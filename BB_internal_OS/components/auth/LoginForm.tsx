@@ -62,15 +62,20 @@ export function LoginForm({ initialError }: LoginFormProps) {
       error: authenticatedUserError,
     } = await supabase.auth.getUser();
 
-    const authenticatedUserId = authenticatedUser?.id ?? signInData.user.id;
+    const authenticatedUserId = signInData.user.id;
     const authenticatedEmail =
       authenticatedUser?.email?.trim().toLowerCase() ?? normalizedEmail;
+
+    console.log("Login auth user id:", authenticatedUserId);
+    console.log("Login auth email:", authenticatedEmail);
 
     let { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", authenticatedUserId)
       .maybeSingle<Profile>();
+
+    console.log("Login profile by id result:", profile);
 
     if (!profile) {
       const fallback = await supabase
@@ -81,6 +86,7 @@ export function LoginForm({ initialError }: LoginFormProps) {
 
       profile = fallback.data;
       profileError = fallback.error;
+      console.log("Login profile by email result:", fallback.data);
     }
 
     if (profileError) {
@@ -101,6 +107,20 @@ export function LoginForm({ initialError }: LoginFormProps) {
     if (!validRoles.has(normalizedRole)) {
       await supabase.auth.signOut();
       setError("Role not assigned. Please contact admin.");
+      setIsLoading(false);
+      return;
+    }
+
+    const selectedRoleMatches = (() => {
+      if (selectedRole === "admin") {
+        return normalizedRole === "admin" || normalizedRole === "super_admin";
+      }
+      return normalizedRole === selectedRole;
+    })();
+
+    if (!selectedRoleMatches) {
+      await supabase.auth.signOut();
+      setError("Selected role does not match your account access.");
       setIsLoading(false);
       return;
     }
