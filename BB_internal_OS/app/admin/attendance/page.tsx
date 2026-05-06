@@ -14,6 +14,8 @@ type AttendanceRecord = {
   check_in_longitude: number | null;
   check_out_latitude: number | null;
   check_out_longitude: number | null;
+  check_in_address?: string | null;
+  check_out_address?: string | null;
   status: string | null;
   location_type: string | null;
   total_working_minutes: number | null;
@@ -112,7 +114,9 @@ function formatDate(value: string) {
 
 function formatDateTime(value: string | null) {
   if (!value) return "-";
-  return new Date(value).toLocaleString();
+  return new Date(value).toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+  });
 }
 
 function formatTime(value: string | null) {
@@ -128,11 +132,16 @@ function formatTime(value: string | null) {
 
 function formatDateTimeAsTime(value: string | null) {
   if (!value) return "-";
-  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+  return new Date(value).toLocaleTimeString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 function formatHoursFromMinutes(minutes: number | null) {
-  if (!minutes || minutes <= 0) return "-";
+  if (minutes === null || minutes < 0) return "-";
   const hrs = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return `${hrs}h ${mins}m`;
@@ -433,7 +442,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
 
     let logsQuery = supabase
       .from("attendance_records")
-      .select("id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,status,location_type,total_working_minutes")
+      .select("id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,check_in_address,check_out_address,status,location_type,total_working_minutes")
       .order("attendance_date", { ascending: false })
       .limit(400);
 
@@ -508,7 +517,22 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
             <table className="w-full min-w-[1500px] text-left text-sm">
               <thead className="bg-[#f1f6fc] text-[#64748b]">
                 <tr>
-                  {["Employee Code", "Employee Name", "Email", "Department", "Date", "Check In Time", "Check Out Time", "Total Hours", "Status", "Location Type", "Check In Coordinates", "Check Out Coordinates"].map((h) => (
+                  {[
+                    "Employee Code",
+                    "Employee Name",
+                    "Email",
+                    "Department",
+                    "Date",
+                    "Check In Time",
+                    "Check Out Time",
+                    "Total Hours",
+                    "Status",
+                    "Location Type",
+                    "Check In Location",
+                    "Check Out Location",
+                    "Check In Coordinates",
+                    "Check Out Coordinates",
+                  ].map((h) => (
                     <th key={h} className="px-4 py-3">{h}</th>
                   ))}
                 </tr>
@@ -530,13 +554,15 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
                       <td className="px-4 py-3">{formatHoursFromMinutes(row.total_working_minutes)}</td>
                       <td className="px-4 py-3"><Badge value={row.status ?? "pending"} /></td>
                       <td className="px-4 py-3">{row.location_type ?? "-"}</td>
+                      <td className="max-w-[260px] px-4 py-3">{row.check_in_address ?? "-"}</td>
+                      <td className="max-w-[260px] px-4 py-3">{row.check_out_address ?? "-"}</td>
                       <td className="px-4 py-3">{checkInCoords}</td>
                       <td className="px-4 py-3">{checkOutCoords}</td>
                     </tr>
                   );
                 })}
                 {!records.length ? (
-                  <tr><td colSpan={12} className="px-4 py-8 text-center text-slate-500">No check-in/check-out records found.</td></tr>
+                  <tr><td colSpan={14} className="px-4 py-8 text-center text-slate-500">No check-in/check-out records found.</td></tr>
                 ) : null}
               </tbody>
             </table>

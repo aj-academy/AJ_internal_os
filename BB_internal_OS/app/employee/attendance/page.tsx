@@ -16,6 +16,8 @@ interface AttendanceRecord {
   check_in_longitude: number | null;
   check_out_latitude: number | null;
   check_out_longitude: number | null;
+  check_in_address: string | null;
+  check_out_address: string | null;
   location_type: string | null;
   status: string | null;
   total_working_minutes: number | null;
@@ -30,6 +32,8 @@ interface AttendanceWritePayload {
   check_in_longitude: number | null;
   check_out_latitude: number | null;
   check_out_longitude: number | null;
+  check_in_address: string | null;
+  check_out_address: string | null;
   location_type: string | null;
   status: string | null;
   total_working_minutes: number | null;
@@ -73,10 +77,28 @@ function formatDate(value: string) {
 }
 
 function formatHours(minutes: number | null) {
-  if (!minutes || minutes <= 0) return "-";
+  if (minutes === null || minutes < 0) return "-";
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return `${hours}h ${mins}m`;
+}
+
+async function resolveAddress(location: LocationPoint): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${location.latitude}&lon=${location.longitude}`,
+      {
+        headers: {
+          Accept: "application/json",
+        },
+      },
+    );
+    if (!response.ok) return null;
+    const data = (await response.json()) as { display_name?: string };
+    return data.display_name ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function getGeoLocation(): Promise<LocationPoint> {
@@ -98,6 +120,25 @@ function getGeoLocation(): Promise<LocationPoint> {
   });
 }
 
+function toReadableAttendanceError(input: unknown) {
+  const raw =
+    typeof input === "object" && input !== null && "message" in input
+      ? String((input as { message?: unknown }).message ?? "Unexpected error.")
+      : input instanceof Error
+        ? input.message
+        : "Unexpected error.";
+
+  const lowered = raw.toLowerCase();
+  if (
+    lowered.includes("permission denied") ||
+    lowered.includes("forbidden") ||
+    lowered.includes("row-level security")
+  ) {
+    return "Attendance write/read permission is blocked by Supabase RLS. Run `supabase/attendance_rls.sql` in Supabase SQL Editor, then retry.";
+  }
+  return raw;
+}
+
 async function getLatestTodayRecord(
   supabase: ReturnType<typeof createClient>,
   currentEmployeeId: string,
@@ -106,7 +147,7 @@ async function getLatestTodayRecord(
   const { data, error } = await supabase
     .from("attendance_records")
     .select(
-      "id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,location_type,status,total_working_minutes",
+      "id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,check_in_address,check_out_address,location_type,status,total_working_minutes",
     )
     .eq("employee_id", currentEmployeeId)
     .eq("attendance_date", today)
@@ -143,7 +184,7 @@ export default function EmployeeAttendancePage() {
         supabase
           .from("attendance_records")
           .select(
-            "id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,location_type,status,total_working_minutes",
+            "id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,check_in_address,check_out_address,location_type,status,total_working_minutes",
           )
           .eq("employee_id", currentEmployeeId)
           .order("attendance_date", { ascending: false })
@@ -210,7 +251,7 @@ export default function EmployeeAttendancePage() {
 
         setProfile(profileData ?? null);
       } catch (error) {
-        const text = error instanceof Error ? error.message : "Unable to load attendance data.";
+        const text = toReadableAttendanceError(error);
         setMessage({ type: "error", text });
       } finally {
         setBusy("idle");
@@ -265,6 +306,7 @@ export default function EmployeeAttendancePage() {
       }
 
       const location = await getGeoLocation();
+      const address = await resolveAddress(location);
       const nowIso = new Date().toISOString();
       const today = getTodayLocalDate();
 
@@ -277,6 +319,8 @@ export default function EmployeeAttendancePage() {
         check_in_longitude: location.longitude,
         check_out_latitude: null,
         check_out_longitude: null,
+        check_in_address: address,
+        check_out_address: null,
         status: "present",
         location_type: "Remote",
         total_working_minutes: null,
@@ -290,6 +334,7 @@ export default function EmployeeAttendancePage() {
             check_in_time: nowIso,
             check_in_latitude: location.latitude,
             check_in_longitude: location.longitude,
+            check_in_address: address,
             status: "present",
             location_type: "Remote",
           })
@@ -306,7 +351,7 @@ export default function EmployeeAttendancePage() {
       await loadAttendanceData(employeeId);
       setMessage({ type: "success", text: "Check in successful." });
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Check in failed. Please try again.";
+      const text = toReadableAttendanceError(error);
       setMessage({ type: "error", text });
     } finally {
       setBusy("idle");
@@ -335,10 +380,12 @@ export default function EmployeeAttendancePage() {
 
     try {
       const location = await getGeoLocation();
+      const address = await resolveAddress(location);
       const now = new Date();
       const nowIso = now.toISOString();
       const checkInAt = new Date(latestToday.check_in_time);
-      const totalMinutes = Math.max(0, Math.floor((now.getTime() - checkInAt.getTime()) / 60000));
+      const diffMs = now.getTime() - checkInAt.getTime();
+      const totalMinutes = diffMs > 0 ? Math.max(1, Math.ceil(diffMs / 60000)) : 0;
 
       const { error: updateError } = await supabase
         .from("attendance_records")
@@ -346,6 +393,7 @@ export default function EmployeeAttendancePage() {
           check_out_time: nowIso,
           check_out_latitude: location.latitude,
           check_out_longitude: location.longitude,
+          check_out_address: address,
           total_working_minutes: totalMinutes,
           status: "completed",
           location_type: "Remote",
@@ -373,7 +421,7 @@ export default function EmployeeAttendancePage() {
       setShowCheckoutForm(false);
       setMessage({ type: "success", text: "Check out and work summary submitted successfully." });
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Check out failed. Please try again.";
+      const text = toReadableAttendanceError(error);
       setMessage({ type: "error", text });
     } finally {
       setBusy("idle");
@@ -480,7 +528,17 @@ export default function EmployeeAttendancePage() {
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="bg-[#f1f6fc] text-[#64748b]">
               <tr>
-                {["Date", "Check In", "Check Out", "Time Gap", "Status", "Location Type", "Work Summary Status"].map(
+                {[
+                  "Date",
+                  "Check In",
+                  "Check Out",
+                  "Time Gap",
+                  "Status",
+                  "Location Type",
+                  "Check In Location",
+                  "Check Out Location",
+                  "Work Summary Status",
+                ].map(
                   (heading) => (
                     <th key={heading} className="px-4 py-3">
                       {heading}
@@ -498,12 +556,24 @@ export default function EmployeeAttendancePage() {
                   <td className="px-4 py-3">{formatHours(record.total_working_minutes)}</td>
                   <td className="px-4 py-3 capitalize">{record.status ?? "-"}</td>
                   <td className="px-4 py-3">{record.location_type ?? "-"}</td>
+                  <td className="max-w-[260px] px-4 py-3">
+                    {record.check_in_address ??
+                      (record.check_in_latitude && record.check_in_longitude
+                        ? `${record.check_in_latitude}, ${record.check_in_longitude}`
+                        : "-")}
+                  </td>
+                  <td className="max-w-[260px] px-4 py-3">
+                    {record.check_out_address ??
+                      (record.check_out_latitude && record.check_out_longitude
+                        ? `${record.check_out_latitude}, ${record.check_out_longitude}`
+                        : "-")}
+                  </td>
                   <td className="px-4 py-3 capitalize">{summaryStatusMap[record.id] ?? "-"}</td>
                 </tr>
               ))}
               {!history.length && busy !== "loading" ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                     No attendance records found.
                   </td>
                 </tr>
