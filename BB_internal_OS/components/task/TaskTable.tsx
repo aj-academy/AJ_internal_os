@@ -66,8 +66,9 @@ export function TaskTable({
                   </tr>
                 ))
               : tasks.map((task) => {
-                  const isOverdue = Boolean(task.due_date) && task.due_date < today && task.status !== "Completed";
-                  const isDueToday = task.due_date === today;
+                  const dueDate = task.due_date;
+                  const isOverdue = dueDate ? dueDate < today && task.status !== "Completed" : false;
+                  const isDueToday = dueDate === today;
                   return (
                     <tr
                       key={task.id}

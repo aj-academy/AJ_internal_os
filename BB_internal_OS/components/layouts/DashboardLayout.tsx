@@ -49,14 +49,17 @@ export function DashboardLayout({
       >
         <div className="flex h-16 items-center bg-[#eaf1f8] px-4 lg:hidden">
           <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                className="rounded-full border-[#d4deea] bg-white text-[#1e3a8a]"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
+            <SheetTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="rounded-full border-[#d4deea] bg-white text-[#1e3a8a]"
+                />
+              }
+            >
+              <Menu className="h-5 w-5" />
             </SheetTrigger>
             <SheetContent side="left" className="w-[270px] border-none bg-[#eaf1f8] p-3">
               <Sidebar

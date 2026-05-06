@@ -86,14 +86,32 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
 
   const loadSummary = useCallback(
     async (userId: string) => {
-      const applyScope = (query: ReturnType<typeof supabase.from<"tasks", TaskRecord>>) =>
-        isAdmin ? query : query.eq("assigned_to", userId);
+      let totalQuery = supabase.from("tasks").select("id", { count: "exact", head: true });
+      let pendingQuery = supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "Pending");
+      let inProgressQuery = supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "In Progress");
+      let completedQuery = supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "Completed");
+
+      if (!isAdmin) {
+        totalQuery = totalQuery.eq("assigned_to", userId);
+        pendingQuery = pendingQuery.eq("assigned_to", userId);
+        inProgressQuery = inProgressQuery.eq("assigned_to", userId);
+        completedQuery = completedQuery.eq("assigned_to", userId);
+      }
 
       const [totalRes, pendingRes, inProgressRes, completedRes] = await Promise.all([
-        applyScope(supabase.from("tasks").select("id", { count: "exact", head: true })),
-        applyScope(supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "Pending")),
-        applyScope(supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "In Progress")),
-        applyScope(supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "Completed")),
+        totalQuery,
+        pendingQuery,
+        inProgressQuery,
+        completedQuery,
       ]);
 
       const summaryError = totalRes.error ?? pendingRes.error ?? inProgressRes.error ?? completedRes.error;
@@ -113,9 +131,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     async (userId: string) => {
       let query = supabase
         .from("tasks")
-        .select("id,title,description,assigned_to,priority,status,start_date,due_date,progress,created_at,updated_at")
-        .order("due_date", { ascending: true, nullsFirst: false })
-        .returns<TaskRecord[]>();
+        .select("id,title,description,assigned_to,priority,status,start_date,due_date,progress,created_at,updated_at");
 
       if (!isAdmin) query = query.eq("assigned_to", userId);
       if (applied.status) query = query.eq("status", applied.status);
@@ -124,9 +140,11 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       if (applied.dueDate) query = query.eq("due_date", applied.dueDate);
       if (applied.search) query = query.ilike("title", `%${applied.search}%`);
 
+      query = query.order("due_date", { ascending: true, nullsFirst: false });
+
       const { data, error: taskError } = await query;
       if (taskError) throw new Error(taskError.message);
-      setRows(data ?? []);
+      setRows((data as TaskRecord[] | null) ?? []);
     },
     [applied.assigned, applied.dueDate, applied.priority, applied.search, applied.status, isAdmin, supabase],
   );

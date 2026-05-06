@@ -240,13 +240,8 @@ export default function EmployeeAttendancePage() {
     return "Not Checked In";
   }, [todayRecord]);
 
-  const canCheckIn =
-    busy === "idle" &&
-    (!todayRecord || (!todayRecord.check_in_time && !todayRecord.check_out_time));
-  const canCheckOut =
-    busy === "idle" &&
-    Boolean(todayRecord?.check_in_time) &&
-    !todayRecord?.check_out_time;
+  const canCheckIn = !todayRecord || (!todayRecord.check_in_time && !todayRecord.check_out_time);
+  const canCheckOut = Boolean(todayRecord?.check_in_time) && !todayRecord?.check_out_time;
 
   const displayEmployeeName = useMemo(() => {
     const byProfile = profile?.full_name?.trim();
@@ -424,7 +419,7 @@ export default function EmployeeAttendancePage() {
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={!canCheckIn}
+            disabled={!canCheckIn || busy !== "idle"}
             onClick={handleCheckIn}
             className="rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#98b5ef] hover:bg-[#1d4ed8]"
           >
@@ -432,7 +427,7 @@ export default function EmployeeAttendancePage() {
           </button>
           <button
             type="button"
-            disabled={!canCheckOut}
+            disabled={!canCheckOut || busy !== "idle"}
             onClick={() => setShowCheckoutForm((prev) => !prev)}
             className="rounded-xl border border-[#cfdceb] bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-60 hover:bg-[#eef4ff]"
           >

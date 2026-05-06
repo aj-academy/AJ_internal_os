@@ -82,18 +82,29 @@ export function ClientLeadMasterPage({ role }: ClientLeadMasterPageProps) {
 
   const loadSummary = useCallback(
     async (userId: string) => {
-      const applyScope = (query: ReturnType<typeof supabase.from<"clients", ClientLeadRecord>>) => {
-        if (!isAdmin) {
-          return query.eq("assigned_to", userId);
-        }
-        return query;
-      };
+      let totalQuery = supabase.from("clients").select("id", { count: "exact", head: true });
+      let contactedQuery = supabase
+        .from("clients")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "Contacted");
+      let convertedQuery = supabase
+        .from("clients")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "Converted");
+      let lostQuery = supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "Lost");
+
+      if (!isAdmin) {
+        totalQuery = totalQuery.eq("assigned_to", userId);
+        contactedQuery = contactedQuery.eq("assigned_to", userId);
+        convertedQuery = convertedQuery.eq("assigned_to", userId);
+        lostQuery = lostQuery.eq("assigned_to", userId);
+      }
 
       const [totalRes, contactedRes, convertedRes, lostRes] = await Promise.all([
-        applyScope(supabase.from("clients").select("id", { count: "exact", head: true })),
-        applyScope(supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "Contacted")),
-        applyScope(supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "Converted")),
-        applyScope(supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "Lost")),
+        totalQuery,
+        contactedQuery,
+        convertedQuery,
+        lostQuery,
       ]);
 
       const summaryError =
@@ -117,10 +128,7 @@ export function ClientLeadMasterPage({ role }: ClientLeadMasterPageProps) {
         .select(
           "id,name,company_name,email,phone,source,status,budget,assigned_to,follow_up_date,requirement,notes,created_at",
           { count: "exact" },
-        )
-        .order("follow_up_date", { ascending: true, nullsFirst: false })
-        .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
-        .returns<ClientLeadRecord[]>();
+        );
 
       if (!isAdmin) {
         query = query.eq("assigned_to", userId);
@@ -133,9 +141,13 @@ export function ClientLeadMasterPage({ role }: ClientLeadMasterPageProps) {
         query = query.or(`name.ilike.${text},email.ilike.${text},phone.ilike.${text}`);
       }
 
+      query = query
+        .order("follow_up_date", { ascending: true, nullsFirst: false })
+        .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+
       const { data, error: listError, count } = await query;
       if (listError) throw new Error(listError.message);
-      setRows(data ?? []);
+      setRows((data as ClientLeadRecord[] | null) ?? []);
       setTotalCount(count ?? 0);
     },
     [applied.assigned, applied.search, applied.source, applied.status, isAdmin, page, supabase],
@@ -474,7 +486,8 @@ export function ClientLeadMasterPage({ role }: ClientLeadMasterPageProps) {
                       </tr>
                     ))
                   : rows.map((lead) => {
-                      const isOverdue = Boolean(lead.follow_up_date) && lead.follow_up_date < new Date().toISOString().slice(0, 10);
+                      const followUpDate = lead.follow_up_date;
+                      const isOverdue = followUpDate ? followUpDate < new Date().toISOString().slice(0, 10) : false;
                       return (
                         <tr key={lead.id} className={isOverdue ? "bg-rose-50/70" : ""}>
                           <td className="px-5 py-3.5 align-middle font-medium text-[#0f172a]">

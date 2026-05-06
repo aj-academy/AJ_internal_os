@@ -102,11 +102,12 @@ export default async function EmployeePermissionPage({
     .returns<PermissionRequest[]>();
 
   const rows = data ?? [];
+  const errorMessage = (error?.message ?? "").toLowerCase();
   const tableMissing =
-    Boolean(error) &&
-    ((error.message ?? "").toLowerCase().includes("could not find the table") ||
-      (error.message ?? "").toLowerCase().includes("relation") ||
-      (error.message ?? "").toLowerCase().includes("permission_requests"));
+    Boolean(errorMessage) &&
+    (errorMessage.includes("could not find the table") ||
+      errorMessage.includes("relation") ||
+      errorMessage.includes("permission_requests"));
 
   return (
     <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
