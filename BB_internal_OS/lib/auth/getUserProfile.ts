@@ -12,11 +12,33 @@ export const getUserProfile = cache(async () => {
     return { user: null, profile: null as Profile | null };
   }
 
-  const { data: profile } = await supabase
+  let { data: profile } = await supabase
     .from("profiles")
     .select("id,full_name,email,role,department,designation,status,created_at")
     .eq("id", user.id)
     .maybeSingle();
+
+  // Fallback for legacy/manual seeded rows where profile id may not match auth uid.
+  if (!profile && user.email) {
+    const fallback = await supabase
+      .from("profiles")
+      .select("id,full_name,email,role,department,designation,status,created_at")
+      .eq("email", user.email.toLowerCase())
+      .maybeSingle();
+    profile = fallback.data ?? null;
+  }
+
+  if (profile) {
+    const normalizedRole =
+      typeof profile.role === "string" ? profile.role.trim().toLowerCase() : profile.role;
+    const normalizedStatus =
+      typeof profile.status === "string" ? profile.status.trim().toLowerCase() : profile.status;
+    profile = {
+      ...profile,
+      role: normalizedRole as Profile["role"],
+      status: normalizedStatus as Profile["status"],
+    };
+  }
 
   return { user, profile: profile as Profile | null };
 });
