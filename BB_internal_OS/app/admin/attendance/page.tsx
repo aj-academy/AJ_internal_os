@@ -147,6 +147,20 @@ function formatHoursFromMinutes(minutes: number | null) {
   return `${hrs}h ${mins}m`;
 }
 
+function getWorkingMinutes(row: AttendanceRecord) {
+  if (typeof row.total_working_minutes === "number" && row.total_working_minutes > 0) {
+    return row.total_working_minutes;
+  }
+  if (row.check_in_time && row.check_out_time) {
+    const inMs = new Date(row.check_in_time).getTime();
+    const outMs = new Date(row.check_out_time).getTime();
+    if (!Number.isNaN(inMs) && !Number.isNaN(outMs) && outMs > inMs) {
+      return Math.max(1, Math.ceil((outMs - inMs) / 60000));
+    }
+  }
+  return row.total_working_minutes;
+}
+
 function toHours(minutes: number) {
   return (minutes / 60).toFixed(1);
 }
@@ -530,8 +544,6 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
                     "Location Type",
                     "Check In Location",
                     "Check Out Location",
-                    "Check In Coordinates",
-                    "Check Out Coordinates",
                   ].map((h) => (
                     <th key={h} className="px-4 py-3">{h}</th>
                   ))}
@@ -540,8 +552,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
               <tbody className="divide-y divide-[#e8edf5] text-slate-700">
                 {records.map((row) => {
                   const profile = profileMap.get(row.employee_id);
-                  const checkInCoords = row.check_in_latitude && row.check_in_longitude ? `${row.check_in_latitude}, ${row.check_in_longitude}` : "-";
-                  const checkOutCoords = row.check_out_latitude && row.check_out_longitude ? `${row.check_out_latitude}, ${row.check_out_longitude}` : "-";
+                  const computedMinutes = getWorkingMinutes(row);
                   return (
                     <tr key={row.id}>
                       <td className="px-4 py-3">{employeeCodeMap.get(row.employee_id) ?? "-"}</td>
@@ -551,18 +562,16 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
                       <td className="px-4 py-3">{formatDate(row.attendance_date)}</td>
                       <td className="px-4 py-3">{formatDateTimeAsTime(row.check_in_time)}</td>
                       <td className="px-4 py-3">{formatDateTimeAsTime(row.check_out_time)}</td>
-                      <td className="px-4 py-3">{formatHoursFromMinutes(row.total_working_minutes)}</td>
+                      <td className="px-4 py-3">{formatHoursFromMinutes(computedMinutes)}</td>
                       <td className="px-4 py-3"><Badge value={row.status ?? "pending"} /></td>
                       <td className="px-4 py-3">{row.location_type ?? "-"}</td>
                       <td className="max-w-[260px] px-4 py-3">{row.check_in_address ?? "-"}</td>
                       <td className="max-w-[260px] px-4 py-3">{row.check_out_address ?? "-"}</td>
-                      <td className="px-4 py-3">{checkInCoords}</td>
-                      <td className="px-4 py-3">{checkOutCoords}</td>
                     </tr>
                   );
                 })}
                 {!records.length ? (
-                  <tr><td colSpan={14} className="px-4 py-8 text-center text-slate-500">No check-in/check-out records found.</td></tr>
+                  <tr><td colSpan={12} className="px-4 py-8 text-center text-slate-500">No check-in/check-out records found.</td></tr>
                 ) : null}
               </tbody>
             </table>
