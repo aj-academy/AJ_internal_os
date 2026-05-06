@@ -36,6 +36,13 @@ export function LoginForm({ initialError }: LoginFormProps) {
     return actualRole === selectedRole;
   };
 
+  const selectedRolePath = () => {
+    if (selectedRole === "admin") return "/admin/dashboard";
+    if (selectedRole === "manager") return "/manager/dashboard";
+    if (selectedRole === "accounts") return "/accounts/dashboard";
+    return "/employee/dashboard";
+  };
+
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
@@ -65,35 +72,43 @@ export function LoginForm({ initialError }: LoginFormProps) {
     const authenticatedEmail =
       authenticatedUser?.email?.trim().toLowerCase() ?? normalizedEmail;
 
-    let { data: profile, error: profileError } = await supabase
+    let { data: profileRows, error: profileError } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", authenticatedUserId)
-      .maybeSingle<Profile>();
+      .limit(1)
+      .returns<Profile[]>();
+
+    let profile = profileRows?.[0] ?? null;
 
     if (!profile) {
       const fallback = await supabase
         .from("profiles")
         .select("*")
-        .eq("email", authenticatedEmail)
-        .maybeSingle<Profile>();
+        .ilike("email", authenticatedEmail)
+        .limit(1)
+        .returns<Profile[]>();
 
-      profile = fallback.data;
+      profile = fallback.data?.[0] ?? null;
       profileError = fallback.error;
-
-      if (fallback.error) {
-        profileError = fallback.error;
-      }
     }
 
-    if (profileError || !profile?.role) {
-      await supabase.auth.signOut();
-      setError("Role not assigned. Please contact admin.");
-      setIsLoading(false);
+    // If profile lookup is blocked/transient, continue to server-side guard.
+    // This avoids false-negative "Role not assigned" on client.
+    if (profileError && !profile) {
+      router.replace(selectedRolePath());
+      router.refresh();
       return;
     }
 
-    if (profile.status !== "active") {
+    const normalizedRole =
+      typeof profile?.role === "string"
+        ? (profile.role.trim().toLowerCase() as UserRole)
+        : null;
+    const normalizedStatus =
+      typeof profile?.status === "string" ? profile.status.trim().toLowerCase() : null;
+
+    if (normalizedStatus && normalizedStatus !== "active") {
       await supabase.auth.signOut();
       setError("Your account is inactive. Please contact admin.");
       setIsLoading(false);
@@ -107,14 +122,20 @@ export function LoginForm({ initialError }: LoginFormProps) {
       return;
     }
 
-    if (!roleMatchesSelection(profile.role)) {
+    if (normalizedRole && !roleMatchesSelection(normalizedRole)) {
       await supabase.auth.signOut();
       setError("Selected role does not match your account access.");
       setIsLoading(false);
       return;
     }
 
-    router.replace(getRoleRedirectPath(profile.role));
+    if (normalizedRole) {
+      router.replace(getRoleRedirectPath(normalizedRole));
+    } else {
+      // Fallback: let protected layouts resolve/validate role server-side.
+      router.replace(selectedRolePath());
+    }
+    router.refresh();
   };
 
   return (
