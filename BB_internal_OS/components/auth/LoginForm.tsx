@@ -20,6 +20,14 @@ const ERROR_MAP: Record<string, string> = {
 };
 
 export function LoginForm({ initialError }: LoginFormProps) {
+  const pickBestProfile = (rows: Profile[] | null | undefined) => {
+    if (!rows?.length) return null;
+    const withRole = rows.find(
+      (row) => typeof row.role === "string" && row.role.trim().length > 0,
+    );
+    return withRole ?? rows[0];
+  };
+
   const router = useRouter();
   const [selectedRole, setSelectedRole] = useState<"admin" | "employee" | "manager" | "accounts">("employee");
   const [email, setEmail] = useState("");
@@ -79,17 +87,18 @@ export function LoginForm({ initialError }: LoginFormProps) {
       .limit(1)
       .returns<Profile[]>();
 
-    let profile = profileRows?.[0] ?? null;
+    let profile = pickBestProfile(profileRows);
 
     if (!profile) {
       const fallback = await supabase
         .from("profiles")
         .select("*")
         .ilike("email", authenticatedEmail)
-        .limit(1)
+        .order("created_at", { ascending: false })
+        .limit(10)
         .returns<Profile[]>();
 
-      profile = fallback.data?.[0] ?? null;
+      profile = pickBestProfile(fallback.data);
       profileError = fallback.error;
     }
 

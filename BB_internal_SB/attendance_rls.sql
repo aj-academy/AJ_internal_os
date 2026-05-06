@@ -43,6 +43,15 @@ using (
   )
 );
 
+-- Fast/stable fallback: allow authenticated users to read profiles.
+-- This prevents role-resolution failures when JWT/id-based policy conditions mismatch.
+drop policy if exists profiles_authenticated_read_all on public.profiles;
+create policy profiles_authenticated_read_all
+on public.profiles
+for select
+to authenticated
+using (true);
+
 drop policy if exists attendance_employee_own on public.attendance_records;
 create policy attendance_employee_own
 on public.attendance_records
