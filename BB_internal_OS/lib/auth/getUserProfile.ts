@@ -1,12 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/types/profile";
 
-function pickBestProfile(rows: Profile[] | null | undefined) {
-  if (!rows?.length) return null;
-  const withRole = rows.find((row) => typeof row.role === "string" && row.role.trim().length > 0);
-  return withRole ?? rows[0];
-}
-
 export async function getUserProfile() {
   const supabase = await createClient();
   const {
@@ -17,25 +11,20 @@ export async function getUserProfile() {
     return { user: null, profile: null as Profile | null };
   }
 
-  const { data: profileById } = await supabase
+  let { data: profile } = await supabase
     .from("profiles")
     .select("id,full_name,email,role,department,designation,status,created_at")
     .eq("id", user.id)
-    .limit(1)
-    .returns<Profile[]>();
-
-  let profile = pickBestProfile(profileById);
+    .maybeSingle<Profile>();
 
   // Fallback for legacy/manual seeded rows where profile id may not match auth uid.
-  if ((!profile || !profile.role) && user.email) {
+  if (!profile && user.email) {
     const fallback = await supabase
       .from("profiles")
       .select("id,full_name,email,role,department,designation,status,created_at")
-      .ilike("email", user.email.trim())
-      .order("created_at", { ascending: false })
-      .limit(10)
-      .returns<Profile[]>();
-    profile = pickBestProfile(fallback.data) ?? profile;
+      .eq("email", user.email.toLowerCase())
+      .maybeSingle<Profile>();
+    profile = fallback.data ?? null;
   }
 
   if (profile) {

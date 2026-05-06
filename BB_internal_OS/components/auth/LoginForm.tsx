@@ -20,14 +20,6 @@ const ERROR_MAP: Record<string, string> = {
 };
 
 export function LoginForm({ initialError }: LoginFormProps) {
-  const pickBestProfile = (rows: Profile[] | null | undefined) => {
-    if (!rows?.length) return null;
-    const withRole = rows.find(
-      (row) => typeof row.role === "string" && row.role.trim().length > 0,
-    );
-    return withRole ?? rows[0];
-  };
-
   const router = useRouter();
   const [selectedRole, setSelectedRole] = useState<"admin" | "employee" | "manager" | "accounts">("employee");
   const [email, setEmail] = useState("");
@@ -37,19 +29,13 @@ export function LoginForm({ initialError }: LoginFormProps) {
   );
   const [isLoading, setIsLoading] = useState(false);
 
-  const roleMatchesSelection = (actualRole: UserRole) => {
-    if (selectedRole === "admin") {
-      return actualRole === "admin" || actualRole === "super_admin";
-    }
-    return actualRole === selectedRole;
-  };
-
-  const selectedRolePath = () => {
-    if (selectedRole === "admin") return "/admin/dashboard";
-    if (selectedRole === "manager") return "/manager/dashboard";
-    if (selectedRole === "accounts") return "/accounts/dashboard";
-    return "/employee/dashboard";
-  };
+  const validRoles = new Set<UserRole>([
+    "super_admin",
+    "admin",
+    "manager",
+    "employee",
+    "accounts",
+  ]);
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -80,42 +66,44 @@ export function LoginForm({ initialError }: LoginFormProps) {
     const authenticatedEmail =
       authenticatedUser?.email?.trim().toLowerCase() ?? normalizedEmail;
 
-    let { data: profileRows, error: profileError } = await supabase
+    let { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", authenticatedUserId)
-      .limit(1)
-      .returns<Profile[]>();
-
-    let profile = pickBestProfile(profileRows);
+      .maybeSingle<Profile>();
 
     if (!profile) {
       const fallback = await supabase
         .from("profiles")
         .select("*")
-        .ilike("email", authenticatedEmail)
-        .order("created_at", { ascending: false })
-        .limit(10)
-        .returns<Profile[]>();
+        .eq("email", authenticatedEmail.toLowerCase())
+        .maybeSingle<Profile>();
 
-      profile = pickBestProfile(fallback.data);
+      profile = fallback.data;
       profileError = fallback.error;
     }
 
-    // If profile lookup is blocked/transient, continue to server-side guard.
-    // This avoids false-negative "Role not assigned" on client.
-    if (profileError && !profile) {
-      router.replace(selectedRolePath());
-      router.refresh();
+    if (profileError) {
+      console.error("Login profile fetch error:", profileError);
+    }
+
+    if (!profile?.role) {
+      await supabase.auth.signOut();
+      setError("Role not assigned. Please contact admin.");
+      setIsLoading(false);
       return;
     }
 
-    const normalizedRole =
-      typeof profile?.role === "string"
-        ? (profile.role.trim().toLowerCase() as UserRole)
-        : null;
+    const normalizedRole = profile.role.trim().toLowerCase() as UserRole;
     const normalizedStatus =
       typeof profile?.status === "string" ? profile.status.trim().toLowerCase() : null;
+
+    if (!validRoles.has(normalizedRole)) {
+      await supabase.auth.signOut();
+      setError("Role not assigned. Please contact admin.");
+      setIsLoading(false);
+      return;
+    }
 
     if (normalizedStatus && normalizedStatus !== "active") {
       await supabase.auth.signOut();
@@ -131,19 +119,7 @@ export function LoginForm({ initialError }: LoginFormProps) {
       return;
     }
 
-    if (normalizedRole && !roleMatchesSelection(normalizedRole)) {
-      await supabase.auth.signOut();
-      setError("Selected role does not match your account access.");
-      setIsLoading(false);
-      return;
-    }
-
-    if (normalizedRole) {
-      router.replace(getRoleRedirectPath(normalizedRole));
-    } else {
-      // Fallback: let protected layouts resolve/validate role server-side.
-      router.replace(selectedRolePath());
-    }
+    router.replace(getRoleRedirectPath(normalizedRole));
     router.refresh();
   };
 
