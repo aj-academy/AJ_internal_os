@@ -20,6 +20,15 @@ for select
 to authenticated
 using (id = auth.uid());
 
+drop policy if exists profiles_self_read_by_email on public.profiles;
+create policy profiles_self_read_by_email
+on public.profiles
+for select
+to authenticated
+using (
+  lower(email) = lower(coalesce(auth.jwt()->>'email', ''))
+);
+
 drop policy if exists profiles_admin_read_all on public.profiles;
 create policy profiles_admin_read_all
 on public.profiles
