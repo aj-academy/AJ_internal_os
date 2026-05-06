@@ -35,6 +35,8 @@ type EmployeeDetailMini = {
   id?: string | null;
   user_id?: string | null;
   employee_code: string | null;
+  full_name?: string | null;
+  email?: string | null;
 };
 
 type PermissionRequest = {
@@ -306,12 +308,20 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
   ]);
   const profileMap = new Map((profilesRes.data ?? []).map((row) => [row.id, row]));
   const employeeCodeMap = new Map<string, string>();
+  const employeeNameFallbackMap = new Map<string, string>();
+  const employeeEmailFallbackMap = new Map<string, string>();
   (employeeDetailsRes.data ?? []).forEach((row) => {
     const code = row.employee_code?.trim();
+    const fullName = row.full_name?.trim();
+    const email = row.email?.trim();
     if (!code) return;
     const keys = [row.employee_id, row.profile_id, row.user_id, row.id]
       .filter((key): key is string => Boolean(key && typeof key === "string"));
-    keys.forEach((key) => employeeCodeMap.set(key, code));
+    keys.forEach((key) => {
+      employeeCodeMap.set(key, code);
+      if (fullName) employeeNameFallbackMap.set(key, fullName);
+      if (email) employeeEmailFallbackMap.set(key, email);
+    });
   });
   const departments = Array.from(new Set((profilesRes.data ?? []).map((p) => p.department).filter(Boolean))) as string[];
 
@@ -469,8 +479,8 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
       const profile = profileMap.get(row.employee_id);
       const department = (profile?.department ?? "").toLowerCase();
       const employeeCode = (employeeCodeMap.get(row.employee_id) ?? "").toLowerCase();
-      const fullName = (profile?.full_name ?? "").toLowerCase();
-      const email = (profile?.email ?? "").toLowerCase();
+      const fullName = (profile?.full_name ?? employeeNameFallbackMap.get(row.employee_id) ?? "").toLowerCase();
+      const email = (profile?.email ?? employeeEmailFallbackMap.get(row.employee_id) ?? "").toLowerCase();
       const matchesDept = departmentFilter ? department === departmentFilter.toLowerCase() : true;
       const matchesSearch = queryFilter ? fullName.includes(queryFilter) || email.includes(queryFilter) || employeeCode.includes(queryFilter) : true;
       return matchesDept && matchesSearch;
@@ -553,11 +563,17 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
                 {records.map((row) => {
                   const profile = profileMap.get(row.employee_id);
                   const computedMinutes = getWorkingMinutes(row);
+                  const displayName =
+                    profile?.full_name ??
+                    employeeNameFallbackMap.get(row.employee_id) ??
+                    getEmployeeName(profile, row.employee_id);
+                  const displayEmail =
+                    profile?.email ?? employeeEmailFallbackMap.get(row.employee_id) ?? "-";
                   return (
                     <tr key={row.id}>
                       <td className="px-4 py-3">{employeeCodeMap.get(row.employee_id) ?? "-"}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900">{getEmployeeName(profile, row.employee_id)}</td>
-                      <td className="px-4 py-3">{profile?.email ?? "-"}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{displayName}</td>
+                      <td className="px-4 py-3">{displayEmail}</td>
                       <td className="px-4 py-3">{profile?.department ?? "-"}</td>
                       <td className="px-4 py-3">{formatDate(row.attendance_date)}</td>
                       <td className="px-4 py-3">{formatDateTimeAsTime(row.check_in_time)}</td>

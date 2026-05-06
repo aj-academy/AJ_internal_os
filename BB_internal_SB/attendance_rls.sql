@@ -13,6 +13,27 @@ alter table public.work_summaries enable row level security;
 alter table public.permission_requests enable row level security;
 alter table public.profiles enable row level security;
 
+drop policy if exists profiles_self_read on public.profiles;
+create policy profiles_self_read
+on public.profiles
+for select
+to authenticated
+using (id = auth.uid());
+
+drop policy if exists profiles_admin_read_all on public.profiles;
+create policy profiles_admin_read_all
+on public.profiles
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role in ('admin', 'super_admin')
+  )
+);
+
 drop policy if exists attendance_employee_own on public.attendance_records;
 create policy attendance_employee_own
 on public.attendance_records
