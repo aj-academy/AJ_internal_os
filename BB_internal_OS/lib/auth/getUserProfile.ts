@@ -23,9 +23,10 @@ export const getUserProfile = cache(async () => {
     const fallback = await supabase
       .from("profiles")
       .select("id,full_name,email,role,department,designation,status,created_at")
-      .eq("email", user.email.toLowerCase())
-      .maybeSingle();
-    profile = fallback.data ?? null;
+      .ilike("email", user.email.trim())
+      .limit(1)
+      .returns<Profile[]>();
+    profile = fallback.data?.[0] ?? null;
   }
 
   if (profile) {
