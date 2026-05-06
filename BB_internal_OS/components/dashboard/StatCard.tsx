@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Circle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 interface StatCardProps {
@@ -7,7 +8,8 @@ interface StatCardProps {
   value: string;
   trend?: string;
   description?: string;
-  icon: LucideIcon;
+  hint?: string;
+  icon?: LucideIcon;
   variant?: "default" | "rose";
 }
 
@@ -16,9 +18,12 @@ export function StatCard({
   value,
   trend,
   description,
-  icon: Icon,
+  hint,
+  icon: Icon = Circle,
   variant = "default",
 }: StatCardProps) {
+  const subtext = description ?? hint;
+
   return (
     <Card
       className={[
@@ -41,7 +46,7 @@ export function StatCard({
       </CardHeader>
       <CardContent className="pb-5 pt-1">
         <p className="text-3xl font-semibold text-[#191716]">{value}</p>
-        {description ? <p className="mt-2 text-xs text-[#8a8178]">{description}</p> : null}
+        {subtext ? <p className="mt-2 text-xs text-[#8a8178]">{subtext}</p> : null}
       </CardContent>
     </Card>
   );
