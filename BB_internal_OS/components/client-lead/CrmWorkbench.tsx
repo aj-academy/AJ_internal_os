@@ -232,13 +232,13 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
     if (!isAdmin) {
       q = q.eq("assigned_to", currentUserId);
     }
-    return q;
+    return q.returns<CrmClientRow[]>();
   }, [currentUserId, isAdmin, supabase]);
 
   const loadClientsDataset = useCallback(async () => {
     const { data, error: loadError } = await buildClientsBaseQuery();
     if (loadError) throw new Error(loadError.message);
-    setClients((data as CrmClientRow[] | null) ?? []);
+    setClients(data ?? []);
   }, [buildClientsBaseQuery]);
 
   const loadOverviewCounts = useCallback(async () => {
