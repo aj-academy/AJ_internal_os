@@ -69,7 +69,7 @@ export async function POST(request: Request) {
 
     const userId = authData.user.id;
 
-    const { error: profileError } = await admin.from("profiles").insert({
+    const profilePayload = {
       id: userId,
       full_name,
       email: emailRaw,
@@ -77,7 +77,11 @@ export async function POST(request: Request) {
       department,
       designation,
       status,
-    });
+    };
+
+    const { error: profileError } = await admin
+      .from("profiles")
+      .upsert(profilePayload, { onConflict: "id" });
 
     if (profileError) {
       await admin.auth.admin.deleteUser(userId);
@@ -85,6 +89,27 @@ export async function POST(request: Request) {
         { error: profileError.message ?? "Could not save profile." },
         { status: 400 },
       );
+    }
+
+    // Safety check: ensure profile row is actually visible after write.
+    const { data: savedProfile, error: readBackError } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (readBackError || !savedProfile?.id) {
+      const { error: retryError } = await admin
+        .from("profiles")
+        .upsert(profilePayload, { onConflict: "id" });
+
+      if (retryError) {
+        await admin.auth.admin.deleteUser(userId);
+        return NextResponse.json(
+          { error: retryError.message ?? "Could not finalize employee profile sync." },
+          { status: 500 },
+        );
+      }
     }
 
     return NextResponse.json({
