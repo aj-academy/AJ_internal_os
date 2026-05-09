@@ -239,7 +239,7 @@ export default function EmployeeMasterPage() {
         </Card>
       </div>
 
-      <div className="flex w-full flex-col items-stretch gap-6">
+      <div className="mx-auto flex w-full max-w-[1400px] flex-col items-stretch gap-6">
         <Card className="w-full rounded-2xl border-[#dbe6f3] py-0 shadow-sm">
           <CardHeader className="pb-2 pt-4">
             <CardTitle className="text-lg text-slate-900">Employee Directory</CardTitle>

@@ -75,5 +75,15 @@ export async function POST(request: Request) {
     );
   }
 
+  // Keep profile row normalized to match login identity used by the employee.
+  await admin
+    .from("profiles")
+    .update({
+      email,
+      role,
+      status: "active",
+    })
+    .eq("id", profile.id);
+
   return NextResponse.json({ ok: true });
 }
