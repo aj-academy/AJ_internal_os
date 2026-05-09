@@ -238,6 +238,40 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function AttendanceSubCategoryNav({ activeTab }: { activeTab: string }) {
+  const tabs = [
+    { id: "overview", label: "Overview" },
+    { id: "logs", label: "Check In / Check Out Logs" },
+    { id: "permission", label: "Permission Requests" },
+    { id: "summary", label: "Work Summary" },
+    { id: "monthly", label: "Monthly Report" },
+  ];
+
+  return (
+    <nav className="overflow-x-auto rounded-2xl border border-[#dbe7ff] bg-[#f8fbff] p-2">
+      <div className="flex min-w-max gap-2">
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <Link
+              key={tab.id}
+              href={`/admin/attendance?tab=${tab.id}`}
+              className={[
+                "rounded-xl px-3 py-2 text-sm font-medium transition-all",
+                isActive
+                  ? "bg-[#2563eb] text-white shadow-[0_8px_18px_rgba(37,99,235,0.24)]"
+                  : "bg-white text-slate-700 hover:bg-[#eaf1ff]",
+              ].join(" ")}
+            >
+              {tab.label}
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
 async function handlePermissionAction(formData: FormData) {
   "use server";
   const { profile } = await getUserProfile();
@@ -384,6 +418,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
             Overview: Live today snapshot
           </p>
           <AdminAttendanceAutoRefresh />
+          <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Total Check-ins Today" value={presentToday} />
@@ -488,6 +523,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <h2 className="text-3xl font-semibold text-slate-900">Check In / Check Out Logs</h2>
           <p className="text-sm text-slate-600">Real employee attendance logs from check-in and check-out submissions.</p>
           <AdminAttendanceAutoRefresh />
+          <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Total Check-ins Today" value={totalCheckInToday} />
@@ -624,6 +660,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <h2 className="text-3xl font-semibold text-slate-900">Permission Requests</h2>
           <p className="text-sm text-slate-600">Review and take action on employee permission submissions.</p>
           <AdminAttendanceAutoRefresh />
+          <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Pending Permissions" value={pendingPermissions} />
@@ -755,6 +792,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <h2 className="text-3xl font-semibold text-slate-900">Work Summary</h2>
           <p className="text-sm text-slate-600">Review checkout work summaries submitted by employees.</p>
           <AdminAttendanceAutoRefresh />
+          <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Submitted Today" value={submittedToday} />
@@ -939,6 +977,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           Monthly Report: Aggregated month analytics
         </p>
         <AdminAttendanceAutoRefresh />
+        <AttendanceSubCategoryNav activeTab={selectedTab} />
       </header>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard label="Total Working Days" value={workingDays} />
