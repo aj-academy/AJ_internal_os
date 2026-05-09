@@ -45,11 +45,32 @@ export function LoginForm({ initialError }: LoginFormProps) {
     const supabase = createClient();
     const normalizedEmail = email.trim().toLowerCase();
 
-    const { data: signInData, error: signInError } =
-      await supabase.auth.signInWithPassword({
-        email: normalizedEmail,
-        password,
+    let { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
+
+    if (signInError || !signInData.user) {
+      // First-login initialization: if auth password is not yet set, initialize once and retry.
+      const firstLoginRes = await fetch("/api/auth/first-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          role: selectedRole,
+          password,
+        }),
       });
+
+      if (firstLoginRes.ok) {
+        const retry = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password,
+        });
+        signInData = retry.data;
+        signInError = retry.error;
+      }
+    }
 
     if (signInError || !signInData.user) {
       setError(signInError?.message ?? "Invalid credentials.");
@@ -66,16 +87,11 @@ export function LoginForm({ initialError }: LoginFormProps) {
     const authenticatedEmail =
       authenticatedUser?.email?.trim().toLowerCase() ?? normalizedEmail;
 
-    console.log("Login auth user id:", authenticatedUserId);
-    console.log("Login auth email:", authenticatedEmail);
-
     let { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", authenticatedUserId)
       .maybeSingle<Profile>();
-
-    console.log("Login profile by id result:", profile);
 
     if (!profile) {
       const fallback = await supabase
@@ -86,11 +102,6 @@ export function LoginForm({ initialError }: LoginFormProps) {
 
       profile = fallback.data;
       profileError = fallback.error;
-      console.log("Login profile by email result:", fallback.data);
-    }
-
-    if (profileError) {
-      console.error("Login profile fetch error:", profileError);
     }
 
     if (!profile?.role) {
@@ -188,6 +199,9 @@ export function LoginForm({ initialError }: LoginFormProps) {
               onChange={(event) => setPassword(event.target.value)}
               required
             />
+            <p className="text-xs text-slate-500">
+              Use the initial password your administrator created in Employee Master, or your current password if you have updated it.
+            </p>
           </div>
 
           {error ? <p className="text-sm text-red-600">{error}</p> : null}

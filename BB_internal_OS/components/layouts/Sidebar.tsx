@@ -3,7 +3,7 @@
 import { memo } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   BarChart3,
   BriefcaseBusiness,
@@ -39,7 +39,6 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeTab = searchParams.get("tab") ?? "overview";
-  const [attendanceExpanded, setAttendanceExpanded] = useState(pathname.startsWith("/admin/attendance"));
   const getIcon = (label: string) => {
     if (label.includes("Attendance")) return UserCheck;
     if (label.includes("Employee")) return UsersRound;
@@ -104,22 +103,14 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
               const url = new URL(child.href, "http://localhost");
               return pathname === url.pathname && activeTab === (url.searchParams.get("tab") ?? "overview");
             });
-          const isAttendanceMenu = item.label === "Attendance System";
-          const isExpanded = !collapsed && hasChildren && (isAttendanceMenu ? attendanceExpanded : isActive || hasActiveChild);
+          const isExpanded = !collapsed && hasChildren && (isActive || hasActiveChild);
           const Icon = getIcon(item.label);
 
           return (
             <div key={item.href} className="space-y-1">
               <Link
                 href={item.href}
-                onClick={(event) => {
-                  if (hasChildren && isAttendanceMenu && pathname.startsWith("/admin/attendance")) {
-                    event.preventDefault();
-                    setAttendanceExpanded((prev) => !prev);
-                    return;
-                  }
-                  onNavigate?.();
-                }}
+                onClick={() => onNavigate?.()}
                 className={cn(
                   "group flex items-center justify-between rounded-full px-3 py-2.5 text-sm font-medium transition-all duration-300 ease-out hover:bg-white hover:text-[#1e3a8a]",
                   isActive || hasActiveChild

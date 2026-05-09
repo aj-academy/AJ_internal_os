@@ -325,16 +325,6 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
   });
   const departments = Array.from(new Set((profilesRes.data ?? []).map((p) => p.department).filter(Boolean))) as string[];
 
-  const renderTabLinks = (
-    <div className="flex flex-wrap gap-2">
-      <Link href="/admin/attendance?tab=overview" className="rounded-lg border border-[#dbe6f3] bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-[#eef4ff]">Overview</Link>
-      <Link href="/admin/attendance?tab=logs" className="rounded-lg border border-[#dbe6f3] bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-[#eef4ff]">Check In / Check Out Logs</Link>
-      <Link href="/admin/attendance?tab=permission" className="rounded-lg border border-[#dbe6f3] bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-[#eef4ff]">Permission Requests</Link>
-      <Link href="/admin/attendance?tab=summary" className="rounded-lg border border-[#dbe6f3] bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-[#eef4ff]">Work Summary</Link>
-      <Link href="/admin/attendance?tab=monthly" className="rounded-lg border border-[#dbe6f3] bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-[#eef4ff]">Monthly Report</Link>
-    </div>
-  );
-
   if (selectedTab === "overview") {
     const weekDays = getLastNDates(7);
     const weekStart = weekDays[0];
@@ -394,7 +384,6 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           </p>
           <AdminAttendanceAutoRefresh />
         </header>
-        {renderTabLinks}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Total Check-ins Today" value={presentToday} />
           <StatCard label="Completed Check-outs Today" value={completedCheckout} />
@@ -499,7 +488,6 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <p className="text-sm text-slate-600">Real employee attendance logs from check-in and check-out submissions.</p>
           <AdminAttendanceAutoRefresh />
         </header>
-        {renderTabLinks}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Total Check-ins Today" value={totalCheckInToday} />
           <StatCard label="Completed Check-outs Today" value={completedCheckoutToday} />
@@ -636,7 +624,6 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <p className="text-sm text-slate-600">Review and take action on employee permission submissions.</p>
           <AdminAttendanceAutoRefresh />
         </header>
-        {renderTabLinks}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Pending Permissions" value={pendingPermissions} />
           <StatCard label="Approved Today" value={approvedToday} />
@@ -768,7 +755,6 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <p className="text-sm text-slate-600">Review checkout work summaries submitted by employees.</p>
           <AdminAttendanceAutoRefresh />
         </header>
-        {renderTabLinks}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Submitted Today" value={submittedToday} />
           <StatCard label="Pending Today" value={pendingToday} />
@@ -953,7 +939,6 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         </p>
         <AdminAttendanceAutoRefresh />
       </header>
-      {renderTabLinks}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard label="Total Working Days" value={workingDays} />
         <StatCard label="Average Attendance %" value={`${averageAttendance}%`} />

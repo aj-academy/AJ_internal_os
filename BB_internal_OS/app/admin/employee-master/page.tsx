@@ -1,82 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/client";
+import type { Profile, ProfileStatus, UserRole } from "@/types/profile";
 
-type EmployeeStatus = "active" | "inactive";
-type EmployeeRole = "super_admin" | "admin" | "manager" | "employee" | "accounts";
+type EmployeeRole = UserRole;
 
 interface EmployeeRow {
   id: string;
-  employeeCode: string;
-  fullName: string;
+  full_name: string;
   email: string;
   role: EmployeeRole;
-  department: string;
-  designation: string;
-  reportingManagerId: string | null;
-  status: EmployeeStatus;
+  department: string | null;
+  designation: string | null;
+  status: ProfileStatus | null;
 }
-
-const seedEmployees: EmployeeRow[] = [
-  {
-    id: "1",
-    employeeCode: "EMP-001",
-    fullName: "Arjun Kumar",
-    email: "arjun@bbinternal.com",
-    role: "manager",
-    department: "Engineering",
-    designation: "Engineering Manager",
-    reportingManagerId: null,
-    status: "active",
-  },
-  {
-    id: "2",
-    employeeCode: "EMP-002",
-    fullName: "Riya Sharma",
-    email: "riya@bbinternal.com",
-    role: "employee",
-    department: "Human Resources",
-    designation: "HR Executive",
-    reportingManagerId: "4",
-    status: "active",
-  },
-  {
-    id: "3",
-    employeeCode: "EMP-003",
-    fullName: "Naveen Raj",
-    email: "naveen@bbinternal.com",
-    role: "accounts",
-    department: "Finance",
-    designation: "Accounts Officer",
-    reportingManagerId: "5",
-    status: "inactive",
-  },
-  {
-    id: "4",
-    employeeCode: "EMP-004",
-    fullName: "Sana Ali",
-    email: "sana@bbinternal.com",
-    role: "manager",
-    department: "Human Resources",
-    designation: "HR Manager",
-    reportingManagerId: null,
-    status: "active",
-  },
-  {
-    id: "5",
-    employeeCode: "EMP-005",
-    fullName: "Ravi Teja",
-    email: "ravi@bbinternal.com",
-    role: "admin",
-    department: "Operations",
-    designation: "Admin Ops Lead",
-    reportingManagerId: null,
-    status: "active",
-  },
-];
 
 const roles: EmployeeRole[] = ["super_admin", "admin", "manager", "employee", "accounts"];
 
@@ -94,98 +36,169 @@ const designations = [
 
 interface FormState {
   id: string | null;
-  employeeCode: string;
-  fullName: string;
+  full_name: string;
   email: string;
   role: EmployeeRole;
   department: string;
   designation: string;
-  reportingManagerId: string;
-  status: EmployeeStatus;
+  status: ProfileStatus;
+  password: string;
 }
 
 const initialFormState: FormState = {
   id: null,
-  employeeCode: "",
-  fullName: "",
+  full_name: "",
   email: "",
   role: "employee",
   department: departments[0],
   designation: designations[1],
-  reportingManagerId: "",
   status: "active",
+  password: "",
 };
 
+function mapProfileToRow(p: Profile): EmployeeRow {
+  return {
+    id: p.id,
+    full_name: p.full_name ?? "",
+    email: p.email ?? "",
+    role: (p.role ?? "employee") as EmployeeRole,
+    department: p.department,
+    designation: p.designation,
+    status: p.status,
+  };
+}
+
 export default function EmployeeMasterPage() {
-  const [employees, setEmployees] = useState<EmployeeRow[]>(seedEmployees);
+  const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | EmployeeStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | ProfileStatus>("all");
   const [mode, setMode] = useState<"add" | "edit" | "view">("add");
   const [form, setForm] = useState<FormState>(initialFormState);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const managerOptions = useMemo(
-    () => employees.filter((employee) => employee.role === "manager" || employee.role === "admin"),
-    [employees],
-  );
+  const loadEmployees = useCallback(async () => {
+    setLoadingList(true);
+    setListError(null);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id,full_name,email,role,department,designation,status,created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setListError(error.message);
+      setEmployees([]);
+    } else {
+      setEmployees((data ?? []).map((row) => mapProfileToRow(row as Profile)));
+    }
+    setLoadingList(false);
+  }, []);
+
+  useEffect(() => {
+    void loadEmployees();
+  }, [loadEmployees]);
 
   const filteredEmployees = useMemo(() => {
+    const q = search.trim().toLowerCase();
     return employees.filter((employee) => {
       const matchesSearch =
-        employee.fullName.toLowerCase().includes(search.toLowerCase()) ||
-        employee.email.toLowerCase().includes(search.toLowerCase()) ||
-        employee.employeeCode.toLowerCase().includes(search.toLowerCase());
-      const matchesStatus = statusFilter === "all" ? true : employee.status === statusFilter;
+        !q ||
+        employee.full_name.toLowerCase().includes(q) ||
+        employee.email.toLowerCase().includes(q) ||
+        employee.id.toLowerCase().includes(q);
+      const matchesStatus =
+        statusFilter === "all" ? true : (employee.status ?? "active") === statusFilter;
       return matchesSearch && matchesStatus;
     });
   }, [employees, search, statusFilter]);
 
   const onPickEmployee = (employee: EmployeeRow, selectedMode: "view" | "edit") => {
     setMode(selectedMode);
+    setSubmitError(null);
     setForm({
       id: employee.id,
-      employeeCode: employee.employeeCode,
-      fullName: employee.fullName,
+      full_name: employee.full_name,
       email: employee.email,
       role: employee.role,
-      department: employee.department,
-      designation: employee.designation,
-      reportingManagerId: employee.reportingManagerId ?? "",
-      status: employee.status,
+      department: employee.department ?? departments[0],
+      designation: employee.designation ?? designations[0],
+      status: (employee.status ?? "active") as ProfileStatus,
+      password: "",
     });
   };
 
   const onCreateNew = () => {
     setMode("add");
+    setSubmitError(null);
     setForm(initialFormState);
   };
 
-  const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setSubmitError(null);
 
     if (mode === "view") return;
 
-    const payload: EmployeeRow = {
-      id: form.id ?? crypto.randomUUID(),
-      employeeCode: form.employeeCode.trim(),
-      fullName: form.fullName.trim(),
-      email: form.email.trim().toLowerCase(),
-      role: form.role,
-      department: form.department,
-      designation: form.designation,
-      reportingManagerId: form.reportingManagerId || null,
-      status: form.status,
-    };
-
     if (mode === "add") {
-      setEmployees((prev) => [payload, ...prev]);
-    } else {
-      setEmployees((prev) => prev.map((employee) => (employee.id === payload.id ? payload : employee)));
+      if (form.password.length < 8) {
+        setSubmitError("Initial password must be at least 8 characters for the employee's first login.");
+        return;
+      }
     }
 
-    onCreateNew();
+    setSubmitting(true);
+
+    try {
+      if (mode === "add") {
+        const res = await fetch("/api/admin/employees", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            full_name: form.full_name.trim(),
+            email: form.email.trim().toLowerCase(),
+            role: form.role,
+            department: form.department.trim(),
+            designation: form.designation.trim(),
+            status: form.status,
+            password: form.password,
+          }),
+        });
+        const payload = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          setSubmitError(payload.error ?? "Could not create employee.");
+          return;
+        }
+      } else if (mode === "edit" && form.id) {
+        const res = await fetch(`/api/admin/employees/${form.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            full_name: form.full_name.trim(),
+            email: form.email.trim().toLowerCase(),
+            role: form.role,
+            department: form.department.trim(),
+            designation: form.designation.trim(),
+            status: form.status,
+          }),
+        });
+        const payload = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          setSubmitError(payload.error ?? "Could not update employee.");
+          return;
+        }
+      }
+
+      await loadEmployees();
+      onCreateNew();
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const activeCount = employees.filter((employee) => employee.status === "active").length;
+  const activeCount = employees.filter((employee) => (employee.status ?? "active") === "active").length;
   const inactiveCount = employees.length - activeCount;
   const managersCount = employees.filter((employee) => employee.role === "manager").length;
 
@@ -196,7 +209,8 @@ export default function EmployeeMasterPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#64748b]">Admin Control</p>
           <h2 className="mt-2 text-3xl font-semibold text-[#0f172a]">Employee Master</h2>
           <p className="mt-2 text-sm text-[#64748b]">
-            Manage employee records, role mapping, department, designation, reporting manager, and status.
+            Directory and creation form match the Supabase profiles columns (full name, email, role, department, designation, status).
+            New employees sign in with their work email, the matching role, and the initial password you set below.
           </p>
         </div>
         <Button className="rounded-full bg-[#2563eb] px-5 text-white hover:bg-[#1d4ed8]" onClick={onCreateNew}>
@@ -225,20 +239,20 @@ export default function EmployeeMasterPage() {
         </Card>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-12">
-        <Card className="xl:col-span-8 rounded-2xl border-[#dbe6f3] py-0 shadow-sm">
+      <div className="flex w-full flex-col items-stretch gap-6">
+        <Card className="w-full rounded-2xl border-[#dbe6f3] py-0 shadow-sm">
           <CardHeader className="pb-2 pt-4">
             <CardTitle className="text-lg text-slate-900">Employee Directory</CardTitle>
             <div className="grid gap-3 md:grid-cols-2">
               <Input
-                placeholder="Search by name, email, employee ID"
+                placeholder="Search by name, email, or profile ID"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 className="h-9 rounded-xl border-[#cfdceb]"
               />
               <select
                 value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as "all" | EmployeeStatus)}
+                onChange={(event) => setStatusFilter(event.target.value as "all" | ProfileStatus)}
                 className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#2563eb] focus:ring-2 focus:ring-[#dbeafe]"
               >
                 <option value="all">All Status</option>
@@ -248,49 +262,44 @@ export default function EmployeeMasterPage() {
             </div>
           </CardHeader>
           <CardContent className="pb-4">
-            <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
-              <table className="w-full min-w-[920px] text-left text-sm">
-                <thead className="bg-[#f1f6fc] text-[#64748b]">
-                  <tr>
-                    {[
-                      "Employee ID",
-                      "Name",
-                      "Role",
-                      "Department",
-                      "Designation",
-                      "Reporting Manager",
-                      "Status",
-                      "Action",
-                    ].map((heading) => (
-                      <th key={heading} className="px-4 py-3">
-                        {heading}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#e8edf5] text-slate-700">
-                  {filteredEmployees.map((employee) => {
-                    const managerName =
-                      employees.find((item) => item.id === employee.reportingManagerId)?.fullName ?? "-";
-                    return (
+            {listError ? <p className="mb-3 text-sm text-red-600">{listError}</p> : null}
+            {loadingList ? (
+              <div className="flex items-center gap-2 py-8 text-sm text-slate-500">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading employees…
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
+                <table className="w-full min-w-[720px] text-left text-sm">
+                  <thead className="bg-[#f1f6fc] text-[#64748b]">
+                    <tr>
+                      {["Profile ID", "Name", "Role", "Department", "Designation", "Status", "Action"].map((heading) => (
+                        <th key={heading} className="px-4 py-3">
+                          {heading}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#e8edf5] text-slate-700">
+                    {filteredEmployees.map((employee) => (
                       <tr key={employee.id}>
-                        <td className="px-4 py-3 font-medium text-slate-900">{employee.employeeCode}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-600">{employee.id.slice(0, 8)}…</td>
                         <td className="px-4 py-3">
-                          <p className="font-medium text-slate-900">{employee.fullName}</p>
+                          <p className="font-medium text-slate-900">{employee.full_name}</p>
                           <p className="text-xs text-slate-500">{employee.email}</p>
                         </td>
                         <td className="px-4 py-3 capitalize">{employee.role.replace("_", " ")}</td>
-                        <td className="px-4 py-3">{employee.department}</td>
-                        <td className="px-4 py-3">{employee.designation}</td>
-                        <td className="px-4 py-3">{managerName}</td>
+                        <td className="px-4 py-3">{employee.department ?? "—"}</td>
+                        <td className="px-4 py-3">{employee.designation ?? "—"}</td>
                         <td className="px-4 py-3">
                           <span
                             className={[
                               "rounded-full px-2.5 py-1 text-xs font-semibold",
-                              employee.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-700",
+                              (employee.status ?? "active") === "active"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-slate-200 text-slate-700",
                             ].join(" ")}
                           >
-                            {employee.status}
+                            {employee.status ?? "active"}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -313,45 +322,37 @@ export default function EmployeeMasterPage() {
                           </div>
                         </td>
                       </tr>
-                    );
-                  })}
-                  {!filteredEmployees.length ? (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
-                        No employees found for current filters.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
+                    ))}
+                    {!filteredEmployees.length ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
+                          No employees found for current filters.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        <Card className="xl:col-span-4 rounded-2xl border-[#dbe6f3] py-0 shadow-sm">
+        <Card className="w-full rounded-2xl border-[#dbe6f3] py-0 shadow-sm">
           <CardHeader className="pb-0 pt-4">
             <CardTitle className="text-lg text-slate-900">
               {mode === "add" ? "Add Employee" : mode === "edit" ? "Edit Employee" : "View Employee"}
             </CardTitle>
             <p className="text-xs text-slate-500">
               {mode === "view"
-                ? "Read-only employee details."
-                : "Configure role mapping, department, designation and reporting manager."}
+                ? "Read-only profile fields (matches Supabase profiles)."
+                : "Fields match the profiles table: full name, email, role, department, designation, status. On create, set an initial password the employee will use at login."}
             </p>
           </CardHeader>
           <CardContent className="pb-4">
-            <form className="space-y-3" onSubmit={onSubmit}>
+            <form className="grid grid-cols-1 gap-3 md:grid-cols-2" onSubmit={onSubmit}>
               <Input
-                value={form.employeeCode}
-                onChange={(event) => setForm((prev) => ({ ...prev, employeeCode: event.target.value }))}
-                placeholder="Employee Code"
-                className="h-9 rounded-xl border-[#cfdceb]"
-                disabled={mode === "view"}
-                required
-              />
-              <Input
-                value={form.fullName}
-                onChange={(event) => setForm((prev) => ({ ...prev, fullName: event.target.value }))}
+                value={form.full_name}
+                onChange={(event) => setForm((prev) => ({ ...prev, full_name: event.target.value }))}
                 placeholder="Full Name"
                 className="h-9 rounded-xl border-[#cfdceb]"
                 disabled={mode === "view"}
@@ -407,22 +408,10 @@ export default function EmployeeMasterPage() {
               </select>
 
               <select
-                value={form.reportingManagerId}
-                onChange={(event) => setForm((prev) => ({ ...prev, reportingManagerId: event.target.value }))}
-                className="h-9 w-full rounded-xl border border-[#cfdceb] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#2563eb] focus:ring-2 focus:ring-[#dbeafe]"
-                disabled={mode === "view"}
-              >
-                <option value="">No Manager</option>
-                {managerOptions.map((manager) => (
-                  <option key={manager.id} value={manager.id}>
-                    {manager.fullName}
-                  </option>
-                ))}
-              </select>
-
-              <select
                 value={form.status}
-                onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value as EmployeeStatus }))}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, status: event.target.value as ProfileStatus }))
+                }
                 className="h-9 w-full rounded-xl border border-[#cfdceb] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#2563eb] focus:ring-2 focus:ring-[#dbeafe]"
                 disabled={mode === "view"}
               >
@@ -430,16 +419,36 @@ export default function EmployeeMasterPage() {
                 <option value="inactive">inactive</option>
               </select>
 
-              <div className="flex gap-2 pt-1">
+              {mode === "add" ? (
+                <div className="md:col-span-2 space-y-1">
+                  <Input
+                    type="password"
+                    value={form.password}
+                    onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+                    placeholder="Initial login password (min 8 characters)"
+                    className="h-9 rounded-xl border-[#cfdceb]"
+                    autoComplete="new-password"
+                    required
+                  />
+                  <p className="text-xs text-slate-500">
+                    Stored in Supabase Auth; the employee uses this password with their email on the login page (along with the matching role).
+                  </p>
+                </div>
+              ) : null}
+
+              {submitError ? <p className="md:col-span-2 text-sm text-red-600">{submitError}</p> : null}
+
+              <div className="flex flex-wrap gap-2 pt-1 md:col-span-2">
                 <Button type="button" variant="outline" className="rounded-xl border-[#cfdceb]" onClick={onCreateNew}>
                   Reset
                 </Button>
                 <Button
                   type="submit"
                   className="rounded-xl bg-[#2563eb] text-white hover:bg-[#1d4ed8]"
-                  disabled={mode === "view"}
+                  disabled={mode === "view" || submitting}
                 >
-                  {mode === "add" ? "Create Employee" : "Save Changes"}
+                  {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {mode === "add" ? "Create Employee" : mode === "edit" ? "Save Changes" : ""}
                 </Button>
               </div>
             </form>
