@@ -282,7 +282,7 @@ export default function EmployeeMasterPage() {
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="bg-[#f1f6fc] text-[#64748b]">
                     <tr>
-                      {["Profile ID", "Name", "Role", "Department", "Designation", "Status", "Action"].map((heading) => (
+                      {["Name", "Role", "Department", "Designation", "Status", "Action"].map((heading) => (
                         <th key={heading} className="px-4 py-3">
                           {heading}
                         </th>
@@ -292,7 +292,6 @@ export default function EmployeeMasterPage() {
                   <tbody className="divide-y divide-[#e8edf5] text-slate-700">
                     {filteredEmployees.map((employee) => (
                       <tr key={employee.id}>
-                        <td className="px-4 py-3 font-mono text-xs text-slate-600">{employee.id.slice(0, 8)}…</td>
                         <td className="px-4 py-3">
                           <p className="font-medium text-slate-900">{employee.full_name}</p>
                           <p className="text-xs text-slate-500">{employee.email}</p>
@@ -335,7 +334,7 @@ export default function EmployeeMasterPage() {
                     ))}
                     {!filteredEmployees.length ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
+                        <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
                           No employees found for current filters.
                         </td>
                       </tr>

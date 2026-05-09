@@ -19,6 +19,15 @@ const ERROR_MAP: Record<string, string> = {
   inactive: "Your account is inactive. Please contact admin.",
 };
 
+async function parseApiError(response: Response, fallback: string) {
+  try {
+    const payload = (await response.json()) as { error?: string };
+    return payload.error ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function LoginForm({ initialError }: LoginFormProps) {
   const router = useRouter();
   const [selectedRole, setSelectedRole] = useState<"admin" | "employee" | "manager" | "accounts">("employee");
@@ -49,6 +58,7 @@ export function LoginForm({ initialError }: LoginFormProps) {
       email: normalizedEmail,
       password,
     });
+    let firstLoginError: string | null = null;
 
     if (signInError || !signInData.user) {
       // First-login initialization: if auth password is not yet set, initialize once and retry.
@@ -69,11 +79,13 @@ export function LoginForm({ initialError }: LoginFormProps) {
         });
         signInData = retry.data;
         signInError = retry.error;
+      } else {
+        firstLoginError = await parseApiError(firstLoginRes, "Could not initialize first login.");
       }
     }
 
     if (signInError || !signInData.user) {
-      setError(signInError?.message ?? "Invalid credentials.");
+      setError(firstLoginError ?? signInError?.message ?? "Invalid credentials.");
       setIsLoading(false);
       return;
     }
