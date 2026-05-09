@@ -28,6 +28,33 @@ async function parseApiError(response: Response, fallback: string) {
   }
 }
 
+async function initializeFirstLogin(payload: { email: string; role: string; password: string }) {
+  const endpoints = ["/api/first-login", "/api/auth/first-login"];
+
+  for (const endpoint of endpoints) {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (response.status === 404) {
+      continue;
+    }
+
+    if (response.ok) {
+      return { ok: true as const, error: null };
+    }
+
+    return {
+      ok: false as const,
+      error: await parseApiError(response, "Could not initialize first login."),
+    };
+  }
+
+  return { ok: false as const, error: null };
+}
+
 export function LoginForm({ initialError }: LoginFormProps) {
   const router = useRouter();
   const [selectedRole, setSelectedRole] = useState<"admin" | "employee" | "manager" | "accounts">("employee");
@@ -62,17 +89,13 @@ export function LoginForm({ initialError }: LoginFormProps) {
 
     if (signInError || !signInData.user) {
       // First-login initialization: if auth password is not yet set, initialize once and retry.
-      const firstLoginRes = await fetch("/api/auth/first-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: normalizedEmail,
-          role: selectedRole,
-          password,
-        }),
+      const firstLoginResult = await initializeFirstLogin({
+        email: normalizedEmail,
+        role: selectedRole,
+        password,
       });
 
-      if (firstLoginRes.ok) {
+      if (firstLoginResult.ok) {
         const retry = await supabase.auth.signInWithPassword({
           email: normalizedEmail,
           password,
@@ -80,7 +103,7 @@ export function LoginForm({ initialError }: LoginFormProps) {
         signInData = retry.data;
         signInError = retry.error;
       } else {
-        firstLoginError = await parseApiError(firstLoginRes, "Could not initialize first login.");
+        firstLoginError = firstLoginResult.error;
       }
     }
 
