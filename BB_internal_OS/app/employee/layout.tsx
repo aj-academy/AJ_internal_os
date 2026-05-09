@@ -1,4 +1,5 @@
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
+import { PolicyAcceptanceGate } from "@/components/policies/PolicyAcceptanceGate";
 import { requireRole } from "@/lib/auth/requireRole";
 
 const employeeSidebarItems = [
@@ -9,7 +10,7 @@ const employeeSidebarItems = [
   { label: "My Tasks", href: "/employee/my-tasks" },
   { label: "My Leave", href: "/employee/dashboard" },
   { label: "My Expenses", href: "/employee/dashboard" },
-  { label: "Company Policies", href: "/employee/dashboard" },
+  { label: "Company Policies", href: "/employee/policies" },
   { label: "My Profile", href: "/employee/dashboard" },
 ];
 
@@ -25,6 +26,7 @@ export default async function EmployeeLayout({
       userName={profile.full_name ?? "Employee"}
       userEmail={userEmail}
     >
+      <PolicyAcceptanceGate />
       {children}
     </DashboardLayout>
   );

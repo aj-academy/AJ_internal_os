@@ -1,0 +1,36 @@
+Apply these SQL scripts in Supabase SQL Editor (same production project as the app).
+Match the NEXT_PUBLIC_SUPABASE_URL in Vercel / .env.local.
+
+Order (core → features → RLS):
+
+1) schema.sql
+   Profiles, employee_details, audit_logs, helpers (get_user_role, is_admin).
+
+2) attendance_schema.sql
+   attendance_records, work_summaries, work_from_home_requests, leave_requests, attendance_settings.
+   NOTE: This file defines a simplified permission_requests. If you use permission_requests_schema.sql
+   instead (recommended), SKIP creating permission_requests from attendance_schema.sql or drop the weak
+   table first — prefer permission_requests_schema.sql for approval fields used by Admin Attendance UI.
+
+3) permission_requests_schema.sql
+   Full permission_requests (approved_by, approved_at, rejection_reason, permission_type, updated_at).
+
+4) employee_master_schema.sql
+   Optional: departments / designations / employee_master extensions.
+
+5) client_lead_schema.sql
+   Clients / leads tables.
+
+6) task_schema.sql
+   Task assignment tables + RLS.
+
+7) company_policies_schema.sql
+   company_policies + policy_acceptances (Employee policy gate + Admin policy URLs).
+
+8) rls-policies.sql
+   Core RLS on profiles / employee_details / audit_logs / settings.
+
+9) attendance_rls.sql
+   Attendance + work_summaries + permission_requests + profiles read policies used by Employee/Admin attendance.
+
+Re-run scripts are generally safe where they use CREATE IF NOT EXISTS / DROP POLICY IF EXISTS.
