@@ -19,7 +19,12 @@ Order (core → features → RLS):
    Optional: departments / designations / employee_master extensions.
 
 5) client_lead_schema.sql
-   Clients / leads tables.
+   Single public.clients row model (leads + converted clients), full CRM columns, RLS, realtime on clients.
+   This is the authoritative clients table — not duplicated by the next script.
+
+5b) client_master_schema.sql
+   Run after (5). Satellite tables: lead_followups, lead_activities, client_documents (+ RLS + realtime).
+   Plus idempotent ALTER/legacy constraint drops for databases that were created from an older narrow clients table.
 
 6) task_schema.sql
    Task assignment tables + RLS.
