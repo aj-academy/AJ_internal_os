@@ -1775,10 +1775,7 @@ function ProfileModal({
   follows: FollowRow[];
   activities: ActivityRow[];
 }) {
-  const budgetTxt =
-    lead.budget !== null && lead.budget !== undefined && lead.budget !== ""
-      ? String(lead.budget)
-      : "—";
+  const budgetTxt = lead.budget != null ? String(lead.budget) : "—";
   const scoreTxt = lead.lead_score !== null && lead.lead_score !== undefined ? String(lead.lead_score) : "—";
   const servicesList = servicesFromCsv(typeof lead.service_interest === "string" ? lead.service_interest : "");
 
