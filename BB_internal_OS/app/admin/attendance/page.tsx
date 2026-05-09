@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { AdminAttendanceAutoRefresh } from "@/components/attendance/AdminAttendanceAutoRefresh";
@@ -80,6 +81,8 @@ interface AdminAttendancePageProps {
     q?: string;
   }>;
 }
+
+const VALID_TABS = new Set(["overview", "logs", "permission", "summary", "monthly"]);
 
 
 function getTodayLocalDate() {
@@ -287,7 +290,14 @@ async function handleSummaryReview(formData: FormData) {
 
 export default async function AdminAttendancePage({ searchParams }: AdminAttendancePageProps) {
   const params = await searchParams;
-  const selectedTab = "overview";
+  const selectedTab = (params.tab ?? "overview").toLowerCase();
+  const removedTabs = new Set(["daily", "leave", "wfh", "settings"]);
+  if (removedTabs.has(selectedTab)) {
+    redirect("/admin/attendance?tab=overview");
+  }
+  if (!VALID_TABS.has(selectedTab)) {
+    redirect("/admin/attendance?tab=overview");
+  }
 
   const supabase = await createClient();
   const today = getTodayLocalDate();
