@@ -68,6 +68,15 @@ function mapProfileToRow(p: Profile): EmployeeRow {
   };
 }
 
+async function readApiError(response: Response, fallback: string) {
+  try {
+    const payload = (await response.json()) as { error?: string };
+    return payload.error ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function EmployeeMasterPage() {
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -166,9 +175,8 @@ export default function EmployeeMasterPage() {
             password: form.password,
           }),
         });
-        const payload = (await res.json()) as { error?: string };
         if (!res.ok) {
-          setSubmitError(payload.error ?? "Could not create employee.");
+          setSubmitError(await readApiError(res, "Could not create employee."));
           return;
         }
       } else if (mode === "edit" && form.id) {
@@ -184,15 +192,17 @@ export default function EmployeeMasterPage() {
             status: form.status,
           }),
         });
-        const payload = (await res.json()) as { error?: string };
         if (!res.ok) {
-          setSubmitError(payload.error ?? "Could not update employee.");
+          setSubmitError(await readApiError(res, "Could not update employee."));
           return;
         }
       }
 
       await loadEmployees();
       onCreateNew();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Request failed while saving employee.";
+      setSubmitError(message);
     } finally {
       setSubmitting(false);
     }
