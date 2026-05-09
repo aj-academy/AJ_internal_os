@@ -10,6 +10,7 @@ import {
   CRM_FOLLOW_UP_TYPES_UI,
   CRM_LEAD_STATUSES,
   CRM_PRIORITIES,
+  CRM_PROPOSAL_STATUSES,
   CRM_SERVICES,
   CRM_SOURCES,
   CRM_TAB_IDS,
@@ -74,6 +75,24 @@ function csvServices(set: Set<string>) {
   return Array.from(set).join(", ");
 }
 
+function logDevSupabase(tag: string, err: unknown) {
+  if (process.env.NODE_ENV !== "development") return;
+  // eslint-disable-next-line no-console -- intentional dev-only diagnostics
+  console.error(`[CRM ${tag}]`, err);
+}
+
+function normalizeTimeForDb(raw: string | null | undefined): string | null {
+  const t = (raw || "").trim();
+  if (!t) return null;
+  if (/^\d{2}:\d{2}$/.test(t)) return `${t}:00`;
+  if (/^\d{2}:\d{2}:\d{2}/.test(t)) return t.slice(0, 8);
+  return t;
+}
+
+function isIsoDate(d: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(d);
+}
+
 function emptyForm(assignedFallback: string, admin: boolean): CrmLeadFormValue {
   return {
     lead_name: "",
@@ -114,14 +133,59 @@ async function insertActivityClient(
   old_value?: string | null,
   new_value?: string | null,
 ) {
-  await supabase.from("lead_activities").insert({
+  if (!clientId?.trim()) throw new Error("Activity log failed: missing client.");
+  if (!userId?.trim()) throw new Error("Activity log failed: missing user session.");
+  const { error } = await supabase.from("lead_activities").insert({
     client_id: clientId,
     activity_type,
-    notes: notes ?? "",
+    notes: notes?.trim() ? notes.trim() : null,
     old_value: old_value ?? null,
     new_value: new_value ?? null,
     created_by: userId,
   });
+  if (error) {
+    logDevSupabase("lead_activities.insert", error);
+    throw new Error(error.message);
+  }
+}
+
+async function fetchFollowupsAndActivitiesForIds(
+  supabase: ReturnType<typeof createClient>,
+  ids: string[],
+): Promise<{ follows: FollowRow[]; activities: ActivityRow[] }> {
+  if (!ids.length) return { follows: [], activities: [] };
+  const chunkSize = 120;
+  const allFollows: FollowRow[] = [];
+  const allActivities: ActivityRow[] = [];
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const slice = ids.slice(i, i + chunkSize);
+    const [fr, ar] = await Promise.all([
+      supabase
+        .from("lead_followups")
+        .select("id,client_id,follow_up_date,follow_up_time,follow_up_type,status,notes,created_at")
+        .in("client_id", slice)
+        .order("follow_up_date", { ascending: true })
+        .limit(500),
+      supabase
+        .from("lead_activities")
+        .select("id,client_id,activity_type,notes,old_value,new_value,created_at,created_by")
+        .in("client_id", slice)
+        .order("created_at", { ascending: false })
+        .limit(400),
+    ]);
+    if (fr.error) {
+      logDevSupabase("lead_followups.select", fr.error);
+      throw new Error(fr.error.message);
+    }
+    if (ar.error) {
+      logDevSupabase("lead_activities.select", ar.error);
+      throw new Error(ar.error.message);
+    }
+    allFollows.push(...((fr.data as FollowRow[] | null) ?? []));
+    allActivities.push(...((ar.data as ActivityRow[] | null) ?? []));
+  }
+  allActivities.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  return { follows: allFollows, activities: allActivities.slice(0, 500) };
 }
 
 function pickEmployeePayload(base: Record<string, unknown>) {
@@ -196,6 +260,17 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
     type: "Call",
     notes: "",
   });
+
+  const [proposalModalLead, setProposalModalLead] = useState<CrmClientRow | null>(null);
+  const [proposalDraft, setProposalDraft] = useState({
+    status: "Not Sent" as CrmProposalStatus,
+    amount: "",
+    sent_date: "",
+    proposal_link: "",
+    quotation_link: "",
+    agreement_link: "",
+  });
+  const [proposalSubmitting, setProposalSubmitting] = useState(false);
 
   const [overview, setOverview] = useState({
     total: 0,
@@ -334,13 +409,37 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
     }
   }, [currentUserId, loadClientsDataset, loadOverviewCounts]);
 
+  /** Refresh clients + follow-ups + activities + overview without full-page loading spinner. */
+  const silentRefreshCrm = useCallback(async () => {
+    if (!currentUserId) return;
+    try {
+      const { data, error: loadError } = await buildClientsBaseQuery();
+      if (loadError) throw new Error(loadError.message);
+      const next = data ?? [];
+      setClients(next);
+      const ids = next.map((c) => c.id);
+      if (!ids.length) {
+        setFollowRows([]);
+        setActivityRows([]);
+      } else {
+        const { follows, activities } = await fetchFollowupsAndActivitiesForIds(supabase, ids);
+        setFollowRows(follows);
+        setActivityRows(activities);
+      }
+      await loadOverviewCounts();
+    } catch (e) {
+      setError(friendlyError(e));
+      logDevSupabase("silentRefreshCrm", e);
+    }
+  }, [buildClientsBaseQuery, currentUserId, loadOverviewCounts, supabase]);
+
   useEffect(() => {
     void loadEmployees();
     async function loadEmployees() {
       const { data, error: profilesError } = await supabase
         .from("profiles")
         .select("id,full_name,email")
-        .in("role", ["employee", "manager"])
+        .in("role", ["employee", "manager", "admin", "super_admin"])
         .eq("status", "active")
         .order("full_name", { ascending: true });
       if (!profilesError) setEmployees((data ?? []) as ProfileMini[]);
@@ -373,22 +472,14 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
       return;
     }
     void (async () => {
-      const [fr, ar] = await Promise.all([
-        supabase
-          .from("lead_followups")
-          .select("id,client_id,follow_up_date,follow_up_time,follow_up_type,status,notes,created_at")
-          .in("client_id", ids)
-          .order("follow_up_date", { ascending: true })
-          .limit(500),
-        supabase
-          .from("lead_activities")
-          .select("id,client_id,activity_type,notes,old_value,new_value,created_at,created_by")
-          .in("client_id", ids)
-          .order("created_at", { ascending: false })
-          .limit(350),
-      ]);
-      if (!fr.error) setFollowRows((fr.data as FollowRow[] | null) ?? []);
-      if (!ar.error) setActivityRows((ar.data as ActivityRow[] | null) ?? []);
+      try {
+        const { follows, activities } = await fetchFollowupsAndActivitiesForIds(supabase, ids);
+        setFollowRows(follows);
+        setActivityRows(activities);
+      } catch (e) {
+        setError(friendlyError(e));
+        logDevSupabase("fetchFollowupsAndActivitiesForIds", e);
+      }
     })();
   }, [clients, supabase]);
 
@@ -397,27 +488,13 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
     const ch = supabase
       .channel("crm-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "clients" }, () => void reload())
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "lead_followups" },
-        () =>
-          void (async () => {
-            await loadClientsDataset();
-          })(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "lead_activities" },
-        () =>
-          void (async () => {
-            await loadClientsDataset();
-          })(),
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "lead_followups" }, () => void reload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "lead_activities" }, () => void reload())
       .subscribe();
     return () => {
       void supabase.removeChannel(ch);
     };
-  }, [currentUserId, loadClientsDataset, reload, supabase]);
+  }, [currentUserId, reload, supabase]);
 
   const filteredClients = useMemo(() => {
     let list = [...clients];
@@ -601,9 +678,30 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
       if (!isAdmin && editId) {
         const base = buildPayload(form, { full: false }) as Record<string, unknown>;
         const limited = pickEmployeePayload(base);
+        const previous = clients.find((cRow) => cRow.id === editId);
         const up = await supabase.from("clients").update(limited).eq("id", editId).eq("assigned_to", currentUserId);
         if (up.error) throw up.error;
-        await insertActivityClient(supabase, editId, "Lead Updated", "Employee saved changes.", currentUserId);
+        const prevP = {
+          st: String(previous?.proposal_status ?? ""),
+          am: previous?.proposal_amount != null ? String(previous.proposal_amount) : "",
+          sd: String(previous?.proposal_sent_date ?? "").slice(0, 10),
+        };
+        const newP = {
+          st: String(limited.proposal_status ?? ""),
+          am: String(limited.proposal_amount ?? ""),
+          sd: String(limited.proposal_sent_date ?? "").slice(0, 10),
+        };
+        if (previous && (prevP.st !== newP.st || prevP.am !== newP.am || prevP.sd !== newP.sd)) {
+          await insertActivityClient(
+            supabase,
+            editId,
+            "Proposal Updated",
+            `Status ${newP.st}${newP.am ? ` · Amount ₹${Number(newP.am).toLocaleString()}` : ""}`,
+            currentUserId,
+          );
+        } else {
+          await insertActivityClient(supabase, editId, "Lead Updated", "Employee saved changes.", currentUserId);
+        }
         setSuccess("Lead updated.");
       } else if (editId && isAdmin) {
         const full = buildPayload(form, { full: true }) as Record<string, unknown>;
@@ -611,17 +709,56 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
         const up = await supabase.from("clients").update(full).eq("id", editId);
         if (up.error) throw up.error;
         const prevStat = normalizeStatus(String(previous?.status ?? ""));
-        if (previous && prevStat !== form.status.trim()) {
+        const prevAss = previous?.assigned_to ? String(previous.assigned_to) : "";
+        const newAss = form.assigned_to ? String(form.assigned_to) : "";
+        const prevProp = {
+          st: String(previous?.proposal_status ?? ""),
+          am: previous?.proposal_amount != null ? String(previous.proposal_amount) : "",
+          sd: String(previous?.proposal_sent_date ?? "").slice(0, 10),
+        };
+        const newProp = {
+          st: form.proposal_status,
+          am: form.proposal_amount.trim(),
+          sd: form.proposal_sent_date,
+        };
+        const proposalChanged =
+          !!previous &&
+          (prevProp.st !== newProp.st || prevProp.am !== newProp.am || prevProp.sd !== newProp.sd);
+        const statusChanged = !!previous && prevStat !== form.status.trim();
+        const assignedChanged = !!previous && prevAss !== newAss;
+
+        if (statusChanged) {
           await insertActivityClient(
             supabase,
             editId,
             "Status Changed",
             "",
             currentUserId,
-            String(previous.status ?? ""),
+            String(previous?.status ?? ""),
             form.status.trim(),
           );
-        } else {
+        }
+        if (assignedChanged) {
+          await insertActivityClient(
+            supabase,
+            editId,
+            "Assigned Person Changed",
+            "Lead owner updated.",
+            currentUserId,
+            prevAss || "Unassigned",
+            newAss || "Unassigned",
+          );
+        }
+        if (proposalChanged) {
+          await insertActivityClient(
+            supabase,
+            editId,
+            "Proposal Updated",
+            `Status ${newProp.st}${newProp.am ? ` · Amount ₹${Number(newProp.am).toLocaleString()}` : ""}`,
+            currentUserId,
+          );
+        }
+        if (!statusChanged && !assignedChanged && !proposalChanged) {
           await insertActivityClient(supabase, editId, "Lead Updated", "", currentUserId);
         }
         setSuccess("Lead saved.");
@@ -680,13 +817,18 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
       setError(updateError.message);
       return;
     }
-    await insertActivityClient(
-      supabase,
-      leadRow.id,
-      "Converted to Client",
-      `Assigned client code ${nextCode}`,
-      currentUserId,
-    );
+    try {
+      await insertActivityClient(
+        supabase,
+        leadRow.id,
+        "Converted to Client",
+        `Assigned client code ${nextCode}`,
+        currentUserId,
+      );
+    } catch (e) {
+      logDevSupabase("convertLead.activity", e);
+      setError(`Converted, but timeline log failed: ${friendlyError(e)}`);
+    }
     setSuccess("Converted.");
     await reload();
   };
@@ -699,55 +841,195 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
       setError(pipelineError.message);
       return;
     }
-    await insertActivityClient(supabase, leadRow.id, "Status Changed", "", currentUserId, String(prev ?? ""), nextStatus);
+    try {
+      await insertActivityClient(supabase, leadRow.id, "Status Changed", "", currentUserId, String(prev ?? ""), nextStatus);
+    } catch (e) {
+      logDevSupabase("changePipelineStatus.activity", e);
+      setError(`Status updated, but timeline log failed: ${friendlyError(e)}`);
+    }
     await reload();
   };
 
   const saveFollowQuick = async () => {
-    if (!followModalFor || !currentUserId) return;
+    if (!followModalFor?.id?.trim()) {
+      setError("Follow-up failed: missing lead.");
+      return;
+    }
+    let actor = currentUserId;
+    if (!actor?.trim()) {
+      const { data: authData } = await supabase.auth.getUser();
+      actor = authData.user?.id ?? "";
+      if (!actor) {
+        setError("Follow-up failed: sign in again, then retry.");
+        return;
+      }
+      setCurrentUserId(actor);
+    }
+
+    const followDate = (followDraft.date || followModalFor.follow_up_date || todayISO()).toString().slice(0, 10);
+    if (!isIsoDate(followDate)) {
+      setError("Please enter a valid follow-up date (YYYY-MM-DD).");
+      return;
+    }
+    const followTime = normalizeTimeForDb(followDraft.time);
+    const followType = (followDraft.type || "Call").trim() || "Call";
+    const notesVal = followDraft.notes.trim() || null;
+
     setSubmitting(true);
+    setError(null);
     try {
       const ins = await supabase.from("lead_followups").insert({
         client_id: followModalFor.id,
-        follow_up_date: followDraft.date || followModalFor.follow_up_date || todayISO(),
-        follow_up_time: followDraft.time || null,
-        follow_up_type: followDraft.type || "Call",
+        follow_up_date: followDate,
+        follow_up_time: followTime,
+        follow_up_type: followType,
         status: "Pending",
-        notes: followDraft.notes,
-        created_by: currentUserId,
+        notes: notesVal,
+        created_by: actor,
       });
-      if (ins.error) throw ins.error;
-      await supabase
+      if (ins.error) {
+        logDevSupabase("lead_followups.insert", ins.error);
+        throw new Error(ins.error.message);
+      }
+      const up = await supabase
         .from("clients")
         .update({
-          follow_up_date: followDraft.date || followModalFor.follow_up_date,
-          follow_up_time: followDraft.time || null,
-          follow_up_type: followDraft.type,
+          follow_up_date: followDate,
+          follow_up_time: followTime,
+          follow_up_type: followType,
         })
         .eq("id", followModalFor.id);
+      if (up.error) {
+        logDevSupabase("clients.follow_up_snapshot", up.error);
+        throw new Error(up.error.message);
+      }
       await insertActivityClient(
         supabase,
         followModalFor.id,
-        "Follow-up scheduled",
-        followDraft.notes || "",
-        currentUserId,
+        "Follow-up Added",
+        notesVal || `Scheduled ${followDate} · ${followType}`,
+        actor,
       );
       setFollowModalFor(null);
       setSuccess("Follow-up added.");
-      await reload();
+      await silentRefreshCrm();
     } catch (e) {
       setError(friendlyError(e));
+      logDevSupabase("saveFollowQuick", e);
     } finally {
       setSubmitting(false);
     }
   };
 
   const markFollowCompleted = async (fr: FollowRow) => {
-    const { error: doneError } = await supabase.from("lead_followups").update({ status: "Completed" }).eq("id", fr.id);
-    if (!doneError && fr.client_id) {
-      await insertActivityClient(supabase, fr.client_id, "Follow-up completed", fr.notes || "", currentUserId);
-      await reload();
-    } else if (doneError) setError(doneError.message);
+    if (!currentUserId) return;
+    setError(null);
+    try {
+      const { error: doneError } = await supabase.from("lead_followups").update({ status: "Completed" }).eq("id", fr.id);
+      if (doneError) {
+        logDevSupabase("lead_followups.complete", doneError);
+        throw new Error(doneError.message);
+      }
+      if (fr.client_id) {
+        const patch = await supabase
+          .from("clients")
+          .update({ last_contacted_at: new Date().toISOString() })
+          .eq("id", fr.client_id);
+        if (patch.error) logDevSupabase("clients.last_contacted_at", patch.error);
+        await insertActivityClient(
+          supabase,
+          fr.client_id,
+          "Follow-up completed",
+          fr.notes?.trim() ? fr.notes.trim() : null,
+          currentUserId,
+        );
+      }
+      setSuccess("Follow-up marked completed.");
+      await silentRefreshCrm();
+    } catch (e) {
+      setError(friendlyError(e));
+      logDevSupabase("markFollowCompleted", e);
+    }
+  };
+
+  const openProposalModal = (lead: CrmClientRow) => {
+    setProposalModalLead(lead);
+    setProposalDraft({
+      status: ((lead.proposal_status as CrmProposalStatus) || "Not Sent") as CrmProposalStatus,
+      amount: lead.proposal_amount != null ? String(lead.proposal_amount) : "",
+      sent_date: lead.proposal_sent_date ? String(lead.proposal_sent_date).slice(0, 10) : "",
+      proposal_link: String(lead.proposal_link ?? ""),
+      quotation_link: String(lead.quotation_link ?? ""),
+      agreement_link: String(lead.agreement_link ?? ""),
+    });
+  };
+
+  const saveProposalFromModal = async () => {
+    if (!proposalModalLead?.id || !currentUserId) return;
+    if (!isAdmin) {
+      setError("Only admins can update proposals from the tracker.");
+      return;
+    }
+    setProposalSubmitting(true);
+    setError(null);
+    try {
+      const prev = proposalModalLead;
+      const amtRaw = proposalDraft.amount.trim();
+      const amt = amtRaw === "" ? null : Number(proposalDraft.amount);
+      if (amtRaw !== "" && !Number.isFinite(amt)) {
+        setError("Proposal amount must be a valid number.");
+        return;
+      }
+      const updates: Record<string, unknown> = {
+        proposal_status: proposalDraft.status,
+        proposal_amount: amt,
+        proposal_sent_date: proposalDraft.sent_date.trim() || null,
+        proposal_link: proposalDraft.proposal_link.trim() || null,
+        quotation_link: proposalDraft.quotation_link.trim() || null,
+        agreement_link: proposalDraft.agreement_link.trim() || null,
+      };
+
+      if (proposalDraft.status === "Accepted" && normalizeStatus(String(prev.status)) !== "Converted") {
+        const year = new Date().getFullYear();
+        const { count } = await supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "Converted");
+        const nextCode = (typeof prev.client_code === "string" && prev.client_code.trim())
+          ? prev.client_code.trim()
+          : `BB-${year}-${String((count ?? 0) + 1).padStart(4, "0")}`;
+        updates.status = "Converted";
+        updates.converted_at = new Date().toISOString();
+        if (!(typeof prev.client_code === "string" && prev.client_code.trim())) {
+          updates.client_code = nextCode;
+        }
+      }
+
+      const { error: upErr } = await supabase.from("clients").update(updates).eq("id", prev.id);
+      if (upErr) {
+        logDevSupabase("clients.proposal_update", upErr);
+        throw new Error(upErr.message);
+      }
+
+      const noteLine = `Status: ${proposalDraft.status}${amt != null ? ` · Amount: ₹${Number(amt).toLocaleString()}` : ""}`;
+      await insertActivityClient(supabase, prev.id, "Proposal Updated", noteLine, currentUserId);
+
+      if (proposalDraft.status === "Accepted" && normalizeStatus(String(prev.status)) !== "Converted") {
+        await insertActivityClient(
+          supabase,
+          prev.id,
+          "Converted to Client",
+          "Proposal accepted — lead marked converted.",
+          currentUserId,
+        );
+      }
+
+      setProposalModalLead(null);
+      setSuccess("Proposal saved.");
+      await silentRefreshCrm();
+    } catch (e) {
+      setError(friendlyError(e));
+      logDevSupabase("saveProposalFromModal", e);
+    } finally {
+      setProposalSubmitting(false);
+    }
   };
 
   const todayFollowUps = followRowsScoped.filter((f) => f.follow_up_date === todayISO());
@@ -926,23 +1208,38 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
       )}
 
       {activeTab === "proposal" && (
-        <ProposalTable
-          leads={filteredClients.filter((leadRecord) =>
-            Boolean(
-              (leadRecord.proposal_status && leadRecord.proposal_status !== "Not Sent") ||
-                (leadRecord.proposal_amount != null && Number(leadRecord.proposal_amount) > 0),
-            ),
-          )}
+        <>
+          <p className="text-sm text-[#64748b]">
+            Track and update proposal fields on each lead. Changes save to the lead record and appear in Activity Timeline.
+          </p>
+          <ProposalTrackerTable leads={filteredClients} isAdmin={isAdmin} onEdit={(leadRow) => openProposalModal(leadRow)} />
+          {proposalModalLead ? (
+            <ProposalEditModal
+              lead={proposalModalLead}
+              draft={proposalDraft}
+              setDraft={setProposalDraft}
+              submitting={proposalSubmitting}
+              onClose={() => setProposalModalLead(null)}
+              onSave={() => void saveProposalFromModal()}
+            />
+          ) : null}
+        </>
+      )}
+
+      {activeTab === "timeline" && (
+        <ActivityTable rows={activityRows} clientMap={clientMap} employeeNameMap={employeeNameMap} loading={loading} />
+      )}
+
+      {activeTab === "reports" && (
+        <ReportsPanel
+          leads={filteredClients}
+          followRows={followRowsScoped}
+          isAdmin={isAdmin}
+          employeeNameMap={employeeNameMap}
         />
       )}
 
-      {activeTab === "timeline" && <ActivityTable rows={activityRows} clientMap={clientMap} />}
-
-      {activeTab === "reports" && (
-        <ReportsPanel leads={filteredClients} followRows={followRowsScoped} isAdmin={isAdmin} />
-      )}
-
-      {activeTab === "settings" && <SettingsPlaceholder />}
+      {activeTab === "settings" && <CrmSettingsPanel />}
 
       {panelOpen && (
         <>
@@ -1167,6 +1464,13 @@ function FollowUpsTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-[#e8edf5]">
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={9} className="px-6 py-12 text-center text-[#64748b]">
+                No follow-ups loaded yet. Add one from All Leads → Follow-up, or ensure follow-up rows exist for your visible leads.
+              </td>
+            </tr>
+          ) : null}
           {rows.map((fr) => {
             const cli = clientMap[fr.client_id];
             if (!cli) return null;
@@ -1440,81 +1744,254 @@ function ConvertedTable({
   );
 }
 
-function ProposalTable({ leads }: { leads: CrmClientRow[] }) {
+function ProposalTrackerTable({
+  leads,
+  isAdmin,
+  onEdit,
+}: {
+  leads: CrmClientRow[];
+  isAdmin: boolean;
+  onEdit: (l: CrmClientRow) => void;
+}) {
   return (
-    <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white">
-      <table className="w-full min-w-[760px] text-sm">
+    <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+      <table className="w-full min-w-[880px] text-sm">
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
-            <th className="px-4 py-3 text-left">Lead</th>
-            <th className="px-4 py-3 text-left">Company</th>
-            <th className="px-4 py-3 text-left">Amount</th>
-            <th className="px-4 py-3 text-left">Status</th>
-            <th className="px-4 py-3 text-left">Sent date</th>
-            <th className="px-4 py-3 text-left">Link</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Lead</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Company</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Amount</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Status</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Sent date</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Proposal link</th>
+            <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide">Actions</th>
           </tr>
         </thead>
         <tbody>
-          {leads.map((proposalLead) => (
-            <tr key={proposalLead.id} className="border-t border-[#eef2ff]">
-              <td className="px-4 py-3 font-semibold">{displayLeadName(proposalLead)}</td>
-              <td>{proposalLead.company_name}</td>
-              <td>{proposalLead.proposal_amount != null ? `₹${Number(proposalLead.proposal_amount).toLocaleString()}` : "—"}</td>
-              <td><ProposalStatusBadge status={String(proposalLead.proposal_status)} /></td>
-              <td className="whitespace-nowrap">{proposalLead.proposal_sent_date || "—"}</td>
-              <td>
-                {proposalLead.proposal_link ? (
-                  <a href={String(proposalLead.proposal_link)} target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 hover:underline">
-                    Open
-                  </a>
-                ) : (
-                  "—"
-                )}
+          {leads.length === 0 ? (
+            <tr>
+              <td colSpan={7} className="px-6 py-12 text-center text-[#64748b]">
+                No leads match the current filters. Adjust filters on the All Leads tab or add a lead.
               </td>
             </tr>
-          ))}
+          ) : (
+            leads.map((proposalLead) => (
+              <tr key={proposalLead.id} className="border-t border-[#eef2ff]">
+                <td className="px-4 py-3 font-semibold text-slate-900">{displayLeadName(proposalLead) || "—"}</td>
+                <td className="max-w-[200px] truncate px-4 py-3">{proposalLead.company_name || "—"}</td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  {proposalLead.proposal_amount != null ? `₹${Number(proposalLead.proposal_amount).toLocaleString()}` : "—"}
+                </td>
+                <td className="px-4 py-3">
+                  <ProposalStatusBadge status={String(proposalLead.proposal_status)} />
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">{proposalLead.proposal_sent_date || "—"}</td>
+                <td className="px-4 py-3">
+                  {proposalLead.proposal_link ? (
+                    <a
+                      href={String(proposalLead.proposal_link)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-blue-700 hover:underline"
+                    >
+                      Open
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  {isAdmin ? (
+                    <button type="button" className="text-xs font-semibold text-blue-700 hover:underline" onClick={() => onEdit(proposalLead)}>
+                      Update
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-400">Admin only</span>
+                  )}
+                </td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>
   );
 }
 
+function ProposalEditModal({
+  lead,
+  draft,
+  setDraft,
+  onClose,
+  onSave,
+  submitting,
+}: {
+  lead: CrmClientRow;
+  draft: {
+    status: CrmProposalStatus;
+    amount: string;
+    sent_date: string;
+    proposal_link: string;
+    quotation_link: string;
+    agreement_link: string;
+  };
+  setDraft: Dispatch<
+    SetStateAction<{
+      status: CrmProposalStatus;
+      amount: string;
+      sent_date: string;
+      proposal_link: string;
+      quotation_link: string;
+      agreement_link: string;
+    }>
+  >;
+  onClose: () => void;
+  onSave: () => void;
+  submitting: boolean;
+}) {
+  return (
+    <>
+      <button type="button" aria-label="Close" className="fixed inset-0 z-[60] bg-slate-900/40" onClick={onClose} />
+      <div className="fixed left-4 right-4 top-[8%] z-[61] mx-auto max-h-[85vh] max-w-lg overflow-y-auto rounded-[20px] border border-[#d4deea] bg-white p-6 shadow-2xl sm:left-auto sm:right-10">
+        <h4 className="text-lg font-semibold text-[#0f172a]">Update proposal</h4>
+        <p className="mt-1 text-xs text-[#64748b]">{displayLeadName(lead) || "—"} · {lead.company_name || "—"}</p>
+        <div className="mt-4 space-y-3 text-sm">
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-[#64748b]">Proposal status</span>
+            <select
+              className="rounded-lg border border-[#dbe6f3] bg-white px-3 py-2"
+              value={draft.status}
+              onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value as CrmProposalStatus }))}
+            >
+              {CRM_PROPOSAL_STATUSES.map((st) => (
+                <option key={st} value={st}>
+                  {st}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-[#64748b]">Proposal amount (₹)</span>
+            <Input value={draft.amount} onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value }))} className="rounded-lg border-[#dbe6f3]" />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-[#64748b]">Sent date</span>
+            <Input type="date" value={draft.sent_date} onChange={(e) => setDraft((d) => ({ ...d, sent_date: e.target.value }))} className="rounded-lg border-[#dbe6f3]" />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-[#64748b]">Proposal link</span>
+            <Input value={draft.proposal_link} onChange={(e) => setDraft((d) => ({ ...d, proposal_link: e.target.value }))} className="rounded-lg border-[#dbe6f3]" />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-[#64748b]">Quotation link</span>
+            <Input value={draft.quotation_link} onChange={(e) => setDraft((d) => ({ ...d, quotation_link: e.target.value }))} className="rounded-lg border-[#dbe6f3]" />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-[#64748b]">Agreement link</span>
+            <Input value={draft.agreement_link} onChange={(e) => setDraft((d) => ({ ...d, agreement_link: e.target.value }))} className="rounded-lg border-[#dbe6f3]" />
+          </label>
+          {draft.status === "Accepted" ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              Accepted will mark this lead as <strong>Converted</strong> and set <strong>converted_at</strong> (and client code if missing).
+            </p>
+          ) : null}
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="button" className="rounded-full bg-[#2563eb]" disabled={submitting} onClick={onSave}>
+            Save
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function ActivityTable({
   rows,
   clientMap,
+  employeeNameMap,
+  loading,
 }: {
   rows: ActivityRow[];
   clientMap: Record<string, CrmClientRow>;
+  employeeNameMap: Record<string, string>;
+  loading: boolean;
 }) {
   return (
-    <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white">
-      <table className="w-full min-w-[700px] text-sm">
-        <thead className="bg-[#f1f6fc] text-[#64748b]">
-          <tr>
-            <th className="px-4 py-3 text-left">When</th>
-            <th className="px-4 py-3 text-left">Lead</th>
-            <th className="px-4 py-3 text-left">Type</th>
-            <th className="px-4 py-3 text-left">Details</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((ar) => (
-            <tr key={ar.id} className="border-t border-[#f1f5f9]">
-              <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">{new Date(ar.created_at).toLocaleString()}</td>
-              <td className="px-4 py-3 font-semibold">
-                {clientMap[ar.client_id] ? displayLeadName(clientMap[ar.client_id]) : ar.client_id}
-              </td>
-              <td>{ar.activity_type}</td>
-              <td className="max-w-xl text-xs text-slate-600">
-                {[ar.notes, ar.old_value || ar.new_value ? `${ar.old_value ?? "?"} → ${ar.new_value ?? "?"}` : ""]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </td>
+    <div className="space-y-3">
+      <p className="text-sm text-[#64748b]">
+        Chronological log of CRM actions for leads you can access. Rows come from <code className="rounded bg-slate-100 px-1 text-xs">lead_activities</code>{" "}
+        joined to lead names below.
+      </p>
+      <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+        <table className="w-full min-w-[920px] text-sm">
+          <thead className="bg-[#f1f6fc] text-[#64748b]">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Date &amp; time</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Lead / client</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Activity type</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Notes</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Created by</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                  Loading activity…
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-12 text-center text-[#64748b]">
+                  No activity found yet. Activities will appear when leads are created, follow-ups are added, proposals are updated, or status
+                  changes.
+                </td>
+              </tr>
+            ) : (
+              rows.map((ar) => {
+                const detail = [ar.notes, ar.old_value || ar.new_value ? `${ar.old_value ?? "?"} → ${ar.new_value ?? "?"}` : ""]
+                  .filter(Boolean)
+                  .join(" · ");
+                const by = ar.created_by ? employeeNameMap[ar.created_by] || ar.created_by.slice(0, 8) : "—";
+                return (
+                  <tr key={ar.id} className="border-t border-[#f1f5f9]">
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{new Date(ar.created_at).toLocaleString()}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-900">
+                      {clientMap[ar.client_id] ? displayLeadName(clientMap[ar.client_id]) || "—" : "Unknown lead"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-800">{ar.activity_type || "—"}</td>
+                    <td className="max-w-md px-4 py-3 text-xs text-slate-600">{detail || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-700">{by}</td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
+  );
+}
+
+function ReportStatCard({
+  title,
+  value,
+  subtitle,
+}: {
+  title: string;
+  value: string | number;
+  subtitle?: string;
+}) {
+  return (
+    <article className="flex min-h-[132px] flex-col rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+      <p className="text-sm font-medium text-[#64748b]">{title}</p>
+      <p className="mt-2 text-2xl font-semibold tracking-tight text-[#0f172a] sm:text-3xl">{value}</p>
+      {subtitle ? <p className="mt-auto pt-2 text-xs text-[#94a3b8]">{subtitle}</p> : <span className="mt-auto block pt-2 text-xs text-transparent">.</span>}
+    </article>
   );
 }
 
@@ -1522,10 +1999,12 @@ function ReportsPanel({
   leads,
   followRows,
   isAdmin,
+  employeeNameMap,
 }: {
   leads: CrmClientRow[];
   followRows: FollowRow[];
   isAdmin: boolean;
+  employeeNameMap: Record<string, string>;
 }) {
   const thisMonthKEY = monthKeyFromDate(new Date());
   const thisMonthLeads = leads.filter((l) => (l.created_at ? monthKeyFromDate(new Date(String(l.created_at))) === thisMonthKEY : false)).length;
@@ -1533,7 +2012,7 @@ function ReportsPanel({
   const total = leads.length;
   const fuTotal = followRows.length;
   const fuDone = followRows.filter((followRowCompletion) => followRowCompletion.status === "Completed").length;
-  const followUpCompletionPct = fuTotal ? `${((fuDone / fuTotal) * 100).toFixed(1)}%` : "—";
+  const followUpCompletionPct = fuTotal ? `${((fuDone / fuTotal) * 100).toFixed(1)}%` : total === 0 ? "0%" : "—";
   const convertedN = leads.filter((lEntry) => normalizeStatus(String(lEntry.status)) === "Converted").length;
   const lostN = leads.filter((lEntry) => normalizeStatus(String(lEntry.status)) === "Lost").length;
   const conversionRate = total ? `${((convertedN / total) * 100).toFixed(1)}%` : "0%";
@@ -1560,7 +2039,8 @@ function ReportsPanel({
 
   const byOwner = new Map<string, number>();
   leads.forEach((leadAssignment) => {
-    const ky = leadAssignment.assigned_to || "Unassigned";
+    const id = leadAssignment.assigned_to || "";
+    const ky = id ? employeeNameMap[id] || id.slice(0, 8) : "Unassigned";
     byOwner.set(ky, (byOwner.get(ky) || 0) + 1);
   });
 
@@ -1577,28 +2057,34 @@ function ReportsPanel({
   );
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        <LeadSummaryCard title="Leads this month" value={thisMonthLeads} loading={false} />
-        <LeadSummaryCard title="Conversion rate" value={conversionRate} loading={false} />
-        <LeadSummaryCard title="Lost rate" value={lostRate} loading={false} />
-        <LeadSummaryCard
-          title="Avg deal value"
+    <div className="space-y-6">
+      <p className="text-sm text-[#64748b]">Metrics use the leads visible in this workspace (respects your role and filters on other tabs).</p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <ReportStatCard title="Total leads this month" value={thisMonthLeads} subtitle="Created in current calendar month" />
+        <ReportStatCard title="Conversion rate" value={conversionRate} subtitle="Converted ÷ all visible leads" />
+        <ReportStatCard title="Lost rate" value={lostRate} subtitle="Lost ÷ all visible leads" />
+        <ReportStatCard
+          title="Average deal value"
           value={isAdmin && deals.length ? `₹${Math.round(avgDeal).toLocaleString()}` : "—"}
-          loading={false}
+          subtitle={isAdmin ? "From proposal amounts on visible leads" : "Visible to admin only"}
         />
-        {isAdmin ? (
-          <LeadSummaryCard title="Revenue potential" value={`₹${Math.round(revenuePotential).toLocaleString()}`} loading={false} />
-        ) : (
-          <LeadSummaryCard title="Potential (hidden)" value="—" loading={false} />
-        )}
-        <LeadSummaryCard title="Follow-up completion" value={followUpCompletionPct} loading={false} />
-        <LeadSummaryCard title="Dataset size (tab)" value={total} loading={false} />
+        <ReportStatCard
+          title="Revenue potential"
+          value={isAdmin ? `₹${Math.round(revenuePotential).toLocaleString()}` : "—"}
+          subtitle={isAdmin ? "Sum of budgets (excl. closed)" : "Admin view"}
+        />
+        <ReportStatCard
+          title="Follow-up completion rate"
+          value={followUpCompletionPct}
+          subtitle={fuTotal ? `${fuDone} of ${fuTotal} follow-ups completed` : "No follow-up rows loaded"}
+        />
       </div>
-      <SimpleReportTable title="Source-wise leads" pairs={[...bySource.entries()]} />
-      <SimpleReportTable title="Owner-wise counts" pairs={[...byOwner.entries()]} />
-      <SimpleReportTable title="Service interest hits" pairs={[...bySvc.entries()]} />
-      <SimpleReportTable title="Status split" pairs={[...byStatus.entries()]} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SimpleReportTable title="Source-wise leads" pairs={[...bySource.entries()]} />
+        <SimpleReportTable title="Employee-wise leads" pairs={[...byOwner.entries()]} />
+        <SimpleReportTable title="Service-wise leads" pairs={[...bySvc.entries()]} />
+        <SimpleReportTable title="Status-wise pipeline" pairs={[...byStatus.entries()]} />
+      </div>
 
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" className="rounded-xl" disabled title="Coming soon">
@@ -1615,43 +2101,64 @@ function ReportsPanel({
 function SimpleReportTable({ title, pairs }: { title: string; pairs: [string, number][] }) {
   const rows = [...pairs].sort((aArr, bArr) => bArr[1] - aArr[1]);
   return (
-    <div className="rounded-[18px] border border-[#dbe6f3] bg-white">
+    <div className="rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
       <p className="border-b border-[#f1f5f9] px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[#64748b]">{title}</p>
       <table className="w-full text-sm">
         <tbody>
-          {rows.map(([lbl, qty]) => (
-            <tr key={lbl + qty} className="border-t border-[#eef2ff]">
-              <td className="px-4 py-2 font-medium text-slate-800">{lbl}</td>
-              <td className="px-4 py-2 text-right font-semibold text-slate-700">{qty}</td>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={2} className="px-4 py-8 text-center text-[#64748b]">
+                0 — no rows in this breakdown yet.
+              </td>
             </tr>
-          ))}
+          ) : (
+            rows.map(([lbl, qty]) => (
+              <tr key={lbl + String(qty)} className="border-t border-[#eef2ff]">
+                <td className="px-4 py-2 font-medium text-slate-800">{lbl}</td>
+                <td className="px-4 py-2 text-right font-semibold text-slate-700">{qty}</td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>
   );
 }
 
-function SettingsPlaceholder() {
+function CrmSettingsPanel() {
+  const block = (title: string, description: string, items: readonly string[]) => (
+    <article className="flex flex-col rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+      <h4 className="text-sm font-semibold text-[#0f172a]">{title}</h4>
+      <p className="mt-1 text-xs leading-relaxed text-[#64748b]">{description}</p>
+      <ul className="mt-3 max-h-48 list-inside list-disc space-y-1 overflow-y-auto text-xs text-[#475569]">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </article>
+  );
+
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {[
-        "Lead Sources",
-        "Lead Statuses",
-        "Services",
-        "Priority labels",
-        "Follow-up Types",
-        "Default owner",
-      ].map((labelTxt) => (
-        <article key={labelTxt} className="rounded-xl border border-[#dbe6f3] bg-[#f8fbff] p-5">
-          <h4 className="font-semibold text-slate-900">{labelTxt}</h4>
-          <p className="mt-2 text-xs text-[#64748b]">
-            Values are seeded in the Add Lead UI. Persist to Supabase system_settings via admin tooling soon.
-          </p>
-          <button type="button" className="mt-4 text-xs font-semibold text-blue-700 underline opacity-70" disabled>
-            Configure soon
-          </button>
-        </article>
-      ))}
+    <div className="space-y-4">
+      <div className="rounded-[20px] border border-blue-100 bg-[#f8fbff] p-5">
+        <h3 className="text-base font-semibold text-[#0f172a]">CRM configuration</h3>
+        <p className="mt-2 text-sm text-[#64748b]">
+          These lists define what your team sees in dropdowns when adding or editing leads. They are <strong>static</strong> in the app for now.
+        </p>
+        <p className="mt-2 text-xs font-medium text-blue-800">Coming soon: editable CRM settings stored in Supabase (e.g. system_settings).</p>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {block("Lead sources", "Where new business originates. Used in the Add Lead form.", CRM_SOURCES)}
+        {block("Lead statuses", "Pipeline stages from first touch through close.", CRM_LEAD_STATUSES)}
+        {block("Service interests", "Services Birthmark Brahma offers; multi-select on leads.", CRM_SERVICES)}
+        {block("Follow-up types", "How the next touch is planned (call, message, meeting, email).", CRM_FOLLOW_UP_TYPES_UI)}
+        {block("Priority types", "Deal temperature for triage.", CRM_PRIORITIES)}
+        {block(
+          "Default lead owner",
+          "When adding a lead, admins pick assignee; employees default to themselves. Persisted per-lead on the client row.",
+          ["Configured per lead in Add / Edit Lead (Assigned To)."],
+        )}
+      </div>
     </div>
   );
 }
