@@ -1,4 +1,5 @@
 import { getUserProfile } from "@/lib/auth/getUserProfile";
+import { ClientLeadMasterPage } from "@/components/client-lead/ClientLeadMasterPage";
 
 const sections = [
   { title: "My Attendance", value: "Present", subtitle: "Today attendance status" },
@@ -52,6 +53,9 @@ export default async function EmployeeDashboardPage() {
           </article>
         ))}
       </div>
+
+      {/* Same module as /employee/client-lead-master — CrmWorkbench with role="employee" */}
+      <ClientLeadMasterPage role="employee" />
     </section>
   );
 }
