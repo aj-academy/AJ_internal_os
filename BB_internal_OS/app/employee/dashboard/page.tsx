@@ -163,7 +163,7 @@ export default async function EmployeeDashboardPage() {
     },
     {
       title: "My Leave",
-      description: "Review requests, balances at a glance, and what is coming up next.",
+      description: "Leave requests and status on your dashboard.",
       href: "/employee/dashboard#my-leave",
       icon: CalendarDays,
     },
@@ -259,84 +259,50 @@ export default async function EmployeeDashboardPage() {
         </div>
       </div>
 
-      <section
-        className="scroll-mt-24 overflow-hidden rounded-[22px] border border-[#dbe6f3] bg-gradient-to-br from-white to-[#f8fbff] shadow-sm"
-        id="my-leave"
-      >
-        <div className="border-b border-[#e8edf5] bg-white/80 px-5 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#eff6ff] text-[#2563eb]">
-                <CalendarDays className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">Time off</p>
-                <h3 className="mt-0.5 text-lg font-semibold text-[#0f172a]">My leave</h3>
-                <p className="mt-1 max-w-2xl text-sm text-[#64748b]">
-                  Track requests like in a typical HR dashboard: pipeline counts for this year, what is waiting on a manager, and your next
-                  approved time away. Submit new leave through your company process (often HR or Attendance admin).
-                </p>
-              </div>
-            </div>
-            <Link
-              href="/employee/permission"
-              className="inline-flex h-9 items-center rounded-full border border-[#c9d8eb] bg-white px-4 text-sm font-medium text-[#1e3a8a] hover:bg-[#eff6ff]"
-            >
-              Permission & requests
-            </Link>
+      <section className="scroll-mt-24 rounded-[22px] border border-[#dbe6f3] bg-white p-5 shadow-sm" id="my-leave">
+        <div className="flex items-center gap-3 border-b border-[#e8edf5] pb-4">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eff6ff] text-[#2563eb]">
+            <CalendarDays className="h-5 w-5" />
+          </span>
+          <div>
+            <h3 className="text-lg font-semibold text-[#0f172a]">My leave</h3>
+            <p className="text-sm text-[#64748b]">Your leave requests from the company system.</p>
           </div>
         </div>
 
-        <div className="grid gap-3 p-5 sm:grid-cols-3">
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-amber-800/90">Pending approval</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-amber-800/90">Pending</p>
             <p className="mt-1 text-2xl font-semibold text-amber-950">{leavePending}</p>
-            <p className="mt-1 text-xs text-amber-900/80">Open requests awaiting a decision</p>
           </div>
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-emerald-800/90">Approved (YTD)</p>
             <p className="mt-1 text-2xl font-semibold text-emerald-950">{leaveYtdApproved}</p>
-            <p className="mt-1 text-xs text-emerald-900/80">From requests submitted this calendar year</p>
           </div>
           <div className="rounded-xl border border-rose-200 bg-rose-50/90 px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide text-rose-800/90">Rejected (YTD)</p>
             <p className="mt-1 text-2xl font-semibold text-rose-950">{leaveYtdRejected}</p>
-            <p className="mt-1 text-xs text-rose-900/80">Based on your recent request history</p>
           </div>
         </div>
 
         {upcomingApproved.length > 0 ? (
-          <div className="border-t border-[#e8edf5] px-5 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">Upcoming approved leave</p>
-            <ul className="mt-2 space-y-2">
-              {upcomingApproved.map((row) => (
-                <li
-                  key={row.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#dbe6f3] bg-white px-3 py-2 text-sm"
-                >
-                  <span className="font-medium text-[#0f172a]">{row.leave_type || "Leave"}</span>
-                  <span className="text-[#64748b]">
-                    {formatDateOnly(row.from_date)} → {formatDateOnly(row.to_date)}
-                    {row.total_days != null ? ` · ${row.total_days} day(s)` : ""}
-                  </span>
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Approved</span>
-                </li>
+          <div className="mt-4 rounded-xl border border-[#e8edf5] bg-[#fbfdff] px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">Next approved</p>
+            <p className="mt-1 text-sm text-[#334155]">
+              {upcomingApproved.map((row, index) => (
+                <span key={row.id}>
+                  {index > 0 ? " · " : ""}
+                  {row.leave_type || "Leave"}: {formatDateOnly(row.from_date)}–{formatDateOnly(row.to_date)}
+                </span>
               ))}
-            </ul>
+            </p>
           </div>
-        ) : (
-          <div className="border-t border-[#e8edf5] px-5 py-4 text-sm text-[#64748b]">
-            No upcoming approved leave in your recent records. Approved trips will appear here when end dates are today or later.
-          </div>
-        )}
+        ) : null}
 
-        <div className="border-t border-[#e8edf5] px-5 pb-5 pt-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-[#0f172a]">Recent requests</p>
-            <span className="text-xs text-[#64748b]">Newest first · last {leaveHistory.length} loaded</span>
-          </div>
-          <div className="overflow-x-auto rounded-xl border border-[#e8edf5] bg-white">
-            <table className="w-full min-w-[720px] text-left text-sm">
+        <div className="mt-4">
+          <p className="mb-2 text-sm font-semibold text-[#0f172a]">Requests</p>
+          <div className="overflow-x-auto rounded-xl border border-[#e8edf5]">
+            <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
                 <tr>
                   <th className="px-3 py-2">Type</th>
@@ -345,13 +311,14 @@ export default async function EmployeeDashboardPage() {
                   <th className="px-3 py-2">Days</th>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Submitted</th>
+                  <th className="px-3 py-2">Reason</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#eef2ff] text-[#334155]">
                 {leaveHistory.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-3 py-8 text-center text-[#64748b]">
-                      No leave requests yet. When you submit time off, it will show here with live status.
+                    <td colSpan={7} className="px-3 py-8 text-center text-[#64748b]">
+                      No leave requests yet.
                     </td>
                   </tr>
                 ) : (
@@ -363,6 +330,8 @@ export default async function EmployeeDashboardPage() {
                         : s === "rejected"
                           ? "bg-rose-100 text-rose-800"
                           : "bg-amber-100 text-amber-900";
+                    const reason = row.reason?.trim() || "—";
+                    const reasonShort = reason.length > 48 ? `${reason.slice(0, 48)}…` : reason;
                     return (
                       <tr key={row.id}>
                         <td className="px-3 py-2 font-medium text-[#0f172a]">{row.leave_type || "—"}</td>
@@ -375,6 +344,9 @@ export default async function EmployeeDashboardPage() {
                           </span>
                         </td>
                         <td className="px-3 py-2 text-[#64748b]">{formatDateOnly(row.created_at)}</td>
+                        <td className="max-w-[200px] truncate px-3 py-2 text-[#64748b]" title={reason !== "—" ? row.reason ?? undefined : undefined}>
+                          {reasonShort}
+                        </td>
                       </tr>
                     );
                   })
@@ -382,9 +354,6 @@ export default async function EmployeeDashboardPage() {
               </tbody>
             </table>
           </div>
-          {leaveHistory.some((r) => r.reason?.trim()) ? (
-            <p className="mt-3 text-xs text-[#64748b]">Reasons are stored on each request; expand leave workflows in Attendance / HR admin when ready.</p>
-          ) : null}
         </div>
       </section>
 
