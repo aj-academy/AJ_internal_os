@@ -12,7 +12,9 @@ import {
   ChevronRight,
   ClipboardList,
   FileText,
+  FolderKanban,
   LayoutGrid,
+  ListChecks,
   Settings,
   ShieldCheck,
   UserCheck,
@@ -43,8 +45,8 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
     if (label.includes("Attendance")) return UserCheck;
     if (label.includes("Employee")) return UsersRound;
     if (label.includes("Client")) return BriefcaseBusiness;
-    if (label.includes("Project")) return ClipboardList;
-    if (label.includes("Task")) return ClipboardList;
+    if (label.includes("Project")) return FolderKanban;
+    if (label.includes("Task")) return ListChecks;
     if (label.includes("Finance")) return Wallet;
     if (label.includes("Policies")) return ShieldCheck;
     if (label.includes("Reports")) return BarChart3;
