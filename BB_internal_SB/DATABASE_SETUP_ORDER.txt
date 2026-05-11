@@ -27,7 +27,8 @@ Order (core → features → RLS):
    Plus idempotent ALTER/legacy constraint drops for databases that were created from an older narrow clients table.
 
 6) task_schema.sql
-   public.tasks + RLS (admin CRUD, employee read/update own, manager read-all) + optional realtime.
+   public.tasks + RLS (admin CRUD, employee read/update own, employee insert self-assigned rows, manager read-all) + optional realtime.
+   If you already applied an older task_schema.sql, re-run this file so policy tasks_employee_insert_self exists (needed for “Add my task” on the employee task page).
 
 6b) project_master_schema.sql
    Run AFTER (6). Adds public.projects, project_activities, project_team_members; tasks.project_id FK;

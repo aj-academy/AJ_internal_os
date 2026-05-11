@@ -120,6 +120,22 @@ to authenticated
 using (assigned_to = auth.uid())
 with check (assigned_to = auth.uid());
 
+-- Employees: create tasks only for themselves (personal backlog; admin-assigned tasks use same row shape)
+drop policy if exists "tasks_employee_insert_self" on public.tasks;
+create policy "tasks_employee_insert_self"
+on public.tasks
+for insert
+to authenticated
+with check (
+  assigned_to = auth.uid()
+  and exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and lower(coalesce(p.role, '')) = 'employee'
+  )
+);
+
 -- Managers: read all tasks (team visibility; same pattern as CRM)
 drop policy if exists "tasks_manager_select_all" on public.tasks;
 create policy "tasks_manager_select_all"

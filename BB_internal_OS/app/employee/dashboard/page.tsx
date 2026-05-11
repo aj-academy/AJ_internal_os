@@ -1,59 +1,251 @@
+import Link from "next/link";
+import {
+  CalendarClock,
+  ClipboardCheck,
+  ClipboardList,
+  LayoutDashboard,
+  Shield,
+  User,
+  Wallet,
+} from "lucide-react";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
-import { TaskAssignmentPage } from "@/components/task/TaskAssignmentPage";
+import { createClient } from "@/lib/supabase/server";
+import { EmployeeTaskPreview } from "@/components/employee/EmployeeTaskPreview";
 
-const sections = [
-  { title: "My Attendance", value: "Present", subtitle: "Today attendance status" },
-  { title: "Check In / Check Out", value: "09:04 / -", subtitle: "Latest punch details" },
-  { title: "My Tasks", value: "7", subtitle: "Open assigned tasks" },
-  { title: "My Leave Balance", value: "12", subtitle: "Remaining leave days" },
-  { title: "Company Policies", value: "5", subtitle: "Recently updated policies" },
-  { title: "My Profile", value: "View", subtitle: "Personal details and preferences" },
-];
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatTime(iso: string | null | undefined) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "—";
+  }
+}
 
 export default async function EmployeeDashboardPage() {
   const { profile, user } = await getUserProfile();
+  const supabase = await createClient();
+
+  const uid = user?.id;
+  const today = todayISO();
+
+  let todayAttendance: { status: string | null; check_in_time: string | null; check_out_time: string | null } | null = null;
+  let totalTasks = 0;
+  let openTasks = 0;
+  let dueTodayTasks = 0;
+  let overdueTasks = 0;
+  let leavePending = 0;
+  let permissionPending = 0;
+  let policyCount = 0;
+
+  if (uid) {
+    const [attRes, totalRes, openRes, dueRes, overdueRes, leaveRes, permRes, polRes] = await Promise.all([
+      supabase
+        .from("attendance_records")
+        .select("status,check_in_time,check_out_time")
+        .eq("employee_id", uid)
+        .eq("attendance_date", today)
+        .maybeSingle(),
+      supabase.from("tasks").select("id", { count: "exact", head: true }).eq("assigned_to", uid),
+      supabase.from("tasks").select("id", { count: "exact", head: true }).eq("assigned_to", uid).neq("status", "Completed"),
+      supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("assigned_to", uid)
+        .eq("due_date", today)
+        .neq("status", "Completed"),
+      supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("assigned_to", uid)
+        .lt("due_date", today)
+        .neq("status", "Completed"),
+      supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("employee_id", uid).ilike("status", "pending"),
+      supabase.from("permission_requests").select("id", { count: "exact", head: true }).eq("employee_id", uid).ilike("status", "pending"),
+      supabase.from("company_policies").select("id", { count: "exact", head: true }),
+    ]);
+
+    todayAttendance = attRes.data ?? null;
+    totalTasks = totalRes.count ?? 0;
+    openTasks = openRes.count ?? 0;
+    dueTodayTasks = dueRes.count ?? 0;
+    overdueTasks = overdueRes.count ?? 0;
+    leavePending = leaveRes.count ?? 0;
+    permissionPending = permRes.count ?? 0;
+    policyCount = polRes.count ?? 0;
+  }
+
+  const attLabel = todayAttendance?.status?.trim() || "No check-in yet";
+  const punchLine =
+    todayAttendance?.check_in_time || todayAttendance?.check_out_time
+      ? `${formatTime(todayAttendance.check_in_time)} → ${formatTime(todayAttendance.check_out_time)}`
+      : "Record attendance from My Attendance";
+
+  const firstName = (profile?.full_name ?? "there").split(" ")[0];
+
+  const shortcuts = [
+    {
+      title: "My Attendance",
+      description: "Check in, check out, and daily status — same flow as dedicated attendance.",
+      href: "/employee/attendance",
+      icon: CalendarClock,
+    },
+    {
+      title: "My Permission",
+      description: "Request short leave from office; track approval status.",
+      href: "/employee/permission",
+      icon: ClipboardCheck,
+    },
+    {
+      title: "My Tasks",
+      description: "Full task board: work assigned by admins appears when your user is the assignee.",
+      href: "/employee/my-tasks",
+      icon: ClipboardList,
+    },
+    {
+      title: "Company Policies",
+      description: "Read and acknowledge policies your company publishes.",
+      href: "/employee/policies",
+      icon: Shield,
+    },
+  ];
 
   return (
-    <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
-      <div>
-        <h2 className="text-3xl font-semibold text-[#0f172a]">Employee Dashboard</h2>
-        <p className="mt-1 text-sm text-slate-600">Your attendance, tasks, leaves and personal work summary.</p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Employee</p>
-          <p className="mt-2 text-lg font-semibold text-slate-900">{profile?.full_name ?? "Employee"}</p>
-          <p className="text-sm text-slate-600">{user?.email ?? profile?.email ?? "-"}</p>
+    <section className="space-y-8 rounded-[24px] border border-[#d4deea] bg-white p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
+      <div className="flex flex-col gap-2 border-b border-[#e8edf5] pb-6 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748b]">Workspace</p>
+          <h2 className="mt-1 flex items-center gap-2 text-3xl font-semibold text-[#0f172a]">
+            <LayoutDashboard className="h-8 w-8 text-[#2563eb]" />
+            Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, {firstName}
+          </h2>
+          <p className="mt-1 text-sm text-[#64748b]">
+            {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} · One place for
+            attendance, tasks, and requests.
+          </p>
         </div>
-        <div className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Department</p>
-          <p className="mt-2 text-lg font-semibold text-slate-900">{profile?.department ?? "-"}</p>
-        </div>
-        <div className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Designation</p>
-          <p className="mt-2 text-lg font-semibold text-slate-900">{profile?.designation ?? "-"}</p>
-        </div>
-        <div className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Status</p>
-          <p className="mt-2 text-lg font-semibold capitalize text-slate-900">{profile?.status ?? "-"}</p>
-        </div>
+        <Link
+          href="/employee/my-tasks"
+          className="inline-flex h-10 items-center justify-center rounded-full bg-[#2563eb] px-5 text-sm font-medium text-white hover:bg-[#1d4ed8]"
+        >
+          Go to My Tasks
+        </Link>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {sections.map((section) => (
-          <article
-            key={section.title}
-            className="rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-[0_8px_18px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_26px_rgba(30,64,175,0.11)]"
-          >
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{section.title}</p>
-            <p className="mt-3 text-2xl font-semibold text-slate-900">{section.value}</p>
-            <p className="mt-1 text-xs text-slate-600">{section.subtitle}</p>
-          </article>
-        ))}
+        <article className="rounded-[20px] border border-[#dbe6f3] bg-gradient-to-br from-[#f8fbff] to-white p-5 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-[#64748b]">Today&apos;s status</p>
+          <p className="mt-2 text-2xl font-semibold capitalize text-[#0f172a]">{attLabel}</p>
+          <p className="mt-1 text-xs text-[#64748b]">{punchLine}</p>
+        </article>
+        <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-[#64748b]">Open tasks</p>
+          <p className="mt-2 text-2xl font-semibold text-[#0f172a]">{openTasks}</p>
+          <p className="mt-1 text-xs text-[#64748b]">
+            {totalTasks} total assigned · {dueTodayTasks} due today · {overdueTasks} overdue
+          </p>
+        </article>
+        <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-[#64748b]">Approvals</p>
+          <p className="mt-2 text-2xl font-semibold text-[#0f172a]">{leavePending + permissionPending}</p>
+          <p className="mt-1 text-xs text-[#64748b]">
+            {leavePending} leave pending · {permissionPending} permission pending
+          </p>
+        </article>
+        <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-[#64748b]">Policies</p>
+          <p className="mt-2 text-2xl font-semibold text-[#0f172a]">{policyCount}</p>
+          <p className="mt-1 text-xs text-[#64748b]">Published company policies</p>
+        </article>
       </div>
 
-      <TaskAssignmentPage role="employee" />
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-[#64748b]">Quick navigation</h3>
+        <div className="mt-3 grid gap-4 md:grid-cols-2">
+          {shortcuts.map((item) => (
+            <Link
+              key={item.title}
+              href={item.href}
+              className="group flex gap-4 rounded-[20px] border border-[#dbe6f3] bg-[#fbfdff] p-4 shadow-sm transition hover:border-[#2563eb]/40 hover:shadow-md"
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#eff6ff] text-[#2563eb]">
+                <item.icon className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="font-semibold text-[#0f172a] group-hover:text-[#2563eb]">{item.title}</p>
+                <p className="mt-1 text-sm text-[#64748b]">{item.description}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <section className="scroll-mt-24 rounded-[22px] border border-[#dbe6f3] bg-white p-5 shadow-sm" id="my-leave">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">Time off</p>
+              <h3 className="mt-1 text-lg font-semibold text-[#0f172a]">My leave</h3>
+              <p className="mt-1 text-sm text-[#64748b]">
+                You have <strong className="text-[#0f172a]">{leavePending}</strong> leave request(s) waiting for approval. Submit new requests
+                from your HR or attendance flow when your org enables it.
+              </p>
+            </div>
+            <CalendarClock className="h-10 w-10 shrink-0 text-[#94a3b8]" />
+          </div>
+        </section>
+
+        <section className="scroll-mt-24 rounded-[22px] border border-[#dbe6f3] bg-white p-5 shadow-sm" id="my-expenses">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">Reimbursements</p>
+              <h3 className="mt-1 text-lg font-semibold text-[#0f172a]">My expenses</h3>
+              <p className="mt-1 text-sm text-[#64748b]">
+                Expense claims are handled through accounts in this portal. Contact your manager or accounts team for submissions and status.
+              </p>
+            </div>
+            <Wallet className="h-10 w-10 shrink-0 text-[#94a3b8]" />
+          </div>
+        </section>
+      </div>
+
+      <EmployeeTaskPreview />
+
+      <section className="scroll-mt-24 rounded-[22px] border border-[#dbe6f3] bg-[#f8fbff] p-5 shadow-sm" id="my-profile">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex gap-4">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#2563eb] ring-1 ring-[#dbe6f3]">
+              <User className="h-6 w-6" />
+            </span>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">My profile</p>
+              <h3 className="mt-1 text-lg font-semibold text-[#0f172a]">{profile?.full_name ?? "Employee"}</h3>
+              <p className="text-sm text-[#64748b]">{user?.email ?? profile?.email ?? "—"}</p>
+              <dl className="mt-3 grid gap-2 text-sm text-[#334155] sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs text-[#94a3b8]">Department</dt>
+                  <dd className="font-medium">{profile?.department ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-[#94a3b8]">Designation</dt>
+                  <dd className="font-medium">{profile?.designation ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-[#94a3b8]">Status</dt>
+                  <dd className="font-medium capitalize">{profile?.status ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-[#94a3b8]">Role</dt>
+                  <dd className="font-medium capitalize">{profile?.role ?? "employee"}</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </section>
     </section>
   );
 }

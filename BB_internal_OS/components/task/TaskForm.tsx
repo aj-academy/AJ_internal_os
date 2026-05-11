@@ -33,6 +33,8 @@ interface TaskFormProps {
   employees: EmployeeOption[];
   projects?: ProjectOption[];
   showProjectField?: boolean;
+  /** When true, assignee is fixed (self); used for employee personal tasks */
+  assigneeLockedToSelf?: boolean;
   submitting: boolean;
   onChange: (value: TaskFormValue) => void;
   onClose: () => void;
@@ -49,6 +51,7 @@ export function TaskForm({
   employees,
   projects = [],
   showProjectField = false,
+  assigneeLockedToSelf = false,
   submitting,
   onChange,
   onClose,
@@ -93,20 +96,27 @@ export function TaskForm({
             </select>
           </Field>
         ) : null}
-        <Field label="Assigned To">
-          <select
-            value={value.assigned_to}
-            onChange={(event) => onChange({ ...value, assigned_to: event.target.value })}
-            className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb]"
-          >
-            <option value="">Select employee</option>
-            {employees.map((employee) => (
-              <option key={employee.id} value={employee.id}>
-                {employee.label}
-              </option>
-            ))}
-          </select>
-        </Field>
+        {assigneeLockedToSelf ? (
+          <div className="rounded-lg border border-[#dbe6f3] bg-[#f8fbff] px-3 py-2 text-sm text-[#334155]">
+            <span className="font-medium text-[#0f172a]">Assigned to</span>
+            <p className="mt-1 text-[#64748b]">You — admins and managers can also assign tasks to you; those appear in your list automatically.</p>
+          </div>
+        ) : (
+          <Field label="Assigned To">
+            <select
+              value={value.assigned_to}
+              onChange={(event) => onChange({ ...value, assigned_to: event.target.value })}
+              className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb]"
+            >
+              <option value="">Select employee</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
         <Field label="Priority">
           <select
             value={value.priority}
@@ -151,7 +161,7 @@ export function TaskForm({
 
       <Button
         onClick={onSubmit}
-        disabled={submitting || !value.title.trim() || !value.assigned_to}
+        disabled={submitting || !value.title.trim() || (!assigneeLockedToSelf && !value.assigned_to)}
         className="mt-4 h-9 w-full rounded-full bg-[#2563eb] text-white hover:bg-[#1d4ed8]"
       >
         {submitting ? "Saving..." : "Save Task"}

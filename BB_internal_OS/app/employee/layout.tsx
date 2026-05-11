@@ -7,10 +7,10 @@ const employeeSidebarItems = [
   { label: "My Attendance", href: "/employee/attendance" },
   { label: "My Permission", href: "/employee/permission" },
   { label: "My Tasks", href: "/employee/my-tasks" },
-  { label: "My Leave", href: "/employee/dashboard" },
-  { label: "My Expenses", href: "/employee/dashboard" },
+  { label: "My Leave", href: "/employee/dashboard#my-leave" },
+  { label: "My Expenses", href: "/employee/dashboard#my-expenses" },
   { label: "Company Policies", href: "/employee/policies" },
-  { label: "My Profile", href: "/employee/dashboard" },
+  { label: "My Profile", href: "/employee/dashboard#my-profile" },
 ];
 
 export default async function EmployeeLayout({

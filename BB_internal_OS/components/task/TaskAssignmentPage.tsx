@@ -61,6 +61,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   const searchParams = useSearchParams();
   const isAdmin = role === "admin";
   const isManager = role === "manager";
+  const isEmployee = role === "employee";
   const seesAllTasks = isAdmin || isManager;
   const [currentUserId, setCurrentUserId] = useState("");
   const [employees, setEmployees] = useState<ProfileOption[]>([]);
@@ -335,7 +336,12 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     setError(null);
     setSuccess(null);
     setEditId(null);
-    setForm(initialForm);
+    if (isEmployee) {
+      if (!currentUserId) return;
+      setForm({ ...initialForm, assigned_to: currentUserId });
+    } else {
+      setForm(initialForm);
+    }
     setPanelOpen(true);
   };
 
@@ -358,8 +364,53 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
 
   const handleSaveTask = async () => {
     if (tasksTableMissing) return;
+    if (isManager) {
+      setError("Managers cannot create or edit tasks from this form.");
+      return;
+    }
+    if (isEmployee) {
+      if (editId) {
+        setError("Use the task list to update status and progress. Ask an admin to change title, dates, or assignee.");
+        return;
+      }
+      if (!currentUserId) {
+        setError("Unable to resolve your account.");
+        return;
+      }
+      if (!form.title.trim()) {
+        setError("Please enter a task title.");
+        return;
+      }
+      setSubmitting(true);
+      setError(null);
+      setSuccess(null);
+      const selfPayload = {
+        title: form.title.trim(),
+        description: form.description || null,
+        assigned_to: currentUserId,
+        project_id: null as string | null,
+        priority: form.priority,
+        status: form.status,
+        start_date: form.start_date || null,
+        due_date: form.due_date || null,
+        progress: form.progress,
+      };
+      try {
+        const { error: insertError } = await supabase.from("tasks").insert(selfPayload);
+        if (insertError) throw new Error(insertError.message);
+        setSuccess("Task added to your list.");
+        setPanelOpen(false);
+        setForm(initialForm);
+        await reload();
+      } catch (saveError) {
+        setError(toReadableTaskError(saveError));
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
     if (!isAdmin) {
-      setError("Only admins can assign/edit tasks from this form.");
+      setError("Only admins can assign tasks from this form.");
       return;
     }
     setSubmitting(true);
@@ -444,16 +495,20 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">Task Assignment</h2>
           <p className="mt-1 text-sm text-[#64748b]">
-            {isManager ? "View and monitor team tasks (create and edit remain admin-only)." : "Assign, track and manage employee tasks"}
+            {isManager
+              ? "View and monitor team tasks (create and edit remain admin-only)."
+              : isEmployee
+                ? "Tasks your admin assigns to you use your account and appear here automatically. Add your own tasks, then update status and progress."
+                : "Assign, track and manage employee tasks"}
           </p>
         </div>
-        {isAdmin ? (
+        {isAdmin || isEmployee ? (
           <Button
             onClick={openCreate}
             disabled={tasksTableMissing}
             className="h-9 rounded-full bg-[#2563eb] px-4 text-white hover:bg-[#1d4ed8] disabled:opacity-50"
           >
-            + Assign Task
+            {isEmployee ? "+ Add my task" : "+ Assign Task"}
           </Button>
         ) : null}
       </div>
@@ -587,11 +642,12 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
           <div className="fixed inset-y-0 right-0 z-50 w-full max-w-[420px] p-3 sm:p-4">
             <TaskForm
               open={panelOpen}
-              title={editId ? "Edit Task" : "Assign Task"}
+              title={editId ? "Edit Task" : isEmployee ? "Add task for me" : "Assign Task"}
               value={form}
               employees={employeeOptions}
               projects={projectOptions}
               showProjectField={isAdmin}
+              assigneeLockedToSelf={isEmployee && !editId}
               submitting={submitting}
               onChange={setForm}
               onClose={() => setPanelOpen(false)}
