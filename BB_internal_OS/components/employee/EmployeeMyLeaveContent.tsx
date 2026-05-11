@@ -100,7 +100,7 @@ export async function EmployeeMyLeaveContent({ showBackLink = false }: { showBac
         </div>
         {showBackLink ? (
           <Link
-            href="/employee/dashboard"
+            href={{ pathname: "/employee/dashboard" }}
             className="inline-flex items-center gap-2 rounded-full border border-[#d4deea] bg-white px-4 py-2 text-sm font-medium text-[#334155] hover:bg-[#f8fbff]"
           >
             <ArrowLeft className="h-4 w-4" />

@@ -37,8 +37,40 @@ interface SidebarProps {
   onNavigate?: () => void;
 }
 
+/** Strip trailing slash so `/employee/leave/` matches config `/employee/leave`. */
+function normalizeRoutePath(p: string | null) {
+  if (!p) return "";
+  const trimmed = p.replace(/\/$/, "");
+  return trimmed || "/";
+}
+
+/**
+ * Use a pathname object for simple app routes so client navigations do not keep a
+ * stale hash (e.g. old `#my-leave`) that would otherwise stick on the next page.
+ */
+function toLinkHref(href: string): string | { pathname: string } {
+  try {
+    const u = new URL(href, "https://example.com");
+    if (u.search || u.hash) {
+      return `${u.pathname}${u.search}${u.hash}`;
+    }
+    return { pathname: u.pathname || "/" };
+  } catch {
+    return href;
+  }
+}
+
+function routePathOnly(href: string) {
+  try {
+    return normalizeRoutePath(new URL(href, "https://example.com").pathname);
+  } catch {
+    return normalizeRoutePath(href);
+  }
+}
+
 export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggleCollapse, onNavigate }: SidebarProps) {
   const pathname = usePathname();
+  const pathNorm = normalizeRoutePath(pathname);
   const searchParams = useSearchParams();
   const activeTab = searchParams.get("tab") ?? "overview";
   const getIcon = (label: string) => {
@@ -97,13 +129,13 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
 
       <nav className="flex-1 space-y-1.5 p-3">
         {uniqueItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = pathNorm === routePathOnly(item.href);
           const hasChildren = Boolean(item.children?.length);
           const hasActiveChild =
             hasChildren &&
             item.children!.some((child) => {
               const url = new URL(child.href, "http://localhost");
-              return pathname === url.pathname && activeTab === (url.searchParams.get("tab") ?? "overview");
+              return pathNorm === normalizeRoutePath(url.pathname) && activeTab === (url.searchParams.get("tab") ?? "overview");
             });
           const isExpanded = !collapsed && hasChildren && (isActive || hasActiveChild);
           const Icon = getIcon(item.label);
@@ -111,20 +143,24 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
           return (
             <div key={item.href} className="space-y-1">
               <Link
-                href={item.href}
+                href={toLinkHref(item.href)}
                 onClick={() => onNavigate?.()}
                 className={cn(
-                  "group flex items-center justify-between rounded-full px-3 py-2.5 text-sm font-medium transition-all duration-300 ease-out hover:bg-white hover:text-[#1e3a8a]",
-                  isActive || hasActiveChild
-                    ? "text-white"
-                    : "text-[#dbeafe]",
+                  "group flex items-center justify-between rounded-full px-3 py-2.5 text-sm font-medium transition-all duration-300 ease-out",
+                  isActive
+                    ? "bg-white text-[#1e3a8a] shadow-sm"
+                    : hasActiveChild
+                      ? "bg-white/12 text-white hover:bg-white/20"
+                      : "text-[#dbeafe] hover:bg-white hover:text-[#1e3a8a]",
                 )}
               >
                 <span className="flex items-center gap-3">
                   <Icon
                     className={cn(
-                      "h-4 w-4 text-white transition-colors duration-200",
-                      isActive || hasActiveChild ? "text-white group-hover:text-[#1e3a8a]" : "text-white group-hover:text-[#1e3a8a]",
+                      "h-4 w-4 transition-colors duration-200",
+                      isActive
+                        ? "text-[#1e3a8a]"
+                        : "text-white group-hover:text-[#1e3a8a]",
                     )}
                   />
                   <span
@@ -150,17 +186,17 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
                   {item.children!.map((child) => {
                     const childUrl = new URL(child.href, "http://localhost");
                     const childIsActive =
-                      pathname === childUrl.pathname &&
+                      pathNorm === normalizeRoutePath(childUrl.pathname) &&
                       activeTab === (childUrl.searchParams.get("tab") ?? "overview");
                     return (
                       <Link
                         key={child.href}
-                        href={child.href}
+                        href={toLinkHref(child.href)}
                         onClick={onNavigate}
                         className={cn(
                           "block rounded-md px-2 py-1.5 text-xs transition-colors duration-200",
                           childIsActive
-                            ? "font-semibold text-white"
+                            ? "bg-white/15 font-semibold text-white"
                             : "text-[#cfe0ff] hover:bg-[#2b5cb0] hover:text-white",
                         )}
                       >

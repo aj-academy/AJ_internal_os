@@ -129,13 +129,13 @@ export default async function EmployeeDashboardPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
-            href="/employee/leave"
+            href={{ pathname: "/employee/leave" }}
             className="inline-flex h-10 items-center justify-center rounded-full border border-[#d4deea] bg-white px-5 text-sm font-medium text-[#334155] hover:bg-[#f8fbff]"
           >
             My leave
           </Link>
           <Link
-            href="/employee/my-tasks"
+            href={{ pathname: "/employee/my-tasks" }}
             className="inline-flex h-10 items-center justify-center rounded-full bg-[#2563eb] px-5 text-sm font-medium text-white hover:bg-[#1d4ed8]"
           >
             My tasks
@@ -176,7 +176,7 @@ export default async function EmployeeDashboardPage() {
           {shortcuts.map((item) => (
             <Link
               key={item.title}
-              href={item.href}
+              href={{ pathname: item.href }}
               className="group flex gap-4 rounded-[20px] border border-[#dbe6f3] bg-[#fbfdff] p-4 shadow-sm transition hover:border-[#2563eb]/40 hover:shadow-md"
             >
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#eff6ff] text-[#2563eb]">
