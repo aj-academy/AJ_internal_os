@@ -1,5 +1,5 @@
-import { FinanceWorkbench } from "@/components/finance/FinanceWorkbench";
+import { redirect } from "next/navigation";
 
 export default function EmployeeFinancePage() {
-  return <FinanceWorkbench variant="employee" />;
+  redirect("/employee/dashboard");
 }

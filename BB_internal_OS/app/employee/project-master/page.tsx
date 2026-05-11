@@ -1,5 +1,5 @@
-import { ProjectMasterWorkbench } from "@/components/project-master/ProjectMasterWorkbench";
+import { redirect } from "next/navigation";
 
 export default function EmployeeProjectMasterPage() {
-  return <ProjectMasterWorkbench variant="employee" />;
+  redirect("/employee/dashboard");
 }

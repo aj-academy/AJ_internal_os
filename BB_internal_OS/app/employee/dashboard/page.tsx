@@ -1,5 +1,4 @@
 import { getUserProfile } from "@/lib/auth/getUserProfile";
-import { ClientLeadMasterPage } from "@/components/client-lead/ClientLeadMasterPage";
 import { TaskAssignmentPage } from "@/components/task/TaskAssignmentPage";
 
 const sections = [
@@ -7,7 +6,6 @@ const sections = [
   { title: "Check In / Check Out", value: "09:04 / -", subtitle: "Latest punch details" },
   { title: "My Tasks", value: "7", subtitle: "Open assigned tasks" },
   { title: "My Leave Balance", value: "12", subtitle: "Remaining leave days" },
-  { title: "My Expense Claims", value: "3", subtitle: "Pending expense claims" },
   { title: "Company Policies", value: "5", subtitle: "Recently updated policies" },
   { title: "My Profile", value: "View", subtitle: "Personal details and preferences" },
 ];
@@ -55,8 +53,6 @@ export default async function EmployeeDashboardPage() {
         ))}
       </div>
 
-      {/* Same modules as dedicated routes — identical UI and Supabase behavior */}
-      <ClientLeadMasterPage role="employee" />
       <TaskAssignmentPage role="employee" />
     </section>
   );

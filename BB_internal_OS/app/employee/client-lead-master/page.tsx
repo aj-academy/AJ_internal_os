@@ -1,5 +1,5 @@
-import { ClientLeadMasterPage } from "@/components/client-lead/ClientLeadMasterPage";
+import { redirect } from "next/navigation";
 
 export default function EmployeeClientLeadMasterRoute() {
-  return <ClientLeadMasterPage role="employee" />;
+  redirect("/employee/dashboard");
 }
