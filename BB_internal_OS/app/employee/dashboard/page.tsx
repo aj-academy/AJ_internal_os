@@ -1,5 +1,6 @@
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { ClientLeadMasterPage } from "@/components/client-lead/ClientLeadMasterPage";
+import { TaskAssignmentPage } from "@/components/task/TaskAssignmentPage";
 
 const sections = [
   { title: "My Attendance", value: "Present", subtitle: "Today attendance status" },
@@ -54,8 +55,9 @@ export default async function EmployeeDashboardPage() {
         ))}
       </div>
 
-      {/* Same module as /employee/client-lead-master — CrmWorkbench with role="employee" */}
+      {/* Same modules as dedicated routes — identical UI and Supabase behavior */}
       <ClientLeadMasterPage role="employee" />
+      <TaskAssignmentPage role="employee" />
     </section>
   );
 }

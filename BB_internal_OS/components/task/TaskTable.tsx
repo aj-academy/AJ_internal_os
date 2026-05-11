@@ -7,12 +7,14 @@ import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 interface TaskTableProps {
   tasks: TaskRecord[];
   loading: boolean;
+  tableMissing?: boolean;
   employeeNameMap: Record<string, string>;
   isAdmin: boolean;
   onView: (task: TaskRecord) => void;
   onEdit: (task: TaskRecord) => void;
   onDelete: (taskId: string) => void;
-  onEmployeeUpdate: (taskId: string, status: TaskStatus, progress: number) => void;
+  onEmployeeStatusChange: (taskId: string, status: TaskStatus, progress: number) => void;
+  onEmployeeProgressChange: (taskId: string, status: TaskStatus, progress: number) => void;
 }
 
 const statusClassMap: Record<TaskStatus, string> = {
@@ -34,17 +36,20 @@ function todayDateKey() {
 export function TaskTable({
   tasks,
   loading,
+  tableMissing = false,
   employeeNameMap,
   isAdmin,
   onView,
   onEdit,
   onDelete,
-  onEmployeeUpdate,
+  onEmployeeStatusChange,
+  onEmployeeProgressChange,
 }: TaskTableProps) {
   const today = todayDateKey();
+  const disabled = tableMissing;
 
   return (
-    <article className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white">
+    <article className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1160px] text-sm">
           <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
@@ -85,8 +90,10 @@ export function TaskTable({
                       <td className="px-4 py-3.5 align-middle">
                         <Badge className={statusClassMap[task.status]}>{task.status}</Badge>
                       </td>
-                      <td className="px-4 py-3.5 align-middle whitespace-nowrap">{task.start_date || "-"}</td>
-                      <td className={["px-4 py-3.5 align-middle whitespace-nowrap", isOverdue ? "font-semibold text-rose-700" : ""].join(" ")}>
+                      <td className="whitespace-nowrap px-4 py-3.5 align-middle">{task.start_date || "-"}</td>
+                      <td
+                        className={["whitespace-nowrap px-4 py-3.5 align-middle", isOverdue ? "font-semibold text-rose-700" : ""].join(" ")}
+                      >
                         {task.due_date || "-"}
                       </td>
                       <td className="px-4 py-3.5 align-middle">
@@ -101,33 +108,52 @@ export function TaskTable({
                               max={100}
                               step={5}
                               value={task.progress}
+                              disabled={disabled}
                               onChange={(event) =>
-                                onEmployeeUpdate(task.id, task.status, Number(event.target.value))
+                                onEmployeeProgressChange(task.id, task.status, Number(event.target.value))
                               }
-                              className="w-full"
+                              className="w-full disabled:opacity-50"
                             />
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3.5 align-middle whitespace-nowrap">
+                      <td className="whitespace-nowrap px-4 py-3.5 align-middle">
                         <div className="flex items-center justify-center gap-3">
-                          <button type="button" onClick={() => onView(task)} className="text-xs font-medium text-[#1d4ed8] hover:underline">
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => onView(task)}
+                            className="text-xs font-medium text-[#1d4ed8] hover:underline disabled:opacity-40"
+                          >
                             View Task
                           </button>
                           {isAdmin ? (
                             <>
-                              <button type="button" onClick={() => onEdit(task)} className="text-xs font-medium text-[#475569] hover:underline">
+                              <button
+                                type="button"
+                                disabled={disabled}
+                                onClick={() => onEdit(task)}
+                                className="text-xs font-medium text-[#475569] hover:underline disabled:opacity-40"
+                              >
                                 Edit Task
                               </button>
-                              <button type="button" onClick={() => onDelete(task.id)} className="text-xs font-medium text-rose-600 hover:underline">
+                              <button
+                                type="button"
+                                disabled={disabled}
+                                onClick={() => onDelete(task.id)}
+                                className="text-xs font-medium text-rose-600 hover:underline disabled:opacity-40"
+                              >
                                 Delete Task
                               </button>
                             </>
                           ) : (
                             <select
                               value={task.status}
-                              onChange={(event) => onEmployeeUpdate(task.id, event.target.value as TaskStatus, task.progress)}
-                              className="h-7 rounded-md border border-[#d4deea] bg-white px-2 text-xs text-[#334155] outline-none"
+                              disabled={disabled}
+                              onChange={(event) =>
+                                onEmployeeStatusChange(task.id, event.target.value as TaskStatus, task.progress)
+                              }
+                              className="h-7 rounded-md border border-[#d4deea] bg-white px-2 text-xs text-[#334155] outline-none disabled:opacity-50"
                             >
                               <option value="Pending">Pending</option>
                               <option value="In Progress">In Progress</option>
@@ -142,7 +168,9 @@ export function TaskTable({
             {!loading && !tasks.length ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-[#64748b]">
-                  No tasks found for current filters.
+                  {tableMissing
+                    ? "Tasks will appear here after the database script is applied and you refresh."
+                    : "No tasks found for current filters."}
                 </td>
               </tr>
             ) : null}

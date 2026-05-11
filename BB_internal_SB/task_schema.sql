@@ -1,3 +1,7 @@
+-- BB Internal OS — Task assignment (public.tasks)
+-- Run after schema.sql (profiles) so assigned_to references exist.
+-- Path in repo: BB_internal_SB/task_schema.sql
+
 create extension if not exists pgcrypto;
 
 create table if not exists public.tasks (
@@ -115,6 +119,21 @@ for update
 to authenticated
 using (assigned_to = auth.uid())
 with check (assigned_to = auth.uid());
+
+-- Managers: read all tasks (team visibility; same pattern as CRM)
+drop policy if exists "tasks_manager_select_all" on public.tasks;
+create policy "tasks_manager_select_all"
+on public.tasks
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and lower(coalesce(p.role, '')) = 'manager'
+  )
+);
 
 do $$
 begin

@@ -27,7 +27,7 @@ Order (core → features → RLS):
    Plus idempotent ALTER/legacy constraint drops for databases that were created from an older narrow clients table.
 
 6) task_schema.sql
-   Task assignment tables + RLS.
+   public.tasks + RLS (admin CRUD, employee read/update own, manager read-all) + optional realtime.
 
 7) company_policies_schema.sql
    company_policies + policy_acceptances (Employee policy gate + Admin policy URLs).
