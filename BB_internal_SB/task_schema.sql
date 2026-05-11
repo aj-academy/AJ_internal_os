@@ -120,19 +120,192 @@ to authenticated
 using (assigned_to = auth.uid())
 with check (assigned_to = auth.uid());
 
--- Employees: create tasks only for themselves (personal backlog; admin-assigned tasks use same row shape)
+-- Employees: assign to self, same-department peers, or shared project team (see tasks_employee_may_assign_to)
+create or replace function public.tasks_employee_may_assign_to (actor uuid, assignee uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_has_ptm boolean;
+  v_me_dept text;
+  v_assignee_dept text;
+begin
+  if actor is null or assignee is null then
+    return false;
+  end if;
+
+  if not exists (
+    select 1
+    from public.profiles me
+    where me.id = actor
+      and lower(coalesce(me.role, '')) = 'employee'
+  ) then
+    return false;
+  end if;
+
+  if not exists (
+    select 1
+    from public.profiles a
+    where a.id = assignee
+      and coalesce(lower(a.status), 'active') = 'active'
+      and lower(coalesce(a.role, '')) in ('employee', 'manager')
+  ) then
+    return false;
+  end if;
+
+  if actor = assignee then
+    return true;
+  end if;
+
+  select nullif(trim(department), '')
+  into v_me_dept
+  from public.profiles
+  where id = actor;
+
+  select nullif(trim(department), '')
+  into v_assignee_dept
+  from public.profiles
+  where id = assignee;
+
+  if v_me_dept is not null and v_assignee_dept is not null and lower(v_me_dept) = lower(v_assignee_dept) then
+    return true;
+  end if;
+
+  select to_regclass('public.project_team_members') is not null into v_has_ptm;
+
+  if v_has_ptm then
+    return exists (
+      select 1
+      from public.project_team_members a
+      join public.project_team_members b on b.project_id = a.project_id and b.profile_id = assignee
+      where a.profile_id = actor
+    );
+  end if;
+
+  return false;
+end;
+$$;
+
 drop policy if exists "tasks_employee_insert_self" on public.tasks;
-create policy "tasks_employee_insert_self"
+drop policy if exists "tasks_employee_insert_delegated" on public.tasks;
+create policy "tasks_employee_insert_delegated"
+on public.tasks
+for insert
+to authenticated
+with check (public.tasks_employee_may_assign_to(auth.uid(), assigned_to));
+
+-- Team assignee picker for employees (bypasses profiles RLS safely)
+create or replace function public.get_team_assignees ()
+returns table (
+  id uuid,
+  full_name text,
+  email text
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_has_ptm boolean;
+begin
+  select to_regclass('public.project_team_members') is not null into v_has_ptm;
+
+  return query
+  select x.id, x.full_name, x.email
+  from (
+    select p.id, p.full_name, p.email
+    from public.profiles p
+    where p.id = auth.uid()
+
+    union
+
+    select p.id, p.full_name, p.email
+    from public.profiles p
+    where
+      exists (
+        select 1
+        from public.profiles me
+        where me.id = auth.uid()
+          and lower(coalesce(me.role, '')) = 'employee'
+      )
+      and coalesce(lower(p.status), 'active') = 'active'
+      and lower(coalesce(p.role, '')) in ('employee', 'manager')
+      and p.id <> auth.uid()
+      and (
+        (
+          nullif(trim(p.department), '') is not null
+          and nullif(trim((select pr.department from public.profiles pr where pr.id = auth.uid())), '') is not null
+          and lower(trim(p.department)) = lower(trim((select pr.department from public.profiles pr where pr.id = auth.uid())))
+        )
+        or (
+          v_has_ptm
+          and exists (
+            select 1
+            from public.project_team_members a
+            join public.project_team_members b on b.project_id = a.project_id and b.profile_id = p.id
+            where a.profile_id = auth.uid()
+          )
+        )
+      )
+  ) x
+  order by x.full_name nulls last, x.email nulls last;
+end;
+$$;
+
+grant execute on function public.get_team_assignees () to authenticated;
+
+-- Managers: create / update / delete tasks (same scope as admin for operations)
+drop policy if exists "tasks_manager_insert_all" on public.tasks;
+create policy "tasks_manager_insert_all"
 on public.tasks
 for insert
 to authenticated
 with check (
-  assigned_to = auth.uid()
-  and exists (
+  exists (
     select 1
     from public.profiles p
     where p.id = auth.uid()
-      and lower(coalesce(p.role, '')) = 'employee'
+      and lower(coalesce(p.role, '')) = 'manager'
+  )
+);
+
+drop policy if exists "tasks_manager_update_all" on public.tasks;
+create policy "tasks_manager_update_all"
+on public.tasks
+for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and lower(coalesce(p.role, '')) = 'manager'
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and lower(coalesce(p.role, '')) = 'manager'
+  )
+);
+
+drop policy if exists "tasks_manager_delete_all" on public.tasks;
+create policy "tasks_manager_delete_all"
+on public.tasks
+for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and lower(coalesce(p.role, '')) = 'manager'
   )
 );
 

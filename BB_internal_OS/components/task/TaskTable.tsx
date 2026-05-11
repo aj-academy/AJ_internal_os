@@ -9,7 +9,8 @@ interface TaskTableProps {
   loading: boolean;
   tableMissing?: boolean;
   employeeNameMap: Record<string, string>;
-  isAdmin: boolean;
+  /** Admin or manager: full task management UI */
+  canManageTasks: boolean;
   onView: (task: TaskRecord) => void;
   onEdit: (task: TaskRecord) => void;
   onDelete: (taskId: string) => void;
@@ -38,7 +39,7 @@ export function TaskTable({
   loading,
   tableMissing = false,
   employeeNameMap,
-  isAdmin,
+  canManageTasks,
   onView,
   onEdit,
   onDelete,
@@ -97,7 +98,7 @@ export function TaskTable({
                         {task.due_date || "-"}
                       </td>
                       <td className="px-4 py-3.5 align-middle">
-                        {isAdmin ? (
+                        {canManageTasks ? (
                           <ProgressBar value={task.progress} />
                         ) : (
                           <div className="space-y-2">
@@ -127,7 +128,7 @@ export function TaskTable({
                           >
                             View Task
                           </button>
-                          {isAdmin ? (
+                          {canManageTasks ? (
                             <>
                               <button
                                 type="button"

@@ -53,6 +53,9 @@ function toReadableTaskError(input: unknown) {
   if (isMissingTasksTableMessage(raw)) {
     return "DATABASE_SETUP: The `public.tasks` table is not in this Supabase project yet. In Supabase SQL Editor, run `BB_internal_SB/task_schema.sql` (see DATABASE_SETUP_ORDER.txt), then refresh this page.";
   }
+  if (raw.toLowerCase().includes("get_team_assignees") || raw.toLowerCase().includes("tasks_employee_may_assign_to")) {
+    return "DATABASE_SETUP: Re-run `BB_internal_SB/task_schema.sql` in Supabase so `get_team_assignees()` and teammate task rules exist, then refresh.";
+  }
   return raw;
 }
 
@@ -63,6 +66,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   const isManager = role === "manager";
   const isEmployee = role === "employee";
   const seesAllTasks = isAdmin || isManager;
+  const canManageTasks = isAdmin || isManager;
   const [currentUserId, setCurrentUserId] = useState("");
   const [employees, setEmployees] = useState<ProfileOption[]>([]);
   const [rows, setRows] = useState<TaskRecord[]>([]);
@@ -111,17 +115,24 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     );
   }, [supabase]);
 
-  const loadEmployees = useCallback(async () => {
+  const loadAssignees = useCallback(async () => {
+    if (isEmployee) {
+      const { data, error: rpcError } = await supabase.rpc("get_team_assignees");
+      if (rpcError) throw new Error(rpcError.message);
+      const rows = (data ?? []) as { id: string; full_name: string | null; email: string | null }[];
+      setEmployees(rows.map((r) => ({ id: r.id, full_name: r.full_name, email: r.email })));
+      return;
+    }
     const { data, error: profilesError } = await supabase
       .from("profiles")
       .select("id,full_name,email")
       .in("role", ["employee", "manager", "admin", "super_admin"])
-      .eq("status", "active")
+      .or("status.is.null,status.eq.active")
       .order("full_name", { ascending: true })
       .returns<ProfileOption[]>();
     if (profilesError) throw new Error(profilesError.message);
     setEmployees(data ?? []);
-  }, [supabase]);
+  }, [isEmployee, supabase]);
 
   const loadSummary = useCallback(
     async (userId: string) => {
@@ -239,8 +250,8 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         if (userError) throw new Error(userError.message);
         if (!user?.id) throw new Error("Unable to resolve current user.");
         setCurrentUserId(user.id);
-        await loadEmployees();
-        if (isAdmin) await loadProjectsForForm();
+        await loadAssignees();
+        if (isAdmin || isManager) await loadProjectsForForm();
       } catch (bootstrapError) {
         setError(toReadableTaskError(bootstrapError));
       } finally {
@@ -249,17 +260,17 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     };
 
     void bootstrap();
-  }, [isAdmin, loadEmployees, loadProjectsForForm, supabase]);
+  }, [isAdmin, isManager, loadAssignees, loadProjectsForForm, supabase]);
 
   const projectPrefillDone = useRef(false);
   useEffect(() => {
     const pid = searchParams.get("project");
-    if (!isAdmin || !pid || tasksTableMissing || !currentUserId || projectPrefillDone.current) return;
+    if (!(isAdmin || isManager) || !pid || tasksTableMissing || !currentUserId || projectPrefillDone.current) return;
     projectPrefillDone.current = true;
     setEditId(null);
     setForm({ ...initialForm, project_id: pid });
     setPanelOpen(true);
-  }, [currentUserId, isAdmin, searchParams, tasksTableMissing]);
+  }, [currentUserId, isAdmin, isManager, searchParams, tasksTableMissing]);
 
   useEffect(() => {
     void reload();
@@ -346,7 +357,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   };
 
   const openEdit = (task: TaskRecord) => {
-    if (!isAdmin || tasksTableMissing) return;
+    if (!canManageTasks || tasksTableMissing) return;
     setEditId(task.id);
     setForm({
       title: task.title,
@@ -364,30 +375,26 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
 
   const handleSaveTask = async () => {
     if (tasksTableMissing) return;
-    if (isManager) {
-      setError("Managers cannot create or edit tasks from this form.");
-      return;
-    }
     if (isEmployee) {
       if (editId) {
-        setError("Use the task list to update status and progress. Ask an admin to change title, dates, or assignee.");
-        return;
-      }
-      if (!currentUserId) {
-        setError("Unable to resolve your account.");
+        setError("Use the task list to update status and progress. Ask an admin or manager to change title, dates, or assignee.");
         return;
       }
       if (!form.title.trim()) {
         setError("Please enter a task title.");
         return;
       }
+      if (!form.assigned_to.trim()) {
+        setError("Select an employee to assign this task to (yourself or a teammate).");
+        return;
+      }
       setSubmitting(true);
       setError(null);
       setSuccess(null);
-      const selfPayload = {
+      const employeePayload = {
         title: form.title.trim(),
         description: form.description || null,
-        assigned_to: currentUserId,
+        assigned_to: form.assigned_to.trim(),
         project_id: null as string | null,
         priority: form.priority,
         status: form.status,
@@ -396,9 +403,9 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         progress: form.progress,
       };
       try {
-        const { error: insertError } = await supabase.from("tasks").insert(selfPayload);
+        const { error: insertError } = await supabase.from("tasks").insert(employeePayload);
         if (insertError) throw new Error(insertError.message);
-        setSuccess("Task added to your list.");
+        setSuccess("Task assigned.");
         setPanelOpen(false);
         setForm(initialForm);
         await reload();
@@ -409,8 +416,16 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       }
       return;
     }
-    if (!isAdmin) {
-      setError("Only admins can assign tasks from this form.");
+    if (!canManageTasks) {
+      setError("You do not have permission to assign tasks here.");
+      return;
+    }
+    if (!form.title.trim()) {
+      setError("Please enter a task title.");
+      return;
+    }
+    if (!form.assigned_to.trim()) {
+      setError("Select an employee to assign this task to.");
       return;
     }
     setSubmitting(true);
@@ -449,7 +464,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    if (!isAdmin || tasksTableMissing) return;
+    if (!canManageTasks || tasksTableMissing) return;
     const confirmed = window.confirm("Delete this task?");
     if (!confirmed) return;
     const { error: deleteError } = await supabase.from("tasks").delete().eq("id", taskId);
@@ -496,19 +511,19 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
           <h2 className="text-3xl font-semibold text-[#0f172a]">Task Assignment</h2>
           <p className="mt-1 text-sm text-[#64748b]">
             {isManager
-              ? "View and monitor team tasks (create and edit remain admin-only)."
+              ? "Assign work to your team, edit tasks, and monitor progress — same task list your reports see when they are assignees."
               : isEmployee
-                ? "Tasks your admin assigns to you use your account and appear here automatically. Add your own tasks, then update status and progress."
+                ? "Admins and managers assign work to your user account; it appears here. You can also assign tasks to yourself or teammates in your department or shared projects."
                 : "Assign, track and manage employee tasks"}
           </p>
         </div>
-        {isAdmin || isEmployee ? (
+        {isAdmin || isManager || isEmployee ? (
           <Button
             onClick={openCreate}
             disabled={tasksTableMissing}
             className="h-9 rounded-full bg-[#2563eb] px-4 text-white hover:bg-[#1d4ed8] disabled:opacity-50"
           >
-            {isEmployee ? "+ Add my task" : "+ Assign Task"}
+            + Assign task
           </Button>
         ) : null}
       </div>
@@ -619,7 +634,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         loading={loading}
         tableMissing={tasksTableMissing}
         employeeNameMap={employeeNameMap}
-        isAdmin={isAdmin}
+        canManageTasks={canManageTasks}
         onView={(task) => setViewTask(task)}
         onEdit={openEdit}
         onDelete={(taskId) => void handleDeleteTask(taskId)}
@@ -642,12 +657,17 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
           <div className="fixed inset-y-0 right-0 z-50 w-full max-w-[420px] p-3 sm:p-4">
             <TaskForm
               open={panelOpen}
-              title={editId ? "Edit Task" : isEmployee ? "Add task for me" : "Assign Task"}
+              title={editId ? "Edit Task" : "Assign task"}
               value={form}
               employees={employeeOptions}
               projects={projectOptions}
-              showProjectField={isAdmin}
-              assigneeLockedToSelf={isEmployee && !editId}
+              showProjectField={canManageTasks}
+              assigneeLockedToSelf={false}
+              assigneeHelperText={
+                isEmployee
+                  ? "Teammates in your department or on the same project roster as you appear here. If the list is empty, ask HR to set your department or add you to a project team."
+                  : undefined
+              }
               submitting={submitting}
               onChange={setForm}
               onClose={() => setPanelOpen(false)}

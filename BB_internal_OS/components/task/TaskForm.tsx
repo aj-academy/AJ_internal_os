@@ -35,6 +35,8 @@ interface TaskFormProps {
   showProjectField?: boolean;
   /** When true, assignee is fixed (self); used for employee personal tasks */
   assigneeLockedToSelf?: boolean;
+  /** Shown under assignee field (e.g. who appears in the list) */
+  assigneeHelperText?: string;
   submitting: boolean;
   onChange: (value: TaskFormValue) => void;
   onClose: () => void;
@@ -52,6 +54,7 @@ export function TaskForm({
   projects = [],
   showProjectField = false,
   assigneeLockedToSelf = false,
+  assigneeHelperText,
   submitting,
   onChange,
   onClose,
@@ -102,7 +105,7 @@ export function TaskForm({
             <p className="mt-1 text-[#64748b]">You — admins and managers can also assign tasks to you; those appear in your list automatically.</p>
           </div>
         ) : (
-          <Field label="Assigned To">
+          <Field label="Assign to">
             <select
               value={value.assigned_to}
               onChange={(event) => onChange({ ...value, assigned_to: event.target.value })}
@@ -115,6 +118,7 @@ export function TaskForm({
                 </option>
               ))}
             </select>
+            {assigneeHelperText ? <p className="mt-1.5 text-xs text-[#64748b]">{assigneeHelperText}</p> : null}
           </Field>
         )}
         <Field label="Priority">
