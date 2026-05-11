@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth/requireRole";
 const accountsSidebarItems = [
   { label: "Dashboard", href: "/accounts/dashboard" },
   { label: "Project budgets", href: "/accounts/project-master" },
-  { label: "Finance & Expenses", href: "/accounts/dashboard" },
+  { label: "Finance & Expenses", href: "/accounts/finance" },
   { label: "Invoices & Payments", href: "/accounts/dashboard" },
   { label: "Expense Reports", href: "/accounts/dashboard" },
   { label: "Vendor Payments", href: "/accounts/dashboard" },

@@ -32,6 +32,11 @@ Order (core → features → RLS):
 6b) project_master_schema.sql
    Run AFTER (6). Adds public.projects, project_activities, project_team_members; tasks.project_id FK;
    triggers to sync project progress from tasks; RLS for projects/activities/team; extends task SELECT for project team.
+   Re-run this script after pulling updates if RLS helper functions / policies change (uses OR REPLACE / DROP POLICY IF EXISTS).
+
+6c) finance_schema.sql
+   Run AFTER (6b). finance_transactions, expense_claims, project_payments, finance_categories, finance_activities;
+   triggers refresh projects.advance_paid/pending_amount from project_payments; approved claims post expense rows; RLS for roles.
 
 7) company_policies_schema.sql
    company_policies + policy_acceptances (Employee policy gate + Admin policy URLs).

@@ -6,6 +6,8 @@
 -- Adds: tasks.project_id + trigger to sync task counts / progress on projects
 -- RLS: admin full; manager read/update projects they manage or are on; employee read team projects;
 --       accounts read all projects (financial visibility); task visibility extended for project team.
+-- RLS helpers (SECURITY DEFINER) avoid recursion between projects, project_team_members, and policies
+-- that referenced the same table twice (e.g. EXISTS (SELECT … FROM project_team_members …) inside ptm RLS).
 
 create extension if not exists pgcrypto;
 
@@ -202,6 +204,59 @@ execute function public.tasks_touch_project_stats ();
 
 alter table public.projects enable row level security;
 
+-- RLS helpers (SECURITY DEFINER): avoid infinite recursion.
+-- 1) projects <-> project_team_members when policies subquery the other table with RLS on.
+-- 2) project_team_members policy must NOT subquery project_team_members (re-enters same policy).
+create or replace function public.project_actor_is_manager_of (p_project_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.projects pr
+    where
+      pr.id = p_project_id
+      and pr.project_manager = auth.uid ()
+  );
+$$;
+
+create or replace function public.project_actor_is_team_member (p_project_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.project_team_members m
+    where
+      m.project_id = p_project_id
+      and m.profile_id = auth.uid ()
+  );
+$$;
+
+create or replace function public.project_principal_has_access (p_project_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.project_actor_is_manager_of (p_project_id)
+    or public.project_actor_is_team_member (p_project_id);
+$$;
+
+revoke all on function public.project_actor_is_manager_of (uuid) from public;
+revoke all on function public.project_actor_is_team_member (uuid) from public;
+revoke all on function public.project_principal_has_access (uuid) from public;
+grant execute on function public.project_actor_is_manager_of (uuid) to authenticated;
+grant execute on function public.project_actor_is_team_member (uuid) to authenticated;
+grant execute on function public.project_principal_has_access (uuid) to authenticated;
+
 drop policy if exists "projects_admin_all" on public.projects;
 create policy "projects_admin_all"
 on public.projects
@@ -252,12 +307,7 @@ using (
   )
   and (
     project_manager = auth.uid ()
-    or exists (
-      select 1
-      from public.project_team_members m
-      where m.project_id = projects.id
-        and m.profile_id = auth.uid ()
-    )
+    or public.project_actor_is_team_member (projects.id)
   )
 );
 
@@ -275,12 +325,7 @@ using (
   )
   and (
     project_manager = auth.uid ()
-    or exists (
-      select 1
-      from public.project_team_members m
-      where m.project_id = projects.id
-        and m.profile_id = auth.uid ()
-    )
+    or public.project_actor_is_team_member (projects.id)
   )
 )
 with check (
@@ -292,12 +337,7 @@ with check (
   )
   and (
     project_manager = auth.uid ()
-    or exists (
-      select 1
-      from public.project_team_members m
-      where m.project_id = projects.id
-        and m.profile_id = auth.uid ()
-    )
+    or public.project_actor_is_team_member (projects.id)
   )
 );
 
@@ -315,12 +355,7 @@ using (
   )
   and (
     project_manager = auth.uid ()
-    or exists (
-      select 1
-      from public.project_team_members m
-      where m.project_id = projects.id
-        and m.profile_id = auth.uid ()
-    )
+    or public.project_actor_is_team_member (projects.id)
   )
 );
 
@@ -373,18 +408,8 @@ for select
 to authenticated
 using (
   profile_id = auth.uid ()
-  or exists (
-    select 1
-    from public.projects pr
-    where pr.id = project_team_members.project_id
-      and pr.project_manager = auth.uid ()
-  )
-  or exists (
-    select 1
-    from public.project_team_members selfm
-    where selfm.project_id = project_team_members.project_id
-      and selfm.profile_id = auth.uid ()
-  )
+  or public.project_actor_is_manager_of (project_team_members.project_id)
+  or public.project_actor_is_team_member (project_team_members.project_id)
 );
 
 -- ------------------------------
@@ -434,44 +459,14 @@ create policy "project_activities_member_select"
 on public.project_activities
 for select
 to authenticated
-using (
-  exists (
-    select 1
-    from public.projects pr
-    where pr.id = project_activities.project_id
-      and (
-        pr.project_manager = auth.uid ()
-        or exists (
-          select 1
-          from public.project_team_members m
-          where m.project_id = pr.id
-            and m.profile_id = auth.uid ()
-        )
-      )
-  )
-);
+using (public.project_principal_has_access (project_activities.project_id));
 
 drop policy if exists "project_activities_member_insert" on public.project_activities;
 create policy "project_activities_member_insert"
 on public.project_activities
 for insert
 to authenticated
-with check (
-  exists (
-    select 1
-    from public.projects pr
-    where pr.id = project_activities.project_id
-      and (
-        pr.project_manager = auth.uid ()
-        or exists (
-          select 1
-          from public.project_team_members m
-          where m.project_id = pr.id
-            and m.profile_id = auth.uid ()
-        )
-      )
-  )
-);
+with check (public.project_principal_has_access (project_activities.project_id));
 
 -- ------------------------------
 -- Tasks: employees on project team can read project tasks
@@ -486,21 +481,11 @@ using (
   assigned_to = auth.uid ()
   or (
     project_id is not null
-    and exists (
-      select 1
-      from public.project_team_members m
-      where m.project_id = tasks.project_id
-        and m.profile_id = auth.uid ()
-    )
+    and public.project_actor_is_team_member (tasks.project_id)
   )
   or (
     project_id is not null
-    and exists (
-      select 1
-      from public.projects pr
-      where pr.id = tasks.project_id
-        and pr.project_manager = auth.uid ()
-    )
+    and public.project_actor_is_manager_of (tasks.project_id)
   )
 );
 

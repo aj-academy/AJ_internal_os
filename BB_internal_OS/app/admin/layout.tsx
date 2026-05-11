@@ -8,7 +8,7 @@ const adminSidebarItems = [
   { label: "Client / Lead Master", href: "/admin/client-lead-master" },
   { label: "Project Master", href: "/admin/project-master" },
   { label: "Task Assignment", href: "/admin/task-assignment" },
-  { label: "Finance & Expenses", href: "/admin/dashboard" },
+  { label: "Finance & Expenses", href: "/admin/finance" },
   { label: "Company Policies", href: "/admin/policies" },
   { label: "Reports", href: "/admin/dashboard" },
   { label: "Settings", href: "/admin/dashboard" },

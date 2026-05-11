@@ -6,6 +6,7 @@ const managerSidebarItems = [
   { label: "Team Attendance", href: "/manager/dashboard" },
   { label: "Project Master", href: "/manager/project-master" },
   { label: "Task Assignment", href: "/manager/task-assignment" },
+  { label: "Finance", href: "/manager/finance" },
   { label: "Work Summary", href: "/manager/dashboard" },
   { label: "Reports", href: "/manager/dashboard" },
 ];

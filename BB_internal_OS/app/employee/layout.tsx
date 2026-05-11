@@ -9,6 +9,7 @@ const employeeSidebarItems = [
   { label: "Client / Lead Master", href: "/employee/client-lead-master" },
   { label: "Project Master", href: "/employee/project-master" },
   { label: "My Tasks", href: "/employee/my-tasks" },
+  { label: "Expense Claims", href: "/employee/finance" },
   { label: "My Leave", href: "/employee/dashboard" },
   { label: "My Expenses", href: "/employee/dashboard" },
   { label: "Company Policies", href: "/employee/policies" },
