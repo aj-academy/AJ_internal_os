@@ -38,6 +38,9 @@ Order (core → features → RLS):
    Run AFTER (6b). finance_transactions, expense_claims, project_payments, finance_categories, finance_activities;
    triggers refresh projects.advance_paid/pending_amount from project_payments; approved claims post expense rows; RLS for roles.
 
+6d) system_settings_schema.sql
+   Run AFTER (6c) or anytime after profiles. Key/value JSON store for Admin System Settings (company, attendance, CRM lists, etc.).
+
 7) company_policies_schema.sql
    company_policies + policy_acceptances (Employee policy gate + Admin policy URLs).
 

@@ -10,8 +10,8 @@ const adminSidebarItems = [
   { label: "Task Assignment", href: "/admin/task-assignment" },
   { label: "Finance & Expenses", href: "/admin/finance" },
   { label: "Company Policies", href: "/admin/policies" },
-  { label: "Reports", href: "/admin/dashboard" },
-  { label: "Settings", href: "/admin/dashboard" },
+  { label: "Reports", href: "/admin/reports" },
+  { label: "Settings", href: "/admin/settings" },
 ];
 
 export default async function AdminLayout({
