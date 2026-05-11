@@ -28,7 +28,7 @@ Order (core → features → RLS):
 
 6) task_schema.sql
    public.tasks + RLS (admin CRUD; employee read/update own; employee insert for self / same department / shared project team via tasks_employee_may_assign_to;
-   get_team_assignees() RPC for the assignee picker; manager read/insert/update/delete-all) + optional realtime.
+   get_team_assignees() RPC (employee assignee picker); get_task_assignees() RPC (admin/manager assignee picker); manager read/insert/update/delete-all) + optional realtime.
    Re-run this file after updates so new policies and RPCs stay in sync (safe when using DROP POLICY IF EXISTS / CREATE OR REPLACE).
 
 6b) project_master_schema.sql

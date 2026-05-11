@@ -198,11 +198,14 @@ to authenticated
 with check (public.tasks_employee_may_assign_to(auth.uid(), assigned_to));
 
 -- Team assignee picker for employees (bypasses profiles RLS safely)
+drop function if exists public.get_team_assignees ();
+
 create or replace function public.get_team_assignees ()
 returns table (
   id uuid,
   full_name text,
-  email text
+  email text,
+  department text
 )
 language plpgsql
 stable
@@ -215,15 +218,15 @@ begin
   select to_regclass('public.project_team_members') is not null into v_has_ptm;
 
   return query
-  select x.id, x.full_name, x.email
+  select x.id, x.full_name, x.email, x.department
   from (
-    select p.id, p.full_name, p.email
+    select p.id, p.full_name, p.email, p.department
     from public.profiles p
     where p.id = auth.uid()
 
     union
 
-    select p.id, p.full_name, p.email
+    select p.id, p.full_name, p.email, p.department
     from public.profiles p
     where
       exists (
@@ -257,6 +260,49 @@ end;
 $$;
 
 grant execute on function public.get_team_assignees () to authenticated;
+
+-- Admin / manager assignee picker (real profiles; bypasses narrow client RLS on profiles)
+drop function if exists public.get_task_assignees ();
+
+create or replace function public.get_task_assignees ()
+returns table (
+  id uuid,
+  full_name text,
+  email text,
+  department text,
+  role text
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and lower(coalesce(p.role, '')) in ('admin', 'super_admin', 'manager')
+  ) then
+    return;
+  end if;
+
+  return query
+  select
+    p.id,
+    p.full_name,
+    p.email,
+    p.department,
+    p.role
+  from public.profiles p
+  where
+    lower(coalesce(p.role, '')) in ('employee', 'manager', 'admin', 'super_admin')
+    and (p.status is null or lower(trim(p.status)) = 'active')
+  order by p.full_name nulls last, p.email nulls last;
+end;
+$$;
+
+grant execute on function public.get_task_assignees () to authenticated;
 
 -- Managers: create / update / delete tasks (same scope as admin for operations)
 drop policy if exists "tasks_manager_insert_all" on public.tasks;

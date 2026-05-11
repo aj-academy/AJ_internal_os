@@ -20,6 +20,8 @@ interface ProfileOption {
   id: string;
   full_name: string | null;
   email: string | null;
+  department?: string | null;
+  role?: string | null;
 }
 
 const initialForm: TaskFormValue = {
@@ -53,8 +55,12 @@ function toReadableTaskError(input: unknown) {
   if (isMissingTasksTableMessage(raw)) {
     return "DATABASE_SETUP: The `public.tasks` table is not in this Supabase project yet. In Supabase SQL Editor, run `BB_internal_SB/task_schema.sql` (see DATABASE_SETUP_ORDER.txt), then refresh this page.";
   }
-  if (raw.toLowerCase().includes("get_team_assignees") || raw.toLowerCase().includes("tasks_employee_may_assign_to")) {
-    return "DATABASE_SETUP: Re-run `BB_internal_SB/task_schema.sql` in Supabase so `get_team_assignees()` and teammate task rules exist, then refresh.";
+  if (
+    raw.toLowerCase().includes("get_team_assignees") ||
+    raw.toLowerCase().includes("get_task_assignees") ||
+    raw.toLowerCase().includes("tasks_employee_may_assign_to")
+  ) {
+    return "DATABASE_SETUP: Re-run `BB_internal_SB/task_schema.sql` in Supabase so assignee RPCs (`get_team_assignees`, `get_task_assignees`) and task rules exist, then refresh.";
   }
   return raw;
 }
@@ -119,13 +125,19 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     if (isEmployee) {
       const { data, error: rpcError } = await supabase.rpc("get_team_assignees");
       if (rpcError) throw new Error(rpcError.message);
-      const rows = (data ?? []) as { id: string; full_name: string | null; email: string | null }[];
-      setEmployees(rows.map((r) => ({ id: r.id, full_name: r.full_name, email: r.email })));
+      const rows = (data ?? []) as { id: string; full_name: string | null; email: string | null; department?: string | null }[];
+      setEmployees(rows.map((r) => ({ id: r.id, full_name: r.full_name, email: r.email, department: r.department ?? null })));
+      return;
+    }
+    const { data: rpcRows, error: rpcError } = await supabase.rpc("get_task_assignees");
+    if (!rpcError && Array.isArray(rpcRows)) {
+      const rows = rpcRows as { id: string; full_name: string | null; email: string | null; department: string | null; role: string | null }[];
+      setEmployees(rows.map((r) => ({ id: r.id, full_name: r.full_name, email: r.email, department: r.department, role: r.role })));
       return;
     }
     const { data, error: profilesError } = await supabase
       .from("profiles")
-      .select("id,full_name,email")
+      .select("id,full_name,email,department,role")
       .in("role", ["employee", "manager", "admin", "super_admin"])
       .or("status.is.null,status.eq.active")
       .order("full_name", { ascending: true })
@@ -298,10 +310,12 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
 
   const employeeOptions = useMemo(
     () =>
-      employees.map((employee) => ({
-        id: employee.id,
-        label: employee.full_name || employee.email || "Unnamed Employee",
-      })),
+      employees.map((employee) => {
+        const name = employee.full_name || employee.email || "Unnamed";
+        const dept = employee.department?.trim();
+        const label = dept ? `${name} — ${dept}` : name;
+        return { id: employee.id, label };
+      }),
     [employees],
   );
 
@@ -342,11 +356,16 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     setApplied({ status: "", priority: "", assigned: "", dueDate: "", search: "" });
   };
 
-  const openCreate = () => {
+  const openCreate = async () => {
     if (tasksTableMissing) return;
     setError(null);
     setSuccess(null);
     setEditId(null);
+    try {
+      await loadAssignees();
+    } catch (assigneeLoadError) {
+      setError(toReadableTaskError(assigneeLoadError));
+    }
     if (isEmployee) {
       if (!currentUserId) return;
       setForm({ ...initialForm, assigned_to: currentUserId });
@@ -356,8 +375,14 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     setPanelOpen(true);
   };
 
-  const openEdit = (task: TaskRecord) => {
+  const openEdit = async (task: TaskRecord) => {
     if (!canManageTasks || tasksTableMissing) return;
+    setError(null);
+    try {
+      await loadAssignees();
+    } catch (assigneeLoadError) {
+      setError(toReadableTaskError(assigneeLoadError));
+    }
     setEditId(task.id);
     setForm({
       title: task.title,
@@ -519,7 +544,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         </div>
         {isAdmin || isManager || isEmployee ? (
           <Button
-            onClick={openCreate}
+            onClick={() => void openCreate()}
             disabled={tasksTableMissing}
             className="h-9 rounded-full bg-[#2563eb] px-4 text-white hover:bg-[#1d4ed8] disabled:opacity-50"
           >
@@ -636,7 +661,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         employeeNameMap={employeeNameMap}
         canManageTasks={canManageTasks}
         onView={(task) => setViewTask(task)}
-        onEdit={openEdit}
+        onEdit={(task) => void openEdit(task)}
         onDelete={(taskId) => void handleDeleteTask(taskId)}
         onEmployeeStatusChange={(taskId, status, progress) => void handleEmployeeStatusChange(taskId, status, progress)}
         onEmployeeProgressChange={(taskId, status, progress) => handleEmployeeProgressAdjust(taskId, status, progress)}
@@ -666,7 +691,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
               assigneeHelperText={
                 isEmployee
                   ? "Teammates in your department or on the same project roster as you appear here. If the list is empty, ask HR to set your department or add you to a project team."
-                  : undefined
+                  : "List refreshes when you open this panel. Active employees, managers, and admins who can receive tasks are shown."
               }
               submitting={submitting}
               onChange={setForm}

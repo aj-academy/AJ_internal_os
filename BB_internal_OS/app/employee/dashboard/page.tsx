@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { CalendarClock, ClipboardCheck, ClipboardList, LayoutDashboard, Mail, Shield, User } from "lucide-react";
+import {
+  CalendarClock,
+  CalendarDays,
+  ClipboardCheck,
+  ClipboardList,
+  LayoutDashboard,
+  Shield,
+} from "lucide-react";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { createClient } from "@/lib/supabase/server";
 import { EmployeeTaskPreview } from "@/components/employee/EmployeeTaskPreview";
@@ -11,7 +18,7 @@ function todayISO() {
 function formatDateOnly(iso: string | null | undefined) {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    return new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
   } catch {
     return "—";
   }
@@ -26,12 +33,32 @@ function formatTime(iso: string | null | undefined) {
   }
 }
 
+function normalizeLeaveStatus(raw: string | null | undefined) {
+  const v = (raw || "").toLowerCase();
+  if (v.includes("pend")) return "pending";
+  if (v.includes("approv")) return "approved";
+  if (v.includes("reject")) return "rejected";
+  return v || "other";
+}
+
+type LeaveRequestRow = {
+  id: string;
+  leave_type: string | null;
+  from_date: string | null;
+  to_date: string | null;
+  total_days: number | null;
+  status: string | null;
+  reason: string | null;
+  created_at: string;
+};
+
 export default async function EmployeeDashboardPage() {
   const { profile, user } = await getUserProfile();
   const supabase = await createClient();
 
   const uid = user?.id;
   const today = todayISO();
+  const yearBoundary = `${new Date().getFullYear()}-01-01T00:00:00.000Z`;
 
   let todayAttendance: { status: string | null; check_in_time: string | null; check_out_time: string | null } | null = null;
   let totalTasks = 0;
@@ -41,14 +68,13 @@ export default async function EmployeeDashboardPage() {
   let leavePending = 0;
   let permissionPending = 0;
   let policyCount = 0;
-  let employeeCode: string | null = null;
-  let workPhone: string | null = null;
-  let joinedAt: string | null = null;
-  let managerName: string | null = null;
-  let managerEmail: string | null = null;
+  let leaveHistory: LeaveRequestRow[] = [];
+  let leaveYtdApproved = 0;
+  let leaveYtdRejected = 0;
+  let upcomingApproved: LeaveRequestRow[] = [];
 
   if (uid) {
-    const [attRes, totalRes, openRes, dueRes, overdueRes, leaveRes, permRes, polRes] = await Promise.all([
+    const [attRes, totalRes, openRes, dueRes, overdueRes, leaveRes, permRes, polRes, leaveListRes, apprYtdRes, rejYtdRes] = await Promise.all([
       supabase
         .from("attendance_records")
         .select("status,check_in_time,check_out_time")
@@ -72,6 +98,24 @@ export default async function EmployeeDashboardPage() {
       supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("employee_id", uid).ilike("status", "pending"),
       supabase.from("permission_requests").select("id", { count: "exact", head: true }).eq("employee_id", uid).ilike("status", "pending"),
       supabase.from("company_policies").select("id", { count: "exact", head: true }),
+      supabase
+        .from("leave_requests")
+        .select("id,leave_type,from_date,to_date,total_days,status,reason,created_at")
+        .eq("employee_id", uid)
+        .order("created_at", { ascending: false })
+        .limit(40),
+      supabase
+        .from("leave_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("employee_id", uid)
+        .gte("created_at", yearBoundary)
+        .ilike("status", "%approved%"),
+      supabase
+        .from("leave_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("employee_id", uid)
+        .gte("created_at", yearBoundary)
+        .ilike("status", "%reject%"),
     ]);
 
     todayAttendance = attRes.data ?? null;
@@ -82,28 +126,18 @@ export default async function EmployeeDashboardPage() {
     leavePending = leaveRes.count ?? 0;
     permissionPending = permRes.count ?? 0;
     policyCount = polRes.count ?? 0;
+    leaveHistory = (leaveListRes.data ?? []) as LeaveRequestRow[];
+    leaveYtdApproved = apprYtdRes.count ?? 0;
+    leaveYtdRejected = rejYtdRes.count ?? 0;
 
-    const edRes = await supabase
-      .from("employee_details")
-      .select("employee_code, phone, joined_at, manager_id")
-      .eq("employee_id", uid)
-      .maybeSingle();
-    if (!edRes.error && edRes.data) {
-      const ed = edRes.data as {
-        employee_code: string | null;
-        phone: string | null;
-        joined_at: string | null;
-        manager_id: string | null;
-      };
-      employeeCode = ed.employee_code;
-      workPhone = ed.phone;
-      joinedAt = ed.joined_at;
-      if (ed.manager_id) {
-        const { data: mgr } = await supabase.from("profiles").select("full_name, email").eq("id", ed.manager_id).maybeSingle();
-        managerName = (mgr?.full_name as string | null) ?? null;
-        managerEmail = (mgr?.email as string | null) ?? null;
-      }
-    }
+    upcomingApproved = leaveHistory
+      .filter((row) => {
+        if (normalizeLeaveStatus(row.status) !== "approved") return false;
+        const end = row.to_date || row.from_date;
+        return end ? end >= today : false;
+      })
+      .sort((a, b) => (a.from_date || "").localeCompare(b.from_date || ""))
+      .slice(0, 3);
   }
 
   const attLabel = todayAttendance?.status?.trim() || "No check-in yet";
@@ -126,6 +160,12 @@ export default async function EmployeeDashboardPage() {
       description: "Request short leave from office; track approval status.",
       href: "/employee/permission",
       icon: ClipboardCheck,
+    },
+    {
+      title: "My Leave",
+      description: "Review requests, balances at a glance, and what is coming up next.",
+      href: "/employee/dashboard#my-leave",
+      icon: CalendarDays,
     },
     {
       title: "My Tasks",
@@ -155,12 +195,20 @@ export default async function EmployeeDashboardPage() {
             attendance, tasks, and requests.
           </p>
         </div>
-        <Link
-          href="/employee/my-tasks"
-          className="inline-flex h-10 items-center justify-center rounded-full bg-[#2563eb] px-5 text-sm font-medium text-white hover:bg-[#1d4ed8]"
-        >
-          Go to My Tasks
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/employee/dashboard#my-leave"
+            className="inline-flex h-10 items-center justify-center rounded-full border border-[#d4deea] bg-white px-5 text-sm font-medium text-[#334155] hover:bg-[#f8fbff]"
+          >
+            Leave overview
+          </Link>
+          <Link
+            href="/employee/my-tasks"
+            className="inline-flex h-10 items-center justify-center rounded-full bg-[#2563eb] px-5 text-sm font-medium text-white hover:bg-[#1d4ed8]"
+          >
+            My tasks
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -192,7 +240,7 @@ export default async function EmployeeDashboardPage() {
 
       <div>
         <h3 className="text-sm font-semibold uppercase tracking-wide text-[#64748b]">Quick navigation</h3>
-        <div className="mt-3 grid gap-4 md:grid-cols-2">
+        <div className="mt-3 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {shortcuts.map((item) => (
             <Link
               key={item.title}
@@ -211,95 +259,136 @@ export default async function EmployeeDashboardPage() {
         </div>
       </div>
 
-      <section className="scroll-mt-24 rounded-[22px] border border-[#dbe6f3] bg-white p-5 shadow-sm" id="my-leave">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">Time off</p>
-            <h3 className="mt-1 text-lg font-semibold text-[#0f172a]">My leave</h3>
-            <p className="mt-1 text-sm text-[#64748b]">
-              You have <strong className="text-[#0f172a]">{leavePending}</strong> leave request(s) waiting for approval. Submit new requests from
-              your HR or attendance flow when your org enables it.
-            </p>
+      <section
+        className="scroll-mt-24 overflow-hidden rounded-[22px] border border-[#dbe6f3] bg-gradient-to-br from-white to-[#f8fbff] shadow-sm"
+        id="my-leave"
+      >
+        <div className="border-b border-[#e8edf5] bg-white/80 px-5 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#eff6ff] text-[#2563eb]">
+                <CalendarDays className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">Time off</p>
+                <h3 className="mt-0.5 text-lg font-semibold text-[#0f172a]">My leave</h3>
+                <p className="mt-1 max-w-2xl text-sm text-[#64748b]">
+                  Track requests like in a typical HR dashboard: pipeline counts for this year, what is waiting on a manager, and your next
+                  approved time away. Submit new leave through your company process (often HR or Attendance admin).
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/employee/permission"
+              className="inline-flex h-9 items-center rounded-full border border-[#c9d8eb] bg-white px-4 text-sm font-medium text-[#1e3a8a] hover:bg-[#eff6ff]"
+            >
+              Permission & requests
+            </Link>
           </div>
-          <CalendarClock className="h-10 w-10 shrink-0 text-[#94a3b8]" />
+        </div>
+
+        <div className="grid gap-3 p-5 sm:grid-cols-3">
+          <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-amber-800/90">Pending approval</p>
+            <p className="mt-1 text-2xl font-semibold text-amber-950">{leavePending}</p>
+            <p className="mt-1 text-xs text-amber-900/80">Open requests awaiting a decision</p>
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-emerald-800/90">Approved (YTD)</p>
+            <p className="mt-1 text-2xl font-semibold text-emerald-950">{leaveYtdApproved}</p>
+            <p className="mt-1 text-xs text-emerald-900/80">From requests submitted this calendar year</p>
+          </div>
+          <div className="rounded-xl border border-rose-200 bg-rose-50/90 px-4 py-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-rose-800/90">Rejected (YTD)</p>
+            <p className="mt-1 text-2xl font-semibold text-rose-950">{leaveYtdRejected}</p>
+            <p className="mt-1 text-xs text-rose-900/80">Based on your recent request history</p>
+          </div>
+        </div>
+
+        {upcomingApproved.length > 0 ? (
+          <div className="border-t border-[#e8edf5] px-5 py-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">Upcoming approved leave</p>
+            <ul className="mt-2 space-y-2">
+              {upcomingApproved.map((row) => (
+                <li
+                  key={row.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#dbe6f3] bg-white px-3 py-2 text-sm"
+                >
+                  <span className="font-medium text-[#0f172a]">{row.leave_type || "Leave"}</span>
+                  <span className="text-[#64748b]">
+                    {formatDateOnly(row.from_date)} → {formatDateOnly(row.to_date)}
+                    {row.total_days != null ? ` · ${row.total_days} day(s)` : ""}
+                  </span>
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Approved</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <div className="border-t border-[#e8edf5] px-5 py-4 text-sm text-[#64748b]">
+            No upcoming approved leave in your recent records. Approved trips will appear here when end dates are today or later.
+          </div>
+        )}
+
+        <div className="border-t border-[#e8edf5] px-5 pb-5 pt-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-[#0f172a]">Recent requests</p>
+            <span className="text-xs text-[#64748b]">Newest first · last {leaveHistory.length} loaded</span>
+          </div>
+          <div className="overflow-x-auto rounded-xl border border-[#e8edf5] bg-white">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
+                <tr>
+                  <th className="px-3 py-2">Type</th>
+                  <th className="px-3 py-2">From</th>
+                  <th className="px-3 py-2">To</th>
+                  <th className="px-3 py-2">Days</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Submitted</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#eef2ff] text-[#334155]">
+                {leaveHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-8 text-center text-[#64748b]">
+                      No leave requests yet. When you submit time off, it will show here with live status.
+                    </td>
+                  </tr>
+                ) : (
+                  leaveHistory.map((row) => {
+                    const s = normalizeLeaveStatus(row.status);
+                    const badge =
+                      s === "approved"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : s === "rejected"
+                          ? "bg-rose-100 text-rose-800"
+                          : "bg-amber-100 text-amber-900";
+                    return (
+                      <tr key={row.id}>
+                        <td className="px-3 py-2 font-medium text-[#0f172a]">{row.leave_type || "—"}</td>
+                        <td className="px-3 py-2">{formatDateOnly(row.from_date)}</td>
+                        <td className="px-3 py-2">{formatDateOnly(row.to_date)}</td>
+                        <td className="px-3 py-2">{row.total_days ?? "—"}</td>
+                        <td className="px-3 py-2">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${badge}`}>
+                            {row.status || "Pending"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-[#64748b]">{formatDateOnly(row.created_at)}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+          {leaveHistory.some((r) => r.reason?.trim()) ? (
+            <p className="mt-3 text-xs text-[#64748b]">Reasons are stored on each request; expand leave workflows in Attendance / HR admin when ready.</p>
+          ) : null}
         </div>
       </section>
 
       <EmployeeTaskPreview />
-
-      <section className="scroll-mt-24 rounded-[22px] border border-[#dbe6f3] bg-[#f8fbff] p-5 shadow-sm" id="my-profile">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex gap-4">
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white text-lg font-semibold text-[#2563eb] ring-1 ring-[#dbe6f3]">
-              {(profile?.full_name ?? "E")
-                .split(" ")
-                .map((s) => s[0])
-                .join("")
-                .slice(0, 2)
-                .toUpperCase()}
-            </span>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">My profile</p>
-              <h3 className="mt-1 text-xl font-semibold text-[#0f172a]">{profile?.full_name ?? "Employee"}</h3>
-              <p className="mt-1 flex items-center gap-2 text-sm text-[#64748b]">
-                <Mail className="h-4 w-4 shrink-0" />
-                {user?.email ?? profile?.email ?? "—"}
-              </p>
-              <p className="mt-2 text-xs text-[#94a3b8]">
-                Account ID: <span className="font-mono text-[#475569]">{uid ?? "—"}</span>
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <dl className="mt-6 grid gap-4 text-sm text-[#334155] sm:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-xl border border-[#e8edf5] bg-white/80 p-3">
-            <dt className="text-xs font-medium text-[#94a3b8]">Employee code</dt>
-            <dd className="mt-1 font-semibold text-[#0f172a]">{employeeCode ?? "—"}</dd>
-          </div>
-          <div className="rounded-xl border border-[#e8edf5] bg-white/80 p-3">
-            <dt className="text-xs font-medium text-[#94a3b8]">Department</dt>
-            <dd className="mt-1 font-semibold text-[#0f172a]">{profile?.department ?? "—"}</dd>
-          </div>
-          <div className="rounded-xl border border-[#e8edf5] bg-white/80 p-3">
-            <dt className="text-xs font-medium text-[#94a3b8]">Designation</dt>
-            <dd className="mt-1 font-semibold text-[#0f172a]">{profile?.designation ?? "—"}</dd>
-          </div>
-          <div className="rounded-xl border border-[#e8edf5] bg-white/80 p-3">
-            <dt className="text-xs font-medium text-[#94a3b8]">Work phone</dt>
-            <dd className="mt-1 font-semibold text-[#0f172a]">{workPhone ?? "—"}</dd>
-          </div>
-          <div className="rounded-xl border border-[#e8edf5] bg-white/80 p-3">
-            <dt className="text-xs font-medium text-[#94a3b8]">Joined company</dt>
-            <dd className="mt-1 font-semibold text-[#0f172a]">{formatDateOnly(joinedAt)}</dd>
-          </div>
-          <div className="rounded-xl border border-[#e8edf5] bg-white/80 p-3">
-            <dt className="text-xs font-medium text-[#94a3b8]">Profile created</dt>
-            <dd className="mt-1 font-semibold text-[#0f172a]">{formatDateOnly(profile?.created_at)}</dd>
-          </div>
-          <div className="rounded-xl border border-[#e8edf5] bg-white/80 p-3 sm:col-span-2 lg:col-span-3">
-            <dt className="text-xs font-medium text-[#94a3b8]">Reporting manager</dt>
-            <dd className="mt-1 font-semibold text-[#0f172a]">
-              {managerName ?? "—"}
-              {managerEmail ? <span className="mt-0.5 block text-sm font-normal text-[#64748b]">{managerEmail}</span> : null}
-            </dd>
-          </div>
-          <div className="rounded-xl border border-[#e8edf5] bg-white/80 p-3">
-            <dt className="text-xs font-medium text-[#94a3b8]">Employment status</dt>
-            <dd className="mt-1 font-semibold capitalize text-[#0f172a]">{profile?.status ?? "—"}</dd>
-          </div>
-          <div className="rounded-xl border border-[#e8edf5] bg-white/80 p-3">
-            <dt className="text-xs font-medium text-[#94a3b8]">Access role</dt>
-            <dd className="mt-1 font-semibold capitalize text-[#0f172a]">{profile?.role ?? "employee"}</dd>
-          </div>
-        </dl>
-
-        <p className="mt-4 flex items-start gap-2 rounded-lg border border-[#dbe6f3] bg-white/60 px-3 py-2 text-xs text-[#64748b]">
-          <User className="mt-0.5 h-4 w-4 shrink-0 text-[#94a3b8]" />
-          To change legal name, department, or manager, contact HR or an administrator — employee self-service edits depend on your company
-          policy.
-        </p>
-      </section>
     </section>
   );
 }
