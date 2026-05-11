@@ -11,6 +11,7 @@ export interface TaskRecord {
   start_date: string | null;
   due_date: string | null;
   progress: number;
+  project_id?: string | null;
   created_at: string;
   updated_at: string;
 }

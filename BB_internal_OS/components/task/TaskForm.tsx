@@ -8,6 +8,7 @@ export interface TaskFormValue {
   title: string;
   description: string;
   assigned_to: string;
+  project_id: string;
   priority: TaskPriority;
   status: TaskStatus;
   start_date: string;
@@ -20,11 +21,18 @@ interface EmployeeOption {
   label: string;
 }
 
+interface ProjectOption {
+  id: string;
+  label: string;
+}
+
 interface TaskFormProps {
   open: boolean;
   title: string;
   value: TaskFormValue;
   employees: EmployeeOption[];
+  projects?: ProjectOption[];
+  showProjectField?: boolean;
   submitting: boolean;
   onChange: (value: TaskFormValue) => void;
   onClose: () => void;
@@ -34,7 +42,18 @@ interface TaskFormProps {
 const priorities: TaskPriority[] = ["Low", "Medium", "High"];
 const statuses: TaskStatus[] = ["Pending", "In Progress", "Completed"];
 
-export function TaskForm({ open, title, value, employees, submitting, onChange, onClose, onSubmit }: TaskFormProps) {
+export function TaskForm({
+  open,
+  title,
+  value,
+  employees,
+  projects = [],
+  showProjectField = false,
+  submitting,
+  onChange,
+  onClose,
+  onSubmit,
+}: TaskFormProps) {
   if (!open) return null;
 
   return (
@@ -58,6 +77,22 @@ export function TaskForm({ open, title, value, employees, submitting, onChange, 
             className="w-full rounded-lg border border-[#d4deea] px-3 py-2 text-sm outline-none focus:border-[#2563eb]"
           />
         </Field>
+        {showProjectField ? (
+          <Field label="Project (optional)">
+            <select
+              value={value.project_id}
+              onChange={(event) => onChange({ ...value, project_id: event.target.value })}
+              className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb]"
+            >
+              <option value="">No project</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
         <Field label="Assigned To">
           <select
             value={value.assigned_to}

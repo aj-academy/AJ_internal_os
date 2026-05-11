@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { TaskForm, type TaskFormValue } from "@/components/task/TaskForm";
 import { TaskTable } from "@/components/task/TaskTable";
 import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 
-type AppRole = "admin" | "employee";
+type AppRole = "admin" | "employee" | "manager";
 
 interface TaskAssignmentPageProps {
   role: AppRole;
@@ -25,6 +26,7 @@ const initialForm: TaskFormValue = {
   title: "",
   description: "",
   assigned_to: "",
+  project_id: "",
   priority: "Medium",
   status: "Pending",
   start_date: "",
@@ -56,7 +58,10 @@ function toReadableTaskError(input: unknown) {
 
 export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   const supabase = useMemo(() => createClient(), []);
+  const searchParams = useSearchParams();
   const isAdmin = role === "admin";
+  const isManager = role === "manager";
+  const seesAllTasks = isAdmin || isManager;
   const [currentUserId, setCurrentUserId] = useState("");
   const [employees, setEmployees] = useState<ProfileOption[]>([]);
   const [rows, setRows] = useState<TaskRecord[]>([]);
@@ -70,6 +75,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<TaskFormValue>(initialForm);
   const [viewTask, setViewTask] = useState<TaskRecord | null>(null);
+  const [projectOptions, setProjectOptions] = useState<{ id: string; label: string }[]>([]);
 
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "">("");
@@ -85,6 +91,24 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   });
 
   const progressDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const loadProjectsForForm = useCallback(async () => {
+    const { data, error: projErr } = await supabase
+      .from("projects")
+      .select("id,project_name,project_code")
+      .order("project_name", { ascending: true })
+      .limit(400);
+    if (projErr) {
+      setProjectOptions([]);
+      return;
+    }
+    setProjectOptions(
+      (data ?? []).map((row: { id: string; project_name: string | null; project_code: string | null }) => ({
+        id: row.id,
+        label: [row.project_code, row.project_name].filter(Boolean).join(" · ") || row.id.slice(0, 8),
+      })),
+    );
+  }, [supabase]);
 
   const loadEmployees = useCallback(async () => {
     const { data, error: profilesError } = await supabase
@@ -105,7 +129,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       let inProgressQuery = supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "In Progress");
       let completedQuery = supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "Completed");
 
-      if (!isAdmin) {
+      if (!seesAllTasks) {
         totalQuery = totalQuery.eq("assigned_to", userId);
         pendingQuery = pendingQuery.eq("assigned_to", userId);
         inProgressQuery = inProgressQuery.eq("assigned_to", userId);
@@ -137,14 +161,16 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         completed: completedRes.count ?? 0,
       });
     },
-    [isAdmin, supabase],
+    [seesAllTasks, supabase],
   );
 
   const loadTasks = useCallback(
     async (userId: string) => {
-      let query = supabase.from("tasks").select("id,title,description,assigned_to,priority,status,start_date,due_date,progress,created_at,updated_at");
+      let query = supabase
+        .from("tasks")
+        .select("id,title,description,assigned_to,priority,status,start_date,due_date,progress,project_id,created_at,updated_at");
 
-      if (!isAdmin) query = query.eq("assigned_to", userId);
+      if (!seesAllTasks) query = query.eq("assigned_to", userId);
       if (applied.status) query = query.eq("status", applied.status);
       if (applied.priority) query = query.eq("priority", applied.priority);
       if (applied.assigned) query = query.eq("assigned_to", applied.assigned);
@@ -165,7 +191,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       setTasksTableMissing(false);
       setRows(data ?? []);
     },
-    [applied.assigned, applied.dueDate, applied.priority, applied.search, applied.status, isAdmin, supabase],
+    [applied.assigned, applied.dueDate, applied.priority, applied.search, applied.status, seesAllTasks, supabase],
   );
 
   const refreshTaskData = useCallback(
@@ -213,6 +239,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         if (!user?.id) throw new Error("Unable to resolve current user.");
         setCurrentUserId(user.id);
         await loadEmployees();
+        if (isAdmin) await loadProjectsForForm();
       } catch (bootstrapError) {
         setError(toReadableTaskError(bootstrapError));
       } finally {
@@ -221,7 +248,17 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     };
 
     void bootstrap();
-  }, [loadEmployees, supabase]);
+  }, [isAdmin, loadEmployees, loadProjectsForForm, supabase]);
+
+  const projectPrefillDone = useRef(false);
+  useEffect(() => {
+    const pid = searchParams.get("project");
+    if (!isAdmin || !pid || tasksTableMissing || !currentUserId || projectPrefillDone.current) return;
+    projectPrefillDone.current = true;
+    setEditId(null);
+    setForm({ ...initialForm, project_id: pid });
+    setPanelOpen(true);
+  }, [currentUserId, isAdmin, searchParams, tasksTableMissing]);
 
   useEffect(() => {
     void reload();
@@ -309,6 +346,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       title: task.title,
       description: task.description ?? "",
       assigned_to: task.assigned_to,
+      project_id: task.project_id ?? "",
       priority: task.priority,
       status: task.status,
       start_date: task.start_date ?? "",
@@ -331,6 +369,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       title: form.title.trim(),
       description: form.description || null,
       assigned_to: form.assigned_to,
+      project_id: form.project_id.trim() || null,
       priority: form.priority,
       status: form.status,
       start_date: form.start_date || null,
@@ -404,7 +443,9 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">Task Assignment</h2>
-          <p className="mt-1 text-sm text-[#64748b]">Assign, track and manage employee tasks</p>
+          <p className="mt-1 text-sm text-[#64748b]">
+            {isManager ? "View and monitor team tasks (create and edit remain admin-only)." : "Assign, track and manage employee tasks"}
+          </p>
         </div>
         {isAdmin ? (
           <Button
@@ -475,7 +516,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
           <select
             value={assignedFilter}
             onChange={(event) => setAssignedFilter(event.target.value)}
-            disabled={!isAdmin || tasksTableMissing}
+            disabled={!seesAllTasks || tasksTableMissing}
             className="h-9 rounded-lg border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8]"
           >
             <option value="">Assigned Employee</option>
@@ -549,6 +590,8 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
               title={editId ? "Edit Task" : "Assign Task"}
               value={form}
               employees={employeeOptions}
+              projects={projectOptions}
+              showProjectField={isAdmin}
               submitting={submitting}
               onChange={setForm}
               onClose={() => setPanelOpen(false)}

@@ -4,8 +4,8 @@ import { requireRole } from "@/lib/auth/requireRole";
 const managerSidebarItems = [
   { label: "Dashboard", href: "/manager/dashboard" },
   { label: "Team Attendance", href: "/manager/dashboard" },
-  { label: "Project Master", href: "/manager/dashboard" },
-  { label: "Task Assignment", href: "/manager/dashboard" },
+  { label: "Project Master", href: "/manager/project-master" },
+  { label: "Task Assignment", href: "/manager/task-assignment" },
   { label: "Work Summary", href: "/manager/dashboard" },
   { label: "Reports", href: "/manager/dashboard" },
 ];

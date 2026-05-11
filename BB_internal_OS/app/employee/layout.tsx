@@ -7,6 +7,7 @@ const employeeSidebarItems = [
   { label: "My Attendance", href: "/employee/attendance" },
   { label: "My Permission", href: "/employee/permission" },
   { label: "Client / Lead Master", href: "/employee/client-lead-master" },
+  { label: "Project Master", href: "/employee/project-master" },
   { label: "My Tasks", href: "/employee/my-tasks" },
   { label: "My Leave", href: "/employee/dashboard" },
   { label: "My Expenses", href: "/employee/dashboard" },
