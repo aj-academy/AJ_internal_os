@@ -326,13 +326,14 @@ async function handleSummaryReview(formData: FormData) {
   if (!id) return;
 
   const supabase = await createAttendanceSupabaseClient();
-  await supabase
-    .from("work_summaries")
-    .update({
-      status: "reviewed",
-      manager_remarks: remark || "Reviewed by admin",
-    })
-    .eq("id", id);
+  const payloadWithRemark = {
+    status: "reviewed" as const,
+    manager_remarks: remark || "Reviewed by admin",
+  };
+  const { error } = await supabase.from("work_summaries").update(payloadWithRemark).eq("id", id);
+  if (error?.message?.toLowerCase().includes("manager_remarks")) {
+    await supabase.from("work_summaries").update({ status: "reviewed" }).eq("id", id);
+  }
 }
 
 export default async function AdminAttendancePage({ searchParams }: AdminAttendancePageProps) {
@@ -772,16 +773,44 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const departmentFilter = params.department ?? "";
     const statusFilter = params.status ?? "";
 
-    let summaryQuery = supabase
-      .from("work_summaries")
-      .select("id,employee_id,attendance_id,summary_date,completed_work,pending_work,challenges,tomorrow_plan,status,manager_remarks,created_at")
-      .order("created_at", { ascending: false })
-      .limit(400);
+    const selectWithRemarks =
+      "id,employee_id,attendance_id,summary_date,completed_work,pending_work,challenges,tomorrow_plan,status,manager_remarks,created_at";
+    const selectWithoutRemarks =
+      "id,employee_id,attendance_id,summary_date,completed_work,pending_work,challenges,tomorrow_plan,status,created_at";
 
-    if (dateFilter) summaryQuery = summaryQuery.eq("summary_date", dateFilter);
-    if (statusFilter) summaryQuery = summaryQuery.eq("status", statusFilter.trim().toLowerCase());
+    function buildSummaryQuery(selectList: string) {
+      let q = supabase
+        .from("work_summaries")
+        .select(selectList)
+        .order("created_at", { ascending: false })
+        .limit(400);
+      if (dateFilter) q = q.eq("summary_date", dateFilter);
+      if (statusFilter) q = q.eq("status", statusFilter.trim().toLowerCase());
+      return q;
+    }
 
-    const { data: summaryData, error: summaryFetchError } = await summaryQuery.returns<WorkSummary[]>();
+    let summaryFetchError: { message: string } | null = null;
+    let summarySchemaNotice: string | null = null;
+    let summaryData: WorkSummary[] = [];
+
+    const firstRes = await buildSummaryQuery(selectWithRemarks).returns<WorkSummary[]>();
+    const errMsg = (firstRes.error?.message ?? "").toLowerCase();
+    if (firstRes.error && errMsg.includes("manager_remarks")) {
+      const secondRes = await buildSummaryQuery(selectWithoutRemarks).returns<
+        Omit<WorkSummary, "manager_remarks">[]
+      >();
+      if (secondRes.error) {
+        summaryFetchError = secondRes.error;
+      } else {
+        summaryData = (secondRes.data ?? []).map((r) => ({ ...r, manager_remarks: null }));
+        summarySchemaNotice =
+          "Your database is missing work_summaries.manager_remarks, so summaries still load without admin remarks. Run BB_internal_SB/attendance_module.sql in Supabase (or fix_work_summaries_manager_remarks.sql), then refresh.";
+      }
+    } else {
+      summaryFetchError = firstRes.error;
+      summaryData = firstRes.data ?? [];
+    }
+
     if (summaryFetchError) {
       console.error("work_summaries fetch:", summaryFetchError.message);
     }
@@ -819,15 +848,17 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <StatCard label="Delayed Summaries" value={delayedSummaries} />
         </div>
 
+        {summarySchemaNotice ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            {summarySchemaNotice}
+          </div>
+        ) : null}
+
         {summaryFetchError ? (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-            Could not load work summaries: {summaryFetchError.message}. If the error mentions a missing column (for example{" "}
-            <code className="rounded bg-white/80 px-1">manager_remarks</code>), run{" "}
-            <code className="rounded bg-white/80 px-1">BB_internal_SB/fix_work_summaries_manager_remarks.sql</code> or re-run{" "}
-            <code className="rounded bg-white/80 px-1">BB_internal_SB/attendance_schema.sql</code> in Supabase—older tables are not altered by{" "}
-            <code className="rounded bg-white/80 px-1">CREATE TABLE IF NOT EXISTS</code> alone. For access errors, set{" "}
-            <code className="rounded bg-white/80 px-1">SUPABASE_SERVICE_ROLE_KEY</code> on the server; for RLS issues, re-run{" "}
-            <code className="rounded bg-white/80 px-1">BB_internal_SB/attendance_rls.sql</code>.
+            Could not load work summaries: {summaryFetchError.message}. Confirm{" "}
+            <code className="rounded bg-white/80 px-1">SUPABASE_SERVICE_ROLE_KEY</code> on Vercel for admin reads, then run{" "}
+            <code className="rounded bg-white/80 px-1">BB_internal_SB/attendance_module.sql</code> in Supabase so tables and RLS match the app (one file for the attendance domain).
           </div>
         ) : null}
 

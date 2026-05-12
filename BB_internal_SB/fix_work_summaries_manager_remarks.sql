@@ -3,5 +3,7 @@
 --
 -- Your work_summaries table was likely created before this column existed.
 -- CREATE TABLE IF NOT EXISTS does not add new columns to an existing table.
+--
+-- Prefer: BB_internal_SB/attendance_module.sql (one combined attendance setup).
 
 alter table public.work_summaries add column if not exists manager_remarks text;

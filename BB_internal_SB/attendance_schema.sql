@@ -1,5 +1,7 @@
 -- Supabase-ready attendance schema for future integration
 -- Uses public.profiles(id) as employee and approver references
+--
+-- For a single combined script (tables + helpers + RLS), use attendance_module.sql instead of juggling multiple files.
 
 create extension if not exists pgcrypto;
 
