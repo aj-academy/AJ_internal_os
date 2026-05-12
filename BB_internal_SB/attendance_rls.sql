@@ -39,7 +39,7 @@ using (
     select 1
     from public.profiles p
     where p.id = auth.uid()
-      and p.role in ('admin', 'super_admin')
+      and lower(btrim(coalesce(p.role, ''))) in ('admin', 'super_admin')
   )
 );
 
@@ -70,7 +70,7 @@ using (
     select 1
     from public.profiles p
     where p.id = auth.uid()
-      and p.role in ('admin', 'super_admin')
+      and lower(btrim(coalesce(p.role, ''))) in ('admin', 'super_admin')
   )
 );
 
@@ -92,7 +92,7 @@ using (
     select 1
     from public.profiles p
     where p.id = auth.uid()
-      and p.role in ('admin', 'super_admin')
+      and lower(btrim(coalesce(p.role, ''))) in ('admin', 'super_admin')
   )
 )
 with check (
@@ -100,7 +100,7 @@ with check (
     select 1
     from public.profiles p
     where p.id = auth.uid()
-      and p.role in ('admin', 'super_admin')
+      and lower(btrim(coalesce(p.role, ''))) in ('admin', 'super_admin')
   )
 );
 
@@ -122,7 +122,7 @@ using (
     select 1
     from public.profiles p
     where p.id = auth.uid()
-      and p.role in ('admin', 'super_admin')
+      and lower(btrim(coalesce(p.role, ''))) in ('admin', 'super_admin')
   )
 )
 with check (
@@ -130,6 +130,6 @@ with check (
     select 1
     from public.profiles p
     where p.id = auth.uid()
-      and p.role in ('admin', 'super_admin')
+      and lower(btrim(coalesce(p.role, ''))) in ('admin', 'super_admin')
   )
 );

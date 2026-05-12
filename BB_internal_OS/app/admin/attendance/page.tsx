@@ -1,8 +1,21 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { AdminAttendanceAutoRefresh } from "@/components/attendance/AdminAttendanceAutoRefresh";
+
+/**
+ * Prefer service role on this admin-only route so attendance + work_summaries
+ * always load even if session RLS policies are misaligned in Supabase.
+ */
+async function createAttendanceSupabaseClient() {
+  try {
+    return createAdminClient();
+  } catch {
+    return await createClient();
+  }
+}
 
 type AttendanceRecord = {
   id: string;
@@ -282,7 +295,7 @@ async function handlePermissionAction(formData: FormData) {
   const rejectionReason = String(formData.get("rejection_reason") ?? "").trim();
   if (!id || !action) return;
 
-  const supabase = await createClient();
+  const supabase = await createAttendanceSupabaseClient();
   const payload: {
     status: string;
     approved_by: string;
@@ -312,7 +325,7 @@ async function handleSummaryReview(formData: FormData) {
   const remark = String(formData.get("remark") ?? "").trim();
   if (!id) return;
 
-  const supabase = await createClient();
+  const supabase = await createAttendanceSupabaseClient();
   await supabase
     .from("work_summaries")
     .update({
@@ -333,7 +346,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     redirect("/admin/attendance?tab=overview");
   }
 
-  const supabase = await createClient();
+  const supabase = await createAttendanceSupabaseClient();
   const today = getTodayLocalDate();
   const queryFilter = (params.q ?? "").trim().toLowerCase();
 
@@ -766,9 +779,12 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
       .limit(400);
 
     if (dateFilter) summaryQuery = summaryQuery.eq("summary_date", dateFilter);
-    if (statusFilter) summaryQuery = summaryQuery.eq("status", statusFilter);
+    if (statusFilter) summaryQuery = summaryQuery.eq("status", statusFilter.trim().toLowerCase());
 
-    const { data: summaryData } = await summaryQuery.returns<WorkSummary[]>();
+    const { data: summaryData, error: summaryFetchError } = await summaryQuery.returns<WorkSummary[]>();
+    if (summaryFetchError) {
+      console.error("work_summaries fetch:", summaryFetchError.message);
+    }
     const rows = (summaryData ?? []).filter((row) => {
       const profile = profileMap.get(row.employee_id);
       const department = (profile?.department ?? "").toLowerCase();
@@ -783,7 +799,9 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const submittedToday = rows.filter((r) => (r.summary_date ?? "").startsWith(today)).length;
     const pendingToday = rows.filter((r) => (r.summary_date ?? "").startsWith(today) && (r.status ?? "submitted") !== "reviewed").length;
     const monthKey = getCurrentMonth();
-    const reviewedThisMonth = rows.filter((r) => (r.status ?? "") === "reviewed" && r.created_at.startsWith(monthKey)).length;
+    const reviewedThisMonth = rows.filter(
+      (r) => (r.status ?? "").toLowerCase() === "reviewed" && (r.summary_date ?? "").startsWith(monthKey),
+    ).length;
     const delayedSummaries = rows.filter((r) => (r.status ?? "submitted") !== "reviewed").length;
 
     return (
@@ -801,6 +819,12 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <StatCard label="Delayed Summaries" value={delayedSummaries} />
         </div>
 
+        {summaryFetchError ? (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            Could not load work summaries: {summaryFetchError.message}. Ensure <code className="rounded bg-white/80 px-1">SUPABASE_SERVICE_ROLE_KEY</code> is set on the server, or re-run <code className="rounded bg-white/80 px-1">BB_internal_SB/attendance_rls.sql</code> in Supabase.
+          </div>
+        ) : null}
+
         <section className="rounded-2xl border border-[#d4deea] bg-[#f8fbff] p-4">
           <form method="get" className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <input type="hidden" name="tab" value="summary" />
@@ -814,7 +838,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
               <option value="submitted">Submitted</option>
               <option value="reviewed">Reviewed</option>
             </select>
-            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name/email/code" className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
+            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
             <div className="xl:col-span-4 flex gap-2">
               <button className="cursor-pointer rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
               <Link href="/admin/attendance?tab=summary" className="rounded-xl border border-[#cfdceb] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
@@ -824,10 +848,10 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
 
         <section className="rounded-2xl border border-[#d4deea] bg-white p-4">
           <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
-            <table className="w-full min-w-[1700px] text-left text-sm">
+            <table className="w-full min-w-[1200px] text-left text-sm">
               <thead className="bg-[#f1f6fc] text-[#64748b]">
                 <tr>
-                  {["Employee Code", "Employee Name", "Department", "Date", "Completed Work", "Pending Work", "Challenges", "Tomorrow Plan", "Status", "Manager/Admin Remarks", "Action"].map((h) => (
+                  {["Employee Name", "Department", "Date", "Completed Work", "Pending Work", "Challenges", "Tomorrow Plan", "Status", "Manager/Admin Remarks", "Action"].map((h) => (
                     <th key={h} className="px-4 py-3">{h}</th>
                   ))}
                 </tr>
@@ -837,8 +861,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
                   const profile = profileMap.get(row.employee_id);
                   return (
                     <tr key={row.id}>
-                      <td className="px-4 py-3">{employeeCodeMap.get(row.employee_id) ?? "-"}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900">{profile?.full_name ?? "-"}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{profile?.full_name ?? employeeNameFallbackMap.get(row.employee_id) ?? "—"}</td>
                       <td className="px-4 py-3">{profile?.department ?? "-"}</td>
                       <td className="px-4 py-3">{row.summary_date ? formatDate(row.summary_date) : "-"}</td>
                       <td className="px-4 py-3 max-w-[220px]">{row.completed_work ?? "-"}</td>
@@ -867,7 +890,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
                   );
                 })}
                 {!rows.length ? (
-                  <tr><td colSpan={11} className="px-4 py-8 text-center text-slate-500">No work summaries found.</td></tr>
+                  <tr><td colSpan={10} className="px-4 py-8 text-center text-slate-500">No work summaries found.</td></tr>
                 ) : null}
               </tbody>
             </table>

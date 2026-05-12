@@ -16,6 +16,8 @@ interface TaskTableProps {
   onDelete: (taskId: string) => void;
   onEmployeeStatusChange: (taskId: string, status: TaskStatus, progress: number) => void;
   onEmployeeProgressChange: (taskId: string, status: TaskStatus, progress: number) => void;
+  /** Assignee opens completion dialog (summary + notify assigner). */
+  onRequestCompleteTask?: (task: TaskRecord) => void;
 }
 
 const statusClassMap: Record<TaskStatus, string> = {
@@ -45,6 +47,7 @@ export function TaskTable({
   onDelete,
   onEmployeeStatusChange,
   onEmployeeProgressChange,
+  onRequestCompleteTask,
 }: TaskTableProps) {
   const today = todayDateKey();
   const disabled = tableMissing;
@@ -148,18 +151,29 @@ export function TaskTable({
                               </button>
                             </>
                           ) : (
-                            <select
-                              value={task.status}
-                              disabled={disabled}
-                              onChange={(event) =>
-                                onEmployeeStatusChange(task.id, event.target.value as TaskStatus, task.progress)
-                              }
-                              className="h-7 rounded-md border border-[#d4deea] bg-white px-2 text-xs text-[#334155] outline-none disabled:opacity-50"
-                            >
-                              <option value="Pending">Pending</option>
-                              <option value="In Progress">In Progress</option>
-                              <option value="Completed">Completed</option>
-                            </select>
+                            <>
+                              <select
+                                value={task.status}
+                                disabled={disabled}
+                                onChange={(event) =>
+                                  onEmployeeStatusChange(task.id, event.target.value as TaskStatus, task.progress)
+                                }
+                                className="h-7 rounded-md border border-[#d4deea] bg-white px-2 text-xs text-[#334155] outline-none disabled:opacity-50"
+                              >
+                                <option value="Pending">Pending</option>
+                                <option value="In Progress">In Progress</option>
+                              </select>
+                              {onRequestCompleteTask && task.status !== "Completed" ? (
+                                <button
+                                  type="button"
+                                  disabled={disabled}
+                                  onClick={() => onRequestCompleteTask(task)}
+                                  className="rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-40"
+                                >
+                                  Task completed
+                                </button>
+                              ) : null}
+                            </>
                           )}
                         </div>
                       </td>

@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/client-lead/LeadSummaryCard";
 import { TaskForm, type TaskFormValue } from "@/components/task/TaskForm";
 import { TaskTable } from "@/components/task/TaskTable";
+import { TaskCompleteDialog } from "@/components/task/TaskCompleteDialog";
+import { assignerDisplayFromProfile } from "@/lib/notifications/taskAssignmentEmail";
 import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 
 type AppRole = "admin" | "employee" | "manager";
@@ -46,7 +48,8 @@ function isMissingTasksTableMessage(message: string) {
     (m.includes("could not find the table") && m.includes("tasks")) ||
     (m.includes("relation") && m.includes("tasks") && m.includes("does not exist")) ||
     (m.includes("schema cache") && m.includes("tasks")) ||
-    (m.includes("pgrst205") && m.includes("tasks"))
+    (m.includes("pgrst205") && m.includes("tasks")) ||
+    (m.includes("column") && m.includes("tasks") && (m.includes("assigned_by") || m.includes("completion_summary")))
   );
 }
 
@@ -86,6 +89,8 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<TaskFormValue>(initialForm);
   const [viewTask, setViewTask] = useState<TaskRecord | null>(null);
+  const [completeTask, setCompleteTask] = useState<TaskRecord | null>(null);
+  const [completeSubmitting, setCompleteSubmitting] = useState(false);
   const [projectOptions, setProjectOptions] = useState<{ id: string; label: string }[]>([]);
 
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
@@ -102,6 +107,8 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   });
 
   const progressDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  /** Assignee id when the edit panel was opened; used to detect reassignment for email. */
+  const assigneeBeforeEditRef = useRef<string | null>(null);
 
   const loadProjectsForForm = useCallback(async () => {
     const { data, error: projErr } = await supabase
@@ -192,7 +199,9 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     async (userId: string) => {
       let query = supabase
         .from("tasks")
-        .select("id,title,description,assigned_to,priority,status,start_date,due_date,progress,project_id,created_at,updated_at");
+        .select(
+          "id,title,description,assigned_to,assigned_by,completion_summary,priority,status,start_date,due_date,progress,project_id,created_at,updated_at",
+        );
 
       if (!seesAllTasks) query = query.eq("assigned_to", userId);
       if (applied.status) query = query.eq("status", applied.status);
@@ -203,7 +212,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
 
       query = query.order("due_date", { ascending: true, nullsFirst: false });
 
-      const { data, error: taskError } = await query.returns<TaskRecord[]>();
+      const { data, error: taskError } = await query;
       if (taskError) {
         if (isMissingTasksTableMessage(taskError.message)) {
           setTasksTableMissing(true);
@@ -213,7 +222,47 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         throw new Error(taskError.message);
       }
       setTasksTableMissing(false);
-      setRows(data ?? []);
+
+      type Raw = {
+        id: string;
+        title: string;
+        description: string | null;
+        assigned_to: string;
+        assigned_by?: string | null;
+        completion_summary?: string | null;
+        priority: TaskPriority;
+        status: TaskStatus;
+        start_date: string | null;
+        due_date: string | null;
+        progress: number;
+        project_id?: string | null;
+        created_at: string;
+        updated_at: string;
+      };
+
+      const rawRows = (data ?? []) as Raw[];
+      const assignerIds = Array.from(
+        new Set(rawRows.map((r) => r.assigned_by).filter((id): id is string => Boolean(id))),
+      );
+      let assignerMap: Record<string, { full_name: string | null; email: string | null; role: string | null }> = {};
+      if (assignerIds.length) {
+        const { data: profs, error: profErr } = await supabase
+          .from("profiles")
+          .select("id,full_name,email,role")
+          .in("id", assignerIds);
+        if (!profErr && profs) {
+          assignerMap = Object.fromEntries(profs.map((p) => [p.id, p]));
+        }
+      }
+
+      const mapped: TaskRecord[] = rawRows.map((row) => ({
+        ...row,
+        assigner_display_name: row.assigned_by
+          ? assignerDisplayFromProfile(assignerMap[row.assigned_by] ?? null) ?? null
+          : null,
+      }));
+
+      setRows(mapped);
     },
     [applied.assigned, applied.dueDate, applied.priority, applied.search, applied.status, seesAllTasks, supabase],
   );
@@ -279,6 +328,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     const pid = searchParams.get("project");
     if (!(isAdmin || isManager) || !pid || tasksTableMissing || !currentUserId || projectPrefillDone.current) return;
     projectPrefillDone.current = true;
+    assigneeBeforeEditRef.current = null;
     setEditId(null);
     setForm({ ...initialForm, project_id: pid });
     setPanelOpen(true);
@@ -356,10 +406,28 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     setApplied({ status: "", priority: "", assigned: "", dueDate: "", search: "" });
   };
 
+  const postTaskAssignedNotification = useCallback(async (taskId: string, previousAssigneeId: string | null) => {
+    try {
+      const res = await fetch("/api/notifications/task-assigned", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, previousAssigneeId }),
+      });
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+        console.warn("Task assignment notification:", payload?.error ?? res.statusText);
+      }
+    } catch (e) {
+      console.warn("Task assignment notification request failed", e);
+    }
+  }, []);
+
   const openCreate = async () => {
     if (tasksTableMissing) return;
     setError(null);
     setSuccess(null);
+    assigneeBeforeEditRef.current = null;
     setEditId(null);
     try {
       await loadAssignees();
@@ -383,6 +451,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     } catch (assigneeLoadError) {
       setError(toReadableTaskError(assigneeLoadError));
     }
+    assigneeBeforeEditRef.current = task.assigned_to;
     setEditId(task.id);
     setForm({
       title: task.title,
@@ -405,6 +474,10 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         setError("Use the task list to update status and progress. Ask an admin or manager to change title, dates, or assignee.");
         return;
       }
+      if (!currentUserId) {
+        setError("Session not ready; try again in a moment.");
+        return;
+      }
       if (!form.title.trim()) {
         setError("Please enter a task title.");
         return;
@@ -420,6 +493,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         title: form.title.trim(),
         description: form.description || null,
         assigned_to: form.assigned_to.trim(),
+        assigned_by: currentUserId,
         project_id: null as string | null,
         priority: form.priority,
         status: form.status,
@@ -428,12 +502,13 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         progress: form.progress,
       };
       try {
-        const { error: insertError } = await supabase.from("tasks").insert(employeePayload);
+        const { data: inserted, error: insertError } = await supabase.from("tasks").insert(employeePayload).select("id").single();
         if (insertError) throw new Error(insertError.message);
         setSuccess("Task assigned.");
         setPanelOpen(false);
         setForm(initialForm);
         await reload();
+        if (inserted?.id) void postTaskAssignedNotification(inserted.id, null);
       } catch (saveError) {
         setError(toReadableTaskError(saveError));
       } finally {
@@ -443,6 +518,10 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     }
     if (!canManageTasks) {
       setError("You do not have permission to assign tasks here.");
+      return;
+    }
+    if (!currentUserId) {
+      setError("Session not ready; try again in a moment.");
       return;
     }
     if (!form.title.trim()) {
@@ -456,7 +535,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     setSubmitting(true);
     setError(null);
     setSuccess(null);
-    const payload = {
+    const basePayload = {
       title: form.title.trim(),
       description: form.description || null,
       assigned_to: form.assigned_to,
@@ -469,18 +548,35 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     };
     try {
       if (editId) {
-        const { error: updateError } = await supabase.from("tasks").update(payload).eq("id", editId);
+        const priorAssignee = assigneeBeforeEditRef.current;
+        const savedTaskId = editId;
+        const updatePayload: typeof basePayload & { assigned_by?: string } = { ...basePayload };
+        if (priorAssignee !== null && basePayload.assigned_to !== priorAssignee) {
+          updatePayload.assigned_by = currentUserId;
+        }
+        const { error: updateError } = await supabase.from("tasks").update(updatePayload).eq("id", editId);
         if (updateError) throw new Error(updateError.message);
         setSuccess("Task updated successfully.");
+        assigneeBeforeEditRef.current = null;
+        setPanelOpen(false);
+        setForm(initialForm);
+        setEditId(null);
+        await reload();
+        void postTaskAssignedNotification(savedTaskId, priorAssignee);
       } else {
-        const { error: insertError } = await supabase.from("tasks").insert(payload);
+        const { data: inserted, error: insertError } = await supabase
+          .from("tasks")
+          .insert({ ...basePayload, assigned_by: currentUserId })
+          .select("id")
+          .single();
         if (insertError) throw new Error(insertError.message);
         setSuccess("Task assigned successfully.");
+        setPanelOpen(false);
+        setForm(initialForm);
+        setEditId(null);
+        await reload();
+        if (inserted?.id) void postTaskAssignedNotification(inserted.id, null);
       }
-      setPanelOpen(false);
-      setForm(initialForm);
-      setEditId(null);
-      await reload();
     } catch (saveError) {
       setError(toReadableTaskError(saveError));
     } finally {
@@ -527,6 +623,32 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       void persistEmployeeTaskUpdate(taskId, status, progress);
       delete progressDebounceRef.current[taskId];
     }, 450);
+  };
+
+  const handleCompleteTaskSubmit = async (summary: string) => {
+    if (!completeTask) return;
+    setCompleteSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/notifications/task-complete", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId: completeTask.id, summary }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string; taskUpdated?: boolean };
+      if (!res.ok) {
+        if (body.taskUpdated) await reload();
+        throw new Error(body.error || "Could not complete task.");
+      }
+      setCompleteTask(null);
+      setSuccess("Task completed. Your summary was saved; the assigner is emailed when mail is configured.");
+      await reload();
+    } catch (e) {
+      setError(toReadableTaskError(e));
+    } finally {
+      setCompleteSubmitting(false);
+    }
   };
 
   return (
@@ -665,6 +787,14 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         onDelete={(taskId) => void handleDeleteTask(taskId)}
         onEmployeeStatusChange={(taskId, status, progress) => void handleEmployeeStatusChange(taskId, status, progress)}
         onEmployeeProgressChange={(taskId, status, progress) => handleEmployeeProgressAdjust(taskId, status, progress)}
+        onRequestCompleteTask={!canManageTasks ? (task) => setCompleteTask(task) : undefined}
+      />
+
+      <TaskCompleteDialog
+        task={completeTask}
+        submitting={completeSubmitting}
+        onClose={() => !completeSubmitting && setCompleteTask(null)}
+        onSubmit={handleCompleteTaskSubmit}
       />
 
       {viewTask ? (
@@ -722,6 +852,9 @@ function TaskViewPanel({
           <div>
             <h3 className="text-lg font-semibold text-[#0f172a]">{task.title}</h3>
             <p className="mt-1 text-xs text-[#64748b]">Assigned to {employeeNameMap[task.assigned_to] || "—"}</p>
+            {task.assigner_display_name ? (
+              <p className="mt-0.5 text-xs text-[#64748b]">Assigned by {task.assigner_display_name}</p>
+            ) : null}
           </div>
           <button type="button" className="text-sm text-[#64748b]" onClick={onClose}>
             Close
@@ -753,6 +886,12 @@ function TaskViewPanel({
               <dt className="text-[#94a3b8]">Progress</dt>
               <dd className="font-medium">{task.progress}%</dd>
             </div>
+            {task.status === "Completed" && task.completion_summary?.trim() ? (
+              <div className="col-span-2">
+                <dt className="text-[#94a3b8]">Completion summary</dt>
+                <dd className="mt-1 whitespace-pre-wrap font-medium">{task.completion_summary}</dd>
+              </div>
+            ) : null}
           </dl>
         </div>
       </div>
