@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       : prev !== assigneeId;
 
   if (!shouldNotify) {
-    return NextResponse.json({ ok: true, skipped: true });
+    return NextResponse.json({ ok: true, skipped: true, reason: "no_reassignment_or_self_assign" });
   }
 
   const apiKey = process.env.RESEND_API_KEY?.trim();
