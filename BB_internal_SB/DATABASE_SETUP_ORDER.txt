@@ -9,8 +9,8 @@ Order (core → features → RLS):
 ATTENDANCE (employee + admin attendance + work summaries) — pick ONE approach:
 
   A) RECOMMENDED — attendance_module.sql (one paste: helpers + tables + RLS for this domain).
-  B) LEGACY — same content in three steps: attendance_rls_prereqs.sql (if helpers missing),
-     then attendance_schema.sql, then attendance_rls.sql.
+  B) LEGACY — attendance_schema.sql, then attendance_rls.sql. If helpers are missing, run Section A of
+     attendance_module.sql (or re-apply get_user_role / is_admin from schema.sql) before attendance_rls.sql.
 
 2) attendance_schema.sql  (only if you did not use attendance_module.sql)
    attendance_records, work_summaries, work_from_home_requests, leave_requests, attendance_settings.
@@ -65,9 +65,9 @@ ATTENDANCE (employee + admin attendance + work summaries) — pick ONE approach:
 9) attendance_rls.sql
    Attendance + work_summaries + permission_requests + profiles read policies used by Employee/Admin attendance.
    Skip if you already ran attendance_module.sql (Section C is the same RLS).
-   If the editor errors with "function public.is_admin() does not exist", run attendance_rls_prereqs.sql
-   first (or apply schema.sql step 1 so get_user_role + is_admin exist), then re-run attendance_rls.sql.
-   If PostgREST returns "infinite recursion detected in policy for relation profiles", run
-   fix_get_user_role_bypass_rls.sql (get_user_role must use SET row_security = off), then retry login.
+   If the editor errors with "function public.is_admin() does not exist", run Section A of attendance_module.sql
+   first (or re-apply get_user_role / is_admin from schema.sql step 1), then re-run attendance_rls.sql.
+   If PostgREST returns "infinite recursion detected in policy for relation profiles", re-apply get_user_role()
+   from schema.sql so it includes SET row_security = off (same as attendance_module.sql Section A), then retry login.
 
 Re-run scripts are generally safe where they use CREATE IF NOT EXISTS / DROP POLICY IF EXISTS.

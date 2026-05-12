@@ -804,7 +804,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
       } else {
         summaryData = (secondRes.data ?? []).map((r) => ({ ...r, manager_remarks: null }));
         summarySchemaNotice =
-          "Your database is missing work_summaries.manager_remarks, so summaries still load without admin remarks. Run BB_internal_SB/attendance_module.sql in Supabase (or fix_work_summaries_manager_remarks.sql), then refresh.";
+          "Your database is missing work_summaries.manager_remarks, so summaries still load without admin remarks. Run BB_internal_SB/attendance_module.sql or BB_internal_SB/attendance_schema.sql in Supabase, then refresh.";
       }
     } else {
       summaryFetchError = firstRes.error;

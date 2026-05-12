@@ -123,7 +123,7 @@ export function LoginForm({ initialError }: LoginFormProps) {
       authenticatedUser?.email?.trim().toLowerCase() ?? normalizedEmail;
 
     const profilesRlsHint =
-      "In Supabase SQL Editor run BB_internal_SB/fix_get_user_role_bypass_rls.sql (stops infinite recursion on profiles), then re-run BB_internal_SB/attendance_rls.sql if policies are outdated.";
+      "Re-apply get_user_role() from BB_internal_SB/schema.sql (must include SET row_security = off), or run Section A of BB_internal_SB/attendance_module.sql, then re-run BB_internal_SB/attendance_rls.sql if policies are outdated.";
 
     let { data: profile, error: profileError } = await supabase
       .from("profiles")

@@ -1,11 +1,10 @@
 -- =============================================================================
 -- BB Internal OS — ATTENDANCE MODULE (single run in Supabase SQL Editor)
 -- =============================================================================
--- Run AFTER `schema.sql` (public.profiles exists). This bundle replaces running
--- these files separately for most projects:
---   • attendance_rls_prereqs.sql  (Section A — skip if schema.sql already ran)
---   • attendance_schema.sql     (Section B — tables + manager_remarks fix)
---   • attendance_rls.sql        (Section C — grants + RLS for attendance domain)
+-- Run AFTER `schema.sql` (public.profiles exists). This bundle is one paste for:
+--   • Section A — get_user_role + is_admin (skip if schema.sql already applied these)
+--   • Section B — attendance_schema (tables + manager_remarks column fix)
+--   • Section C — attendance_rls (grants + RLS for attendance domain)
 --
 -- If you already use `permission_requests_schema.sql` for a richer
 -- permission_requests table, Section B's CREATE TABLE for permission_requests

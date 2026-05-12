@@ -3,7 +3,7 @@
 --
 -- Prefer one file: BB_internal_SB/attendance_module.sql (tables + helpers + this RLS in order).
 -- Requires public.get_user_role() and public.is_admin() (from schema.sql step 1, or Section A of attendance_module.sql).
--- If you see: function public.is_admin() does not exist — run attendance_rls_prereqs.sql or attendance_module.sql Section A first.
+-- If you see: function public.is_admin() does not exist — run attendance_module.sql Section A first, or re-apply get_user_role/is_admin from schema.sql.
 
 grant usage on schema public to authenticated;
 
