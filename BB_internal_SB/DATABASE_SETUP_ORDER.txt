@@ -54,5 +54,7 @@ Order (core → features → RLS):
 
 9) attendance_rls.sql
    Attendance + work_summaries + permission_requests + profiles read policies used by Employee/Admin attendance.
+   If the editor errors with "function public.is_admin() does not exist", run attendance_rls_prereqs.sql
+   first (or apply schema.sql step 1 so get_user_role + is_admin exist), then re-run attendance_rls.sql.
 
 Re-run scripts are generally safe where they use CREATE IF NOT EXISTS / DROP POLICY IF EXISTS.

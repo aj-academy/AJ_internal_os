@@ -1,5 +1,8 @@
 -- Run this in Supabase SQL Editor for production.
 -- It enables employee check-in/check-out writes and admin attendance visibility.
+--
+-- Requires public.get_user_role() and public.is_admin() (from schema.sql step 1).
+-- If you see: function public.is_admin() does not exist — run attendance_rls_prereqs.sql first, then re-run this file.
 
 grant usage on schema public to authenticated;
 

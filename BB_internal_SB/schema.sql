@@ -68,5 +68,8 @@ stable
 security definer
 set search_path = public
 as $$
-  select coalesce(lower(btrim(coalesce(public.get_user_role(), '')))) in ('admin', 'super_admin'), false);
+  select coalesce(
+    (lower(btrim(coalesce(public.get_user_role(), ''))) in ('admin', 'super_admin')),
+    false
+  );
 $$;
