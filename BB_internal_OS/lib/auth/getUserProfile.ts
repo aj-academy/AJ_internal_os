@@ -23,6 +23,8 @@ export async function getUserProfile() {
       .from("profiles")
       .select("id,full_name,email,role,department,designation,status,created_at")
       .eq("email", user.email.toLowerCase())
+      .order("created_at", { ascending: true })
+      .limit(1)
       .maybeSingle<Profile>();
     profile = fallback.data ?? null;
   }

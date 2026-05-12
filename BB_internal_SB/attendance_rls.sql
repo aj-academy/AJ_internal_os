@@ -29,19 +29,14 @@ using (
   lower(email) = lower(coalesce(auth.jwt()->>'email', ''))
 );
 
+-- Use is_admin() (security definer) instead of EXISTS on profiles here to avoid
+-- PostgreSQL RLS infinite recursion / 500 errors on profiles SELECT after login.
 drop policy if exists profiles_admin_read_all on public.profiles;
 create policy profiles_admin_read_all
 on public.profiles
 for select
 to authenticated
-using (
-  exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and lower(btrim(coalesce(p.role, ''))) in ('admin', 'super_admin')
-  )
-);
+using (public.is_admin());
 
 -- Fast/stable fallback: allow authenticated users to read profiles.
 -- This prevents role-resolution failures when JWT/id-based policy conditions mismatch.
@@ -87,22 +82,8 @@ create policy work_summary_admin_read_update
 on public.work_summaries
 for all
 to authenticated
-using (
-  exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and lower(btrim(coalesce(p.role, ''))) in ('admin', 'super_admin')
-  )
-)
-with check (
-  exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and lower(btrim(coalesce(p.role, ''))) in ('admin', 'super_admin')
-  )
-);
+using (public.is_admin())
+with check (public.is_admin());
 
 drop policy if exists permission_employee_own on public.permission_requests;
 create policy permission_employee_own
@@ -117,19 +98,5 @@ create policy permission_admin_read_update
 on public.permission_requests
 for all
 to authenticated
-using (
-  exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and lower(btrim(coalesce(p.role, ''))) in ('admin', 'super_admin')
-  )
-)
-with check (
-  exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and lower(btrim(coalesce(p.role, ''))) in ('admin', 'super_admin')
-  )
-);
+using (public.is_admin())
+with check (public.is_admin());

@@ -128,15 +128,35 @@ export function LoginForm({ initialError }: LoginFormProps) {
       .eq("id", authenticatedUserId)
       .maybeSingle<Profile>();
 
+    if (profileError && !profile) {
+      await supabase.auth.signOut();
+      setError(
+        `Could not load your profile (${profileError.message}). If this persists, ask an admin to re-run BB_internal_SB/attendance_rls.sql in Supabase (fixes RLS on profiles).`,
+      );
+      setIsLoading(false);
+      return;
+    }
+
     if (!profile) {
       const fallback = await supabase
         .from("profiles")
         .select("*")
         .eq("email", authenticatedEmail.toLowerCase())
+        .order("created_at", { ascending: true })
+        .limit(1)
         .maybeSingle<Profile>();
 
       profile = fallback.data;
       profileError = fallback.error;
+    }
+
+    if (profileError && !profile) {
+      await supabase.auth.signOut();
+      setError(
+        `Could not load your profile (${profileError.message}). If this persists, ask an admin to re-run BB_internal_SB/attendance_rls.sql in Supabase.`,
+      );
+      setIsLoading(false);
+      return;
     }
 
     if (!profile?.role) {
