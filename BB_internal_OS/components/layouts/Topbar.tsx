@@ -2,17 +2,20 @@
 
 import { memo } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, LogOut, Menu, Plus, Search } from "lucide-react";
+import { LogOut, Menu, Plus, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
+import { InAppNotificationsBell } from "@/components/layouts/InAppNotificationsBell";
+
 interface TopbarProps {
   fullName: string;
   email: string;
+  notificationFallbackHref: string;
 }
 
-export const Topbar = memo(function Topbar({ fullName, email }: TopbarProps) {
+export const Topbar = memo(function Topbar({ fullName, email, notificationFallbackHref }: TopbarProps) {
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -48,13 +51,7 @@ export const Topbar = memo(function Topbar({ fullName, email }: TopbarProps) {
           >
             <Menu className="h-4 w-4" />
           </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="rounded-full border-[#d4deea] bg-white text-[#1e3a8a]"
-          >
-            <Bell className="h-4 w-4" />
-          </Button>
+          <InAppNotificationsBell fallbackTaskHref={notificationFallbackHref} />
           <Button
             size="icon"
             className="rounded-full bg-[#2563eb] text-white hover:bg-[#1d4ed8]"

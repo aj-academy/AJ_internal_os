@@ -39,10 +39,13 @@ ATTENDANCE (employee + admin attendance + work summaries) — pick ONE approach:
    Re-run this file after updates so new policies and RPCs stay in sync (safe when using DROP POLICY IF EXISTS / CREATE OR REPLACE).
 
 6a) task_notifications_columns.sql
-   Run AFTER (6). Adds tasks.assigned_by (who assigned / last reassigned) and tasks.completion_summary (assignee text on completion) for email flows.
+   Run AFTER (6). Adds tasks.assigned_by (who assigned / last reassigned) and tasks.completion_summary (assignee text on completion) for task flows and in-app notifications.
+
+6a-inapp) in_app_notifications.sql
+   Run AFTER (6a). Table in_app_notifications + RPCs for assignee/assigner in-app bell (no email). In Supabase Dashboard → Database → Replication, add public.in_app_notifications for live updates.
 
 6b) project_master_schema.sql
-   Run AFTER (6a). Adds public.projects, project_activities, project_team_members; tasks.project_id FK;
+   Run AFTER (6a-inapp) (or after 6a if you skip in-app for now). Adds public.projects, project_activities, project_team_members; tasks.project_id FK;
    triggers to sync project progress from tasks; RLS for projects/activities/team; extends task SELECT for project team.
    Re-run this script after pulling updates if RLS helper functions / policies change (uses OR REPLACE / DROP POLICY IF EXISTS).
 

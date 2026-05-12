@@ -12,6 +12,8 @@ interface DashboardLayoutProps {
   sidebarItems: SidebarItem[];
   userName: string;
   userEmail: string;
+  /** Default "Open" link for task-related notifications when link_path is null. */
+  notificationFallbackHref: string;
   children: React.ReactNode;
 }
 
@@ -20,6 +22,7 @@ export function DashboardLayout({
   sidebarItems,
   userName,
   userEmail,
+  notificationFallbackHref,
   children,
 }: DashboardLayoutProps) {
   const [open, setOpen] = useState(false);
@@ -72,7 +75,7 @@ export function DashboardLayout({
           </Sheet>
         </div>
 
-        <Topbar fullName={userName} email={userEmail} />
+        <Topbar fullName={userName} email={userEmail} notificationFallbackHref={notificationFallbackHref} />
 
         <main className="px-4 pb-6 pt-2 lg:px-6 lg:pb-8">{children}</main>
       </div>

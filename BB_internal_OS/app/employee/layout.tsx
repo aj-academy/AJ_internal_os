@@ -23,6 +23,7 @@ export default async function EmployeeLayout({
       sidebarItems={employeeSidebarItems}
       userName={profile.full_name ?? "Employee"}
       userEmail={userEmail}
+      notificationFallbackHref="/employee/my-tasks"
     >
       <PolicyAcceptanceGate />
       {children}

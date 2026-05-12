@@ -6,7 +6,7 @@ export interface TaskRecord {
   title: string;
   description: string | null;
   assigned_to: string;
-  /** Who created or last reassigned the task (profiles.id); used for completion emails. */
+  /** Who created or last reassigned the task (profiles.id); used for in-app completion notifications. */
   assigned_by?: string | null;
   /** Submitted by assignee when marking completed (requires task_notifications_columns.sql). */
   completion_summary?: string | null;

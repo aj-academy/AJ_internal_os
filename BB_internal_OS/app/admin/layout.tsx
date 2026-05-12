@@ -25,6 +25,7 @@ export default async function AdminLayout({
       sidebarItems={adminSidebarItems}
       userName={profile.full_name ?? "Admin User"}
       userEmail={userEmail}
+      notificationFallbackHref="/admin/task-assignment"
     >
       {children}
     </DashboardLayout>

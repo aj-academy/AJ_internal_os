@@ -22,6 +22,7 @@ export default async function ManagerLayout({
       sidebarItems={managerSidebarItems}
       userName={profile.full_name ?? "Manager"}
       userEmail={userEmail}
+      notificationFallbackHref="/manager/task-assignment"
     >
       {children}
     </DashboardLayout>

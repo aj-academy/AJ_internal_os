@@ -9,7 +9,7 @@ import { LeadSummaryCard } from "@/components/client-lead/LeadSummaryCard";
 import { TaskForm, type TaskFormValue } from "@/components/task/TaskForm";
 import { TaskTable } from "@/components/task/TaskTable";
 import { TaskCompleteDialog } from "@/components/task/TaskCompleteDialog";
-import { assignerDisplayFromProfile } from "@/lib/notifications/taskAssignmentEmail";
+import { assignerDisplayFromProfile } from "@/lib/profileDisplayName";
 import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 
 type AppRole = "admin" | "employee" | "manager";
@@ -83,7 +83,6 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [emailNotifyHint, setEmailNotifyHint] = useState<string | null>(null);
   const [tasksTableMissing, setTasksTableMissing] = useState(false);
   const [summary, setSummary] = useState({ total: 0, pending: 0, inProgress: 0, completed: 0 });
   const [panelOpen, setPanelOpen] = useState(false);
@@ -407,64 +406,22 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     setApplied({ status: "", priority: "", assigned: "", dueDate: "", search: "" });
   };
 
-  const postTaskAssignedNotification = useCallback(async (taskId: string, previousAssigneeId: string | null) => {
-    try {
-      const res = await fetch("/api/notifications/task-assigned", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskId, previousAssigneeId }),
-      });
-      const payload = (await res.json().catch(() => null)) as {
-        ok?: boolean;
-        skipped?: boolean;
-        reason?: string;
-        error?: string;
-      } | null;
-      if (!res.ok) {
-        console.warn("Task assignment notification:", payload?.error ?? res.statusText);
-        setEmailNotifyHint(
-          payload?.error
-            ? `Assignee email was not sent: ${payload.error}`
-            : "Assignee email was not sent (notification request failed). Check the browser console.",
-        );
-        return;
+  const notifyAssigneeInApp = useCallback(
+    async (taskId: string) => {
+      try {
+        const { error } = await supabase.rpc("create_task_assignment_notification", { p_task_id: taskId });
+        if (error) console.warn("create_task_assignment_notification:", error.message);
+      } catch (e) {
+        console.warn("create_task_assignment_notification", e);
       }
-      if (payload?.skipped) {
-        const r = payload.reason;
-        if (r === "RESEND_API_KEY not set") {
-          setEmailNotifyHint(
-            "Assignee email was not sent: add RESEND_API_KEY (and optionally TASK_EMAIL_FROM) in Vercel → Environment Variables, then redeploy.",
-          );
-        } else if (r === "Assignee has no email on profile") {
-          setEmailNotifyHint(
-            "Assignee email was not sent: that user’s row in public.profiles has no email. Sync email from Supabase Auth or set profiles.email, then try again.",
-          );
-        } else if (r === "no_reassignment_or_self_assign") {
-          setEmailNotifyHint(
-            "No assignee email: the assignee did not change, or the task stayed assigned to you. New assignees get an email when someone else is assigned.",
-          );
-        } else if (r) {
-          setEmailNotifyHint(`Assignee email was not sent: ${r}`);
-        } else {
-          setEmailNotifyHint(
-            "No assignee email sent (assignee unchanged or notification not configured).",
-          );
-        }
-        return;
-      }
-      setEmailNotifyHint(null);
-    } catch (e) {
-      console.warn("Task assignment notification request failed", e);
-      setEmailNotifyHint("Assignee email was not sent (network error). Check the browser console.");
-    }
-  }, []);
+    },
+    [supabase],
+  );
 
   const openCreate = async () => {
     if (tasksTableMissing) return;
     setError(null);
     setSuccess(null);
-    setEmailNotifyHint(null);
     assigneeBeforeEditRef.current = null;
     setEditId(null);
     try {
@@ -484,7 +441,6 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   const openEdit = async (task: TaskRecord) => {
     if (!canManageTasks || tasksTableMissing) return;
     setError(null);
-    setEmailNotifyHint(null);
     try {
       await loadAssignees();
     } catch (assigneeLoadError) {
@@ -528,7 +484,6 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       setSubmitting(true);
       setError(null);
       setSuccess(null);
-      setEmailNotifyHint(null);
       const employeePayload = {
         title: form.title.trim(),
         description: form.description || null,
@@ -548,7 +503,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         setPanelOpen(false);
         setForm(initialForm);
         await reload();
-        if (inserted?.id) void postTaskAssignedNotification(inserted.id, null);
+        if (inserted?.id) void notifyAssigneeInApp(inserted.id);
       } catch (saveError) {
         setError(toReadableTaskError(saveError));
       } finally {
@@ -575,7 +530,6 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     setSubmitting(true);
     setError(null);
     setSuccess(null);
-    setEmailNotifyHint(null);
     const basePayload = {
       title: form.title.trim(),
       description: form.description || null,
@@ -603,7 +557,9 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         setForm(initialForm);
         setEditId(null);
         await reload();
-        void postTaskAssignedNotification(savedTaskId, priorAssignee);
+        if (priorAssignee !== basePayload.assigned_to) {
+          void notifyAssigneeInApp(savedTaskId);
+        }
       } else {
         const { data: inserted, error: insertError } = await supabase
           .from("tasks")
@@ -616,7 +572,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         setForm(initialForm);
         setEditId(null);
         await reload();
-        if (inserted?.id) void postTaskAssignedNotification(inserted.id, null);
+        if (inserted?.id) void notifyAssigneeInApp(inserted.id);
       }
     } catch (saveError) {
       setError(toReadableTaskError(saveError));
@@ -667,23 +623,29 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   };
 
   const handleCompleteTaskSubmit = async (summary: string) => {
-    if (!completeTask) return;
+    if (!completeTask || !currentUserId) return;
     setCompleteSubmitting(true);
     setError(null);
     try {
-      const res = await fetch("/api/notifications/task-complete", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskId: completeTask.id, summary }),
+      const { error: updateError } = await supabase
+        .from("tasks")
+        .update({
+          status: "Completed",
+          progress: 100,
+          completion_summary: summary.trim(),
+        })
+        .eq("id", completeTask.id)
+        .eq("assigned_to", currentUserId);
+
+      if (updateError) throw new Error(updateError.message);
+
+      const { error: rpcError } = await supabase.rpc("create_task_completed_notification", {
+        p_task_id: completeTask.id,
       });
-      const body = (await res.json().catch(() => ({}))) as { error?: string; taskUpdated?: boolean };
-      if (!res.ok) {
-        if (body.taskUpdated) await reload();
-        throw new Error(body.error || "Could not complete task.");
-      }
+      if (rpcError) console.warn("create_task_completed_notification:", rpcError.message);
+
       setCompleteTask(null);
-      setSuccess("Task completed. Your summary was saved; the assigner is emailed when mail is configured.");
+      setSuccess("Task completed. Your summary was saved; your assigner gets an in-app notification.");
       await reload();
     } catch (e) {
       setError(toReadableTaskError(e));
@@ -730,7 +692,6 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
 
       {error ? <Alert tone="error" text={error} /> : null}
       {success ? <Alert tone="success" text={success} /> : null}
-      {emailNotifyHint ? <Alert tone="warning" text={emailNotifyHint} /> : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <LeadSummaryCard title="Total Tasks" value={summary.total} loading={loading} />
@@ -941,16 +902,14 @@ function TaskViewPanel({
   );
 }
 
-function Alert({ tone, text }: { tone: "error" | "success" | "warning"; text: string }) {
+function Alert({ tone, text }: { tone: "error" | "success"; text: string }) {
   return (
     <div
       className={[
         "rounded-xl border px-4 py-2 text-sm",
         tone === "error"
           ? "border-rose-200 bg-rose-50 text-rose-700"
-          : tone === "warning"
-            ? "border-amber-200 bg-amber-50 text-amber-900"
-            : "border-emerald-200 bg-emerald-50 text-emerald-700",
+          : "border-emerald-200 bg-emerald-50 text-emerald-700",
       ].join(" ")}
     >
       {text}

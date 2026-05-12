@@ -21,6 +21,7 @@ export default async function AccountsLayout({
       sidebarItems={accountsSidebarItems}
       userName={profile.full_name ?? "Accounts"}
       userEmail={userEmail}
+      notificationFallbackHref="/accounts/dashboard"
     >
       {children}
     </DashboardLayout>
