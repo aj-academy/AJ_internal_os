@@ -18,6 +18,7 @@ import {
   YAxis,
 } from "recharts";
 import {
+  AlertTriangle,
   Bell,
   BriefcaseBusiness,
   CheckCircle2,
@@ -52,6 +53,18 @@ type Wfh = { status: string | null };
 type ActivityRow = { id: string; title: string; module: string; status: string; at: string };
 
 const PIE_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+
+/** PostgREST 404 / missing relation — tables not created in this Supabase project yet. */
+const SKIP_LEAVE_SESSION_KEY = "bb_admin_dashboard_skip_rest_leave_requests";
+const SKIP_PERM_SESSION_KEY = "bb_admin_dashboard_skip_rest_permission_requests";
+const SKIP_WFH_SESSION_KEY = "bb_admin_dashboard_skip_rest_wfh_requests";
+
+function isMissingRelationError(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false;
+  if (err.code === "PGRST205" || err.code === "42P01") return true;
+  const m = (err.message || "").toLowerCase();
+  return m.includes("schema cache") || m.includes("does not exist") || m.includes("could not find the table");
+}
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const monthKey = (dateStr: string) => {
@@ -121,6 +134,8 @@ export default function AdminDashboardPage() {
   const [attWindow, setAttWindow] = useState<"week" | "month">("week");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [attendanceSchemaWarning, setAttendanceSchemaWarning] = useState<string | null>(null);
+  const [skipAttendanceOpsFetch, setSkipAttendanceOpsFetch] = useState(false);
   const [userName, setUserName] = useState("Admin");
 
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -153,7 +168,7 @@ export default function AdminDashboardPage() {
         return (res.data as T) ?? fallback;
       };
 
-      const [pr, at, cl, pj, tk, tx, tm, ec, lv, pm, wf] = await Promise.all([
+      const [pr, at, cl, pj, tk, tx, tm, ec] = await Promise.all([
         safe(supabase.from("profiles").select("id,full_name,email,department,status,created_at").limit(3000).returns<Profile[]>(), []),
         safe(supabase.from("attendance_records").select("employee_id,attendance_date,status,check_in_time,total_working_minutes,created_at").gte("attendance_date", isoDate(new Date(Date.now() - 120 * 86400000))).limit(12000).returns<Attendance[]>(), []),
         safe(supabase.from("clients").select("id,name,company_name,status,follow_up_date,created_at,updated_at").limit(10000).returns<Client[]>(), []),
@@ -162,10 +177,49 @@ export default function AdminDashboardPage() {
         safe(supabase.from("finance_transactions").select("id,transaction_type,amount,transaction_date,payment_status,created_at").limit(12000).returns<Tx[]>(), []),
         safe(supabase.from("project_team_members").select("project_id,profile_id").limit(12000).returns<Team[]>(), []),
         safe(supabase.from("expense_claims").select("approval_status").limit(5000).returns<Claim[]>(), []),
-        safe(supabase.from("leave_requests").select("status").limit(5000).returns<Leave[]>(), []),
-        safe(supabase.from("permission_requests").select("status").limit(5000).returns<Permission[]>(), []),
-        safe(supabase.from("work_from_home_requests").select("status").limit(5000).returns<Wfh[]>(), []),
       ]);
+
+      const w = typeof window !== "undefined";
+      const skipL = w && sessionStorage.getItem(SKIP_LEAVE_SESSION_KEY) === "1";
+      const skipP = w && sessionStorage.getItem(SKIP_PERM_SESSION_KEY) === "1";
+      const skipW = w && sessionStorage.getItem(SKIP_WFH_SESSION_KEY) === "1";
+
+      const [lvR, pmR, wfR] = await Promise.all([
+        skipL
+          ? Promise.resolve({ data: [] as Leave[] | null, error: null })
+          : supabase.from("leave_requests").select("status").limit(5000).returns<Leave[]>(),
+        skipP
+          ? Promise.resolve({ data: [] as Permission[] | null, error: null })
+          : supabase.from("permission_requests").select("status").limit(5000).returns<Permission[]>(),
+        skipW
+          ? Promise.resolve({ data: [] as Wfh[] | null, error: null })
+          : supabase.from("work_from_home_requests").select("status").limit(5000).returns<Wfh[]>(),
+      ]);
+
+      if (w) {
+        if (!lvR.error) sessionStorage.removeItem(SKIP_LEAVE_SESSION_KEY);
+        else if (isMissingRelationError(lvR.error)) sessionStorage.setItem(SKIP_LEAVE_SESSION_KEY, "1");
+        if (!pmR.error) sessionStorage.removeItem(SKIP_PERM_SESSION_KEY);
+        else if (isMissingRelationError(pmR.error)) sessionStorage.setItem(SKIP_PERM_SESSION_KEY, "1");
+        if (!wfR.error) sessionStorage.removeItem(SKIP_WFH_SESSION_KEY);
+        else if (isMissingRelationError(wfR.error)) sessionStorage.setItem(SKIP_WFH_SESSION_KEY, "1");
+      }
+
+      const lv: Leave[] = !lvR.error ? (lvR.data ?? []) : [];
+      const pm: Permission[] = !pmR.error ? (pmR.data ?? []) : [];
+      const wf: Wfh[] = !wfR.error ? (wfR.data ?? []) : [];
+
+      const rtSkip =
+        w &&
+        (sessionStorage.getItem(SKIP_LEAVE_SESSION_KEY) === "1" ||
+          sessionStorage.getItem(SKIP_PERM_SESSION_KEY) === "1" ||
+          sessionStorage.getItem(SKIP_WFH_SESSION_KEY) === "1");
+      setSkipAttendanceOpsFetch(Boolean(rtSkip));
+      setAttendanceSchemaWarning(
+        rtSkip
+          ? "Some attendance tables are missing in Supabase (leave_requests, permission_requests, and/or work_from_home_requests return REST 404). The rest of the dashboard still works. In SQL Editor run BB_internal_SB/attendance_schema.sql (see DATABASE_SETUP_ORDER.txt step 2). For the full permission_requests shape used by Admin Attendance, use permission_requests_schema.sql as documented. After the tables exist, click Retry."
+          : null,
+      );
 
       setProfiles(pr);
       setAttendance(at);
@@ -190,7 +244,7 @@ export default function AdminDashboardPage() {
   }, [load]);
 
   useEffect(() => {
-    const ch = supabase
+    let ch = supabase
       .channel("admin-dashboard-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => void load())
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records" }, () => void load())
@@ -198,15 +252,18 @@ export default function AdminDashboardPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, () => void load())
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => void load())
       .on("postgres_changes", { event: "*", schema: "public", table: "finance_transactions" }, () => void load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "expense_claims" }, () => void load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, () => void load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "permission_requests" }, () => void load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "work_from_home_requests" }, () => void load())
-      .subscribe();
+      .on("postgres_changes", { event: "*", schema: "public", table: "expense_claims" }, () => void load());
+    if (!skipAttendanceOpsFetch) {
+      ch = ch
+        .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, () => void load())
+        .on("postgres_changes", { event: "*", schema: "public", table: "permission_requests" }, () => void load())
+        .on("postgres_changes", { event: "*", schema: "public", table: "work_from_home_requests" }, () => void load());
+    }
+    void ch.subscribe();
     return () => {
       void supabase.removeChannel(ch);
     };
-  }, [load, supabase]);
+  }, [load, supabase, skipAttendanceOpsFetch]);
 
   const nameMap = useMemo(() => {
     const m: Record<string, string> = {};
@@ -391,6 +448,33 @@ export default function AdminDashboardPage() {
 
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</div> : null}
 
+      {attendanceSchemaWarning ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-2">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden />
+            <p className="leading-relaxed">{attendanceSchemaWarning}</p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 border-amber-300 bg-white text-amber-950 hover:bg-amber-100"
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                sessionStorage.removeItem(SKIP_LEAVE_SESSION_KEY);
+                sessionStorage.removeItem(SKIP_PERM_SESSION_KEY);
+                sessionStorage.removeItem(SKIP_WFH_SESSION_KEY);
+              }
+              setSkipAttendanceOpsFetch(false);
+              setAttendanceSchemaWarning(null);
+              void load();
+            }}
+          >
+            Retry after SQL
+          </Button>
+        </div>
+      ) : null}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpiCards.map((item) => (
           <StatCard key={item.title} title={item.title} value={loading ? "…" : item.value} trend={item.trendVal} description={item.description} icon={item.icon} />
@@ -406,7 +490,7 @@ export default function AdminDashboardPage() {
               <Button variant={attWindow === "month" ? "default" : "outline"} className="h-8 rounded-full px-3 text-xs" onClick={() => setAttWindow("month")}>Monthly</Button>
             </div>
           </div>
-          <div className="h-[260px]">
+          <div className="h-[260px] min-h-[260px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={attendanceTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -424,7 +508,7 @@ export default function AdminDashboardPage() {
 
         <section className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
           <h3 className="mb-3 text-base font-semibold text-[#0f172a]">Revenue vs Expense</h3>
-          <div className="h-[260px]">
+          <div className="h-[260px] min-h-[260px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyFinance}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -442,7 +526,7 @@ export default function AdminDashboardPage() {
 
         <section className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
           <h3 className="mb-3 text-base font-semibold text-[#0f172a]">Project Status Mix</h3>
-          <div className="h-[250px]">
+          <div className="h-[250px] min-h-[250px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={projectStatusData} dataKey="value" nameKey="name" outerRadius={80} label>
@@ -459,7 +543,7 @@ export default function AdminDashboardPage() {
 
         <section className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
           <h3 className="mb-3 text-base font-semibold text-[#0f172a]">Task Productivity</h3>
-          <div className="h-[250px]">
+          <div className="h-[250px] min-h-[250px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={taskProductivity}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
