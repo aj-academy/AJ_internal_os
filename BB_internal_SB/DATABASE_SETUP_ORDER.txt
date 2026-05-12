@@ -8,6 +8,7 @@ Order (core → features → RLS):
 
 2) attendance_schema.sql
    attendance_records, work_summaries, work_from_home_requests, leave_requests, attendance_settings.
+   Safe to re-run: adds missing columns (e.g. work_summaries.manager_remarks) via ALTER … IF NOT EXISTS.
    NOTE: This file defines a simplified permission_requests. If you use permission_requests_schema.sql
    instead (recommended), SKIP creating permission_requests from attendance_schema.sql or drop the weak
    table first — prefer permission_requests_schema.sql for approval fields used by Admin Attendance UI.

@@ -77,6 +77,9 @@ create table if not exists public.work_summaries (
   created_at timestamptz default now()
 );
 
+-- Existing databases may have been created before manager_remarks existed; IF NOT EXISTS on the table does not add columns.
+alter table public.work_summaries add column if not exists manager_remarks text;
+
 create table if not exists public.attendance_settings (
   id uuid primary key default gen_random_uuid(),
   office_name text,

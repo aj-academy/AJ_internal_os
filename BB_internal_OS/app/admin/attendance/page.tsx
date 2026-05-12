@@ -821,7 +821,13 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
 
         {summaryFetchError ? (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-            Could not load work summaries: {summaryFetchError.message}. Ensure <code className="rounded bg-white/80 px-1">SUPABASE_SERVICE_ROLE_KEY</code> is set on the server, or re-run <code className="rounded bg-white/80 px-1">BB_internal_SB/attendance_rls.sql</code> in Supabase.
+            Could not load work summaries: {summaryFetchError.message}. If the error mentions a missing column (for example{" "}
+            <code className="rounded bg-white/80 px-1">manager_remarks</code>), run{" "}
+            <code className="rounded bg-white/80 px-1">BB_internal_SB/fix_work_summaries_manager_remarks.sql</code> or re-run{" "}
+            <code className="rounded bg-white/80 px-1">BB_internal_SB/attendance_schema.sql</code> in Supabase—older tables are not altered by{" "}
+            <code className="rounded bg-white/80 px-1">CREATE TABLE IF NOT EXISTS</code> alone. For access errors, set{" "}
+            <code className="rounded bg-white/80 px-1">SUPABASE_SERVICE_ROLE_KEY</code> on the server; for RLS issues, re-run{" "}
+            <code className="rounded bg-white/80 px-1">BB_internal_SB/attendance_rls.sql</code>.
           </div>
         ) : null}
 
