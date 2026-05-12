@@ -122,6 +122,9 @@ export function LoginForm({ initialError }: LoginFormProps) {
     const authenticatedEmail =
       authenticatedUser?.email?.trim().toLowerCase() ?? normalizedEmail;
 
+    const profilesRlsHint =
+      "In Supabase SQL Editor run BB_internal_SB/fix_get_user_role_bypass_rls.sql (stops infinite recursion on profiles), then re-run BB_internal_SB/attendance_rls.sql if policies are outdated.";
+
     let { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("*")
@@ -131,7 +134,7 @@ export function LoginForm({ initialError }: LoginFormProps) {
     if (profileError && !profile) {
       await supabase.auth.signOut();
       setError(
-        `Could not load your profile (${profileError.message}). If this persists, ask an admin to re-run BB_internal_SB/attendance_rls.sql in Supabase (fixes RLS on profiles).`,
+        `Could not load your profile (${profileError.message}). If this persists, ask an admin: ${profilesRlsHint}`,
       );
       setIsLoading(false);
       return;
@@ -153,7 +156,7 @@ export function LoginForm({ initialError }: LoginFormProps) {
     if (profileError && !profile) {
       await supabase.auth.signOut();
       setError(
-        `Could not load your profile (${profileError.message}). If this persists, ask an admin to re-run BB_internal_SB/attendance_rls.sql in Supabase.`,
+        `Could not load your profile (${profileError.message}). If this persists, ask an admin: ${profilesRlsHint}`,
       );
       setIsLoading(false);
       return;

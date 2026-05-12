@@ -41,14 +41,8 @@ for select
 to authenticated
 using (public.is_admin());
 
--- Fast/stable fallback: allow authenticated users to read profiles.
--- This prevents role-resolution failures when JWT/id-based policy conditions mismatch.
+-- Remove legacy permissive policy if present (reads all profiles; not needed once get_user_role bypasses RLS).
 drop policy if exists profiles_authenticated_read_all on public.profiles;
-create policy profiles_authenticated_read_all
-on public.profiles
-for select
-to authenticated
-using (true);
 
 drop policy if exists attendance_employee_own on public.attendance_records;
 create policy attendance_employee_own
@@ -63,14 +57,7 @@ create policy attendance_admin_read_all
 on public.attendance_records
 for select
 to authenticated
-using (
-  exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and lower(btrim(coalesce(p.role, ''))) in ('admin', 'super_admin')
-  )
-);
+using (public.is_admin());
 
 drop policy if exists work_summary_employee_own on public.work_summaries;
 create policy work_summary_employee_own

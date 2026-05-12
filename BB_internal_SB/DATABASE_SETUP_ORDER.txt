@@ -56,5 +56,7 @@ Order (core → features → RLS):
    Attendance + work_summaries + permission_requests + profiles read policies used by Employee/Admin attendance.
    If the editor errors with "function public.is_admin() does not exist", run attendance_rls_prereqs.sql
    first (or apply schema.sql step 1 so get_user_role + is_admin exist), then re-run attendance_rls.sql.
+   If PostgREST returns "infinite recursion detected in policy for relation profiles", run
+   fix_get_user_role_bypass_rls.sql (get_user_role must use SET row_security = off), then retry login.
 
 Re-run scripts are generally safe where they use CREATE IF NOT EXISTS / DROP POLICY IF EXISTS.
