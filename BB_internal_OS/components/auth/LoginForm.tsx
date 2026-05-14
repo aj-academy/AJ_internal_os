@@ -17,6 +17,7 @@ interface LoginFormProps {
 const ERROR_MAP: Record<string, string> = {
   missing_role: "Role not assigned. Please contact admin.",
   inactive: "Your account is inactive. Please contact admin.",
+  reset_link_invalid: "Reset link is invalid or expired. Please request a new one.",
 };
 
 async function parseApiError(response: Response, fallback: string) {
@@ -63,7 +64,9 @@ export function LoginForm({ initialError }: LoginFormProps) {
   const [error, setError] = useState(
     initialError ? ERROR_MAP[initialError] ?? "Unable to login." : "",
   );
+  const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isResetSending, setIsResetSending] = useState(false);
 
   const validRoles = new Set<UserRole>([
     "super_admin",
@@ -212,6 +215,31 @@ export function LoginForm({ initialError }: LoginFormProps) {
     router.refresh();
   };
 
+  const onResetPassword = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    setError("");
+    setNotice("");
+
+    if (!normalizedEmail) {
+      setError("Enter your email address first, then request a password reset link.");
+      return;
+    }
+
+    setIsResetSending(true);
+    const supabase = createClient();
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+    });
+
+    if (resetError) {
+      setError(resetError.message);
+    } else {
+      setNotice("Password reset link sent. Check your email and open the link to set a new password.");
+    }
+
+    setIsResetSending(false);
+  };
+
   return (
     <Card className="w-full max-w-md rounded-2xl border-blue-100 shadow-sm">
       <CardHeader className="space-y-2">
@@ -263,10 +291,20 @@ export function LoginForm({ initialError }: LoginFormProps) {
           </div>
 
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          {notice ? <p className="text-sm text-emerald-700">{notice}</p> : null}
 
           <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {isLoading ? "Signing in..." : "Sign in"}
+          </Button>
+          <Button
+            type="button"
+            variant="link"
+            className="h-auto w-full px-0 text-blue-700"
+            disabled={isResetSending || isLoading}
+            onClick={onResetPassword}
+          >
+            {isResetSending ? "Sending reset link..." : "Forgot / change password?"}
           </Button>
         </form>
       </CardContent>
