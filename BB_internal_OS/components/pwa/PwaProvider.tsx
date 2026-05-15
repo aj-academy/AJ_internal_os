@@ -18,6 +18,7 @@ import {
 } from "@/lib/pwa/constants";
 import { OfflineBanner } from "@/components/pwa/OfflineBanner";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
+import { MobileInstallHelp } from "@/components/pwa/MobileInstallHelp";
 
 type PwaContextValue = {
   isOnline: boolean;
@@ -132,6 +133,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     <PwaContext.Provider value={value}>
       <OfflineBanner isOnline={isOnline} />
       <InstallPrompt />
+      <MobileInstallHelp />
       {offlineToast ? (
         <div
           role="status"
