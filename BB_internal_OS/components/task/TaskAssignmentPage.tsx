@@ -669,6 +669,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         </div>
         {isAdmin || isManager || isEmployee ? (
           <Button
+            data-requires-online
             onClick={() => void openCreate()}
             disabled={tasksTableMissing}
             className="h-9 rounded-full bg-[#2563eb] px-4 text-white hover:bg-[#1d4ed8] disabled:opacity-50"

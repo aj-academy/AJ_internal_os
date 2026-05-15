@@ -463,6 +463,7 @@ export default function EmployeeMasterPage() {
                 </Button>
                 <Button
                   type="submit"
+                  data-requires-online
                   className="rounded-xl bg-[#2563eb] text-white hover:bg-[#1d4ed8]"
                   disabled={mode === "view" || submitting}
                 >

@@ -711,10 +711,10 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                           )}
                           {isPrivileged && c.approval_status === "Pending" ? (
                             <>
-                              <button type="button" className="text-emerald-700 text-xs font-semibold" onClick={() => void approveClaim(c)}>
+                              <button type="button" data-requires-online className="text-emerald-700 text-xs font-semibold" onClick={() => void approveClaim(c)}>
                                 Approve
                               </button>
-                              <button type="button" className="text-rose-700 text-xs font-semibold" onClick={() => void rejectClaim(c)}>
+                              <button type="button" data-requires-online className="text-rose-700 text-xs font-semibold" onClick={() => void rejectClaim(c)}>
                                 Reject
                               </button>
                             </>
@@ -1086,7 +1086,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                   <Field label="Attachment URL">
                     <Input className="h-9 border-[#d4deea]" placeholder="https://…" value={incomeForm.attachment_url} onChange={(e) => setIncomeForm({ ...incomeForm, attachment_url: e.target.value })} />
                   </Field>
-                  <Button className="mt-2 w-full rounded-full bg-[#2563eb] text-white" onClick={() => void saveIncome()}>
+                  <Button data-requires-online className="mt-2 w-full rounded-full bg-[#2563eb] text-white" onClick={() => void saveIncome()}>
                     Save income
                   </Button>
                 </>
@@ -1129,7 +1129,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                   <Field label="Attachment URL">
                     <Input className="h-9 border-[#d4deea]" value={expenseForm.attachment_url} onChange={(e) => setExpenseForm({ ...expenseForm, attachment_url: e.target.value })} />
                   </Field>
-                  <Button className="mt-2 w-full rounded-full bg-[#2563eb] text-white" onClick={() => void saveExpense()}>
+                  <Button data-requires-online className="mt-2 w-full rounded-full bg-[#2563eb] text-white" onClick={() => void saveExpense()}>
                     Save expense
                   </Button>
                 </>
@@ -1176,7 +1176,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                   <Field label="Notes">
                     <Input className="h-9 border-[#d4deea]" value={paymentForm.notes} onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })} />
                   </Field>
-                  <Button className="mt-2 w-full rounded-full bg-[#2563eb] text-white" onClick={() => void savePayment()}>
+                  <Button data-requires-online className="mt-2 w-full rounded-full bg-[#2563eb] text-white" onClick={() => void savePayment()}>
                     Save payment
                   </Button>
                 </>
@@ -1207,7 +1207,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                   <Field label="Receipt URL">
                     <Input className="h-9 border-[#d4deea]" placeholder="https://…" value={claimForm.receipt_url} onChange={(e) => setClaimForm({ ...claimForm, receipt_url: e.target.value })} />
                   </Field>
-                  <Button className="mt-2 w-full rounded-full bg-[#2563eb] text-white" onClick={() => void saveClaim()}>
+                  <Button data-requires-online className="mt-2 w-full rounded-full bg-[#2563eb] text-white" onClick={() => void saveClaim()}>
                     Submit claim
                   </Button>
                 </>

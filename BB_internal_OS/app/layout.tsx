@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Grotesk } from "next/font/google";
+import { PwaProvider } from "@/components/pwa/PwaProvider";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -27,16 +28,17 @@ export const metadata: Metadata = {
     telephone: false,
   },
   icons: {
-    icon: [{ url: "/icons/icon.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/icons/icon.svg", type: "image/svg+xml" }],
+    icon: [
+      { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icons/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" }],
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#2563eb" },
-    { media: "(prefers-color-scheme: dark)", color: "#1e3a8a" },
-  ],
+  themeColor: "#1e4f91",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -52,7 +54,9 @@ export default function RootLayout({
       lang="en"
       className={`${spaceGrotesk.variable} h-full antialiased`}
     >
-      <body className="min-h-full min-w-0 flex flex-col">{children}</body>
+      <body className="min-h-full min-w-0 flex flex-col overflow-x-hidden">
+        <PwaProvider>{children}</PwaProvider>
+      </body>
     </html>
   );
 }

@@ -292,6 +292,7 @@ export function ProjectFormPanel({
           {canEdit ? (
             <Button
               type="button"
+              data-requires-online
               className="mt-6 h-10 w-full rounded-full bg-[#2563eb] text-white"
               disabled={submitting || !value.project_name.trim() || !value.client_id}
               onClick={onSubmit}

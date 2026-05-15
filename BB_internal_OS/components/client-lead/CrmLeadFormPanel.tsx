@@ -290,6 +290,7 @@ export function CrmLeadFormPanel({
       </div>
       <div className="border-t border-[#e8edf5] bg-[#fafcff] px-5 py-4">
         <Button
+          data-requires-online
           onClick={onSubmit}
           disabled={submitting || !value.lead_name.trim()}
           className="w-full rounded-xl bg-[#2563eb] text-white hover:bg-[#1d4ed8]"

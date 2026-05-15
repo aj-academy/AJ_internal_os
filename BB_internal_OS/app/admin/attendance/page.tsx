@@ -749,8 +749,8 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
                               <input type="hidden" name="id" value={row.id} />
                               <input name="rejection_reason" placeholder="Rejection reason (optional)" className="h-8 w-full rounded-md border border-[#cfdceb] px-2 text-xs" />
                               <div className="flex gap-2">
-                                <button name="action" value="approved" className="cursor-pointer rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white">Approve</button>
-                                <button name="action" value="rejected" className="cursor-pointer rounded-md bg-rose-600 px-2 py-1 text-xs font-semibold text-white">Reject</button>
+                                <button name="action" value="approved" data-requires-online className="cursor-pointer rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white">Approve</button>
+                                <button name="action" value="rejected" data-requires-online className="cursor-pointer rounded-md bg-rose-600 px-2 py-1 text-xs font-semibold text-white">Reject</button>
                               </div>
                             </form>
                           ) : (

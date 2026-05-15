@@ -467,6 +467,7 @@ export default function EmployeeAttendancePage() {
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
+            data-requires-online
             disabled={!canCheckIn || busy !== "idle"}
             onClick={handleCheckIn}
             className="rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#98b5ef] hover:bg-[#1d4ed8]"
@@ -512,6 +513,7 @@ export default function EmployeeAttendancePage() {
           <div className="mt-4">
             <button
               type="button"
+              data-requires-online
               onClick={handleCheckOut}
               disabled={!canCheckOut || busy === "checkout"}
               className="rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#98b5ef] hover:bg-[#1d4ed8]"

@@ -1063,7 +1063,7 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
             Refresh
           </Button>
           {isAdmin ? (
-            <Button onClick={openCreate} className="h-9 rounded-full bg-[#2563eb] px-5 text-white hover:bg-[#1d4ed8]">
+            <Button data-requires-online onClick={openCreate} className="h-9 rounded-full bg-[#2563eb] px-5 text-white hover:bg-[#1d4ed8]">
               + Add Lead
             </Button>
           ) : null}

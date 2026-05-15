@@ -164,6 +164,7 @@ export function TaskForm({
       </div>
 
       <Button
+        data-requires-online
         onClick={onSubmit}
         disabled={submitting || !value.title.trim() || (!assigneeLockedToSelf && !value.assigned_to)}
         className="mt-4 h-9 w-full rounded-full bg-[#2563eb] text-white hover:bg-[#1d4ed8]"
