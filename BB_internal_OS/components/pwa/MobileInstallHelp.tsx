@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { Smartphone, X } from "lucide-react";
@@ -52,11 +52,18 @@ export function MobileInstallHelp() {
           <li>Open only from the home screen BB icon.</li>
         </ol>
       ) : (
-        <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-xs text-[#334155]">
-          <li>Open in <strong>Chrome</strong> (Open in Chrome from WhatsApp).</li>
-          <li>Menu ⋮ → Install app / Add to Home screen.</li>
-          <li>Open only from the home screen BB icon.</li>
-        </ol>
+        <>
+          <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-xs text-[#334155]">
+            <li>Open in <strong>Chrome</strong> (Open in Chrome from WhatsApp).</li>
+            <li>Menu ⋮ → Install app / Add to Home screen.</li>
+            <li>Open only from the home screen BB icon.</li>
+          </ol>
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+            <strong>Stuck on “previous site” or not adding?</strong> Remove any old BB shortcut, then Chrome →
+            Site settings → this site → <strong>Clear &amp; reset</strong>. Sign in to Google Play on the phone,
+            free some storage, and install again from the same URL you always use (do not mix www and non-www).
+          </p>
+        </>
       )}
       <p className="mt-3 rounded-lg bg-[#f8fbff] px-3 py-2 text-xs text-[#475569]">Real app = no Chrome address bar at the top.</p>
     </div>

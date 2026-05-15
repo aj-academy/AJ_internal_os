@@ -30,5 +30,6 @@ await base
   .toFile(path.join(iconsDir, "maskable-icon-512x512.png"));
 
 await base.clone().resize(180, 180, { fit: "cover" }).png().toFile(path.join(root, "public", "apple-touch-icon.png"));
+await base.clone().resize(32, 32, { fit: "cover" }).png().toFile(path.join(root, "public", "favicon.ico"));
 
-console.log("PWA icons generated in public/icons/ and apple-touch-icon.png");
+console.log("PWA icons generated in public/icons/, apple-touch-icon.png, and favicon.ico");

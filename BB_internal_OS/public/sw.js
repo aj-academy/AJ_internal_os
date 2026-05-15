@@ -1,5 +1,5 @@
 /* BB Internal OS — safe PWA service worker (static assets only) */
-const CACHE_VERSION = "bb-os-v1";
+const CACHE_VERSION = "bb-os-v2";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 
@@ -8,8 +8,22 @@ const PRECACHE_URLS = [
   "/icons/icon-192x192.png",
   "/icons/icon-512x512.png",
   "/icons/maskable-icon-512x512.png",
-  "/icons/icon.svg",
+  "/apple-touch-icon.png",
+  "/favicon.ico",
 ];
+
+async function precacheShell(cache) {
+  await Promise.all(
+    PRECACHE_URLS.map(async (url) => {
+      try {
+        const response = await fetch(url);
+        if (response.ok) await cache.put(url, response);
+      } catch {
+        /* one missing asset must not block SW install */
+      }
+    }),
+  );
+}
 
 function isSupabaseRequest(url) {
   return url.hostname.includes("supabase.co") || url.hostname.includes("supabase.in");
@@ -65,7 +79,7 @@ async function networkFirstShell(request) {
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) => cache.addAll(PRECACHE_URLS)).then(() => self.skipWaiting()),
+    caches.open(SHELL_CACHE).then((cache) => precacheShell(cache)).then(() => self.skipWaiting()),
   );
 });
 
