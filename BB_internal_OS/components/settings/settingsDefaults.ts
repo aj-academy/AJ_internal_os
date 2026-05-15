@@ -60,6 +60,16 @@ export const SETTINGS_DEFAULTS: Record<string, Record<string, unknown>> = {
     dateFormat: "YYYY-MM-DD",
     timeFormat: "24h",
   },
+  hr_org: {
+    departments: ["Engineering", "Human Resources", "Finance", "Operations", "Sales"],
+    jobDomainsByDepartment: {
+      Engineering: ["Engineering Manager", "Software Engineer", "Team Lead"],
+      "Human Resources": ["HR Executive", "HR Manager"],
+      Finance: ["Accounts Officer"],
+      Operations: ["Admin Ops Lead"],
+      Sales: ["Sales Executive", "Sales Manager"],
+    },
+  },
 };
 
 export function mergeSettings(key: string, value: unknown): Record<string, unknown> {

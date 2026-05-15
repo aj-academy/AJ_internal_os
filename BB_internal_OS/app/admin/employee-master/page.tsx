@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
+import { useHrOrgSettings } from "@/hooks/useHrOrgSettings";
+import { jobDomainsForDepartment } from "@/lib/hrOrg";
 import type { Profile, ProfileStatus, UserRole } from "@/types/profile";
 
 type EmployeeRole = UserRole;
@@ -22,18 +24,6 @@ interface EmployeeRow {
 
 const roles: EmployeeRole[] = ["super_admin", "admin", "manager", "employee", "accounts"];
 
-const departments = ["Engineering", "Human Resources", "Finance", "Operations", "Sales"];
-
-const designations = [
-  "Engineering Manager",
-  "Software Engineer",
-  "HR Executive",
-  "HR Manager",
-  "Accounts Officer",
-  "Admin Ops Lead",
-  "Team Lead",
-];
-
 interface FormState {
   id: string | null;
   full_name: string;
@@ -45,16 +35,18 @@ interface FormState {
   password: string;
 }
 
-const initialFormState: FormState = {
-  id: null,
-  full_name: "",
-  email: "",
-  role: "employee",
-  department: departments[0],
-  designation: designations[1],
-  status: "active",
-  password: "",
-};
+function emptyForm(department: string, designation: string): FormState {
+  return {
+    id: null,
+    full_name: "",
+    email: "",
+    role: "employee",
+    department,
+    designation,
+    status: "active",
+    password: "",
+  };
+}
 
 function mapProfileToRow(p: Profile): EmployeeRow {
   return {
@@ -78,15 +70,25 @@ async function readApiError(response: Response, fallback: string) {
 }
 
 export default function EmployeeMasterPage() {
+  const { settings: hrOrg } = useHrOrgSettings();
+  const departments = hrOrg.departments;
+  const defaultDepartment = departments[0] ?? "General";
+  const defaultDesignation = jobDomainsForDepartment(hrOrg, defaultDepartment)[0] ?? "General";
+
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ProfileStatus>("all");
   const [mode, setMode] = useState<"add" | "edit" | "view">("add");
-  const [form, setForm] = useState<FormState>(initialFormState);
+  const [form, setForm] = useState<FormState>(() => emptyForm(defaultDepartment, defaultDesignation));
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const designationOptions = useMemo(
+    () => jobDomainsForDepartment(hrOrg, form.department),
+    [hrOrg, form.department],
+  );
 
   const loadEmployees = useCallback(async () => {
     setLoadingList(true);
@@ -132,8 +134,8 @@ export default function EmployeeMasterPage() {
       full_name: employee.full_name,
       email: employee.email,
       role: employee.role,
-      department: employee.department ?? departments[0],
-      designation: employee.designation ?? designations[0],
+      department: employee.department ?? defaultDepartment,
+      designation: employee.designation ?? jobDomainsForDepartment(hrOrg, employee.department ?? defaultDepartment)[0] ?? defaultDesignation,
       status: (employee.status ?? "active") as ProfileStatus,
       password: "",
     });
@@ -142,7 +144,7 @@ export default function EmployeeMasterPage() {
   const onCreateNew = () => {
     setMode("add");
     setSubmitError(null);
-    setForm(initialFormState);
+    setForm(emptyForm(defaultDepartment, defaultDesignation));
   };
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -392,7 +394,15 @@ export default function EmployeeMasterPage() {
 
               <select
                 value={form.department}
-                onChange={(event) => setForm((prev) => ({ ...prev, department: event.target.value }))}
+                onChange={(event) => {
+                  const nextDept = event.target.value;
+                  const jobs = jobDomainsForDepartment(hrOrg, nextDept);
+                  setForm((prev) => ({
+                    ...prev,
+                    department: nextDept,
+                    designation: jobs.includes(prev.designation) ? prev.designation : jobs[0] ?? "General",
+                  }));
+                }}
                 className="h-9 w-full rounded-xl border border-[#cfdceb] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#2563eb] focus:ring-2 focus:ring-[#dbeafe]"
                 disabled={mode === "view"}
               >
@@ -409,7 +419,7 @@ export default function EmployeeMasterPage() {
                 className="h-9 w-full rounded-xl border border-[#cfdceb] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#2563eb] focus:ring-2 focus:ring-[#dbeafe]"
                 disabled={mode === "view"}
               >
-                {designations.map((designation) => (
+                {designationOptions.map((designation) => (
                   <option key={designation} value={designation}>
                     {designation}
                   </option>

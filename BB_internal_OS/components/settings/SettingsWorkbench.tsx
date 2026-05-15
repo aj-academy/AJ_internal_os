@@ -5,12 +5,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { HrOrgSettingsPanel } from "@/components/settings/HrOrgSettingsPanel";
 import { mergeSettings, SETTINGS_DEFAULTS } from "@/components/settings/settingsDefaults";
 import type { SystemSettingRow } from "@/types/settings";
 
 export type SettingsTabId =
   | "company"
   | "users"
+  | "hr_org"
   | "attendance"
   | "crm"
   | "project"
@@ -22,6 +24,7 @@ export type SettingsTabId =
 const SETTINGS_TAB_ORDER: SettingsTabId[] = [
   "company",
   "users",
+  "hr_org",
   "attendance",
   "crm",
   "project",
@@ -34,6 +37,7 @@ const SETTINGS_TAB_ORDER: SettingsTabId[] = [
 const SETTINGS_TAB_LABELS: Record<SettingsTabId, string> = {
   company: "Company Settings",
   users: "User & Role Settings",
+  hr_org: "Departments & Job Domains",
   attendance: "Attendance Settings",
   crm: "CRM Settings",
   project: "Project Settings",
@@ -214,6 +218,10 @@ export function SettingsWorkbench() {
             </div>
           </div>
         </SettingsPanel>
+      ) : null}
+
+      {activeTab === "hr_org" ? (
+        <HrOrgSettingsPanel userId={userId} schemaMissing={schemaMissing} onToast={showToast} />
       ) : null}
 
       {activeTab === "users" ? (

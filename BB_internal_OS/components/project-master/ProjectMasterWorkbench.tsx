@@ -26,6 +26,7 @@ interface ProfileMini {
   full_name: string | null;
   email: string | null;
   role?: string | null;
+  department?: string | null;
 }
 
 function todayISO() {
@@ -170,7 +171,7 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
 
     const { data: es } = await supabase
       .from("profiles")
-      .select("id,full_name,email,role")
+      .select("id,full_name,email,role,department")
       .in("role", ["employee", "manager", "admin", "super_admin"])
       .eq("status", "active")
       .order("full_name", { ascending: true });
@@ -393,7 +394,13 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
       .map((e) => {
         const pr = byEmp[e.id]?.projects.size ?? 0;
         const overload = pr > 3;
-        return { id: e.id, name: e.full_name || e.email || "", dept: "-", projects: pr, overload };
+        return {
+          id: e.id,
+          name: e.full_name || e.email || "",
+          dept: e.department?.trim() || "—",
+          projects: pr,
+          overload,
+        };
       });
   }, [employees, teamMembers]);
 
@@ -577,8 +584,8 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
       ) : null}
 
       {activeTab === "team" && showFullTabs ? (
-        <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white">
-          <table className="w-full min-w-[720px] text-sm">
+        <div className="responsive-table-wrap rounded-[20px] border border-[#dbe6f3] bg-white">
+          <table className="w-full min-w-[520px] text-sm">
             <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
               <tr>
                 <th className="px-4 py-3 text-left">Employee</th>

@@ -421,7 +421,7 @@ export default function AdminDashboardPage() {
   ];
 
   return (
-    <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 shadow-[0_20px_40px_rgba(30,64,175,0.08)] sm:p-6 lg:p-8">
+    <section className="dashboard-section space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 shadow-[0_20px_40px_rgba(30,64,175,0.08)] sm:p-6 lg:p-8">
       <header className="grid gap-4 xl:grid-cols-[1fr_1.2fr_1fr] xl:items-center">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748b]">Company Operations Control Center</p>
@@ -590,11 +590,11 @@ export default function AdminDashboardPage() {
         </section>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-12">
-        <section className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm xl:col-span-8">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-12">
+        <section className="min-w-0 overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm xl:col-span-8">
           <h3 className="mb-3 text-base font-semibold text-[#0f172a]">Project Overview (Active)</h3>
-          <div className="responsive-table-wrap">
-            <table className="w-full min-w-[640px] text-sm">
+          <div className="responsive-table-wrap -mx-1 px-1 sm:mx-0 sm:px-0">
+            <table className="w-full min-w-[480px] text-sm">
               <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
                 <tr>
                   <th className="px-3 py-2 text-left">Project</th>
@@ -626,7 +626,7 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
-        <section className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm xl:col-span-4">
+        <section className="min-w-0 overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm xl:col-span-4">
           <h3 className="mb-3 text-base font-semibold text-[#0f172a]">Finance Snapshot</h3>
           <Metric label="Revenue" value={formatInr(revenue)} />
           <Metric label="Expenses" value={formatInr(expenses)} />
@@ -658,9 +658,11 @@ function OpRow({ label, value, tone = "slate" }: { label: string; value: string 
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="mb-2 flex items-center justify-between rounded-lg border border-[#e8edf5] bg-[#fbfdff] px-3 py-2 text-sm">
-      <span className="text-[#64748b]">{label}</span>
-      <span className="font-semibold text-[#0f172a]">{value}</span>
+    <div className="mb-2 flex min-w-0 items-center justify-between gap-2 rounded-lg border border-[#e8edf5] bg-[#fbfdff] px-3 py-2 text-sm">
+      <span className="shrink-0 text-[#64748b]">{label}</span>
+      <span className="min-w-0 truncate text-right font-semibold text-[#0f172a]">{value}</span>
     </div>
   );
 }
+
+
