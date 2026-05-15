@@ -424,9 +424,9 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const pendingCheckout = todayRecords.filter((r) => r.check_in_time && !r.check_out_time).length;
 
     return (
-      <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
+      <section className="dashboard-section space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
         <header className="space-y-2">
-          <h2 className="text-3xl font-semibold text-slate-900">Attendance System</h2>
+          <h2 className="text-2xl font-semibold text-slate-900 sm:text-3xl">Attendance System</h2>
           <p className="text-sm text-slate-600">Overview of today's attendance status from real employee entries.</p>
           <p className="inline-flex rounded-full bg-[#e8f1ff] px-3 py-1 text-xs font-semibold text-[#1d4ed8]">
             Overview: Live today snapshot
@@ -441,18 +441,18 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <StatCard label="Remote Check-ins" value={remoteToday} />
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          <section className="rounded-2xl border border-[#d4deea] bg-white p-5">
-            <h3 className="text-lg font-semibold text-slate-900">Today Status Distribution</h3>
+        <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+          <section className="min-w-0 overflow-hidden rounded-2xl border border-[#d4deea] bg-white p-4 sm:p-5">
+            <h3 className="text-base font-semibold text-slate-900 sm:text-lg">Today Status Distribution</h3>
             <p className="mt-1 text-xs text-slate-500">Quick comparison of attendance states for today</p>
             <div className="mt-4 space-y-3">
               {statusChartRaw.map((item) => (
                 <div key={item.label}>
-                  <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
-                    <span>{item.label}</span>
-                    <span>{item.value}</span>
+                  <div className="mb-1 flex min-w-0 items-center justify-between gap-2 text-xs text-slate-600">
+                    <span className="min-w-0 truncate">{item.label}</span>
+                    <span className="shrink-0 tabular-nums">{item.value}</span>
                   </div>
-                  <div className="h-2 w-full rounded-full bg-slate-100">
+                  <div className="h-2 w-full min-w-0 rounded-full bg-slate-100">
                     <div
                       className={`h-2 rounded-full ${item.color}`}
                       style={{ width: `${Math.max(4, (item.value / statusMax) * 100)}%` }}
@@ -463,27 +463,27 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
             </div>
           </section>
 
-          <section className="rounded-2xl border border-[#d4deea] bg-white p-5">
-            <h3 className="text-lg font-semibold text-slate-900">Last 7 Days Trend</h3>
+          <section className="min-w-0 overflow-hidden rounded-2xl border border-[#d4deea] bg-white p-4 sm:p-5">
+            <h3 className="text-base font-semibold text-slate-900 sm:text-lg">Last 7 Days Trend</h3>
             <p className="mt-1 text-xs text-slate-500">Check-ins vs completed check-outs per day</p>
-            <div className="-mx-1 mt-4 overflow-x-auto pb-1 sm:mx-0">
-              <div className="min-w-[320px] px-1 sm:min-w-0">
-                <div className="grid grid-cols-7 gap-2">
+            <div className="mt-4 w-full min-w-0">
+              <div className="w-full min-w-0">
+                <div className="grid w-full grid-cols-7 gap-1 sm:gap-2">
               {weekBuckets.map((bucket) => (
-                <div key={bucket.day} className="flex flex-col items-center">
-                  <div className="flex h-28 items-end gap-1">
+                <div key={bucket.day} className="flex min-w-0 flex-col items-center">
+                  <div className="flex h-20 w-full items-end justify-center gap-0.5 sm:h-28 sm:gap-1">
                     <div
-                      className="w-2 rounded-t bg-blue-500"
-                      style={{ height: `${Math.max(4, (bucket.checkIns / maxBucket) * 100)}px` }}
+                      className="w-1.5 max-w-[40%] flex-1 rounded-t bg-blue-500 sm:w-2 sm:max-w-none sm:flex-none"
+                      style={{ height: `${Math.max(4, (bucket.checkIns / maxBucket) * 100)}%` }}
                       title={`Check-ins: ${bucket.checkIns}`}
                     />
                     <div
-                      className="w-2 rounded-t bg-emerald-500"
-                      style={{ height: `${Math.max(4, (bucket.checkOuts / maxBucket) * 100)}px` }}
+                      className="w-1.5 max-w-[40%] flex-1 rounded-t bg-emerald-500 sm:w-2 sm:max-w-none sm:flex-none"
+                      style={{ height: `${Math.max(4, (bucket.checkOuts / maxBucket) * 100)}%` }}
                       title={`Check-outs: ${bucket.checkOuts}`}
                     />
                   </div>
-                  <p className="mt-2 text-[11px] text-slate-500">
+                  <p className="mt-1 w-full truncate text-center text-[10px] text-slate-500 sm:mt-2 sm:text-[11px]">
                     {new Date(`${bucket.day}T00:00:00`).toLocaleDateString([], { weekday: "short" })}
                   </p>
                 </div>
@@ -491,7 +491,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
                 </div>
               </div>
             </div>
-            <div className="mt-3 flex items-center gap-4 text-xs text-slate-600">
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-600 sm:gap-4">
               <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500" /> Check-ins</span>
               <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Check-outs</span>
             </div>
