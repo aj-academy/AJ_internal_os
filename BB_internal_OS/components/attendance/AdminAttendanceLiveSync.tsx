@@ -1,37 +1,40 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useDebouncedRouterRefresh } from "@/hooks/useDebouncedRouterRefresh";
 
-/** Keeps admin attendance tabs in sync without a manual refresh toggle. */
-export function AdminAttendanceLiveSync() {
-  const router = useRouter();
+const TABLES_BY_TAB: Record<string, string[]> = {
+  overview: ["attendance_records"],
+  logs: ["attendance_records"],
+  permission: ["permission_requests"],
+  summary: ["work_summaries"],
+  monthly: ["attendance_records", "permission_requests", "work_summaries"],
+};
+
+/** Keeps admin attendance tabs in sync without hammering the server. */
+export function AdminAttendanceLiveSync({ tab }: { tab: string }) {
+  const scheduleRefresh = useDebouncedRouterRefresh(2500);
 
   useEffect(() => {
+    const tables = TABLES_BY_TAB[tab] ?? TABLES_BY_TAB.overview;
     const supabase = createClient();
-    const channel = supabase
-      .channel("admin-attendance-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records" }, () => {
-        router.refresh();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "permission_requests" }, () => {
-        router.refresh();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "work_summaries" }, () => {
-        router.refresh();
-      })
-      .subscribe();
+    let channel = supabase.channel(`admin-attendance-live-${tab}`);
 
-    const interval = window.setInterval(() => {
-      router.refresh();
-    }, 30_000);
+    for (const table of tables) {
+      channel = channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table },
+        scheduleRefresh,
+      );
+    }
+
+    channel.subscribe();
 
     return () => {
-      window.clearInterval(interval);
       void supabase.removeChannel(channel);
     };
-  }, [router]);
+  }, [tab, scheduleRefresh]);
 
   return null;
 }

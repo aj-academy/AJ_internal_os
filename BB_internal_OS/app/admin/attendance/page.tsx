@@ -406,7 +406,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <p className="inline-flex rounded-full bg-[#e8f1ff] px-3 py-1 text-xs font-semibold text-[#1d4ed8]">
             Overview: Live today snapshot
           </p>
-          <AdminAttendanceLiveSync />
+          <AdminAttendanceLiveSync tab={selectedTab} />
           <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -515,7 +515,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         <header className="space-y-2">
           <h2 className="text-3xl font-semibold text-slate-900">Check In / Check Out Logs</h2>
           <p className="text-sm text-slate-600">Real employee attendance logs from check-in and check-out submissions.</p>
-          <AdminAttendanceLiveSync />
+          <AdminAttendanceLiveSync tab={selectedTab} />
           <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -620,7 +620,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         <header className="space-y-2">
           <h2 className="text-3xl font-semibold text-slate-900">Permission Requests</h2>
           <p className="text-sm text-slate-600">Review and take action on employee permission submissions.</p>
-          <AdminAttendanceLiveSync />
+          <AdminAttendanceLiveSync tab={selectedTab} />
           <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -747,7 +747,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         <header className="space-y-2">
           <h2 className="text-3xl font-semibold text-slate-900">Work Summary</h2>
           <p className="text-sm text-slate-600">Review checkout work summaries submitted by employees.</p>
-          <AdminAttendanceLiveSync />
+          <AdminAttendanceLiveSync tab={selectedTab} />
           <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -945,7 +945,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         <p className="inline-flex rounded-full bg-[#ecfeff] px-3 py-1 text-xs font-semibold text-[#0f766e]">
           Monthly Report: Aggregated month analytics
         </p>
-        <AdminAttendanceLiveSync />
+        <AdminAttendanceLiveSync tab={selectedTab} />
         <AttendanceSubCategoryNav activeTab={selectedTab} />
       </header>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">

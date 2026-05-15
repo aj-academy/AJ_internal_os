@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useDebouncedRouterRefresh } from "@/hooks/useDebouncedRouterRefresh";
 import { formatDateIST, formatDateTimeIST, formatPermissionTime } from "@/lib/datetime";
 
 export type PermissionRequestRow = {
@@ -36,7 +36,7 @@ export function PermissionRequestsTable({
   rows: PermissionRequestRow[];
   employeeId: string;
 }) {
-  const router = useRouter();
+  const scheduleRefresh = useDebouncedRouterRefresh(2500);
 
   useEffect(() => {
     const supabase = createClient();
@@ -50,16 +50,14 @@ export function PermissionRequestsTable({
           table: "permission_requests",
           filter: `employee_id=eq.${employeeId}`,
         },
-        () => {
-          router.refresh();
-        },
+        scheduleRefresh,
       )
       .subscribe();
 
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [employeeId, router]);
+  }, [employeeId, scheduleRefresh]);
 
   return (
     <section className="rounded-2xl border border-[#d4deea] bg-white p-4">

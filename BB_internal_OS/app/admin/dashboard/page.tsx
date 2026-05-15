@@ -33,6 +33,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -150,8 +151,8 @@ export default function AdminDashboardPage() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [wfh, setWfh] = useState<Wfh[]>([]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
     setError(null);
     try {
       const {
@@ -239,6 +240,10 @@ export default function AdminDashboardPage() {
     }
   }, [supabase]);
 
+  const scheduleLoad = useDebouncedCallback(() => {
+    void load({ silent: true });
+  }, 3000);
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -246,24 +251,24 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     let ch = supabase
       .channel("admin-dashboard-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => void load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records" }, () => void load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "clients" }, () => void load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, () => void load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => void load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "finance_transactions" }, () => void load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "expense_claims" }, () => void load());
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleLoad)
+      .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records" }, scheduleLoad)
+      .on("postgres_changes", { event: "*", schema: "public", table: "clients" }, scheduleLoad)
+      .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, scheduleLoad)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, scheduleLoad)
+      .on("postgres_changes", { event: "*", schema: "public", table: "finance_transactions" }, scheduleLoad)
+      .on("postgres_changes", { event: "*", schema: "public", table: "expense_claims" }, scheduleLoad);
     if (!skipAttendanceOpsFetch) {
       ch = ch
-        .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, () => void load())
-        .on("postgres_changes", { event: "*", schema: "public", table: "permission_requests" }, () => void load())
-        .on("postgres_changes", { event: "*", schema: "public", table: "work_from_home_requests" }, () => void load());
+        .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, scheduleLoad)
+        .on("postgres_changes", { event: "*", schema: "public", table: "permission_requests" }, scheduleLoad)
+        .on("postgres_changes", { event: "*", schema: "public", table: "work_from_home_requests" }, scheduleLoad);
     }
     void ch.subscribe();
     return () => {
       void supabase.removeChannel(ch);
     };
-  }, [load, supabase, skipAttendanceOpsFetch]);
+  }, [scheduleLoad, supabase, skipAttendanceOpsFetch]);
 
   const nameMap = useMemo(() => {
     const m: Record<string, string> = {};
