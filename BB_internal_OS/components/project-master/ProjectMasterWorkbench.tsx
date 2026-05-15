@@ -400,7 +400,7 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
   const visibleTabs: ProjectTabId[] = isAccounts ? ["budget", "reports", "settings"] : PROJECT_TAB_IDS;
 
   return (
-    <section className="space-y-5 rounded-[24px] border border-[#d4deea] bg-white p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
+    <section className="space-y-5 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">Project Master</h2>

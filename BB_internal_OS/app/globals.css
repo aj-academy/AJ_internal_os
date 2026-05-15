@@ -139,8 +139,17 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
   html {
     @apply font-sans;
+  }
+}
+
+/* PWA / mobile: comfortable tap targets without changing desktop density */
+@layer utilities {
+  .touch-target {
+    @apply min-h-11 min-w-11 sm:min-h-0 sm:min-w-0;
   }
 }

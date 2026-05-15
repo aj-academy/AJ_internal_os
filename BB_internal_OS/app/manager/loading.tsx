@@ -1,6 +1,6 @@
 export default function ManagerLoading() {
   return (
-    <section className="space-y-4 rounded-[24px] border border-[#d4deea] bg-white p-6">
+    <section className="space-y-4 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6">
       <div className="h-8 w-52 animate-pulse rounded-md bg-slate-200" />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 6 }).map((_, idx) => (

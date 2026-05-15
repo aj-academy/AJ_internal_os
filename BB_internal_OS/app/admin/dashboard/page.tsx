@@ -422,17 +422,17 @@ export default function AdminDashboardPage() {
 
   return (
     <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 shadow-[0_20px_40px_rgba(30,64,175,0.08)] sm:p-6 lg:p-8">
-      <header className="grid gap-3 xl:grid-cols-[1fr_1.2fr_1fr] xl:items-center">
-        <div>
+      <header className="grid gap-4 xl:grid-cols-[1fr_1.2fr_1fr] xl:items-center">
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748b]">Company Operations Control Center</p>
-          <h2 className="mt-1 text-3xl font-semibold text-[#0f172a]">Admin Dashboard</h2>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[#0f172a] sm:text-3xl">Admin Dashboard</h2>
           <p className="mt-1 text-sm text-[#64748b]">{new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
         </div>
-        <div className="relative">
+        <div className="relative min-w-0">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search activities" className="h-10 rounded-full border-[#d4deea] bg-[#f8fbff] pl-9" />
         </div>
-        <div className="flex flex-wrap items-center justify-start gap-2 xl:justify-end">
+        <div className="-mx-1 flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto px-1 pb-1 xl:mx-0 xl:flex-wrap xl:justify-end xl:overflow-visible xl:px-0 xl:pb-0">
           <Button variant="outline" size="icon" className="rounded-full border-[#d4deea]"><Bell className="h-4 w-4" /></Button>
           <Button className="rounded-full bg-[#2563eb] px-3 text-white hover:bg-[#1d4ed8]"><Plus className="mr-1 h-4 w-4" />Quick Action</Button>
           <Avatar size="sm" className="border border-[#dbe6f3] bg-[#eff6ff]"><AvatarFallback>{initials(userName)}</AvatarFallback></Avatar>

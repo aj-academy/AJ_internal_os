@@ -87,7 +87,7 @@ export function InAppNotificationsBell({ fallbackTaskHref }: { fallbackTaskHref:
         type="button"
         variant="outline"
         size="icon"
-        className="relative rounded-full border-[#d4deea] bg-white text-[#1e3a8a]"
+        className="touch-target relative rounded-full border-[#d4deea] bg-white text-[#1e3a8a]"
         onClick={() => {
           setOpen((o) => !o);
           void load();
@@ -102,7 +102,7 @@ export function InAppNotificationsBell({ fallbackTaskHref }: { fallbackTaskHref:
         ) : null}
       </Button>
       {open ? (
-        <div className="absolute right-0 z-50 mt-2 w-[min(100vw-2rem,380px)] rounded-xl border border-[#dbe6f3] bg-white py-2 shadow-lg">
+        <div className="absolute left-1/2 z-50 mt-2 w-[min(100vw-2rem,380px)] -translate-x-1/2 rounded-xl border border-[#dbe6f3] bg-white py-2 shadow-lg sm:left-auto sm:right-0 sm:translate-x-0">
           <p className="border-b border-[#eef2ff] px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-[#64748b]">
             Notifications
           </p>

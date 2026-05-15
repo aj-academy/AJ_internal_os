@@ -79,7 +79,7 @@ export function PolicyAcceptanceGate() {
   if (loadFailed && !pending.length) {
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-sm">
-        <div className="w-full max-w-md rounded-[24px] border border-[#d4deea] bg-white p-6 shadow-xl">
+        <div className="w-full max-w-md rounded-[24px] border border-[#d4deea] bg-white p-4 shadow-xl sm:p-6">
           <h3 className="text-lg font-semibold text-[#0f172a]">Company policies unavailable</h3>
           <p className="mt-2 text-sm text-[#64748b]">{error}</p>
           <Button
@@ -97,7 +97,7 @@ export function PolicyAcceptanceGate() {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[24px] border border-[#d4deea] bg-white p-6 shadow-[0_28px_60px_rgba(30,64,175,0.18)]">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_28px_60px_rgba(30,64,175,0.18)]">
         <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-[#eef4ff] text-[#2563eb]">
           <ShieldCheck className="h-6 w-6" />
         </div>

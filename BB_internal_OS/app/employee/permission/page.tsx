@@ -110,7 +110,7 @@ export default async function EmployeePermissionPage({
       errorMessage.includes("permission_requests"));
 
   return (
-    <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
+    <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <header className="space-y-2">
         <h2 className="text-3xl font-semibold text-slate-900">My Permission Requests</h2>
         <p className="text-sm text-slate-600">Submit permission requests for admin approval and track status.</p>

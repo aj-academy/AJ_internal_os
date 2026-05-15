@@ -69,7 +69,7 @@ export default function AdminPoliciesPage() {
   };
 
   return (
-    <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
+    <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#64748b]">Admin Control</p>
         <h2 className="mt-2 text-3xl font-semibold text-[#0f172a]">Company policies</h2>

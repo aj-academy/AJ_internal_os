@@ -424,7 +424,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const pendingCheckout = todayRecords.filter((r) => r.check_in_time && !r.check_out_time).length;
 
     return (
-      <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
+      <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
         <header className="space-y-2">
           <h2 className="text-3xl font-semibold text-slate-900">Attendance System</h2>
           <p className="text-sm text-slate-600">Overview of today's attendance status from real employee entries.</p>
@@ -466,7 +466,9 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <section className="rounded-2xl border border-[#d4deea] bg-white p-5">
             <h3 className="text-lg font-semibold text-slate-900">Last 7 Days Trend</h3>
             <p className="mt-1 text-xs text-slate-500">Check-ins vs completed check-outs per day</p>
-            <div className="mt-4 grid grid-cols-7 gap-2">
+            <div className="-mx-1 mt-4 overflow-x-auto pb-1 sm:mx-0">
+              <div className="min-w-[320px] px-1 sm:min-w-0">
+                <div className="grid grid-cols-7 gap-2">
               {weekBuckets.map((bucket) => (
                 <div key={bucket.day} className="flex flex-col items-center">
                   <div className="flex h-28 items-end gap-1">
@@ -486,6 +488,8 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
                   </p>
                 </div>
               ))}
+                </div>
+              </div>
             </div>
             <div className="mt-3 flex items-center gap-4 text-xs text-slate-600">
               <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500" /> Check-ins</span>
@@ -532,7 +536,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const remoteCheckins = todayRows.filter((r) => r.check_in_time && isWfh(r.location_type)).length;
 
     return (
-      <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
+      <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
         <header className="space-y-2">
           <h2 className="text-3xl font-semibold text-slate-900">Check In / Check Out Logs</h2>
           <p className="text-sm text-slate-600">Real employee attendance logs from check-in and check-out submissions.</p>
@@ -669,7 +673,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const totalPermissionHours = rows.reduce((acc, row) => acc + calcPermissionHours(row.from_time, row.to_time), 0);
 
     return (
-      <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
+      <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
         <header className="space-y-2">
           <h2 className="text-3xl font-semibold text-slate-900">Permission Requests</h2>
           <p className="text-sm text-slate-600">Review and take action on employee permission submissions.</p>
@@ -834,7 +838,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const delayedSummaries = rows.filter((r) => (r.status ?? "submitted") !== "reviewed").length;
 
     return (
-      <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
+      <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
         <header className="space-y-2">
           <h2 className="text-3xl font-semibold text-slate-900">Work Summary</h2>
           <p className="text-sm text-slate-600">Review checkout work summaries submitted by employees.</p>
@@ -1029,7 +1033,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     : "0.0";
 
   return (
-    <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
+    <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
       <header className="space-y-2">
         <h2 className="text-3xl font-semibold text-slate-900">Monthly Report</h2>
         <p className="text-sm text-slate-600">Employee-wise monthly attendance and productivity report.</p>

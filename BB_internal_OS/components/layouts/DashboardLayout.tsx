@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -28,57 +28,70 @@ export function DashboardLayout({
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
-  return (
-    <div className="min-h-screen bg-[#eaf1f8] text-[#1e293b]">
-      <div
-        className={[
-          "hidden lg:fixed lg:inset-y-0 lg:z-30 lg:block lg:p-4 lg:pr-0 lg:transition-all lg:duration-200 lg:ease-out",
-          collapsed ? "lg:w-[92px]" : "lg:w-[270px]",
-        ].join(" ")}
-      >
-        <Sidebar
-          roleLabel={roleLabel}
-          items={sidebarItems}
-          collapsed={collapsed}
-          onToggleCollapse={() => setCollapsed((prev) => !prev)}
+  const mobileMenuTrigger: ReactNode = (
+    <SheetTrigger
+      render={
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="touch-target shrink-0 rounded-full border-[#d4deea] bg-white text-[#1e3a8a] lg:hidden"
+          aria-label="Open navigation menu"
         />
-      </div>
+      }
+    >
+      <Menu className="h-5 w-5" />
+    </SheetTrigger>
+  );
 
-      <div
-        className={[
-          "lg:pr-4 lg:transition-all lg:duration-200 lg:ease-out",
-          collapsed ? "lg:pl-[92px]" : "lg:pl-[270px]",
-        ].join(" ")}
-      >
-        <div className="flex h-16 items-center bg-[#eaf1f8] px-4 lg:hidden">
-          <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="rounded-full border-[#d4deea] bg-white text-[#1e3a8a]"
-                />
-              }
-            >
-              <Menu className="h-5 w-5" />
-            </SheetTrigger>
-            <SheetContent side="left" className="w-[270px] border-none bg-[#eaf1f8] p-3">
-              <Sidebar
-                roleLabel={roleLabel}
-                items={sidebarItems}
-                collapsed={false}
-                onNavigate={() => setOpen(false)}
-              />
-            </SheetContent>
-          </Sheet>
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <div className="min-h-[100dvh] min-w-0 bg-[#eaf1f8] text-[#1e293b]">
+        <div
+          className={[
+            "hidden lg:fixed lg:inset-y-0 lg:z-30 lg:block lg:p-4 lg:pr-0 lg:transition-all lg:duration-200 lg:ease-out",
+            collapsed ? "lg:w-[92px]" : "lg:w-[270px]",
+          ].join(" ")}
+        >
+          <Sidebar
+            roleLabel={roleLabel}
+            items={sidebarItems}
+            collapsed={collapsed}
+            onToggleCollapse={() => setCollapsed((prev) => !prev)}
+          />
         </div>
 
-        <Topbar fullName={userName} email={userEmail} notificationFallbackHref={notificationFallbackHref} />
+        <div
+          className={[
+            "min-w-0 lg:pr-4 lg:transition-all lg:duration-200 lg:ease-out",
+            collapsed ? "lg:pl-[92px]" : "lg:pl-[270px]",
+          ].join(" ")}
+        >
+          <Topbar
+            fullName={userName}
+            email={userEmail}
+            notificationFallbackHref={notificationFallbackHref}
+            mobileMenuTrigger={mobileMenuTrigger}
+          />
 
-        <main className="px-4 pb-6 pt-2 lg:px-6 lg:pb-8">{children}</main>
+          <main className="mx-auto min-h-0 w-full max-w-[1920px] px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 lg:px-6 lg:pb-8">
+            {children}
+          </main>
+        </div>
+
+        <SheetContent
+          side="left"
+          showCloseButton
+          className="w-[min(100vw-1rem,288px)] max-w-[100vw] border-none bg-[#eaf1f8] p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pl-[max(0.75rem,env(safe-area-inset-left))]"
+        >
+          <Sidebar
+            roleLabel={roleLabel}
+            items={sidebarItems}
+            collapsed={false}
+            onNavigate={() => setOpen(false)}
+          />
+        </SheetContent>
       </div>
-    </div>
+    </Sheet>
   );
 }
