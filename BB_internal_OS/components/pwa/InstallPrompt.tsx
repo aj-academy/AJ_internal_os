@@ -10,6 +10,7 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const DISMISS_KEY = "bb-os-pwa-install-dismissed";
+export const PWA_INSTALLED_PENDING_ICON_KEY = "bb-os-pwa-installed-pending-icon";
 
 function isStandalone() {
   if (typeof window === "undefined") return false;
@@ -42,6 +43,7 @@ export function InstallPrompt() {
     };
 
     const onInstalled = () => {
+      window.localStorage.setItem(PWA_INSTALLED_PENDING_ICON_KEY, "1");
       setDeferred(null);
       setHidden(true);
     };

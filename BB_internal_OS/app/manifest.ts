@@ -6,7 +6,7 @@ const PWA_APP_PATH = "/?app=bb-internal-os";
 export default function manifest(): MetadataRoute.Manifest {
   const origin = resolvePwaSiteOrigin();
   const appId = pwaAbsoluteUrl(origin, PWA_APP_PATH);
-  const startUrl = pwaAbsoluteUrl(origin, "/login");
+  const startUrl = pwaAbsoluteUrl(origin, "/install");
 
   return {
     id: appId,

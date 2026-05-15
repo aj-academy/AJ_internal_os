@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Smartphone, X } from "lucide-react";
+import { PWA_INSTALLED_PENDING_ICON_KEY } from "@/components/pwa/InstallPrompt";
 
 const DISMISS_KEY = "bb-os-mobile-install-help-dismissed";
 
@@ -23,11 +24,20 @@ function isIos() {
 export function MobileInstallHelp() {
   const [visible, setVisible] = useState(false);
   const [installUrl, setInstallUrl] = useState("");
+  const [installedPendingIcon, setInstalledPendingIcon] = useState(false);
 
   useEffect(() => {
-    if (!isMobile() || isStandalone()) return;
-    if (window.localStorage.getItem(DISMISS_KEY) === "1") return;
+    if (!isMobile() || isStandalone()) {
+      if (isStandalone()) {
+        window.localStorage.removeItem(PWA_INSTALLED_PENDING_ICON_KEY);
+      }
+      return;
+    }
     setInstallUrl(`${window.location.origin}/login`);
+    setInstalledPendingIcon(window.localStorage.getItem(PWA_INSTALLED_PENDING_ICON_KEY) === "1");
+    if (window.localStorage.getItem(DISMISS_KEY) === "1" && window.localStorage.getItem(PWA_INSTALLED_PENDING_ICON_KEY) !== "1") {
+      return;
+    }
     setVisible(true);
   }, []);
 
@@ -41,11 +51,28 @@ export function MobileInstallHelp() {
             <Smartphone className="h-5 w-5" />
           </span>
           <div>
-            <p className="text-sm font-semibold text-[#0f172a]">Install on your phone (with icon)</p>
-            <p className="mt-1 text-xs text-[#64748b]">If it opens inside Chrome, you added a shortcut — not the real app.</p>
+            <p className="text-sm font-semibold text-[#0f172a]">
+              {installedPendingIcon ? "Installed — find the icon" : "Install on your phone (with icon)"}
+            </p>
+            <p className="mt-1 text-xs text-[#64748b]">
+              {installedPendingIcon
+                ? "Do not tap Add to Home screen again. Check the app drawer first."
+                : "If it opens inside Chrome, you added a shortcut — not the real app."}
+            </p>
           </div>
         </div>
-        <button type="button" onClick={() => { window.localStorage.setItem(DISMISS_KEY, "1"); setVisible(false); }} className="touch-target rounded-full p-1 text-[#64748b]" aria-label="Dismiss"><X className="h-4 w-4" /></button>
+        <button
+          type="button"
+          onClick={() => {
+            window.localStorage.setItem(DISMISS_KEY, "1");
+            window.localStorage.removeItem(PWA_INSTALLED_PENDING_ICON_KEY);
+            setVisible(false);
+          }}
+          className="touch-target rounded-full p-1 text-[#64748b]"
+          aria-label="Dismiss"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
       {isIos() ? (
         <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-xs text-[#334155]">
@@ -53,12 +80,21 @@ export function MobileInstallHelp() {
           <li>Share → Add to Home Screen → Add.</li>
           <li>Open only from the home screen BB icon.</li>
         </ol>
+      ) : installedPendingIcon ? (
+        <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-xs text-[#334155]">
+          <li>Swipe up → open <strong>All apps / App drawer</strong>.</li>
+          <li>Search for <strong>BB OS</strong> or <strong>BB Internal OS</strong>.</li>
+          <li>Long-press the icon → <strong>Add to Home screen</strong>.</li>
+          <li>
+            <strong>Stop tapping Install</strong> in Chrome — that causes the installing loop.
+          </li>
+        </ol>
       ) : (
         <>
           <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-xs text-[#334155]">
             <li>Open in <strong>Chrome</strong> (Open in Chrome from WhatsApp).</li>
-            <li>Menu ⋮ → Install app / Add to Home screen.</li>
-            <li>Open only from the home screen BB icon.</li>
+            <li>Menu ⋮ → <strong>Install app</strong> (once only).</li>
+            <li>If no home icon, check <strong>App drawer</strong> for BB OS.</li>
           </ol>
           {installUrl ? (
             <p className="mt-3 break-all rounded-lg bg-[#f1f5f9] px-3 py-2 font-mono text-[11px] text-[#334155]">

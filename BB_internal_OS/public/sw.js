@@ -1,5 +1,5 @@
 /* BB Internal OS — safe PWA service worker (static assets only) */
-const CACHE_VERSION = "bb-os-v4";
+const CACHE_VERSION = "bb-os-v5";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 
@@ -79,7 +79,7 @@ async function networkFirstShell(request) {
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) => precacheShell(cache)).then(() => self.skipWaiting()),
+    caches.open(SHELL_CACHE).then((cache) => precacheShell(cache)),
   );
 });
 
