@@ -593,8 +593,8 @@ export default function AdminDashboardPage() {
       <div className="grid gap-4 xl:grid-cols-12">
         <section className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm xl:col-span-8">
           <h3 className="mb-3 text-base font-semibold text-[#0f172a]">Project Overview (Active)</h3>
-          <div className="overflow-auto">
-            <table className="w-full min-w-[860px] text-sm">
+          <div className="responsive-table-wrap">
+            <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
                 <tr>
                   <th className="px-3 py-2 text-left">Project</th>

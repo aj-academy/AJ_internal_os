@@ -79,12 +79,12 @@ export function CrmLeadFormPanel({
   if (!open) return null;
 
   return (
-    <aside className="flex h-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[24px] border border-[#d4deea] bg-white shadow-[0_16px_30px_rgba(30,64,175,0.12)]">
-      <div className="border-b border-[#e8edf5] px-5 py-4">
-        <div className="flex items-start justify-between gap-2">
+    <aside className="flex h-full max-h-[100dvh] flex-col overflow-hidden bg-white shadow-[0_16px_30px_rgba(30,64,175,0.12)] lg:rounded-[24px] lg:border lg:border-[#d4deea]">
+      <div className="border-b border-[#e8edf5] px-4 py-4 sm:px-5">
+        <div className="flex items-center justify-between gap-2">
           <h3 className="text-lg font-semibold text-[#0f172a]">{title}</h3>
-          <button type="button" onClick={onClose} className="shrink-0 text-sm font-medium text-[#64748b] hover:text-[#0f172a]">
-            Close
+          <button type="button" onClick={onClose} aria-label="Close" className="touch-target flex items-center justify-center rounded-full border border-[#d4deea] bg-white p-2 text-[#1e3a8a] shadow-sm transition hover:bg-[#eff6ff] active:scale-95">
+            <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">×</span>
           </button>
         </div>
       </div>

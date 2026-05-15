@@ -152,4 +152,52 @@
   .touch-target {
     @apply min-h-11 min-w-11 sm:min-h-0 sm:min-w-0;
   }
+
+  .dashboard-section {
+    @apply min-w-0 w-full max-w-full overflow-x-hidden;
+  }
+
+  .responsive-table-wrap {
+    @apply w-full max-w-full overflow-x-auto overscroll-x-contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .responsive-filter-grid {
+    @apply grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4;
+  }
+
+  .responsive-filter-actions {
+    @apply flex flex-col gap-2 sm:flex-row sm:flex-wrap;
+  }
+
+  /* Full-screen add/edit forms on phone & tablet; side panel on laptop+ */
+  .mobile-form-panel {
+    inset: 0;
+    max-height: 100dvh;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  @media (min-width: 1024px) {
+    .mobile-form-panel {
+      top: 1rem;
+      right: 1rem;
+      bottom: 1rem;
+      left: auto;
+      width: 100%;
+      max-height: calc(100dvh - 2rem);
+      border-radius: 1.5rem;
+      box-shadow: 0 25px 50px -12px rgb(15 23 42 / 0.25);
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+  }
+
+  .sidebar-sheet-close {
+    @apply absolute top-3 right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition-all duration-200 hover:scale-110 hover:bg-white/25 active:scale-95;
+  }
+
+  .sidebar-sheet-close svg {
+    @apply transition-transform duration-200 group-hover:rotate-90;
+  }
 }

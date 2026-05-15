@@ -710,12 +710,12 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       </div>
 
       <article className="rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as TaskStatus | "")}
             disabled={tasksTableMissing}
-            className="h-9 rounded-lg border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8]"
+            className="h-11 rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8] sm:h-9"
           >
             <option value="">Status</option>
             <option value="Pending">Pending</option>
@@ -726,7 +726,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
             value={priorityFilter}
             onChange={(event) => setPriorityFilter(event.target.value as TaskPriority | "")}
             disabled={tasksTableMissing}
-            className="h-9 rounded-lg border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8]"
+            className="h-11 rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8] sm:h-9"
           >
             <option value="">Priority</option>
             <option value="Low">Low</option>
@@ -737,7 +737,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
             value={assignedFilter}
             onChange={(event) => setAssignedFilter(event.target.value)}
             disabled={!seesAllTasks || tasksTableMissing}
-            className="h-9 rounded-lg border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8]"
+            className="h-11 rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8] sm:h-9"
           >
             <option value="">Assigned Employee</option>
             {employeeOptions.map((employee) => (
@@ -751,47 +751,50 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
             value={dueDateFilter}
             onChange={(event) => setDueDateFilter(event.target.value)}
             disabled={tasksTableMissing}
-            className="h-9 border-[#d4deea] bg-white disabled:bg-[#eff3f8]"
+            className="h-11 border-[#d4deea] bg-white disabled:bg-[#eff3f8] sm:h-9"
           />
           <Input
             value={searchText}
             onChange={(event) => setSearchText(event.target.value)}
             placeholder="Search task title"
             disabled={tasksTableMissing}
-            className="h-9 border-[#d4deea] bg-white disabled:bg-[#eff3f8]"
+            className="h-11 border-[#d4deea] bg-white disabled:bg-[#eff3f8] sm:col-span-2 sm:h-9 lg:col-span-1"
           />
-          <Button
-            onClick={applyFilters}
-            variant="outline"
-            disabled={tasksTableMissing}
-            className="h-9 rounded-full border-[#c9d8eb] bg-white text-[#1e3a8a] hover:bg-[#eff6ff] disabled:opacity-50"
-          >
-            Apply Filters
-          </Button>
-          <Button
-            onClick={resetFilters}
-            variant="outline"
-            disabled={tasksTableMissing}
-            className="h-9 rounded-full border-[#c9d8eb] bg-white text-[#475569] hover:bg-[#f8fafc] disabled:opacity-50"
-          >
-            Reset
-          </Button>
+          <div className="flex gap-2 sm:col-span-2 lg:col-span-1">
+            <Button
+              onClick={applyFilters}
+              disabled={tasksTableMissing}
+              className="h-11 flex-1 rounded-xl bg-[#2563eb] text-white hover:bg-[#1d4ed8] disabled:opacity-50 sm:h-9"
+            >
+              Apply Filters
+            </Button>
+            <Button
+              onClick={resetFilters}
+              variant="outline"
+              disabled={tasksTableMissing}
+              className="h-11 flex-1 rounded-xl border-[#c9d8eb] bg-white text-[#475569] hover:bg-[#f8fafc] disabled:opacity-50 sm:h-9"
+            >
+              Reset
+            </Button>
+          </div>
         </div>
       </article>
 
-      <TaskTable
-        tasks={rows}
-        loading={loading}
-        tableMissing={tasksTableMissing}
-        employeeNameMap={employeeNameMap}
-        canManageTasks={canManageTasks}
-        onView={(task) => setViewTask(task)}
-        onEdit={(task) => void openEdit(task)}
-        onDelete={(taskId) => void handleDeleteTask(taskId)}
-        onEmployeeStatusChange={(taskId, status, progress) => void handleEmployeeStatusChange(taskId, status, progress)}
-        onEmployeeProgressChange={(taskId, status, progress) => handleEmployeeProgressAdjust(taskId, status, progress)}
-        onRequestCompleteTask={!canManageTasks ? (task) => setCompleteTask(task) : undefined}
-      />
+      <div className="responsive-table-wrap">
+        <TaskTable
+          tasks={rows}
+          loading={loading}
+          tableMissing={tasksTableMissing}
+          employeeNameMap={employeeNameMap}
+          canManageTasks={canManageTasks}
+          onView={(task) => setViewTask(task)}
+          onEdit={(task) => void openEdit(task)}
+          onDelete={(taskId) => void handleDeleteTask(taskId)}
+          onEmployeeStatusChange={(taskId, status, progress) => void handleEmployeeStatusChange(taskId, status, progress)}
+          onEmployeeProgressChange={(taskId, status, progress) => handleEmployeeProgressAdjust(taskId, status, progress)}
+          onRequestCompleteTask={!canManageTasks ? (task) => setCompleteTask(task) : undefined}
+        />
+      </div>
 
       <TaskCompleteDialog
         task={completeTask}
@@ -810,27 +813,40 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
             type="button"
             aria-label="Close panel overlay"
             onClick={() => setPanelOpen(false)}
-            className="fixed inset-0 z-40 bg-slate-900/20"
+            className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px]"
           />
-          <div className="fixed inset-y-0 right-0 z-50 w-full max-w-[420px] p-3 sm:p-4">
-            <TaskForm
-              open={panelOpen}
-              title={editId ? "Edit Task" : "Assign task"}
-              value={form}
-              employees={employeeOptions}
-              projects={projectOptions}
-              showProjectField={canManageTasks}
-              assigneeLockedToSelf={false}
-              assigneeHelperText={
-                isEmployee
-                  ? "Teammates in your department or on the same project roster as you appear here. If the list is empty, ask HR to set your department or add you to a project team."
-                  : "List refreshes when you open this panel. Active employees, managers, and admins who can receive tasks are shown."
-              }
-              submitting={submitting}
-              onChange={setForm}
-              onClose={() => setPanelOpen(false)}
-              onSubmit={() => void handleSaveTask()}
-            />
+          <div className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-white lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[440px] lg:max-w-[100vw]">
+            <div className="flex shrink-0 items-center justify-between border-b border-[#e8edf5] px-4 py-4 sm:px-5">
+              <h3 className="text-lg font-semibold text-[#0f172a]">{editId ? "Edit Task" : "Assign Task"}</h3>
+              <button
+                type="button"
+                onClick={() => setPanelOpen(false)}
+                aria-label="Close"
+                className="touch-target flex items-center justify-center rounded-full border border-[#d4deea] bg-white p-2 text-[#1e3a8a] shadow-sm transition hover:bg-[#eff6ff] active:scale-95"
+              >
+                <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">×</span>
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+              <TaskForm
+                open={panelOpen}
+                title={editId ? "Edit Task" : "Assign task"}
+                value={form}
+                employees={employeeOptions}
+                projects={projectOptions}
+                showProjectField={canManageTasks}
+                assigneeLockedToSelf={false}
+                assigneeHelperText={
+                  isEmployee
+                    ? "Teammates in your department or on the same project roster as you appear here. If the list is empty, ask HR to set your department or add you to a project team."
+                    : "List refreshes when you open this panel. Active employees, managers, and admins who can receive tasks are shown."
+                }
+                submitting={submitting}
+                onChange={setForm}
+                onClose={() => setPanelOpen(false)}
+                onSubmit={() => void handleSaveTask()}
+              />
+            </div>
           </div>
         </>
       ) : null}

@@ -1012,17 +1012,18 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
 
       {panel !== "none" ? (
         <>
-          <button type="button" className="fixed inset-0 z-40 bg-slate-900/25" aria-label="Close" onClick={() => setPanel("none")} />
-          <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md overflow-y-auto border-l border-[#dbe6f3] bg-white p-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#e8edf5] pb-3">
+          <button type="button" className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px]" aria-label="Close" onClick={() => setPanel("none")} />
+          <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white shadow-2xl lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[480px] lg:max-w-[100vw] lg:border-l lg:border-[#dbe6f3]">
+            <div className="flex shrink-0 items-center justify-between border-b border-[#e8edf5] px-4 py-4 sm:px-5">
               <h3 className="text-lg font-semibold text-[#0f172a]">
                 {panel === "income" ? "Add income" : panel === "expense" ? "Add expense" : panel === "payment" ? "Add project payment" : "New expense claim"}
               </h3>
-              <button type="button" className="text-sm text-[#64748b]" onClick={() => setPanel("none")}>
-                Close
+              <button type="button" aria-label="Close" onClick={() => setPanel("none")} className="touch-target flex items-center justify-center rounded-full border border-[#d4deea] bg-white p-2 text-[#1e3a8a] shadow-sm transition hover:bg-[#eff6ff] active:scale-95">
+                <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">×</span>
               </button>
             </div>
-            <div className="mt-4 space-y-3 text-sm">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+            <div className="mt-0 space-y-3 text-sm">
               {panel === "income" ? (
                 <>
                   <Field label="Category">
@@ -1211,6 +1212,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                   </Button>
                 </>
               ) : null}
+            </div>
             </div>
           </div>
         </>

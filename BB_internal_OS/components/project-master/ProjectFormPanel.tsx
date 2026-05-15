@@ -61,16 +61,15 @@ export function ProjectFormPanel({
 
   return (
     <>
-      <button type="button" aria-label="Close" className="fixed inset-0 z-40 bg-slate-900/25" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-[520px] overflow-y-auto bg-[#f8fbff] p-3 sm:p-4">
-        <aside className="max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[24px] border border-[#d4deea] bg-white p-5 shadow-[0_16px_30px_rgba(30,64,175,0.12)]">
-          <div className="mb-4 flex items-center justify-between">
+      <button type="button" aria-label="Close" className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px]" onClick={onClose} />
+      <aside className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white shadow-[0_16px_30px_rgba(30,64,175,0.12)] lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[540px] lg:max-w-[100vw] lg:rounded-l-[24px] lg:border-l lg:border-[#d4deea]">
+          <div className="flex shrink-0 items-center justify-between border-b border-[#e8edf5] px-4 py-4 sm:px-5">
             <h3 className="text-lg font-semibold text-[#0f172a]">{title}</h3>
-            <button type="button" className="text-sm text-[#64748b]" onClick={onClose}>
-              Close
+            <button type="button" aria-label="Close" onClick={onClose} className="touch-target flex items-center justify-center rounded-full border border-[#d4deea] bg-white p-2 text-[#1e3a8a] shadow-sm transition hover:bg-[#eff6ff] active:scale-95">
+              <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">×</span>
             </button>
           </div>
-
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
           <div className="space-y-4 text-sm">
             <section className="space-y-2">
               <p className="text-xs font-semibold uppercase text-[#94a3b8]">Basic details</p>
@@ -300,8 +299,8 @@ export function ProjectFormPanel({
               {submitting ? "Saving…" : "Save project"}
             </Button>
           ) : null}
+          </div>
         </aside>
-      </div>
     </>
   );
 }

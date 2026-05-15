@@ -48,7 +48,7 @@ export default async function EmployeeProfilePage() {
   }
 
   return (
-    <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
+    <section className="dashboard-section space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e8edf5] pb-5">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748b]">Employee record</p>
@@ -64,9 +64,9 @@ export default async function EmployeeProfilePage() {
         </Link>
       </div>
 
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <div className="flex gap-4 rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-5 lg:max-w-md lg:flex-1">
-          <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-white text-xl font-semibold text-[#2563eb] ring-1 ring-[#dbe6f3]">
+      <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start">
+        <div className="flex min-w-0 gap-3 rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-4 sm:gap-4 sm:p-5 lg:max-w-md lg:flex-1">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-base font-semibold text-[#2563eb] ring-1 ring-[#dbe6f3] sm:h-16 sm:w-16 sm:text-xl">
             {(profile?.full_name ?? "E")
               .split(" ")
               .map((s) => s[0])
@@ -74,14 +74,14 @@ export default async function EmployeeProfilePage() {
               .slice(0, 2)
               .toUpperCase()}
           </span>
-          <div>
-            <h2 className="text-xl font-semibold text-[#0f172a]">{profile?.full_name ?? "Employee"}</h2>
-            <p className="mt-2 flex items-center gap-2 text-sm text-[#64748b]">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-semibold text-[#0f172a] sm:text-xl">{profile?.full_name ?? "Employee"}</h2>
+            <p className="mt-1 flex min-w-0 items-center gap-2 text-sm text-[#64748b]">
               <Mail className="h-4 w-4 shrink-0" />
-              {user?.email ?? profile?.email ?? "—"}
+              <span className="min-w-0 break-all sm:break-normal">{user?.email ?? profile?.email ?? "—"}</span>
             </p>
-            <p className="mt-3 text-xs text-[#94a3b8]">
-              User ID <span className="font-mono text-[#475569]">{uid ?? "—"}</span>
+            <p className="mt-2 text-xs text-[#94a3b8]">
+              User ID <span className="break-all font-mono text-xs text-[#475569]">{uid ?? "—"}</span>
             </p>
           </div>
         </div>

@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Menu } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetClose, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Sidebar, type SidebarItem } from "@/components/layouts/Sidebar";
 import { Topbar } from "@/components/layouts/Topbar";
 
@@ -46,7 +46,7 @@ export function DashboardLayout({
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <div className="min-h-[100dvh] min-w-0 bg-[#eaf1f8] text-[#1e293b]">
+      <div className="min-h-[100dvh] min-w-0 overflow-x-hidden bg-[#eaf1f8] text-[#1e293b]">
         <div
           className={[
             "hidden lg:fixed lg:inset-y-0 lg:z-30 lg:block lg:p-4 lg:pr-0 lg:transition-all lg:duration-200 lg:ease-out",
@@ -74,22 +74,37 @@ export function DashboardLayout({
             mobileMenuTrigger={mobileMenuTrigger}
           />
 
-          <main className="mx-auto min-h-0 w-full max-w-[1920px] px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 lg:px-6 lg:pb-8">
+          <main className="mx-auto min-h-0 w-full max-w-[1920px] min-w-0 px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 lg:px-6 lg:pb-8">
             {children}
           </main>
         </div>
 
         <SheetContent
           side="left"
-          showCloseButton
-          className="w-[min(100vw-1rem,288px)] max-w-[100vw] border-none bg-[#eaf1f8] p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pl-[max(0.75rem,env(safe-area-inset-left))]"
+          showCloseButton={false}
+          className="h-[100dvh] max-h-[100dvh] w-[min(100vw,300px)] max-w-[100vw] border-none bg-transparent p-0 shadow-none"
         >
-          <Sidebar
-            roleLabel={roleLabel}
-            items={sidebarItems}
-            collapsed={false}
-            onNavigate={() => setOpen(false)}
-          />
+          <div className="relative flex h-full min-h-0 flex-col p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] pl-[max(0.5rem,env(safe-area-inset-left))]">
+            <SheetClose
+              render={
+                <button
+                  type="button"
+                  aria-label="Close menu"
+                  className="sidebar-sheet-close group"
+                />
+              }
+            >
+              <X className="h-5 w-5 transition-transform duration-200 group-hover:rotate-90" />
+            </SheetClose>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <Sidebar
+                roleLabel={roleLabel}
+                items={sidebarItems}
+                collapsed={false}
+                onNavigate={() => setOpen(false)}
+              />
+            </div>
+          </div>
         </SheetContent>
       </div>
     </Sheet>

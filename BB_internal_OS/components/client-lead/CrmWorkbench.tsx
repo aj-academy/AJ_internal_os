@@ -1243,8 +1243,8 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
 
       {panelOpen && (
         <>
-          <button type="button" aria-label="Close" className="fixed inset-0 z-40 bg-slate-900/25" onClick={() => setPanelOpen(false)} />
-          <div className="fixed inset-y-0 right-0 z-50 w-full max-w-[520px] p-3">
+          <button type="button" aria-label="Close" className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px]" onClick={() => setPanelOpen(false)} />
+          <div className="fixed inset-0 z-50 lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[540px] lg:max-w-[100vw]">
             <CrmLeadFormPanel
               title={editId ? (isAdmin ? "Edit lead" : "Update lead") : "Add lead"}
               open={panelOpen}
@@ -1362,15 +1362,15 @@ function FiltersBar(props: {
   } = props;
 
   const selectClass =
-    "h-9 w-full rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb]";
+    "h-11 w-full rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] sm:h-9";
 
   return (
     <article className="rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-4">
-      <div className="grid gap-3 xl:grid-cols-12">
-        <div className="xl:col-span-3">
-          <Input placeholder="Search name/email/phone/company" value={searchText} onChange={(e) => setSearchText(e.target.value)} className="h-9 border-[#d4deea]" />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4">
+          <Input placeholder="Search name/email/phone/company" value={searchText} onChange={(e) => setSearchText(e.target.value)} className="h-11 border-[#d4deea] sm:h-9" />
         </div>
-        <select className={selectClass + " xl:col-span-1"} value={fltStatus} onChange={(e) => setFltStatus(e.target.value)}>
+        <select className={selectClass} value={fltStatus} onChange={(e) => setFltStatus(e.target.value)}>
           <option value="">Status</option>
           {CRM_LEAD_STATUSES.map((sOpt) => (
             <option key={sOpt} value={sOpt}>
@@ -1378,7 +1378,7 @@ function FiltersBar(props: {
             </option>
           ))}
         </select>
-        <select className={selectClass + " xl:col-span-1"} value={fltSource} onChange={(e) => setFltSource(e.target.value)}>
+        <select className={selectClass} value={fltSource} onChange={(e) => setFltSource(e.target.value)}>
           <option value="">Source</option>
           {CRM_SOURCES.map((sOpt) => (
             <option key={sOpt} value={sOpt}>
@@ -1386,7 +1386,7 @@ function FiltersBar(props: {
             </option>
           ))}
         </select>
-        <select className={selectClass + " xl:col-span-1"} value={fltPriority} onChange={(e) => setFltPriority(e.target.value)}>
+        <select className={selectClass} value={fltPriority} onChange={(e) => setFltPriority(e.target.value)}>
           <option value="">Priority</option>
           {CRM_PRIORITIES.map((pOpt) => (
             <option key={pOpt} value={pOpt}>
@@ -1394,7 +1394,7 @@ function FiltersBar(props: {
             </option>
           ))}
         </select>
-        <select className={selectClass + " xl:col-span-2"} value={fltService} onChange={(e) => setFltService(e.target.value)}>
+        <select className={selectClass} value={fltService} onChange={(e) => setFltService(e.target.value)}>
           <option value="">Service interest</option>
           {CRM_SERVICES.map((svc) => (
             <option key={svc} value={svc}>
@@ -1403,7 +1403,7 @@ function FiltersBar(props: {
           ))}
         </select>
         <select
-          className={selectClass + " xl:col-span-2"}
+          className={selectClass}
           value={fltAssigned}
           onChange={(e) => setFltAssigned(e.target.value)}
           disabled={!isAdmin}
@@ -1415,15 +1415,15 @@ function FiltersBar(props: {
             </option>
           ))}
         </select>
-        <div className="flex gap-2 xl:col-span-2">
-          <Input type="date" value={fltFollowFrom} onChange={(e) => setFltFollowFrom(e.target.value)} className="h-9 border-[#d4deea]" />
-          <Input type="date" value={fltFollowTo} onChange={(e) => setFltFollowTo(e.target.value)} className="h-9 border-[#d4deea]" />
+        <div className="flex gap-2">
+          <Input type="date" value={fltFollowFrom} onChange={(e) => setFltFollowFrom(e.target.value)} className="h-11 border-[#d4deea] sm:h-9" />
+          <Input type="date" value={fltFollowTo} onChange={(e) => setFltFollowTo(e.target.value)} className="h-11 border-[#d4deea] sm:h-9" />
         </div>
-        <div className="flex gap-2 xl:col-span-12">
-          <Button type="button" variant="outline" className="rounded-xl" onClick={onApply}>
+        <div className="flex gap-2 sm:col-span-2 lg:col-span-1">
+          <Button type="button" className="h-11 flex-1 rounded-xl bg-[#2563eb] text-white hover:bg-[#1d4ed8] sm:h-9" onClick={onApply}>
             Apply filters
           </Button>
-          <Button type="button" variant="outline" className="rounded-xl" onClick={onReset}>
+          <Button type="button" variant="outline" className="h-11 flex-1 rounded-xl border-[#c9d8eb] sm:h-9" onClick={onReset}>
             Reset
           </Button>
         </div>

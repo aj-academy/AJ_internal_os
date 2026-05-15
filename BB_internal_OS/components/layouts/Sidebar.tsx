@@ -127,7 +127,7 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
         ) : null}
       </div>
 
-      <nav className="flex-1 space-y-1.5 p-3">
+      <nav className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain p-3 pb-4">
         {uniqueItems.map((item) => {
           const isActive = pathNorm === routePathOnly(item.href);
           const hasChildren = Boolean(item.children?.length);
