@@ -96,3 +96,17 @@ with check (
       and p.role in ('admin', 'super_admin')
   )
 );
+
+drop policy if exists "permission_admin_delete_all" on public.permission_requests;
+create policy "permission_admin_delete_all"
+on public.permission_requests
+for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role in ('admin', 'super_admin')
+  )
+);

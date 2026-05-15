@@ -60,6 +60,13 @@ for select
 to authenticated
 using (public.is_admin());
 
+drop policy if exists attendance_admin_delete_all on public.attendance_records;
+create policy attendance_admin_delete_all
+on public.attendance_records
+for delete
+to authenticated
+using (public.is_admin());
+
 drop policy if exists work_summary_employee_own on public.work_summaries;
 create policy work_summary_employee_own
 on public.work_summaries

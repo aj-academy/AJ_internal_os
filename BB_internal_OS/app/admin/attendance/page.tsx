@@ -4,7 +4,12 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
-import { AdminAttendanceAutoRefresh } from "@/components/attendance/AdminAttendanceAutoRefresh";
+import { AdminAttendanceLiveSync } from "@/components/attendance/AdminAttendanceLiveSync";
+import { AdminAttendanceLogsTable } from "@/components/attendance/AdminAttendanceLogsTable";
+import {
+  AdminPermissionRequestsTable,
+  type AdminPermissionTableRow,
+} from "@/components/attendance/AdminPermissionRequestsTable";
 
 /**
  * Prefer service role on this admin-only route so attendance + work_summaries
@@ -286,39 +291,6 @@ function AttendanceSubCategoryNav({ activeTab }: { activeTab: string }) {
   );
 }
 
-async function handlePermissionAction(formData: FormData) {
-  "use server";
-  const { profile } = await getUserProfile();
-  if (!profile || (profile.role !== "admin" && profile.role !== "super_admin")) return;
-
-  const id = String(formData.get("id") ?? "");
-  const action = String(formData.get("action") ?? "");
-  const rejectionReason = String(formData.get("rejection_reason") ?? "").trim();
-  if (!id || !action) return;
-
-  const supabase = await createAttendanceSupabaseClient();
-  const payload: {
-    status: string;
-    approved_by: string;
-    approved_at: string;
-    rejection_reason?: string;
-  } = {
-    status: action,
-    approved_by: profile.id,
-    approved_at: new Date().toISOString(),
-  };
-
-  if (action === "rejected") {
-    payload.rejection_reason = rejectionReason || "Rejected by admin";
-  } else {
-    payload.rejection_reason = "";
-  }
-
-  await supabase.from("permission_requests").update(payload).eq("id", id);
-  revalidatePath("/admin/attendance");
-  revalidatePath("/employee/permission");
-}
-
 async function handleSummaryReview(formData: FormData) {
   "use server";
   const { profile } = await getUserProfile();
@@ -434,7 +406,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <p className="inline-flex rounded-full bg-[#e8f1ff] px-3 py-1 text-xs font-semibold text-[#1d4ed8]">
             Overview: Live today snapshot
           </p>
-          <AdminAttendanceAutoRefresh />
+          <AdminAttendanceLiveSync />
           <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -543,7 +515,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         <header className="space-y-2">
           <h2 className="text-3xl font-semibold text-slate-900">Check In / Check Out Logs</h2>
           <p className="text-sm text-slate-600">Real employee attendance logs from check-in and check-out submissions.</p>
-          <AdminAttendanceAutoRefresh />
+          <AdminAttendanceLiveSync />
           <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -582,63 +554,31 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           </form>
         </section>
 
-        <section className="rounded-2xl border border-[#d4deea] bg-white p-4">
-          <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
-            <table className="w-full min-w-[1500px] text-left text-sm">
-              <thead className="bg-[#f1f6fc] text-[#64748b]">
-                <tr>
-                  {[
-                    "Employee Code",
-                    "Employee Name",
-                    "Email",
-                    "Department",
-                    "Date",
-                    "Check In Time",
-                    "Check Out Time",
-                    "Total Hours",
-                    "Status",
-                    "Location Type",
-                    "Check In Location",
-                    "Check Out Location",
-                  ].map((h) => (
-                    <th key={h} className="px-4 py-3">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#e8edf5] text-slate-700">
-                {records.map((row) => {
-                  const profile = profileMap.get(row.employee_id);
-                  const computedMinutes = getWorkingMinutes(row);
-                  const displayName =
-                    profile?.full_name ??
-                    employeeNameFallbackMap.get(row.employee_id) ??
-                    getEmployeeName(profile, row.employee_id);
-                  const displayEmail =
-                    profile?.email ?? employeeEmailFallbackMap.get(row.employee_id) ?? "-";
-                  return (
-                    <tr key={row.id}>
-                      <td className="px-4 py-3">{employeeCodeMap.get(row.employee_id) ?? "-"}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900">{displayName}</td>
-                      <td className="px-4 py-3">{displayEmail}</td>
-                      <td className="px-4 py-3">{profile?.department ?? "-"}</td>
-                      <td className="px-4 py-3">{formatDate(row.attendance_date)}</td>
-                      <td className="px-4 py-3">{formatDateTimeAsTime(row.check_in_time)}</td>
-                      <td className="px-4 py-3">{formatDateTimeAsTime(row.check_out_time)}</td>
-                      <td className="px-4 py-3">{formatHoursFromMinutes(computedMinutes)}</td>
-                      <td className="px-4 py-3"><Badge value={row.status ?? "pending"} /></td>
-                      <td className="px-4 py-3">{row.location_type ?? "-"}</td>
-                      <td className="max-w-[260px] px-4 py-3">{row.check_in_address ?? "-"}</td>
-                      <td className="max-w-[260px] px-4 py-3">{row.check_out_address ?? "-"}</td>
-                    </tr>
-                  );
-                })}
-                {!records.length ? (
-                  <tr><td colSpan={12} className="px-4 py-8 text-center text-slate-500">No check-in/check-out records found.</td></tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <AdminAttendanceLogsTable
+          rows={records.map((row) => {
+            const profile = profileMap.get(row.employee_id);
+            const computedMinutes = getWorkingMinutes(row);
+            const displayName =
+              profile?.full_name ??
+              employeeNameFallbackMap.get(row.employee_id) ??
+              getEmployeeName(profile, row.employee_id);
+            return {
+              id: row.id,
+              employeeCode: employeeCodeMap.get(row.employee_id) ?? "-",
+              employeeName: displayName,
+              email: profile?.email ?? employeeEmailFallbackMap.get(row.employee_id) ?? "-",
+              department: profile?.department ?? "-",
+              date: formatDate(row.attendance_date),
+              checkIn: formatDateTimeAsTime(row.check_in_time),
+              checkOut: formatDateTimeAsTime(row.check_out_time),
+              totalHours: formatHoursFromMinutes(computedMinutes),
+              status: row.status ?? "pending",
+              locationType: row.location_type ?? "-",
+              checkInAddress: row.check_in_address ?? "-",
+              checkOutAddress: row.check_out_address ?? "-",
+            };
+          })}
+        />
       </section>
     );
   }
@@ -680,7 +620,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         <header className="space-y-2">
           <h2 className="text-3xl font-semibold text-slate-900">Permission Requests</h2>
           <p className="text-sm text-slate-600">Review and take action on employee permission submissions.</p>
-          <AdminAttendanceAutoRefresh />
+          <AdminAttendanceLiveSync />
           <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -712,65 +652,27 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           </form>
         </section>
 
-        <section className="rounded-2xl border border-[#d4deea] bg-white p-4">
-          <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
-            <table className="w-full min-w-[1700px] text-left text-sm">
-              <thead className="bg-[#f1f6fc] text-[#64748b]">
-                <tr>
-                  {["Employee Code", "Employee Name", "Department", "Permission Date", "From Time", "To Time", "Total Hours", "Permission Type", "Reason", "Description", "Status", "Requested On", "Action"].map((h) => (
-                    <th key={h} className="px-4 py-3">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#e8edf5] text-slate-700">
-                {rows.map((row) => {
-                  const profile = profileMap.get(row.employee_id);
-                  const totalHours = calcPermissionHours(row.from_time, row.to_time).toFixed(1);
-                  const isPending = (row.status ?? "pending") === "pending";
-                  return (
-                    <tr key={row.id}>
-                      <td className="px-4 py-3">{employeeCodeMap.get(row.employee_id) ?? "-"}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900">{getEmployeeName(profile, row.employee_id)}</td>
-                      <td className="px-4 py-3">{profile?.department ?? "-"}</td>
-                      <td className="px-4 py-3">{formatDate(row.permission_date)}</td>
-                      <td className="px-4 py-3">{formatTime(row.from_time)}</td>
-                      <td className="px-4 py-3">{formatTime(row.to_time)}</td>
-                      <td className="px-4 py-3">{totalHours}</td>
-                      <td className="px-4 py-3">{row.permission_type ?? "-"}</td>
-                      <td className="px-4 py-3">{row.reason ?? "-"}</td>
-                      <td className="px-4 py-3 max-w-[240px]">{row.description ?? "-"}</td>
-                      <td className="px-4 py-3"><Badge value={row.status ?? "pending"} /></td>
-                      <td className="px-4 py-3">{formatDateTime(row.created_at)}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex min-w-[260px] flex-col gap-2">
-                          <details className="rounded-lg border border-[#dbe6f3] bg-white px-2 py-1">
-                            <summary className="cursor-pointer text-xs text-slate-700">View Details</summary>
-                            <p className="mt-1 text-xs text-slate-600">{row.description ?? "-"}</p>
-                          </details>
-                          {isPending ? (
-                            <form action={handlePermissionAction} className="space-y-1">
-                              <input type="hidden" name="id" value={row.id} />
-                              <input name="rejection_reason" placeholder="Rejection reason (optional)" className="h-8 w-full rounded-md border border-[#cfdceb] px-2 text-xs" />
-                              <div className="flex gap-2">
-                                <button name="action" value="approved" data-requires-online className="cursor-pointer rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white">Approve</button>
-                                <button name="action" value="rejected" data-requires-online className="cursor-pointer rounded-md bg-rose-600 px-2 py-1 text-xs font-semibold text-white">Reject</button>
-                              </div>
-                            </form>
-                          ) : (
-                            <p className="text-xs text-slate-500">Action completed</p>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {!rows.length ? (
-                  <tr><td colSpan={13} className="px-4 py-8 text-center text-slate-500">No permission requests found.</td></tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <AdminPermissionRequestsTable
+          rows={rows.map((row): AdminPermissionTableRow => {
+            const profile = profileMap.get(row.employee_id);
+            return {
+              id: row.id,
+              employeeCode: employeeCodeMap.get(row.employee_id) ?? "-",
+              employeeName: getEmployeeName(profile, row.employee_id),
+              department: profile?.department ?? "-",
+              permissionDate: formatDate(row.permission_date),
+              fromTime: formatTime(row.from_time),
+              toTime: formatTime(row.to_time),
+              totalHours: calcPermissionHours(row.from_time, row.to_time).toFixed(1),
+              permissionType: row.permission_type ?? "-",
+              reason: row.reason ?? "-",
+              description: row.description ?? "-",
+              status: row.status ?? "pending",
+              requestedOn: formatDateTime(row.created_at),
+              isPending: (row.status ?? "pending") === "pending",
+            };
+          })}
+        />
       </section>
     );
   }
@@ -845,7 +747,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         <header className="space-y-2">
           <h2 className="text-3xl font-semibold text-slate-900">Work Summary</h2>
           <p className="text-sm text-slate-600">Review checkout work summaries submitted by employees.</p>
-          <AdminAttendanceAutoRefresh />
+          <AdminAttendanceLiveSync />
           <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -1043,7 +945,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         <p className="inline-flex rounded-full bg-[#ecfeff] px-3 py-1 text-xs font-semibold text-[#0f766e]">
           Monthly Report: Aggregated month analytics
         </p>
-        <AdminAttendanceAutoRefresh />
+        <AdminAttendanceLiveSync />
         <AttendanceSubCategoryNav activeTab={selectedTab} />
       </header>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">

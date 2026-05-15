@@ -212,50 +212,20 @@ stable
 security definer
 set search_path = public
 as $$
-declare
-  v_has_ptm boolean;
 begin
-  select to_regclass('public.project_team_members') is not null into v_has_ptm;
-
   return query
-  select x.id, x.full_name, x.email, x.department
-  from (
-    select p.id, p.full_name, p.email, p.department
-    from public.profiles p
-    where p.id = auth.uid()
-
-    union
-
-    select p.id, p.full_name, p.email, p.department
-    from public.profiles p
-    where
-      exists (
-        select 1
-        from public.profiles me
-        where me.id = auth.uid()
-          and lower(coalesce(me.role, '')) = 'employee'
-      )
-      and coalesce(lower(p.status), 'active') = 'active'
-      and lower(coalesce(p.role, '')) in ('employee', 'manager')
-      and p.id <> auth.uid()
-      and (
-        (
-          nullif(trim(p.department), '') is not null
-          and nullif(trim((select pr.department from public.profiles pr where pr.id = auth.uid())), '') is not null
-          and lower(trim(p.department)) = lower(trim((select pr.department from public.profiles pr where pr.id = auth.uid())))
-        )
-        or (
-          v_has_ptm
-          and exists (
-            select 1
-            from public.project_team_members a
-            join public.project_team_members b on b.project_id = a.project_id and b.profile_id = p.id
-            where a.profile_id = auth.uid()
-          )
-        )
-      )
-  ) x
-  order by x.full_name nulls last, x.email nulls last;
+  select p.id, p.full_name, p.email, p.department
+  from public.profiles p
+  where
+    exists (
+      select 1
+      from public.profiles me
+      where me.id = auth.uid()
+        and lower(coalesce(me.role, '')) = 'employee'
+    )
+    and coalesce(lower(p.status), 'active') = 'active'
+    and lower(coalesce(p.role, '')) in ('employee', 'manager', 'admin', 'super_admin')
+  order by p.full_name nulls last, p.email nulls last;
 end;
 $$;
 

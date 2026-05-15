@@ -839,7 +839,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
                 assigneeLockedToSelf={false}
                 assigneeHelperText={
                   isEmployee
-                    ? "Teammates in your department or on the same project roster as you appear here. If the list is empty, ask HR to set your department or add you to a project team."
+                    ? "All active employees, managers, and admins are listed. Choose who should own this task."
                     : "List refreshes when you open this panel. Active employees, managers, and admins who can receive tasks are shown."
                 }
                 submitting={submitting}
