@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Grotesk } from "next/font/google";
 import { PwaProvider } from "@/components/pwa/PwaProvider";
+import { resolvePwaSiteOrigin } from "@/lib/pwa/site-url";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -11,8 +12,7 @@ const spaceGrotesk = Space_Grotesk({
   weight: ["300", "400", "500", "600", "700"],
 });
 
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+const siteUrl = resolvePwaSiteOrigin() ?? "http://localhost:3000";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

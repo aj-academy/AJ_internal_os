@@ -13,6 +13,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   OFFLINE_ACTION_MESSAGE,
+  PWA_BUILD_STORAGE_KEY,
+  PWA_BUILD_VERSION,
   PWA_ONLINE_EVENT,
   SW_URL,
 } from "@/lib/pwa/constants";
@@ -100,8 +102,20 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
 
-    const register = async () => {
+    const setup = async () => {
       try {
+        if (window.localStorage.getItem(PWA_BUILD_STORAGE_KEY) !== PWA_BUILD_VERSION) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map((registration) => registration.unregister()));
+          if ("caches" in window) {
+            const keys = await caches.keys();
+            await Promise.all(
+              keys.filter((key) => key.startsWith("bb-os-")).map((key) => caches.delete(key)),
+            );
+          }
+          window.localStorage.setItem(PWA_BUILD_STORAGE_KEY, PWA_BUILD_VERSION);
+        }
+
         const registration = await navigator.serviceWorker.register(SW_URL, { scope: "/" });
         registration.addEventListener("updatefound", () => {
           const worker = registration.installing;
@@ -118,9 +132,9 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     };
 
     if (document.readyState === "complete") {
-      void register();
+      void setup();
     } else {
-      window.addEventListener("load", () => void register(), { once: true });
+      window.addEventListener("load", () => void setup(), { once: true });
     }
   }, []);
 

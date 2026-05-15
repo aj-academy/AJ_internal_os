@@ -1,5 +1,5 @@
 /* BB Internal OS — safe PWA service worker (static assets only) */
-const CACHE_VERSION = "bb-os-v2";
+const CACHE_VERSION = "bb-os-v4";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 

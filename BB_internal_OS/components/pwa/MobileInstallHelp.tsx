@@ -22,10 +22,12 @@ function isIos() {
 
 export function MobileInstallHelp() {
   const [visible, setVisible] = useState(false);
+  const [installUrl, setInstallUrl] = useState("");
 
   useEffect(() => {
     if (!isMobile() || isStandalone()) return;
     if (window.localStorage.getItem(DISMISS_KEY) === "1") return;
+    setInstallUrl(`${window.location.origin}/login`);
     setVisible(true);
   }, []);
 
@@ -58,10 +60,15 @@ export function MobileInstallHelp() {
             <li>Menu ⋮ → Install app / Add to Home screen.</li>
             <li>Open only from the home screen BB icon.</li>
           </ol>
+          {installUrl ? (
+            <p className="mt-3 break-all rounded-lg bg-[#f1f5f9] px-3 py-2 font-mono text-[11px] text-[#334155]">
+              Install only from: <strong>{installUrl}</strong>
+            </p>
+          ) : null}
           <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-            <strong>Stuck on “previous site” or not adding?</strong> Remove any old BB shortcut, then Chrome →
-            Site settings → this site → <strong>Clear &amp; reset</strong>. Sign in to Google Play on the phone,
-            free some storage, and install again from the same URL you always use (do not mix www and non-www).
+            <strong>“Still adding previous site”?</strong> That is Chrome updating an old install — not a new bug.
+            1) Delete every old BB icon. 2) Settings → Apps → uninstall old site. 3) Chrome → Site settings →
+            Clear &amp; reset. 4) Close Chrome fully. 5) Open the URL above → Install app again.
           </p>
         </>
       )}
