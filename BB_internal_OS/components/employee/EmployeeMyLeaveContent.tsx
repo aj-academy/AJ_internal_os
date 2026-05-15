@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, CalendarDays } from "lucide-react";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { createClient } from "@/lib/supabase/server";
+import { formatDateIST, formatDateTimeIST } from "@/lib/datetime";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -9,11 +10,7 @@ function todayISO() {
 
 function formatDateOnly(iso: string | null | undefined) {
   if (!iso) return "—";
-  try {
-    return new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-  } catch {
-    return "—";
-  }
+  return formatDateIST(iso);
 }
 
 function normalizeLeaveStatus(raw: string | null | undefined) {
@@ -182,7 +179,7 @@ export async function EmployeeMyLeaveContent({ showBackLink = false }: { showBac
                           {row.status || "Pending"}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-[#64748b]">{formatDateOnly(row.created_at)}</td>
+                      <td className="px-3 py-2 text-[#64748b]">{formatDateTimeIST(row.created_at)}</td>
                       <td className="max-w-[200px] truncate px-3 py-2 text-[#64748b]" title={reason !== "—" ? row.reason ?? undefined : undefined}>
                         {reasonShort}
                       </td>

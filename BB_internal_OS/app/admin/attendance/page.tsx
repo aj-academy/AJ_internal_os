@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -314,6 +315,8 @@ async function handlePermissionAction(formData: FormData) {
   }
 
   await supabase.from("permission_requests").update(payload).eq("id", id);
+  revalidatePath("/admin/attendance");
+  revalidatePath("/employee/permission");
 }
 
 async function handleSummaryReview(formData: FormData) {
