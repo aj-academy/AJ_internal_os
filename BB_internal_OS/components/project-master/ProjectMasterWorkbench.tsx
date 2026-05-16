@@ -459,7 +459,7 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
 
       {activeTab === "overview" && showFullTabs ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="stat-cards-grid">
             <LeadSummaryCard title="Total Projects" value={overview.total} loading={loading} />
             <LeadSummaryCard title="Active Projects" value={overview.active} loading={loading} />
             <LeadSummaryCard title="Completed" value={overview.completed} loading={loading} />
@@ -626,7 +626,7 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
 
       {activeTab === "budget" ? (
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="stat-cards-grid">
             <LeadSummaryCard title="Total budget" value={`₹${Math.round(overview.revenue).toLocaleString()}`} loading={loading} />
             <LeadSummaryCard title="Advance received" value={`₹${Math.round(projects.reduce((a, p) => a + Number(p.advance_paid ?? 0), 0)).toLocaleString()}`} loading={loading} />
             <LeadSummaryCard title="Pending" value={`₹${Math.round(overview.pendingPay).toLocaleString()}`} loading={loading} />

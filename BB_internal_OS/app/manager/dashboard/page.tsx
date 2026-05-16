@@ -16,7 +16,7 @@ export default function ManagerDashboardPage() {
         <h2 className="text-2xl font-bold text-slate-900">Manager Dashboard</h2>
         <p className="text-sm text-slate-600">Track team execution and delivery status.</p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="stat-cards-grid">
         {stats.map((title, index) => (
           <StatCard key={title} title={title} value={`${(index + 1) * 4}`} hint="Demo Data" />
         ))}

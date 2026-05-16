@@ -409,7 +409,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <AdminAttendanceLiveSync tab={selectedTab} />
           <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="stat-cards-grid">
           <StatCard label="Total Check-ins Today" value={presentToday} />
           <StatCard label="Completed Check-outs Today" value={completedCheckout} />
           <StatCard label="Pending Check-outs" value={pendingCheckout} />
@@ -518,7 +518,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <AdminAttendanceLiveSync tab={selectedTab} />
           <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="stat-cards-grid">
           <StatCard label="Total Check-ins Today" value={totalCheckInToday} />
           <StatCard label="Completed Check-outs Today" value={completedCheckoutToday} />
           <StatCard label="Pending Check-outs" value={pendingCheckout} />
@@ -623,7 +623,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <AdminAttendanceLiveSync tab={selectedTab} />
           <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="stat-cards-grid">
           <StatCard label="Pending Permissions" value={pendingPermissions} />
           <StatCard label="Approved Today" value={approvedToday} />
           <StatCard label="Rejected This Month" value={rejectedThisMonth} />
@@ -631,7 +631,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         </div>
 
         <section className="rounded-2xl border border-[#d4deea] bg-[#f8fbff] p-4">
-          <form method="get" className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <form method="get" className="responsive-filter-grid">
             <input type="hidden" name="tab" value="permission" />
             <input name="date" type="date" defaultValue={dateFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
             <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
@@ -750,7 +750,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <AdminAttendanceLiveSync tab={selectedTab} />
           <AttendanceSubCategoryNav activeTab={selectedTab} />
         </header>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="stat-cards-grid">
           <StatCard label="Submitted Today" value={submittedToday} />
           <StatCard label="Pending Today" value={pendingToday} />
           <StatCard label="Reviewed This Month" value={reviewedThisMonth} />
@@ -772,7 +772,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         ) : null}
 
         <section className="rounded-2xl border border-[#d4deea] bg-[#f8fbff] p-4">
-          <form method="get" className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <form method="get" className="responsive-filter-grid">
             <input type="hidden" name="tab" value="summary" />
             <input name="date" type="date" defaultValue={dateFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
             <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
@@ -948,7 +948,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         <AdminAttendanceLiveSync tab={selectedTab} />
         <AttendanceSubCategoryNav activeTab={selectedTab} />
       </header>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="stat-cards-grid-5">
         <StatCard label="Total Working Days" value={workingDays} />
         <StatCard label="Average Attendance %" value={`${averageAttendance}%`} />
         <StatCard label="Total Late Days" value={totalLateDays} />
@@ -957,7 +957,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
       </div>
 
       <section className="rounded-2xl border border-[#d4deea] bg-[#f8fbff] p-4">
-        <form method="get" className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <form method="get" className="responsive-filter-grid">
           <input type="hidden" name="tab" value="monthly" />
           <input name="month" type="month" defaultValue={monthFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
           <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">

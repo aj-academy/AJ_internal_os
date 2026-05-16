@@ -573,7 +573,7 @@ export function ReportsWorkbench() {
 
       {activeTab === "overview" ? (
         <div className="space-y-6">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="stat-cards-grid-5">
             <StatCard title="Total employees" value={profiles.length} loading={loading} />
             <StatCard title="Active employees" value={activeEmployees.length} loading={loading} />
             <StatCard title="Total clients" value={clients.length} loading={loading} />
@@ -638,7 +638,7 @@ export function ReportsWorkbench() {
 
       {activeTab === "employees" ? (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="stat-cards-grid">
             <StatCard title="Total employees" value={profiles.length} loading={loading} />
             <StatCard title="Active" value={activeEmployees.length} loading={loading} />
             <StatCard title="Inactive" value={inactiveEmployees.length} loading={loading} />
@@ -709,7 +709,7 @@ export function ReportsWorkbench() {
 
       {activeTab === "attendance" ? (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="stat-cards-grid">
             <StatCard title="Present today" value={attendanceToday.present} loading={loading} />
             <StatCard title="Absent today" value={attendanceToday.absent} loading={loading} />
             <StatCard title="Late / flagged" value={attendanceToday.late} loading={loading} />
@@ -756,7 +756,7 @@ export function ReportsWorkbench() {
 
       {activeTab === "clients" ? (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="stat-cards-grid">
             <StatCard title="Total records" value={clients.length} loading={loading} />
             <StatCard title="Converted" value={clientStats.converted} loading={loading} />
             <StatCard title="Lost" value={clientStats.lost} loading={loading} />
@@ -838,7 +838,7 @@ export function ReportsWorkbench() {
 
       {activeTab === "projects" ? (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="stat-cards-grid">
             <StatCard title="Active" value={projectStats.active} loading={loading} />
             <StatCard title="Completed" value={projectStats.completed} loading={loading} />
             <StatCard title="Delayed" value={projectStats.delayed} loading={loading} />
@@ -884,7 +884,7 @@ export function ReportsWorkbench() {
 
       {activeTab === "tasks" ? (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="stat-cards-grid">
             <StatCard title="Total tasks" value={taskStats.total} loading={loading} />
             <StatCard title="Completed" value={taskStats.completed} loading={loading} />
             <StatCard title="Pending" value={taskStats.pending} loading={loading} />
@@ -936,7 +936,7 @@ export function ReportsWorkbench() {
 
       {activeTab === "finance" ? (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="stat-cards-grid-6">
             <StatCard title="Total revenue" value={formatInr(financeStats.rev)} loading={loading} />
             <StatCard title="Total expenses" value={formatInr(financeStats.exp)} loading={loading} />
             <StatCard title="Net profit" value={formatInr(financeStats.net)} loading={loading} />
@@ -996,7 +996,7 @@ export function ReportsWorkbench() {
 
       {activeTab === "performance" ? (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="stat-cards-grid">
             <StatCard title="Productivity score" value={productivityScore} loading={loading} subtitle="Tasks + attendance blend" />
             <StatCard title="Task completion %" value={taskStats.total ? Math.round((taskStats.completed / taskStats.total) * 1000) / 10 : 0} loading={loading} />
             <StatCard title="Revenue growth (MoM)" value={`${financeStats.growth}%`} loading={loading} />

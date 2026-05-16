@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { CollapsibleFilterPanel, FilterField } from "@/components/ui/CollapsibleFilterPanel";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/client-lead/LeadSummaryCard";
 import { TaskForm, type TaskFormValue } from "@/components/task/TaskForm";
@@ -694,74 +695,85 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       {error ? <Alert tone="error" text={error} /> : null}
       {success ? <Alert tone="success" text={success} /> : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="stat-cards-grid">
         <LeadSummaryCard title="Total Tasks" value={summary.total} loading={loading} />
         <LeadSummaryCard title="Pending Tasks" value={summary.pending} loading={loading} />
         <LeadSummaryCard title="In Progress Tasks" value={summary.inProgress} loading={loading} />
         <LeadSummaryCard title="Completed Tasks" value={summary.completed} loading={loading} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
-          Overdue Tasks Count: {tasksTableMissing ? 0 : overdueCount}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 sm:px-4 sm:text-sm">
+          Overdue: {tasksTableMissing ? 0 : overdueCount}
         </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
-          Today&apos;s Tasks: {tasksTableMissing ? 0 : dueTodayCount}
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 sm:px-4 sm:text-sm">
+          Due today: {tasksTableMissing ? 0 : dueTodayCount}
         </div>
       </div>
 
-      <article className="rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          <select
+      <CollapsibleFilterPanel title="Filter tasks">
+        <div className="responsive-filter-grid">
+          <FilterField label="Status">
+            <select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as TaskStatus | "")}
             disabled={tasksTableMissing}
-            className="h-11 rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8] sm:h-9"
-          >
-            <option value="">Status</option>
-            <option value="Pending">Pending</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Completed">Completed</option>
-          </select>
-          <select
+              className="h-10 w-full rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8]"
+            >
+              <option value="">All statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </FilterField>
+          <FilterField label="Priority">
+            <select
             value={priorityFilter}
             onChange={(event) => setPriorityFilter(event.target.value as TaskPriority | "")}
             disabled={tasksTableMissing}
-            className="h-11 rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8] sm:h-9"
-          >
-            <option value="">Priority</option>
-            <option value="Low">Low</option>
-            <option value="Medium">Medium</option>
-            <option value="High">High</option>
-          </select>
-          <select
+              className="h-10 w-full rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8]"
+            >
+              <option value="">All priorities</option>
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+            </select>
+          </FilterField>
+          <FilterField label="Assigned to">
+            <select
             value={assignedFilter}
             onChange={(event) => setAssignedFilter(event.target.value)}
             disabled={!seesAllTasks || tasksTableMissing}
-            className="h-11 rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8] sm:h-9"
-          >
-            <option value="">Assigned Employee</option>
-            {employeeOptions.map((employee) => (
-              <option key={employee.id} value={employee.id}>
-                {employee.label}
-              </option>
-            ))}
-          </select>
-          <Input
-            type="date"
-            value={dueDateFilter}
-            onChange={(event) => setDueDateFilter(event.target.value)}
-            disabled={tasksTableMissing}
-            className="h-11 border-[#d4deea] bg-white disabled:bg-[#eff3f8] sm:h-9"
-          />
-          <Input
-            value={searchText}
-            onChange={(event) => setSearchText(event.target.value)}
-            placeholder="Search task title"
-            disabled={tasksTableMissing}
-            className="h-11 border-[#d4deea] bg-white disabled:bg-[#eff3f8] sm:col-span-2 sm:h-9 lg:col-span-1"
-          />
-          <div className="flex gap-2 sm:col-span-2 lg:col-span-1">
+              className="h-10 w-full rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8]"
+            >
+              <option value="">All employees</option>
+              {employeeOptions.map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.label}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+          <FilterField label="Due date">
+            <Input
+              type="date"
+              value={dueDateFilter}
+              onChange={(event) => setDueDateFilter(event.target.value)}
+              disabled={tasksTableMissing}
+              aria-label="Due date"
+              className="h-10 border-[#d4deea] bg-white disabled:bg-[#eff3f8]"
+            />
+          </FilterField>
+          <FilterField label="Search">
+            <Input
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search task title…"
+              disabled={tasksTableMissing}
+              className="h-10 border-[#d4deea] bg-white disabled:bg-[#eff3f8]"
+            />
+          </FilterField>
+          <div className="col-span-2 flex gap-2 lg:col-span-1">
             <Button
               onClick={applyFilters}
               disabled={tasksTableMissing}
@@ -779,7 +791,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
             </Button>
           </div>
         </div>
-      </article>
+      </CollapsibleFilterPanel>
 
       <div className="responsive-table-wrap">
         <TaskTable

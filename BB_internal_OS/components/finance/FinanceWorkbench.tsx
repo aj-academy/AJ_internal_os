@@ -546,7 +546,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
 
       {activeTab === "overview" ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="stat-cards-grid">
             <LeadSummaryCard title="Total Revenue" value={formatInr(totals.revenue)} loading={loading} />
             <LeadSummaryCard title="Total Expenses" value={formatInr(totals.officeExp)} loading={loading} />
             <LeadSummaryCard title="Net Profit" value={formatInr(totals.net)} loading={loading} />
@@ -797,7 +797,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
 
       {activeTab === "dues" && (isPrivileged || isManager) ? (
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="stat-cards-grid-3">
             <LeadSummaryCard title="Total pending (projects)" value={formatInr(totals.pendingPay)} loading={loading} />
             <LeadSummaryCard title="Overdue rows" value={overdueProjects.length} loading={loading} accent="rose" />
             <LeadSummaryCard title="Projects with balance" value={projects.filter((p) => Number(p.pending_amount) > 0).length} loading={loading} />
@@ -844,7 +844,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
 
       {activeTab === "pnl" && (isPrivileged || isManager) ? (
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="stat-cards-grid">
             <LeadSummaryCard title="Total revenue" value={formatInr(totals.revenue)} loading={loading} />
             <LeadSummaryCard title="Total expenses" value={formatInr(totals.officeExp)} loading={loading} />
             <LeadSummaryCard title="Net profit" value={formatInr(totals.net)} loading={loading} />
@@ -893,7 +893,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
 
       {activeTab === "reports" && (isPrivileged || isManager) ? (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="stat-cards-grid-3">
             <LeadSummaryCard title="Avg project revenue (income w/ project)" value={formatInr(revenueByProject.length ? totals.revenue / Math.max(1, revenueByProject.length) : 0)} loading={loading} />
             <LeadSummaryCard title="Pending dues" value={formatInr(totals.pendingPay)} loading={loading} />
             <LeadSummaryCard title="Claims pending count" value={claims.filter((c) => c.approval_status === "Pending").length} loading={loading} />

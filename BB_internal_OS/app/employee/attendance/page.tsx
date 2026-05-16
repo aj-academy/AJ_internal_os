@@ -450,7 +450,7 @@ export default function EmployeeAttendancePage() {
 
       <article className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-5">
         <h3 className="mb-3 text-lg font-semibold text-slate-900">Today Attendance</h3>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="stat-cards-grid">
           <Info label="Employee Name" value={displayEmployeeName} />
           <Info
             label="Today Date"

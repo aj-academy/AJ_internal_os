@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { CollapsibleFilterPanel, FilterField } from "@/components/ui/CollapsibleFilterPanel";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/client-lead/LeadSummaryCard";
 import { LeadStatusBadge, ProposalStatusBadge } from "@/components/client-lead/LeadStatusBadge";
@@ -1095,7 +1096,7 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
 
       {activeTab === "overview" && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="stat-cards-grid-5">
             <LeadSummaryCard title="Total Leads" value={overview.total} loading={loading} />
             <LeadSummaryCard title="New Leads" value={overview.newLeads} loading={loading} />
             <LeadSummaryCard title="Contacted" value={overview.contacted} loading={loading} />
@@ -1179,7 +1180,7 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
 
       {activeTab === "follow-ups" && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="stat-cards-grid">
             <LeadSummaryCard title="Today" value={todayFollowUps.length} loading={loading} />
             <LeadSummaryCard title="Overdue snapshot" value={overview.overdue} loading={loading} accent="rose" />
             <LeadSummaryCard title="Rows tracked" value={followRowsScoped.length} loading={loading} />
@@ -1363,64 +1364,92 @@ function FiltersBar(props: {
   } = props;
 
   const selectClass =
-    "h-11 w-full rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] sm:h-9";
+    "h-10 w-full rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb]";
 
   return (
-    <article className="rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4">
-          <Input placeholder="Search name/email/phone/company" value={searchText} onChange={(e) => setSearchText(e.target.value)} className="h-11 border-[#d4deea] sm:h-9" />
-        </div>
-        <select className={selectClass} value={fltStatus} onChange={(e) => setFltStatus(e.target.value)}>
-          <option value="">Status</option>
+    <CollapsibleFilterPanel>
+      <div className="responsive-filter-grid">
+        <Input
+          placeholder="Search name, email, phone, company…"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          className="col-span-2 h-10 border-[#d4deea] lg:col-span-2"
+        />
+        <FilterField label="Status">
+          <select className={selectClass} value={fltStatus} onChange={(e) => setFltStatus(e.target.value)} aria-label="Status">
+            <option value="">All statuses</option>
           {CRM_LEAD_STATUSES.map((sOpt) => (
             <option key={sOpt} value={sOpt}>
               {sOpt}
             </option>
           ))}
-        </select>
-        <select className={selectClass} value={fltSource} onChange={(e) => setFltSource(e.target.value)}>
-          <option value="">Source</option>
+          </select>
+        </FilterField>
+        <FilterField label="Source">
+          <select className={selectClass} value={fltSource} onChange={(e) => setFltSource(e.target.value)} aria-label="Source">
+            <option value="">All sources</option>
           {CRM_SOURCES.map((sOpt) => (
             <option key={sOpt} value={sOpt}>
               {sOpt}
             </option>
           ))}
-        </select>
-        <select className={selectClass} value={fltPriority} onChange={(e) => setFltPriority(e.target.value)}>
-          <option value="">Priority</option>
+          </select>
+        </FilterField>
+        <FilterField label="Priority">
+          <select className={selectClass} value={fltPriority} onChange={(e) => setFltPriority(e.target.value)} aria-label="Priority">
+            <option value="">All priorities</option>
           {CRM_PRIORITIES.map((pOpt) => (
             <option key={pOpt} value={pOpt}>
               {pOpt}
             </option>
           ))}
-        </select>
-        <select className={selectClass} value={fltService} onChange={(e) => setFltService(e.target.value)}>
-          <option value="">Service interest</option>
+          </select>
+        </FilterField>
+        <FilterField label="Service">
+          <select className={selectClass} value={fltService} onChange={(e) => setFltService(e.target.value)} aria-label="Service">
+            <option value="">All services</option>
           {CRM_SERVICES.map((svc) => (
             <option key={svc} value={svc}>
               {svc}
             </option>
           ))}
-        </select>
-        <select
-          className={selectClass}
-          value={fltAssigned}
-          onChange={(e) => setFltAssigned(e.target.value)}
-          disabled={!isAdmin}
-        >
-          <option value="">Assigned</option>
+          </select>
+        </FilterField>
+        <FilterField label="Assigned">
+          <select
+            className={selectClass}
+            value={fltAssigned}
+            onChange={(e) => setFltAssigned(e.target.value)}
+            disabled={!isAdmin}
+            aria-label="Assigned employee"
+          >
+            <option value="">All assignees</option>
           {employeeOptions.map((empOpt) => (
             <option key={empOpt.id} value={empOpt.id}>
               {empOpt.label}
             </option>
           ))}
-        </select>
-        <div className="flex gap-2">
-          <Input type="date" value={fltFollowFrom} onChange={(e) => setFltFollowFrom(e.target.value)} className="h-11 border-[#d4deea] sm:h-9" />
-          <Input type="date" value={fltFollowTo} onChange={(e) => setFltFollowTo(e.target.value)} className="h-11 border-[#d4deea] sm:h-9" />
-        </div>
-        <div className="flex gap-2 sm:col-span-2 lg:col-span-1">
+          </select>
+        </FilterField>
+        <FilterField label="Follow-up from">
+          <Input
+            type="date"
+            value={fltFollowFrom}
+            onChange={(e) => setFltFollowFrom(e.target.value)}
+            aria-label="Follow-up from"
+            className="h-10 border-[#d4deea]"
+          />
+        </FilterField>
+        <FilterField label="Follow-up to">
+          <Input
+            type="date"
+            value={fltFollowTo}
+            onChange={(e) => setFltFollowTo(e.target.value)}
+            aria-label="Follow-up to"
+            className="h-10 border-[#d4deea]"
+          />
+        </FilterField>
+        <div className="col-span-2 flex gap-2 lg:col-span-1">
           <Button type="button" className="h-11 flex-1 rounded-xl bg-[#2563eb] text-white hover:bg-[#1d4ed8] sm:h-9" onClick={onApply}>
             Apply filters
           </Button>
@@ -1429,7 +1458,7 @@ function FiltersBar(props: {
           </Button>
         </div>
       </div>
-    </article>
+    </CollapsibleFilterPanel>
   );
 }
 
@@ -2086,7 +2115,7 @@ function ReportsPanel({
   return (
     <div className="space-y-6">
       <p className="text-sm text-[#64748b]">Metrics use the leads visible in this workspace (respects your role and filters on other tabs).</p>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="stat-cards-grid">
         <ReportStatCard title="Total leads this month" value={thisMonthLeads} subtitle="Created in current calendar month" />
         <ReportStatCard title="Conversion rate" value={conversionRate} subtitle="Converted ÷ all visible leads" />
         <ReportStatCard title="Lost rate" value={lostRate} subtitle="Lost ÷ all visible leads" />

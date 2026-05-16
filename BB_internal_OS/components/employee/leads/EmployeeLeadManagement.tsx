@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Download,
-  Filter,
   MessageCircle,
   Phone,
   Plus,
@@ -14,6 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import { buildCsv, downloadCsv, parseCsv } from "@/lib/csv";
 import { formatDateTimeIST, todayDateIST } from "@/lib/datetime";
 import { Button } from "@/components/ui/button";
+import { CollapsibleFilterPanel } from "@/components/ui/CollapsibleFilterPanel";
 import { Input } from "@/components/ui/input";
 import {
   CommFilter,
@@ -31,9 +31,9 @@ import {
 
 function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
-    <article className="rounded-[20px] border border-[#dbe6f3] bg-gradient-to-br from-[#f8fbff] to-white p-5 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-[#64748b]">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-[#0f172a]">{value}</p>
+    <article className="rounded-[20px] border border-[#dbe6f3] bg-gradient-to-br from-[#f8fbff] to-white p-3 shadow-sm sm:p-5">
+      <p className="text-[10px] font-medium uppercase leading-tight tracking-wide text-[#64748b] sm:text-xs">{label}</p>
+      <p className="mt-2 text-xl font-semibold text-[#0f172a] sm:text-2xl">{value}</p>
     </article>
   );
 }
@@ -442,7 +442,7 @@ export function EmployeeLeadManagement() {
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</div> : null}
       {success ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{success}</div> : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="stat-cards-grid-5">
         <StatCard label="Total Assigned Leads" value={stats.total} />
         <StatCard label="Calls Done" value={stats.callsDone} />
         <StatCard label="WhatsApp Sent" value={stats.waSent} />
@@ -450,14 +450,20 @@ export function EmployeeLeadManagement() {
         <StatCard label="Follow-up Required" value={stats.followUp} />
       </div>
 
-      <section className="rounded-2xl border border-[#d4deea] bg-[#f8fbff] p-4">
-        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[#334155]">
-          <Filter className="h-4 w-4 text-[#2563eb]" />
-          Search & filters
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, company, phone, email…" className="h-10 border-[#d4deea] xl:col-span-2" />
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-10 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
+      <CollapsibleFilterPanel>
+        <div className="responsive-filter-grid">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Name, company, phone, email…"
+            className="col-span-2 h-10 border-[#d4deea] lg:col-span-2"
+          />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            aria-label="Status"
+            className="h-10 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm text-[#334155]"
+          >
             <option value="">All statuses</option>
             {EMPLOYEE_LEAD_STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -465,7 +471,12 @@ export function EmployeeLeadManagement() {
               </option>
             ))}
           </select>
-          <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="h-10 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
+          <select
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value)}
+            aria-label="Priority"
+            className="h-10 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm text-[#334155]"
+          >
             <option value="">All priorities</option>
             {EMPLOYEE_LEAD_PRIORITIES.map((p) => (
               <option key={p} value={p}>
@@ -473,7 +484,12 @@ export function EmployeeLeadManagement() {
               </option>
             ))}
           </select>
-          <select value={commFilter} onChange={(e) => setCommFilter(e.target.value as CommFilter)} className="h-10 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
+          <select
+            value={commFilter}
+            onChange={(e) => setCommFilter(e.target.value as CommFilter)}
+            aria-label="Communication"
+            className="h-10 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm text-[#334155]"
+          >
             <option value="">All communication</option>
             <option value="called">Called</option>
             <option value="not_called">Not called</option>
@@ -481,7 +497,7 @@ export function EmployeeLeadManagement() {
             <option value="whatsapp_pending">WhatsApp pending</option>
           </select>
         </div>
-      </section>
+      </CollapsibleFilterPanel>
 
       <div className="responsive-table-wrap overflow-x-auto rounded-2xl border border-[#dbe6f3]">
         <table className="w-full min-w-[1100px] text-left text-sm">

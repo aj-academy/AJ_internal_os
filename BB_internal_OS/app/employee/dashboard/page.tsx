@@ -139,29 +139,29 @@ export default async function EmployeeDashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <article className="rounded-[20px] border border-[#dbe6f3] bg-gradient-to-br from-[#f8fbff] to-white p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-[#64748b]">Today&apos;s status</p>
-          <p className="mt-2 text-2xl font-semibold capitalize text-[#0f172a]">{attLabel}</p>
+      <div className="stat-cards-grid">
+        <article className="rounded-[20px] border border-[#dbe6f3] bg-gradient-to-br from-[#f8fbff] to-white p-3 shadow-sm sm:p-5">
+          <p className="text-[10px] font-medium uppercase leading-tight tracking-wide text-[#64748b] sm:text-xs">Today&apos;s status</p>
+          <p className="mt-2 text-xl font-semibold capitalize text-[#0f172a] sm:text-2xl">{attLabel}</p>
           <p className="mt-1 text-xs text-[#64748b]">{punchLine}</p>
         </article>
-        <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-[#64748b]">Open tasks</p>
-          <p className="mt-2 text-2xl font-semibold text-[#0f172a]">{openTasks}</p>
+        <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-3 shadow-sm sm:p-5">
+          <p className="text-[10px] font-medium uppercase leading-tight tracking-wide text-[#64748b] sm:text-xs">Open tasks</p>
+          <p className="mt-2 text-xl font-semibold text-[#0f172a] sm:text-2xl">{openTasks}</p>
           <p className="mt-1 text-xs text-[#64748b]">
             {totalTasks} total assigned · {dueTodayTasks} due today · {overdueTasks} overdue
           </p>
         </article>
-        <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-[#64748b]">Approvals</p>
-          <p className="mt-2 text-2xl font-semibold text-[#0f172a]">{leavePending + permissionPending}</p>
+        <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-3 shadow-sm sm:p-5">
+          <p className="text-[10px] font-medium uppercase leading-tight tracking-wide text-[#64748b] sm:text-xs">Approvals</p>
+          <p className="mt-2 text-xl font-semibold text-[#0f172a] sm:text-2xl">{leavePending + permissionPending}</p>
           <p className="mt-1 text-xs text-[#64748b]">
             {leavePending} leave pending · {permissionPending} permission pending
           </p>
         </article>
-        <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-[#64748b]">Policies</p>
-          <p className="mt-2 text-2xl font-semibold text-[#0f172a]">{policyCount}</p>
+        <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-3 shadow-sm sm:p-5">
+          <p className="text-[10px] font-medium uppercase leading-tight tracking-wide text-[#64748b] sm:text-xs">Policies</p>
+          <p className="mt-2 text-xl font-semibold text-[#0f172a] sm:text-2xl">{policyCount}</p>
           <p className="mt-1 text-xs text-[#64748b]">Published company policies</p>
         </article>
       </div>
