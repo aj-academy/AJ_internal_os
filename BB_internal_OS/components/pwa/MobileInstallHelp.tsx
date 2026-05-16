@@ -2,16 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { Smartphone, X } from "lucide-react";
-import { PWA_INSTALLED_PENDING_ICON_KEY } from "@/components/pwa/InstallPrompt";
-
-const DISMISS_KEY = "bb-os-mobile-install-help-dismissed";
-
-function isStandalone() {
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
-  );
-}
+import {
+  hasCompletedPwaInstall,
+  isPwaStandalone,
+  markPwaInstallComplete,
+  PWA_INSTALLED_PENDING_ICON_KEY,
+  PWA_MOBILE_HELP_DISMISS_KEY,
+} from "@/lib/pwa/install-state";
 
 function isMobile() {
   return /android|iphone|ipad|ipod/i.test(navigator.userAgent) || window.innerWidth < 768;
@@ -27,24 +24,37 @@ export function MobileInstallHelp() {
   const [installedPendingIcon, setInstalledPendingIcon] = useState(false);
 
   useEffect(() => {
-    if (!isMobile() || isStandalone()) {
-      if (isStandalone()) {
-        window.localStorage.removeItem(PWA_INSTALLED_PENDING_ICON_KEY);
-      }
+    if (isPwaStandalone()) {
+      markPwaInstallComplete();
       return;
     }
+
+    if (hasCompletedPwaInstall()) {
+      return;
+    }
+
+    if (!isMobile()) {
+      return;
+    }
+
     setInstallUrl(`${window.location.origin}/login`);
     setInstalledPendingIcon(window.localStorage.getItem(PWA_INSTALLED_PENDING_ICON_KEY) === "1");
-    if (window.localStorage.getItem(DISMISS_KEY) === "1" && window.localStorage.getItem(PWA_INSTALLED_PENDING_ICON_KEY) !== "1") {
+
+    if (window.localStorage.getItem(PWA_MOBILE_HELP_DISMISS_KEY) === "1") {
       return;
     }
+
     setVisible(true);
   }, []);
 
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-x-3 bottom-3 z-[85] rounded-2xl border border-[#c9d8eb] bg-white p-4 shadow-xl sm:inset-x-auto sm:right-4 sm:max-w-sm" role="dialog" aria-label="Install on phone">
+    <div
+      className="fixed inset-x-3 bottom-3 z-[85] rounded-2xl border border-[#c9d8eb] bg-white p-4 shadow-xl sm:inset-x-auto sm:right-4 sm:max-w-sm"
+      role="dialog"
+      aria-label="Install on phone"
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex gap-2">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eff6ff] text-[#1e4f91]">
@@ -64,8 +74,7 @@ export function MobileInstallHelp() {
         <button
           type="button"
           onClick={() => {
-            window.localStorage.setItem(DISMISS_KEY, "1");
-            window.localStorage.removeItem(PWA_INSTALLED_PENDING_ICON_KEY);
+            markPwaInstallComplete();
             setVisible(false);
           }}
           className="touch-target rounded-full p-1 text-[#64748b]"

@@ -3,21 +3,18 @@
 import { useEffect, useState } from "react";
 import { Download, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  hasCompletedPwaInstall,
+  isPwaStandalone,
+  markPwaInstallComplete,
+  PWA_INSTALLED_PENDING_ICON_KEY,
+} from "@/lib/pwa/install-state";
+
+export { PWA_INSTALLED_PENDING_ICON_KEY };
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
-
-const DISMISS_KEY = "bb-os-pwa-install-dismissed";
-export const PWA_INSTALLED_PENDING_ICON_KEY = "bb-os-pwa-installed-pending-icon";
-
-function isStandalone() {
-  if (typeof window === "undefined") return false;
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
-  );
 }
 
 export function InstallPrompt() {
@@ -25,25 +22,28 @@ export function InstallPrompt() {
   const [hidden, setHidden] = useState(true);
 
   useEffect(() => {
-    if (isStandalone()) {
+    if (isPwaStandalone()) {
+      markPwaInstallComplete();
       setHidden(true);
       return;
     }
 
-    if (typeof window !== "undefined" && window.localStorage.getItem(DISMISS_KEY) === "1") {
+    if (hasCompletedPwaInstall()) {
       setHidden(true);
+      return;
     }
 
     const onBeforeInstall = (event: Event) => {
       event.preventDefault();
       setDeferred(event as BeforeInstallPromptEvent);
-      if (window.localStorage.getItem(DISMISS_KEY) !== "1") {
+      if (!hasCompletedPwaInstall()) {
         setHidden(false);
       }
     };
 
     const onInstalled = () => {
       window.localStorage.setItem(PWA_INSTALLED_PENDING_ICON_KEY, "1");
+      markPwaInstallComplete();
       setDeferred(null);
       setHidden(true);
     };
@@ -57,19 +57,20 @@ export function InstallPrompt() {
     };
   }, []);
 
-  if (hidden || !deferred || isStandalone()) return null;
+  if (hidden || !deferred || isPwaStandalone() || hasCompletedPwaInstall()) return null;
 
   const onInstall = async () => {
     await deferred.prompt();
     const { outcome } = await deferred.userChoice;
     if (outcome === "accepted") {
+      markPwaInstallComplete();
       setHidden(true);
     }
     setDeferred(null);
   };
 
   const onDismiss = () => {
-    window.localStorage.setItem(DISMISS_KEY, "1");
+    markPwaInstallComplete();
     setHidden(true);
     setDeferred(null);
   };

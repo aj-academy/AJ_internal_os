@@ -21,6 +21,7 @@ import {
 import { OfflineBanner } from "@/components/pwa/OfflineBanner";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { MobileInstallHelp } from "@/components/pwa/MobileInstallHelp";
+import { isPwaStandalone, markPwaInstallComplete } from "@/lib/pwa/install-state";
 
 type PwaContextValue = {
   isOnline: boolean;
@@ -68,6 +69,12 @@ export function PwaProvider({ children }: { children: ReactNode }) {
       /* session refresh is best-effort */
     }
   }, [router]);
+
+  useEffect(() => {
+    if (isPwaStandalone()) {
+      markPwaInstallComplete();
+    }
+  }, []);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
