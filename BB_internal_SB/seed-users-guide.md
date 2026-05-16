@@ -36,7 +36,7 @@ Insert employee metadata and manager assignment:
 
 ```sql
 insert into public.employee_details (
-  employee_id,
+  profile_id,
   manager_id,
   employee_code,
   phone,

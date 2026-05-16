@@ -13,7 +13,7 @@ alter table public.profiles enable row level security;
 
 create table if not exists public.employee_details (
   id uuid primary key default gen_random_uuid(),
-  employee_id uuid not null unique references public.profiles(id) on delete cascade,
+  profile_id uuid not null unique references public.profiles(id) on delete cascade,
   manager_id uuid references public.profiles(id) on delete set null,
   employee_code text unique,
   phone text,

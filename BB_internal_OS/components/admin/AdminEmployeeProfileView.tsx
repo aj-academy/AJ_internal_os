@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Loader2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchEmployeeDetailsForProfile, type EmployeeDetailsRow } from "@/lib/employeeDetails";
 import { formatDateIST, formatDateTimeIST } from "@/lib/datetime";
 import {
   type EmployeeDocumentRow,
@@ -23,14 +24,6 @@ type ProfileRow = {
   designation: string | null;
   status: string | null;
   created_at: string | null;
-};
-
-type EmployeeDetailsRow = {
-  employee_code: string | null;
-  phone: string | null;
-  joined_at: string | null;
-  manager_id: string | null;
-  employment_type: string | null;
 };
 
 function display(value: string | number | null | undefined) {
@@ -126,13 +119,12 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
     setError(null);
     setActionError(null);
     try {
-      const [profileRes, edRes, epdRes, docsRes] = await Promise.all([
+      const [profileRes, epdRes, docsRes] = await Promise.all([
         supabase
           .from("profiles")
           .select("id,full_name,email,role,department,designation,status,created_at")
           .eq("id", profileId)
           .maybeSingle(),
-        supabase.from("employee_details").select("*").eq("employee_id", profileId).maybeSingle(),
         supabase.from("employee_profile_details").select("*").eq("profile_id", profileId).maybeSingle(),
         supabase
           .from("employee_documents")
@@ -145,8 +137,8 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
       if (!profileRes.data) throw new Error("Employee profile not found.");
       setProfile(profileRes.data as ProfileRow);
 
-      if (edRes.error) throw new Error(edRes.error.message);
-      const ed = (edRes.data as EmployeeDetailsRow | null) ?? null;
+      const { data: ed, error: edError } = await fetchEmployeeDetailsForProfile(supabase, profileId);
+      if (edError) throw new Error(edError);
       setEmployeeDetails(ed);
 
       if (ed?.manager_id) {

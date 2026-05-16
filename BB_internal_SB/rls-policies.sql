@@ -90,7 +90,7 @@ for select
 to authenticated
 using (
   public.get_user_role() = 'employee'
-  and employee_id = auth.uid()
+  and profile_id = auth.uid()
 );
 
 drop policy if exists "employee_details_employee_own_update" on public.employee_details;
@@ -100,12 +100,12 @@ for update
 to authenticated
 using (
   public.get_user_role() = 'employee'
-  and employee_id = auth.uid()
+  and profile_id = auth.uid()
 )
 with check (
   public.get_user_role() = 'employee'
-  and employee_id = auth.uid()
-  and manager_id = (select ed.manager_id from public.employee_details ed where ed.employee_id = auth.uid())
+  and profile_id = auth.uid()
+  and manager_id = (select ed.manager_id from public.employee_details ed where ed.profile_id = auth.uid())
 );
 
 -- =========================

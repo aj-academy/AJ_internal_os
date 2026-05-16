@@ -31,6 +31,7 @@ import {
   type EmployeeProfileDetails,
   type ProfileTabId,
 } from "@/lib/employeeProfile";
+import { fetchEmployeeDetailsForProfile, type EmployeeDetailsRow } from "@/lib/employeeDetails";
 import { TagInput } from "./TagInput";
 
 type ProfileRow = {
@@ -42,14 +43,6 @@ type ProfileRow = {
   designation: string | null;
   status: string | null;
   created_at: string | null;
-};
-
-type EmployeeDetailsRow = {
-  employee_code: string | null;
-  phone: string | null;
-  joined_at: string | null;
-  manager_id: string | null;
-  employment_type: string | null;
 };
 
 const fieldClass =
@@ -230,16 +223,11 @@ export function EmployeeProfileWorkbench() {
         return;
       }
 
-      const [profRes, edRes, epdRes, docsRes] = await Promise.all([
+      const [profRes, epdRes, docsRes] = await Promise.all([
         supabase
           .from("profiles")
           .select("id,full_name,email,role,department,designation,status,created_at")
           .eq("id", uid)
-          .maybeSingle(),
-        supabase
-          .from("employee_details")
-          .select("*")
-          .eq("employee_id", uid)
           .maybeSingle(),
         supabase.from("employee_profile_details").select(PROFILE_DETAIL_SELECT).eq("profile_id", uid).maybeSingle(),
         supabase
@@ -252,7 +240,7 @@ export function EmployeeProfileWorkbench() {
       if (profRes.error) throw new Error(profRes.error.message);
       setProfile((profRes.data as ProfileRow | null) ?? null);
 
-      const ed = (edRes.data as EmployeeDetailsRow | null) ?? null;
+      const { data: ed } = await fetchEmployeeDetailsForProfile(supabase, uid);
       setEmployeeDetails(ed);
       if (ed?.manager_id) {
         const { data: mgr } = await supabase.from("profiles").select("full_name,email").eq("id", ed.manager_id).maybeSingle();
@@ -584,7 +572,7 @@ export function EmployeeProfileWorkbench() {
               <ReadonlyField label="Designation" value={profile?.designation ?? ""} />
               <ReadonlyField label="Employment type" value={employeeDetails?.employment_type ?? ""} />
               <ReadonlyField label="Work phone" value={employeeDetails?.phone ?? ""} />
-              <ReadonlyField label="Joined company" value={formatDateOnly(employeeDetails?.joined_at)} />
+              <ReadonlyField label="Joined company" value={formatDateOnly(employeeDetails?.joined_at ?? profile?.created_at)} />
               <ReadonlyField label="Employment status" value={profile?.status ?? ""} />
               <ReadonlyField label="Portal role" value={profile?.role ?? ""} />
               <ReadonlyField

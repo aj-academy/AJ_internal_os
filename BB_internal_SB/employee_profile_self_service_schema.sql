@@ -1,8 +1,41 @@
 -- Employee profile self-service (personal, contact, documents).
 -- Run AFTER schema.sql and rls-policies.sql.
 
+-- Link HR extras to profiles.id via profile_id (not a separate employee_id column).
+alter table public.employee_details add column if not exists profile_id uuid references public.profiles(id) on delete cascade;
 alter table public.employee_details add column if not exists joined_at date;
 alter table public.employee_details add column if not exists employment_type text default 'Full-time';
+
+-- Backfill profile_id from legacy employee_id column when it still exists.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'employee_details' and column_name = 'employee_id'
+  ) then
+    execute $q$
+      update public.employee_details
+      set profile_id = employee_id
+      where profile_id is null and employee_id is not null
+    $q$;
+  end if;
+end $$;
+
+create unique index if not exists employee_details_profile_id_key
+  on public.employee_details (profile_id)
+  where profile_id is not null;
+
+-- Employee read/update by profile_id (works without employee_id column)
+drop policy if exists employee_details_employee_own_read_profile on public.employee_details;
+create policy employee_details_employee_own_read_profile
+on public.employee_details for select to authenticated
+using (profile_id = auth.uid());
+
+drop policy if exists employee_details_employee_own_update_profile on public.employee_details;
+create policy employee_details_employee_own_update_profile
+on public.employee_details for update to authenticated
+using (profile_id = auth.uid())
+with check (profile_id = auth.uid());
 
 create table if not exists public.employee_profile_details (
   id uuid primary key default gen_random_uuid(),
