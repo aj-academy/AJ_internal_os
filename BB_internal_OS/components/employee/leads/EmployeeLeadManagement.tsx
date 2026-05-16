@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Download,
+  FileDown,
   MessageCircle,
   Phone,
   Plus,
@@ -28,6 +29,13 @@ import {
   slugColumnKey,
   whatsAppHref,
 } from "@/components/employee/leads/employeeLeadConfig";
+import {
+  EMPLOYEE_LEAD_CSV_HEADERS,
+  buildEmployeeLeadCsvHeaderIndex,
+  buildEmployeeLeadImportTemplateCsv,
+  leadRowToCsvCells,
+  parseEmployeeLeadCsvBool,
+} from "@/components/employee/leads/employeeLeadCsv";
 
 function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
@@ -262,34 +270,13 @@ export function EmployeeLeadManagement() {
     setActivityLoading(false);
   };
 
+  const handleDownloadTemplate = () => {
+    downloadCsv("employee-leads-import-template.csv", buildEmployeeLeadImportTemplateCsv());
+  };
+
   const handleExport = () => {
-    const headers = [
-      "Lead Name",
-      "Company",
-      "Phone",
-      "WhatsApp",
-      "Email",
-      "Description",
-      "Status",
-      "Priority",
-      "Phone Called",
-      "WhatsApp Sent",
-      "Last Contacted",
-    ];
-    const rows = filteredLeads.map((r) => [
-      displayLeadName(r),
-      r.company_name ?? "",
-      r.phone ?? "",
-      r.whatsapp ?? "",
-      r.email ?? "",
-      r.requirement ?? "",
-      r.status ?? "",
-      r.priority ?? "",
-      r.phone_called ? "Yes" : "No",
-      r.whatsapp_sent ? "Yes" : "No",
-      r.last_contacted_at ? formatDateTimeIST(r.last_contacted_at) : "",
-    ]);
-    downloadCsv(`employee-leads-${todayDateIST()}.csv`, buildCsv(headers, rows));
+    const rows = filteredLeads.map((r) => leadRowToCsvCells(r));
+    downloadCsv(`employee-leads-${todayDateIST()}.csv`, buildCsv([...EMPLOYEE_LEAD_CSV_HEADERS], rows));
   };
 
   const handleImportFile = async (file: File) => {
@@ -302,11 +289,12 @@ export function EmployeeLeadManagement() {
       const matrix = parseCsv(text);
       if (matrix.length < 2) throw new Error("CSV must include a header row and at least one data row.");
 
-      const headers = matrix[0].map((h) => h.trim().toLowerCase());
-      const idx = (key: string) => headers.indexOf(key);
+      const idx = buildEmployeeLeadCsvHeaderIndex(matrix[0]);
 
       const leadNameIdx = idx("lead_name");
-      if (leadNameIdx < 0) throw new Error('CSV must include a "lead_name" column.');
+      if (leadNameIdx < 0) {
+        throw new Error('CSV must include a "lead_name" column (or "Lead Name").');
+      }
 
       let ok = 0;
       let fail = 0;
@@ -329,6 +317,10 @@ export function EmployeeLeadManagement() {
           continue;
         }
 
+        const phoneCalledIdx = idx("phone_called");
+        const whatsappSentIdx = idx("whatsapp_sent");
+        const lastContactIdx = idx("last_contacted_at");
+
         const payload = {
           name: leadName,
           lead_name: leadName,
@@ -342,8 +334,12 @@ export function EmployeeLeadManagement() {
           status: (cells[idx("status")] ?? "").trim() || "New",
           assigned_to: userId,
           assigned_by: userId,
-          phone_called: false,
-          whatsapp_sent: false,
+          phone_called: phoneCalledIdx >= 0 ? parseEmployeeLeadCsvBool(cells[phoneCalledIdx]) : false,
+          whatsapp_sent: whatsappSentIdx >= 0 ? parseEmployeeLeadCsvBool(cells[whatsappSentIdx]) : false,
+          last_contacted_at:
+            lastContactIdx >= 0 && (cells[lastContactIdx] ?? "").trim()
+              ? (cells[lastContactIdx] ?? "").trim()
+              : null,
           custom_fields: {} as Record<string, unknown>,
         };
 
@@ -424,6 +420,10 @@ export function EmployeeLeadManagement() {
               if (f) void handleImportFile(f);
             }}
           />
+          <Button type="button" variant="outline" className="rounded-full border-[#d4deea]" onClick={handleDownloadTemplate}>
+            <FileDown className="mr-1 h-4 w-4" />
+            Import template
+          </Button>
           <Button type="button" variant="outline" className="rounded-full border-[#d4deea]" onClick={() => fileRef.current?.click()} disabled={importing}>
             <Upload className="mr-1 h-4 w-4" />
             {importing ? "Importing…" : "Import"}
