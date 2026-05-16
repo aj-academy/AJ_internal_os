@@ -23,7 +23,6 @@ create table if not exists public.designations (
 create table if not exists public.employee_master (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid not null unique references public.profiles(id) on delete cascade,
-  employee_code text not null unique,
   role text not null check (role in ('super_admin', 'admin', 'manager', 'employee', 'accounts')),
   department_id uuid references public.departments(id),
   designation_id uuid references public.designations(id),

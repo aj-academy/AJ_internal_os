@@ -308,7 +308,7 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="text-lg font-semibold text-[#0f172a]">{display(profile?.full_name)}</div>
-                  <div className="text-sm text-[#64748b]">{display(employeeDetails?.employee_code)}</div>
+                  <div className="text-sm text-[#64748b]">{display(profile?.designation ?? profile?.department)}</div>
                   <div className="mt-2 inline-flex rounded-full bg-[#dbeafe] px-2.5 py-0.5 text-xs font-semibold text-[#1d4ed8]">
                     Profile completion {details.profile_completion}%
                   </div>
@@ -325,7 +325,6 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
               <div className="space-y-3">
                 <SectionTitle letter="A" title="Official Details" />
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Employee code" value={display(employeeDetails?.employee_code)} />
                   <Field label="Full name" value={display(profile?.full_name)} />
                   <Field label="Work email" value={display(profile?.email)} />
                   <Field label="Work phone" value={display(employeeDetails?.phone)} />

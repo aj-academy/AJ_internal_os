@@ -9,7 +9,6 @@ import {
 } from "@/app/admin/attendance/actions";
 export type AdminPermissionTableRow = {
   id: string;
-  employeeCode: string;
   employeeName: string;
   department: string;
   permissionDate: string;
@@ -99,7 +98,7 @@ export function AdminPermissionRequestsTable({ rows }: { rows: AdminPermissionTa
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
-        <table className="w-full min-w-[1700px] text-left text-sm">
+        <table className="w-full min-w-[1550px] text-left text-sm">
           <thead className="bg-[#f1f6fc] text-[#64748b]">
             <tr>
               <th className="w-10 px-3 py-3">
@@ -111,7 +110,6 @@ export function AdminPermissionRequestsTable({ rows }: { rows: AdminPermissionTa
                 />
               </th>
               {[
-                "Employee Code",
                 "Employee Name",
                 "Department",
                 "Permission Date",
@@ -142,7 +140,6 @@ export function AdminPermissionRequestsTable({ rows }: { rows: AdminPermissionTa
                     aria-label={`Select ${row.employeeName}`}
                   />
                 </td>
-                <td className="px-5 py-3">{row.employeeCode}</td>
                 <td className="px-5 py-3 font-medium text-slate-900">{row.employeeName}</td>
                 <td className="px-5 py-3">{row.department}</td>
                 <td className="px-5 py-3">{row.permissionDate}</td>
@@ -214,7 +211,7 @@ export function AdminPermissionRequestsTable({ rows }: { rows: AdminPermissionTa
             ))}
             {!rows.length ? (
               <tr>
-                <td colSpan={14} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={13} className="px-4 py-8 text-center text-slate-500">
                   No permission requests found.
                 </td>
               </tr>

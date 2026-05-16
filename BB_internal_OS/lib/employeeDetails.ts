@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type EmployeeDetailsRow = {
-  employee_code?: string | null;
   phone?: string | null;
   joined_at?: string | null;
   manager_id?: string | null;

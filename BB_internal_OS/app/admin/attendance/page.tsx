@@ -52,7 +52,6 @@ type EmployeeDetailMini = {
   profile_id?: string | null;
   id?: string | null;
   user_id?: string | null;
-  employee_code: string | null;
   full_name?: string | null;
   email?: string | null;
 };
@@ -330,18 +329,14 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     supabase.from("employee_details").select("*").returns<EmployeeDetailMini[]>(),
   ]);
   const profileMap = new Map((profilesRes.data ?? []).map((row) => [row.id, row]));
-  const employeeCodeMap = new Map<string, string>();
   const employeeNameFallbackMap = new Map<string, string>();
   const employeeEmailFallbackMap = new Map<string, string>();
   (employeeDetailsRes.data ?? []).forEach((row) => {
-    const code = row.employee_code?.trim();
     const fullName = row.full_name?.trim();
     const email = row.email?.trim();
-    if (!code) return;
     const keys = [row.employee_id, row.profile_id, row.user_id, row.id]
       .filter((key): key is string => Boolean(key && typeof key === "string"));
     keys.forEach((key) => {
-      employeeCodeMap.set(key, code);
       if (fullName) employeeNameFallbackMap.set(key, fullName);
       if (email) employeeEmailFallbackMap.set(key, email);
     });
@@ -515,11 +510,10 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const records = recordsRaw.filter((row) => {
       const profile = profileMap.get(row.employee_id);
       const department = (profile?.department ?? "").toLowerCase();
-      const employeeCode = (employeeCodeMap.get(row.employee_id) ?? "").toLowerCase();
       const fullName = (profile?.full_name ?? employeeNameFallbackMap.get(row.employee_id) ?? "").toLowerCase();
       const email = (profile?.email ?? employeeEmailFallbackMap.get(row.employee_id) ?? "").toLowerCase();
       const matchesDept = departmentFilter ? department === departmentFilter.toLowerCase() : true;
-      const matchesSearch = queryFilter ? fullName.includes(queryFilter) || email.includes(queryFilter) || employeeCode.includes(queryFilter) : true;
+      const matchesSearch = queryFilter ? fullName.includes(queryFilter) || email.includes(queryFilter) : true;
       return matchesDept && matchesSearch;
     });
 
@@ -565,7 +559,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
               <option value="Work From Home">Work From Home</option>
               <option value="Office">Office</option>
             </select>
-            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name/email/code" className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
+            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
             <div className="xl:col-span-5 flex gap-2">
               <button className="rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
               <Link href="/admin/attendance?tab=logs" className="rounded-xl border border-[#cfdceb] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
@@ -583,7 +577,6 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
               getEmployeeName(profile, row.employee_id);
             return {
               id: row.id,
-              employeeCode: employeeCodeMap.get(row.employee_id) ?? "-",
               employeeName: displayName,
               email: profile?.email ?? employeeEmailFallbackMap.get(row.employee_id) ?? "-",
               department: profile?.department ?? "-",
@@ -621,11 +614,10 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const rows = (permissionData ?? []).filter((row) => {
       const profile = profileMap.get(row.employee_id);
       const department = (profile?.department ?? "").toLowerCase();
-      const employeeCode = (employeeCodeMap.get(row.employee_id) ?? "").toLowerCase();
       const fullName = (profile?.full_name ?? "").toLowerCase();
       const email = (profile?.email ?? "").toLowerCase();
       const matchesDept = departmentFilter ? department === departmentFilter.toLowerCase() : true;
-      const matchesSearch = queryFilter ? fullName.includes(queryFilter) || email.includes(queryFilter) || employeeCode.includes(queryFilter) : true;
+      const matchesSearch = queryFilter ? fullName.includes(queryFilter) || email.includes(queryFilter) : true;
       return matchesDept && matchesSearch;
     });
 
@@ -664,7 +656,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
             </select>
-            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name/email/code" className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
+            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
             <div className="xl:col-span-4 flex gap-2">
               <button className="cursor-pointer rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
               <Link href="/admin/attendance?tab=permission" className="rounded-xl border border-[#cfdceb] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
@@ -677,7 +669,6 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
             const profile = profileMap.get(row.employee_id);
             return {
               id: row.id,
-              employeeCode: employeeCodeMap.get(row.employee_id) ?? "-",
               employeeName: getEmployeeName(profile, row.employee_id),
               department: profile?.department ?? "-",
               permissionDate: formatDate(row.permission_date),
@@ -746,11 +737,10 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const rows = (summaryData ?? []).filter((row) => {
       const profile = profileMap.get(row.employee_id);
       const department = (profile?.department ?? "").toLowerCase();
-      const employeeCode = (employeeCodeMap.get(row.employee_id) ?? "").toLowerCase();
       const fullName = (profile?.full_name ?? "").toLowerCase();
       const email = (profile?.email ?? "").toLowerCase();
       const matchesDept = departmentFilter ? department === departmentFilter.toLowerCase() : true;
-      const matchesSearch = queryFilter ? fullName.includes(queryFilter) || email.includes(queryFilter) || employeeCode.includes(queryFilter) : true;
+      const matchesSearch = queryFilter ? fullName.includes(queryFilter) || email.includes(queryFilter) : true;
       return matchesDept && matchesSearch;
     });
 
@@ -936,10 +926,9 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
 
   const reportRows = Array.from(byEmployee.entries()).filter(([employeeId]) => {
     const profile = profileMap.get(employeeId);
-    const code = employeeCodeMap.get(employeeId) ?? "";
     const matchesDepartment = departmentFilter ? (profile?.department ?? "").toLowerCase() === departmentFilter.toLowerCase() : true;
     const matchesEmployee = employeeFilter ? employeeId === employeeFilter : true;
-    const matchesSearch = queryFilter ? `${profile?.full_name ?? ""} ${(profile?.email ?? "")} ${code}`.toLowerCase().includes(queryFilter) : true;
+    const matchesSearch = queryFilter ? `${profile?.full_name ?? ""} ${profile?.email ?? ""}`.toLowerCase().includes(queryFilter) : true;
     return matchesDepartment && matchesEmployee && matchesSearch;
   });
 
@@ -999,7 +988,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
             <option value="late">Late</option>
             <option value="absent">Absent</option>
           </select>
-          <input name="q" defaultValue={params.q ?? ""} placeholder="Search name/email/code" className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm xl:col-span-2" />
+          <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm xl:col-span-2" />
           <div className="xl:col-span-2 flex gap-2">
               <button className="cursor-pointer rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
             <Link href="/admin/attendance?tab=monthly" className="rounded-xl border border-[#cfdceb] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
@@ -1014,10 +1003,10 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
 
       <section className="rounded-2xl border border-[#d4deea] bg-white p-4">
         <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
-          <table className="w-full min-w-[1700px] text-left text-sm">
+          <table className="w-full min-w-[1550px] text-left text-sm">
             <thead className="bg-[#f1f6fc] text-[#64748b]">
               <tr>
-                {["Employee Code", "Employee Name", "Department", "Present Days", "Absent Days", "Late Days", "Permission Hours", "WFH Days", "Total Working Hours", "Attendance %", "Work Summary Submitted", "Work Summary Pending"].map((h) => (
+                {["Employee Name", "Department", "Present Days", "Absent Days", "Late Days", "Permission Hours", "WFH Days", "Total Working Hours", "Attendance %", "Work Summary Submitted", "Work Summary Pending"].map((h) => (
                   <th key={h} className="px-5 py-3">{h}</th>
                 ))}
               </tr>
@@ -1029,7 +1018,6 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
                 const pending = Math.max(0, row.present - row.summaries);
                 return (
                   <tr key={employeeId}>
-                    <td className="px-5 py-3">{employeeCodeMap.get(employeeId) ?? "-"}</td>
                     <td className="px-5 py-3 font-medium text-slate-900">{profile?.full_name ?? "-"}</td>
                     <td className="px-5 py-3">{profile?.department ?? "-"}</td>
                     <td className="px-5 py-3">{row.present}</td>
@@ -1045,7 +1033,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
                 );
               })}
               {!reportRows.length ? (
-                <tr><td colSpan={12} className="px-4 py-8 text-center text-slate-500">No monthly report records found.</td></tr>
+                <tr><td colSpan={11} className="px-4 py-8 text-center text-slate-500">No monthly report records found.</td></tr>
               ) : null}
             </tbody>
           </table>

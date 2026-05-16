@@ -567,7 +567,6 @@ export function EmployeeProfileWorkbench() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <ReadonlyField label="Legal name" value={profile?.full_name ?? ""} />
               <ReadonlyField label="Work email" value={profile?.email ?? ""} />
-              <ReadonlyField label="Employee code" value={employeeDetails?.employee_code ?? ""} />
               <ReadonlyField label="Department" value={profile?.department ?? ""} />
               <ReadonlyField label="Designation" value={profile?.designation ?? ""} />
               <ReadonlyField label="Employment type" value={employeeDetails?.employment_type ?? ""} />

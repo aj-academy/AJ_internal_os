@@ -10,7 +10,6 @@ import { MOOD_EMOJI, MOOD_LABEL } from "@/lib/moodDisplay";
 
 export type AdminAttendanceLogRow = {
   id: string;
-  employeeCode: string;
   employeeName: string;
   email: string;
   department: string;
@@ -113,7 +112,6 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
                 />
               </th>
               {[
-                "Employee Code",
                 "Employee Name",
                 "Email",
                 "Department",
@@ -147,7 +145,6 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
                       aria-label={`Select ${row.employeeName}`}
                     />
                   </td>
-                  <td className="px-5 py-3">{row.employeeCode}</td>
                   <td className="px-5 py-3 font-medium text-slate-900">{row.employeeName}</td>
                   <td className="px-5 py-3">{row.email}</td>
                   <td className="px-5 py-3">{row.department}</td>
@@ -188,7 +185,7 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
             })}
             {!rows.length ? (
               <tr>
-                <td colSpan={15} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={14} className="px-4 py-8 text-center text-slate-500">
                   No check-in/check-out records found.
                 </td>
               </tr>
