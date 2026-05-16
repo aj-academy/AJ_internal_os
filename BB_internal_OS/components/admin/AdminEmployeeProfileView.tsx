@@ -132,11 +132,7 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
           .select("id,full_name,email,role,department,designation,status,created_at")
           .eq("id", profileId)
           .maybeSingle(),
-        supabase
-          .from("employee_details")
-          .select("employee_code,phone,joined_at,manager_id,employment_type")
-          .eq("employee_id", profileId)
-          .maybeSingle(),
+        supabase.from("employee_details").select("*").eq("employee_id", profileId).maybeSingle(),
         supabase.from("employee_profile_details").select("*").eq("profile_id", profileId).maybeSingle(),
         supabase
           .from("employee_documents")
@@ -345,7 +341,10 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
                   <Field label="Department" value={display(profile?.department)} />
                   <Field label="Designation" value={display(profile?.designation)} />
                   <Field label="Reporting manager" value={display(managerName)} />
-                  <Field label="Joining date" value={formatDateIST(employeeDetails?.joined_at)} />
+                  <Field
+                    label="Joining date"
+                    value={formatDateIST(employeeDetails?.joined_at ?? profile?.created_at ?? null)}
+                  />
                   <Field label="Employment type" value={display(employeeDetails?.employment_type)} />
                   <Field label="Status" value={display(profile?.status)} />
                   <Field label="Record since" value={formatDateTimeIST(profile?.created_at)} />

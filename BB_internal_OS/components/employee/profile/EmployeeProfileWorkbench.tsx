@@ -238,7 +238,7 @@ export function EmployeeProfileWorkbench() {
           .maybeSingle(),
         supabase
           .from("employee_details")
-          .select("employee_code,phone,joined_at,manager_id,employment_type")
+          .select("*")
           .eq("employee_id", uid)
           .maybeSingle(),
         supabase.from("employee_profile_details").select(PROFILE_DETAIL_SELECT).eq("profile_id", uid).maybeSingle(),

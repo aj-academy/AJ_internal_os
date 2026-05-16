@@ -1,6 +1,7 @@
 -- Employee profile self-service (personal, contact, documents).
 -- Run AFTER schema.sql and rls-policies.sql.
 
+alter table public.employee_details add column if not exists joined_at date;
 alter table public.employee_details add column if not exists employment_type text default 'Full-time';
 
 create table if not exists public.employee_profile_details (
