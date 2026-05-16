@@ -25,6 +25,7 @@ import {
   friendlyError,
   normalizeStatus,
 } from "@/components/client-lead/crmHelpers";
+import { formatDateTimeIST } from "@/lib/datetime";
 
 type AppRole = "admin" | "employee";
 
@@ -1556,6 +1557,20 @@ function PipelineBoard({
   );
 }
 
+function EmployeeOutreachBadge({ done, label }: { done: boolean; label: string }) {
+  return (
+    <span
+      className={[
+        "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold",
+        done ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700",
+      ].join(" ")}
+      title={done ? `${label} completed by employee` : `${label} not done yet`}
+    >
+      {done ? "Done" : "Pending"}
+    </span>
+  );
+}
+
 function AllLeadsTable({
   loading,
   leads,
@@ -1590,6 +1605,9 @@ function AllLeadsTable({
               "Company",
               "Phone",
               "WhatsApp",
+              "Call",
+              "WhatsApp msg",
+              "Last contacted",
               "Email",
               "Source",
               "Services",
@@ -1610,7 +1628,7 @@ function AllLeadsTable({
           {loading
             ? [...Array.from({ length: 6 }).keys()].map((skeletonIdx) => (
                 <tr key={skeletonIdx}>
-                  <td colSpan={13} className="px-4 py-3">
+                  <td colSpan={16} className="px-4 py-3">
                     <div className="h-5 animate-pulse rounded bg-slate-100" />
                   </td>
                 </tr>
@@ -1632,6 +1650,15 @@ function AllLeadsTable({
                     <td className="max-w-[180px] truncate px-4 py-3">{lead.company_name || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{lead.phone || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{lead.whatsapp || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <EmployeeOutreachBadge done={Boolean(lead.phone_called)} label="Phone call" />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <EmployeeOutreachBadge done={Boolean(lead.whatsapp_sent)} label="WhatsApp" />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-[#64748b]">
+                      {lead.last_contacted_at ? formatDateTimeIST(String(lead.last_contacted_at)) : "—"}
+                    </td>
                     <td className="max-w-[200px] truncate px-4 py-3">{lead.email || "—"}</td>
                     <td className="whitespace-nowrap">{lead.source || "—"}</td>
                     <td className="max-w-[200px] truncate text-xs">{String(lead.service_interest || "—")}</td>
@@ -2328,6 +2355,21 @@ function ProfileModal({
               <Dt label="WhatsApp" value={lead.whatsapp} />
               <Dt label="Email" value={lead.email} />
               <Dt label="City" value={lead.city} />
+            </dl>
+          </section>
+
+          <section className="space-y-2">
+            <h4 className="text-xs font-semibold uppercase text-[#94a3b8]">Employee outreach</h4>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[#475569]">
+              <Dt
+                label="Phone call"
+                value={lead.phone_called ? `Done${lead.phone_called_at ? ` · ${formatDateTimeIST(String(lead.phone_called_at))}` : ""}` : "Pending"}
+              />
+              <Dt
+                label="WhatsApp"
+                value={lead.whatsapp_sent ? `Done${lead.whatsapp_sent_at ? ` · ${formatDateTimeIST(String(lead.whatsapp_sent_at))}` : ""}` : "Pending"}
+              />
+              <Dt label="Last contacted" value={lead.last_contacted_at ? formatDateTimeIST(String(lead.last_contacted_at)) : null} />
             </dl>
           </section>
 

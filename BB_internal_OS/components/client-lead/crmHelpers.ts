@@ -25,6 +25,11 @@ export type CrmClientRow = Record<string, unknown> & {
   follow_up_time?: string | null;
   follow_up_type?: string | null;
   last_contacted_at?: string | null;
+  phone_called?: boolean | null;
+  whatsapp_sent?: boolean | null;
+  phone_called_at?: string | null;
+  whatsapp_sent_at?: string | null;
+  custom_fields?: Record<string, unknown> | null;
   notes?: string | null;
   proposal_status?: string | null;
   proposal_amount?: number | null;
@@ -64,6 +69,11 @@ export const CRM_CLIENT_SELECT =
     "follow_up_time",
     "follow_up_type",
     "last_contacted_at",
+    "phone_called",
+    "whatsapp_sent",
+    "phone_called_at",
+    "whatsapp_sent_at",
+    "custom_fields",
     "notes",
     "proposal_status",
     "proposal_amount",
