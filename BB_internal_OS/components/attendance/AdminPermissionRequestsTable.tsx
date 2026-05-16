@@ -7,7 +7,6 @@ import {
   deletePermissionRequest,
   handlePermissionAction,
 } from "@/app/admin/attendance/actions";
-
 export type AdminPermissionTableRow = {
   id: string;
   employeeCode: string;
@@ -100,10 +99,10 @@ export function AdminPermissionRequestsTable({ rows }: { rows: AdminPermissionTa
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
-        <table className="w-full min-w-[1700px] text-left text-sm">
-          <thead className="bg-[#f1f6fc] text-[#64748b]">
+        <table className="w-full min-w-[2100px] text-left text-sm">
+          <thead>
             <tr>
-              <th className="w-10 px-3 py-3">
+              <th className="w-14">
                 <input
                   type="checkbox"
                   checked={allSelected}
@@ -126,16 +125,14 @@ export function AdminPermissionRequestsTable({ rows }: { rows: AdminPermissionTa
                 "Requested On",
                 "Action",
               ].map((h) => (
-                <th key={h} className="px-4 py-3">
-                  {h}
-                </th>
+                <th key={h}>{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#e8edf5] text-slate-700">
+          <tbody>
             {rows.map((row) => (
               <tr key={row.id}>
-                <td className="px-3 py-3">
+                <td className="w-14">
                   <input
                     type="checkbox"
                     checked={selected.has(row.id)}
@@ -143,22 +140,22 @@ export function AdminPermissionRequestsTable({ rows }: { rows: AdminPermissionTa
                     aria-label={`Select ${row.employeeName}`}
                   />
                 </td>
-                <td className="px-4 py-3">{row.employeeCode}</td>
-                <td className="px-4 py-3 font-medium text-slate-900">{row.employeeName}</td>
-                <td className="px-4 py-3">{row.department}</td>
-                <td className="px-4 py-3">{row.permissionDate}</td>
-                <td className="px-4 py-3">{row.fromTime}</td>
-                <td className="px-4 py-3">{row.toTime}</td>
-                <td className="px-4 py-3">{row.totalHours}</td>
-                <td className="px-4 py-3">{row.permissionType}</td>
-                <td className="px-4 py-3">{row.reason}</td>
-                <td className="max-w-[240px] px-4 py-3">{row.description}</td>
-                <td className="px-4 py-3">
+                <td className="whitespace-nowrap">{row.employeeCode}</td>
+                <td className="font-medium text-slate-900">{row.employeeName}</td>
+                <td>{row.department}</td>
+                <td className="whitespace-nowrap">{row.permissionDate}</td>
+                <td className="whitespace-nowrap">{row.fromTime}</td>
+                <td className="whitespace-nowrap">{row.toTime}</td>
+                <td className="whitespace-nowrap">{row.totalHours}</td>
+                <td>{row.permissionType}</td>
+                <td>{row.reason}</td>
+                <td className="min-w-[14rem] max-w-[22rem]">{row.description}</td>
+                <td>
                   <Badge value={row.status} />
                 </td>
-                <td className="px-4 py-3">{row.requestedOn}</td>
-                <td className="px-4 py-3">
-                  <div className="flex min-w-[260px] flex-col gap-2">
+                <td className="whitespace-nowrap">{row.requestedOn}</td>
+                <td>
+                  <div className="flex min-w-[280px] flex-col gap-2">
                     {row.isPending ? (
                       <form
                         action={async (formData) => {
@@ -215,7 +212,7 @@ export function AdminPermissionRequestsTable({ rows }: { rows: AdminPermissionTa
             ))}
             {!rows.length ? (
               <tr>
-                <td colSpan={14} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={14} className="py-10 text-center text-slate-500">
                   No permission requests found.
                 </td>
               </tr>

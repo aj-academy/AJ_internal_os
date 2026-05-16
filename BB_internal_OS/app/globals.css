@@ -187,6 +187,30 @@
     @apply flex flex-col gap-2 sm:flex-row sm:flex-wrap;
   }
 
+  /* Data tables project-wide: column gap + comfortable cell padding */
+  table.w-full {
+    border-collapse: separate;
+    border-spacing: 0.5rem 0.25rem;
+  }
+
+  @media (min-width: 768px) {
+    table.w-full {
+      border-spacing: 0.75rem 0.35rem;
+    }
+  }
+
+  table.w-full thead th {
+    @apply bg-[#f1f6fc] px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-[#64748b];
+  }
+
+  table.w-full tbody td {
+    @apply px-4 py-4 align-middle leading-relaxed text-slate-700;
+  }
+
+  table.w-full tbody tr {
+    @apply border-b border-[#e8edf5];
+  }
+
   /* Full-screen add/edit forms on phone & tablet; side panel on laptop+ */
   .mobile-form-panel {
     inset: 0;

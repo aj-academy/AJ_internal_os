@@ -101,10 +101,10 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
-        <table className="w-full min-w-[1560px] text-left text-sm">
-          <thead className="bg-[#f1f6fc] text-[#64748b]">
+        <table className="w-full min-w-[2000px] text-left text-sm">
+          <thead>
             <tr>
-              <th className="w-10 px-3 py-3">
+              <th className="w-14">
                 <input
                   type="checkbox"
                   checked={allSelected}
@@ -128,18 +128,16 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
                 "Check Out Location",
                 "Action",
               ].map((h) => (
-                <th key={h} className="px-4 py-3">
-                  {h}
-                </th>
+                <th key={h}>{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#e8edf5] text-slate-700">
+          <tbody>
             {rows.map((row) => {
               const moodKey = row.mood?.toLowerCase() ?? "";
               return (
                 <tr key={row.id}>
-                  <td className="px-3 py-3">
+                  <td className="w-14">
                     <input
                       type="checkbox"
                       checked={selected.has(row.id)}
@@ -147,14 +145,14 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
                       aria-label={`Select ${row.employeeName}`}
                     />
                   </td>
-                  <td className="px-4 py-3">{row.employeeCode}</td>
-                  <td className="px-4 py-3 font-medium text-slate-900">{row.employeeName}</td>
-                  <td className="px-4 py-3">{row.email}</td>
-                  <td className="px-4 py-3">{row.department}</td>
-                  <td className="px-4 py-3">{row.date}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="whitespace-nowrap">{row.employeeCode}</td>
+                  <td className="font-medium text-slate-900">{row.employeeName}</td>
+                  <td>{row.email}</td>
+                  <td>{row.department}</td>
+                  <td className="whitespace-nowrap">{row.date}</td>
+                  <td className="whitespace-nowrap">
                     {row.mood ? (
-                      <span className="inline-flex items-center gap-1.5" title={MOOD_LABEL[moodKey] ?? row.mood}>
+                      <span className="inline-flex items-center gap-2" title={MOOD_LABEL[moodKey] ?? row.mood}>
                         <span className="text-lg leading-none" aria-hidden>
                           {MOOD_EMOJI[moodKey] ?? "🙂"}
                         </span>
@@ -164,21 +162,21 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
                       <span className="text-xs text-[#94a3b8]">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">{row.checkIn}</td>
-                  <td className="px-4 py-3">{row.checkOut}</td>
-                  <td className="px-4 py-3">{row.totalHours}</td>
-                  <td className="px-4 py-3">
+                  <td className="whitespace-nowrap">{row.checkIn}</td>
+                  <td className="whitespace-nowrap">{row.checkOut}</td>
+                  <td className="whitespace-nowrap">{row.totalHours}</td>
+                  <td>
                     <Badge value={row.status} />
                   </td>
-                  <td className="px-4 py-3">{row.locationType}</td>
-                  <td className="max-w-[260px] px-4 py-3">{row.checkInAddress}</td>
-                  <td className="max-w-[260px] px-4 py-3">{row.checkOutAddress}</td>
-                  <td className="px-4 py-3">
+                  <td>{row.locationType}</td>
+                  <td className="min-w-[14rem] max-w-[22rem]">{row.checkInAddress}</td>
+                  <td className="min-w-[14rem] max-w-[22rem]">{row.checkOutAddress}</td>
+                  <td className="whitespace-nowrap">
                     <button
                       type="button"
                       disabled={pending}
                       onClick={() => deleteOne(row.id)}
-                      className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 disabled:opacity-50"
+                      className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 disabled:opacity-50"
                     >
                       Delete
                     </button>
@@ -188,7 +186,7 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
             })}
             {!rows.length ? (
               <tr>
-                <td colSpan={15} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={15} className="py-10 text-center text-slate-500">
                   No check-in/check-out records found.
                 </td>
               </tr>
