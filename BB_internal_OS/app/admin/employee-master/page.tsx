@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
+import { AdminEmployeeProfileView } from "@/components/admin/AdminEmployeeProfileView";
 import { useHrOrgSettings } from "@/hooks/useHrOrgSettings";
 import { jobDomainsForDepartment } from "@/lib/hrOrg";
 import type { Profile, ProfileStatus, UserRole } from "@/types/profile";
@@ -84,6 +85,7 @@ export default function EmployeeMasterPage() {
   const [form, setForm] = useState<FormState>(() => emptyForm(defaultDepartment, defaultDesignation));
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [viewProfileId, setViewProfileId] = useState<string | null>(null);
 
   const designationOptions = useMemo(
     () => jobDomainsForDepartment(hrOrg, form.department),
@@ -127,6 +129,10 @@ export default function EmployeeMasterPage() {
   }, [employees, search, statusFilter]);
 
   const onPickEmployee = (employee: EmployeeRow, selectedMode: "view" | "edit") => {
+    if (selectedMode === "view") {
+      setViewProfileId(employee.id);
+      return;
+    }
     setMode(selectedMode);
     setSubmitError(null);
     setForm({
@@ -485,6 +491,10 @@ export default function EmployeeMasterPage() {
           Inactive: <span className="font-semibold text-slate-900"> {inactiveCount}</span>
         </CardContent>
       </Card>
+
+      {viewProfileId ? (
+        <AdminEmployeeProfileView profileId={viewProfileId} onClose={() => setViewProfileId(null)} />
+      ) : null}
     </section>
   );
 }
