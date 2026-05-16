@@ -65,3 +65,25 @@ export function formatDateTimeIST(value: string | null | undefined): string {
     hour12: true,
   });
 }
+
+export function formatTimeIST(value: string | null | undefined): string {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleTimeString(IST_LOCALE, {
+    timeZone: IST_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+/** Calendar date in India (IST) as YYYY-MM-DD — use for mood_date filters. */
+export function todayDateIST(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: IST_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}

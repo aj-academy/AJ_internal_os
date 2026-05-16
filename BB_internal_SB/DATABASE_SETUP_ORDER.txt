@@ -44,6 +44,9 @@ ATTENDANCE (employee + admin attendance + work summaries) — pick ONE approach:
 6a-inapp) in_app_notifications.sql
    Run AFTER (6a). Table in_app_notifications + RPCs for assignee/assigner in-app bell (no email). In Supabase Dashboard → Database → Replication, add public.in_app_notifications for live updates.
 
+6a-mood) employee_daily_mood_schema.sql
+   Run AFTER schema.sql. Table employee_daily_mood_checkins (daily emoji mood on employee login). Enable replication for live admin dashboard if desired.
+
 6b) project_master_schema.sql
    Run AFTER (6a-inapp) (or after 6a if you skip in-app for now). Adds public.projects, project_activities, project_team_members; tasks.project_id FK;
    triggers to sync project progress from tasks; RLS for projects/activities/team; extends task SELECT for project team.

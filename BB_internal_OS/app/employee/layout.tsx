@@ -1,4 +1,5 @@
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
+import { EmployeeExperienceLayer } from "@/components/employee/EmployeeExperienceLayer";
 import { PolicyAcceptanceGate } from "@/components/policies/PolicyAcceptanceGate";
 import { requireRole } from "@/lib/auth/requireRole";
 
@@ -26,6 +27,7 @@ export default async function EmployeeLayout({
       notificationFallbackHref="/employee/my-tasks"
     >
       <PolicyAcceptanceGate />
+      <EmployeeExperienceLayer />
       {children}
     </DashboardLayout>
   );

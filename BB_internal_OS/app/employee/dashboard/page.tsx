@@ -1,29 +1,18 @@
 import Link from "next/link";
-import { CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, LayoutDashboard, Shield } from "lucide-react";
+import Image from "next/image";
+import { CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, Shield } from "lucide-react";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { createClient } from "@/lib/supabase/server";
 import { EmployeeTaskPreview } from "@/components/employee/EmployeeTaskPreview";
 import { RedirectMyLeaveHash } from "@/components/employee/RedirectMyLeaveHash";
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function formatTime(iso: string | null | undefined) {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return "—";
-  }
-}
+import { formatTimeIST, todayDateIST } from "@/lib/datetime";
 
 export default async function EmployeeDashboardPage() {
   const { profile, user } = await getUserProfile();
   const supabase = await createClient();
 
   const uid = user?.id;
-  const today = todayISO();
+  const today = todayDateIST();
 
   let todayAttendance: { status: string | null; check_in_time: string | null; check_out_time: string | null } | null = null;
   let totalTasks = 0;
@@ -74,7 +63,7 @@ export default async function EmployeeDashboardPage() {
   const attLabel = todayAttendance?.status?.trim() || "No check-in yet";
   const punchLine =
     todayAttendance?.check_in_time || todayAttendance?.check_out_time
-      ? `${formatTime(todayAttendance.check_in_time)} → ${formatTime(todayAttendance.check_out_time)}`
+      ? `${formatTimeIST(todayAttendance.check_in_time)} → ${formatTimeIST(todayAttendance.check_out_time)}`
       : "Record attendance from My Attendance";
 
   const firstName = (profile?.full_name ?? "there").split(" ")[0];
@@ -118,8 +107,15 @@ export default async function EmployeeDashboardPage() {
       <div className="flex flex-col gap-2 border-b border-[#e8edf5] pb-6 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748b]">Workspace</p>
-          <h2 className="mt-1 flex items-center gap-2 text-3xl font-semibold text-[#0f172a]">
-            <LayoutDashboard className="h-8 w-8 text-[#2563eb]" />
+          <h2 className="mt-1 flex items-center gap-3 text-3xl font-semibold text-[#0f172a]">
+            <Image
+              src="/icons/icon-192x192.png"
+              alt="BB Internal OS"
+              width={40}
+              height={40}
+              className="h-10 w-10 shrink-0 rounded-xl border border-[#dbe6f3] bg-white object-cover shadow-sm"
+              priority
+            />
             Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, {firstName}
           </h2>
           <p className="mt-1 text-sm text-[#64748b]">

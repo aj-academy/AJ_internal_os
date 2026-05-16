@@ -13,6 +13,8 @@ interface TopbarProps {
   fullName: string;
   email: string;
   notificationFallbackHref: string;
+  /** Global search in topbar — hidden on dashboards until wired up. */
+  showSearchBar?: boolean;
   /** Shown only below `lg` (mobile / tablet). Typically a `SheetTrigger` for the sidebar. */
   mobileMenuTrigger?: ReactNode;
 }
@@ -21,6 +23,7 @@ export const Topbar = memo(function Topbar({
   fullName,
   email,
   notificationFallbackHref,
+  showSearchBar = false,
   mobileMenuTrigger,
 }: TopbarProps) {
   const router = useRouter();
@@ -83,14 +86,16 @@ export const Topbar = memo(function Topbar({
           </div>
         </div>
 
-        <div className="relative w-full min-w-0">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b]" />
-          <input
-            type="search"
-            placeholder="Search attendance, projects, expenses…"
-            className="h-11 w-full min-w-0 rounded-full border border-[#d4deea] bg-white py-2 pl-9 pr-4 text-sm text-[#0f172a] outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#dbeafe] sm:h-10"
-          />
-        </div>
+        {showSearchBar ? (
+          <div className="relative w-full min-w-0">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b]" />
+            <input
+              type="search"
+              placeholder="Search attendance, projects, expenses…"
+              className="h-11 w-full min-w-0 rounded-full border border-[#d4deea] bg-white py-2 pl-9 pr-4 text-sm text-[#0f172a] outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#dbeafe] sm:h-10"
+            />
+          </div>
+        ) : null}
       </div>
     </header>
   );
