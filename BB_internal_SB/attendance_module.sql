@@ -142,9 +142,9 @@ create table if not exists public.attendance_settings (
 -- -----------------------------------------------------------------------------
 grant usage on schema public to authenticated;
 
-grant select, insert, update on table public.attendance_records to authenticated;
+grant select, insert, update, delete on table public.attendance_records to authenticated;
 grant select, insert, update on table public.work_summaries to authenticated;
-grant select, insert, update on table public.permission_requests to authenticated;
+grant select, insert, update, delete on table public.permission_requests to authenticated;
 grant select on table public.profiles to authenticated;
 
 alter table public.attendance_records enable row level security;
@@ -192,6 +192,13 @@ for select
 to authenticated
 using (public.is_admin());
 
+drop policy if exists attendance_admin_delete_all on public.attendance_records;
+create policy attendance_admin_delete_all
+on public.attendance_records
+for delete
+to authenticated
+using (public.is_admin());
+
 drop policy if exists work_summary_employee_own on public.work_summaries;
 create policy work_summary_employee_own
 on public.work_summaries
@@ -223,3 +230,10 @@ for all
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
+
+drop policy if exists permission_admin_delete on public.permission_requests;
+create policy permission_admin_delete
+on public.permission_requests
+for delete
+to authenticated
+using (public.is_admin());

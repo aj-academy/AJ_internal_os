@@ -493,7 +493,27 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     if (locationFilter) logsQuery = logsQuery.eq("location_type", locationFilter);
 
     const { data: recordsData } = await logsQuery.returns<AttendanceRecord[]>();
-    const records = (recordsData ?? []).filter((row) => {
+    const recordsRaw = recordsData ?? [];
+    const moodDates = [...new Set(recordsRaw.map((r) => r.attendance_date).filter(Boolean))];
+    const moodByEmployeeDate = new Map<string, string>();
+    if (moodDates.length) {
+      let moodQuery = supabase
+        .from("employee_daily_mood_checkins")
+        .select("employee_id,mood,mood_date");
+      if (dateFilter) {
+        moodQuery = moodQuery.eq("mood_date", dateFilter);
+      } else {
+        moodQuery = moodQuery.in("mood_date", moodDates.slice(0, 100));
+      }
+      const { data: moodRows } = await moodQuery;
+      for (const m of moodRows ?? []) {
+        if (m.employee_id && m.mood_date) {
+          moodByEmployeeDate.set(`${m.employee_id}:${m.mood_date}`, String(m.mood));
+        }
+      }
+    }
+
+    const records = recordsRaw.filter((row) => {
       const profile = profileMap.get(row.employee_id);
       const department = (profile?.department ?? "").toLowerCase();
       const employeeCode = (employeeCodeMap.get(row.employee_id) ?? "").toLowerCase();
@@ -576,6 +596,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
               locationType: row.location_type ?? "-",
               checkInAddress: row.check_in_address ?? "-",
               checkOutAddress: row.check_out_address ?? "-",
+              mood: moodByEmployeeDate.get(`${row.employee_id}:${row.attendance_date}`) ?? null,
             };
           })}
         />

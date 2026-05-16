@@ -7,9 +7,9 @@
 
 grant usage on schema public to authenticated;
 
-grant select, insert, update on table public.attendance_records to authenticated;
+grant select, insert, update, delete on table public.attendance_records to authenticated;
 grant select, insert, update on table public.work_summaries to authenticated;
-grant select, insert, update on table public.permission_requests to authenticated;
+grant select, insert, update, delete on table public.permission_requests to authenticated;
 grant select on table public.profiles to authenticated;
 
 alter table public.attendance_records enable row level security;
@@ -98,3 +98,10 @@ for all
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
+
+drop policy if exists permission_admin_delete on public.permission_requests;
+create policy permission_admin_delete
+on public.permission_requests
+for delete
+to authenticated
+using (public.is_admin());

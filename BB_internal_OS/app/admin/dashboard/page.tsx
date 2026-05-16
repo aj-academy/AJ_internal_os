@@ -34,9 +34,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
-import { AdminDailyMoodPanel, type DailyMoodRow } from "@/components/admin/AdminDailyMoodPanel";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { todayDateIST } from "@/lib/datetime";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,7 +51,6 @@ type Claim = { approval_status: string | null };
 type Leave = { status: string | null };
 type Permission = { status: string | null };
 type Wfh = { status: string | null };
-type MoodCheckin = { id: string; employee_id: string; mood: string; mood_date: string; created_at: string };
 type ActivityRow = { id: string; title: string; module: string; status: string; at: string };
 
 const PIE_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
@@ -153,7 +150,6 @@ export default function AdminDashboardPage() {
   const [leaves, setLeaves] = useState<Leave[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [wfh, setWfh] = useState<Wfh[]>([]);
-  const [dailyMoods, setDailyMoods] = useState<MoodCheckin[]>([]);
 
   const load = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoading(true);
@@ -238,18 +234,6 @@ export default function AdminDashboardPage() {
       setPermissions(pm);
       setWfh(wf);
 
-      const moodToday = todayDateIST();
-      const moodRes = await supabase
-        .from("employee_daily_mood_checkins")
-        .select("id,employee_id,mood,mood_date,created_at")
-        .eq("mood_date", moodToday)
-        .order("created_at", { ascending: false })
-        .limit(500);
-      if (!moodRes.error) {
-        setDailyMoods((moodRes.data ?? []) as MoodCheckin[]);
-      } else {
-        setDailyMoods([]);
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load dashboard data.");
     } finally {
@@ -295,25 +279,6 @@ export default function AdminDashboardPage() {
     return m;
   }, [profiles]);
 
-  const moodPanelRows: DailyMoodRow[] = useMemo(
-    () =>
-      dailyMoods.map((row) => ({
-        ...row,
-        employee_name: nameMap[row.employee_id] ?? row.employee_id.slice(0, 8),
-      })),
-    [dailyMoods, nameMap],
-  );
-
-  const moodTodayLabel = useMemo(
-    () =>
-      new Date().toLocaleDateString("en-IN", {
-        timeZone: "Asia/Kolkata",
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-      }),
-    [],
-  );
   const clientMap = useMemo(() => {
     const m: Record<string, string> = {};
     clients.forEach((c) => {
@@ -522,8 +487,6 @@ export default function AdminDashboardPage() {
           <StatCard key={item.title} title={item.title} value={loading ? "…" : item.value} trend={item.trendVal} description={item.description} icon={item.icon} />
         ))}
       </div>
-
-      <AdminDailyMoodPanel rows={moodPanelRows} todayLabel={moodTodayLabel} />
 
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">

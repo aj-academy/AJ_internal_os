@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   bulkDeleteAttendanceRecords,
   deleteAttendanceRecord,
 } from "@/app/admin/attendance/actions";
+import { MOOD_EMOJI, MOOD_LABEL } from "@/lib/moodDisplay";
 
 export type AdminAttendanceLogRow = {
   id: string;
@@ -20,6 +22,7 @@ export type AdminAttendanceLogRow = {
   locationType: string;
   checkInAddress: string;
   checkOutAddress: string;
+  mood: string | null;
 };
 
 function Badge({ value }: { value: string }) {
@@ -36,7 +39,10 @@ function Badge({ value }: { value: string }) {
 }
 
 export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow[] }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
   const allIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const allSelected = rows.length > 0 && selected.size === rows.length;
 
@@ -53,23 +59,49 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
     });
   };
 
+  const runDelete = (fn: () => Promise<{ ok: boolean; error?: string }>, clearSelection = false) => {
+    setError(null);
+    startTransition(async () => {
+      const result = await fn();
+      if (!result.ok) {
+        setError(result.error ?? "Delete failed.");
+        return;
+      }
+      if (clearSelection) setSelected(new Set());
+      router.refresh();
+    });
+  };
+
+  const deleteOne = (id: string) => {
+    const fd = new FormData();
+    fd.set("id", id);
+    runDelete(() => deleteAttendanceRecord(fd));
+  };
+
+  const deleteSelected = () => {
+    const fd = new FormData();
+    selected.forEach((id) => fd.append("ids", id));
+    runDelete(() => bulkDeleteAttendanceRecords(fd), true);
+  };
+
   return (
     <section className="rounded-2xl border border-[#d4deea] bg-white p-4">
-      <form action={bulkDeleteAttendanceRecords} className="mb-3 flex flex-wrap items-center gap-2">
-        {Array.from(selected).map((id) => (
-          <input key={id} type="hidden" name="ids" value={id} />
-        ))}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <button
-          type="submit"
-          disabled={selected.size === 0}
+          type="button"
+          disabled={selected.size === 0 || pending}
+          onClick={deleteSelected}
           className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Delete selected ({selected.size})
+          {pending ? "Deleting…" : `Delete selected (${selected.size})`}
         </button>
-      </form>
+      </div>
+      {error ? (
+        <p className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">{error}</p>
+      ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
-        <table className="w-full min-w-[1500px] text-left text-sm">
+        <table className="w-full min-w-[1560px] text-left text-sm">
           <thead className="bg-[#f1f6fc] text-[#64748b]">
             <tr>
               <th className="w-10 px-3 py-3">
@@ -86,6 +118,7 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
                 "Email",
                 "Department",
                 "Date",
+                "Mood",
                 "Check In Time",
                 "Check Out Time",
                 "Total Hours",
@@ -102,46 +135,60 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
             </tr>
           </thead>
           <tbody className="divide-y divide-[#e8edf5] text-slate-700">
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td className="px-3 py-3">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(row.id)}
-                    onChange={() => toggleOne(row.id)}
-                    aria-label={`Select ${row.employeeName}`}
-                  />
-                </td>
-                <td className="px-4 py-3">{row.employeeCode}</td>
-                <td className="px-4 py-3 font-medium text-slate-900">{row.employeeName}</td>
-                <td className="px-4 py-3">{row.email}</td>
-                <td className="px-4 py-3">{row.department}</td>
-                <td className="px-4 py-3">{row.date}</td>
-                <td className="px-4 py-3">{row.checkIn}</td>
-                <td className="px-4 py-3">{row.checkOut}</td>
-                <td className="px-4 py-3">{row.totalHours}</td>
-                <td className="px-4 py-3">
-                  <Badge value={row.status} />
-                </td>
-                <td className="px-4 py-3">{row.locationType}</td>
-                <td className="max-w-[260px] px-4 py-3">{row.checkInAddress}</td>
-                <td className="max-w-[260px] px-4 py-3">{row.checkOutAddress}</td>
-                <td className="px-4 py-3">
-                  <form action={deleteAttendanceRecord}>
-                    <input type="hidden" name="id" value={row.id} />
+            {rows.map((row) => {
+              const moodKey = row.mood?.toLowerCase() ?? "";
+              return (
+                <tr key={row.id}>
+                  <td className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(row.id)}
+                      onChange={() => toggleOne(row.id)}
+                      aria-label={`Select ${row.employeeName}`}
+                    />
+                  </td>
+                  <td className="px-4 py-3">{row.employeeCode}</td>
+                  <td className="px-4 py-3 font-medium text-slate-900">{row.employeeName}</td>
+                  <td className="px-4 py-3">{row.email}</td>
+                  <td className="px-4 py-3">{row.department}</td>
+                  <td className="px-4 py-3">{row.date}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {row.mood ? (
+                      <span className="inline-flex items-center gap-1.5" title={MOOD_LABEL[moodKey] ?? row.mood}>
+                        <span className="text-lg leading-none" aria-hidden>
+                          {MOOD_EMOJI[moodKey] ?? "🙂"}
+                        </span>
+                        <span className="text-xs text-[#64748b]">{MOOD_LABEL[moodKey] ?? row.mood}</span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-[#94a3b8]">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">{row.checkIn}</td>
+                  <td className="px-4 py-3">{row.checkOut}</td>
+                  <td className="px-4 py-3">{row.totalHours}</td>
+                  <td className="px-4 py-3">
+                    <Badge value={row.status} />
+                  </td>
+                  <td className="px-4 py-3">{row.locationType}</td>
+                  <td className="max-w-[260px] px-4 py-3">{row.checkInAddress}</td>
+                  <td className="max-w-[260px] px-4 py-3">{row.checkOutAddress}</td>
+                  <td className="px-4 py-3">
                     <button
-                      type="submit"
-                      className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700"
+                      type="button"
+                      disabled={pending}
+                      onClick={() => deleteOne(row.id)}
+                      className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 disabled:opacity-50"
                     >
                       Delete
                     </button>
-                  </form>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                </tr>
+              );
+            })}
             {!rows.length ? (
               <tr>
-                <td colSpan={14} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={15} className="px-4 py-8 text-center text-slate-500">
                   No check-in/check-out records found.
                 </td>
               </tr>
