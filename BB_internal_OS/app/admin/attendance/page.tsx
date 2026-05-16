@@ -814,29 +814,29 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
 
         <section className="rounded-2xl border border-[#d4deea] bg-white p-4">
           <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
-            <table className="w-full min-w-[1600px] text-left text-sm">
-              <thead>
+            <table className="w-full min-w-[1200px] text-left text-sm">
+              <thead className="bg-[#f1f6fc] text-[#64748b]">
                 <tr>
                   {["Employee Name", "Department", "Date", "Completed Work", "Pending Work", "Challenges", "Tomorrow Plan", "Status", "Manager/Admin Remarks", "Action"].map((h) => (
-                    <th key={h}>{h}</th>
+                    <th key={h} className="px-5 py-3">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-[#e8edf5] text-slate-700">
                 {rows.map((row) => {
                   const profile = profileMap.get(row.employee_id);
                   return (
                     <tr key={row.id}>
-                      <td className="font-medium text-slate-900">{profile?.full_name ?? employeeNameFallbackMap.get(row.employee_id) ?? "—"}</td>
-                      <td>{profile?.department ?? "-"}</td>
-                      <td>{row.summary_date ? formatDate(row.summary_date) : "-"}</td>
-                      <td className="min-w-[14rem] max-w-[22rem]">{row.completed_work ?? "-"}</td>
-                      <td className="min-w-[14rem] max-w-[22rem]">{row.pending_work ?? "-"}</td>
-                      <td className="min-w-[14rem] max-w-[22rem]">{row.challenges ?? "-"}</td>
-                      <td className="min-w-[14rem] max-w-[22rem]">{row.tomorrow_plan ?? "-"}</td>
-                      <td><Badge value={row.status ?? "submitted"} /></td>
-                      <td>{row.manager_remarks ?? "-"}</td>
-                      <td>
+                      <td className="px-5 py-3 font-medium text-slate-900">{profile?.full_name ?? employeeNameFallbackMap.get(row.employee_id) ?? "—"}</td>
+                      <td className="px-5 py-3">{profile?.department ?? "-"}</td>
+                      <td className="px-5 py-3">{row.summary_date ? formatDate(row.summary_date) : "-"}</td>
+                      <td className="max-w-[220px] px-5 py-3">{row.completed_work ?? "-"}</td>
+                      <td className="max-w-[220px] px-5 py-3">{row.pending_work ?? "-"}</td>
+                      <td className="max-w-[220px] px-5 py-3">{row.challenges ?? "-"}</td>
+                      <td className="max-w-[220px] px-5 py-3">{row.tomorrow_plan ?? "-"}</td>
+                      <td className="px-5 py-3"><Badge value={row.status ?? "submitted"} /></td>
+                      <td className="px-5 py-3">{row.manager_remarks ?? "-"}</td>
+                      <td className="px-5 py-3">
                         <div className="min-w-[220px] space-y-2">
                           <details className="rounded-lg border border-[#dbe6f3] bg-white px-2 py-1">
                             <summary className="cursor-pointer text-xs text-slate-700">View Full Summary</summary>
@@ -856,7 +856,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
                   );
                 })}
                 {!rows.length ? (
-                  <tr><td colSpan={10} className="py-10 text-center text-slate-500">No work summaries found.</td></tr>
+                  <tr><td colSpan={10} className="px-4 py-8 text-center text-slate-500">No work summaries found.</td></tr>
                 ) : null}
               </tbody>
             </table>
@@ -1014,38 +1014,38 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
 
       <section className="rounded-2xl border border-[#d4deea] bg-white p-4">
         <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
-          <table className="w-full min-w-[1900px] text-left text-sm">
-            <thead>
+          <table className="w-full min-w-[1700px] text-left text-sm">
+            <thead className="bg-[#f1f6fc] text-[#64748b]">
               <tr>
                 {["Employee Code", "Employee Name", "Department", "Present Days", "Absent Days", "Late Days", "Permission Hours", "WFH Days", "Total Working Hours", "Attendance %", "Work Summary Submitted", "Work Summary Pending"].map((h) => (
-                  <th key={h}>{h}</th>
+                  <th key={h} className="px-5 py-3">{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-[#e8edf5] text-slate-700">
               {reportRows.map(([employeeId, row]) => {
                 const profile = profileMap.get(employeeId);
                 const attendancePercent = workingDays ? ((row.present / workingDays) * 100).toFixed(1) : "0.0";
                 const pending = Math.max(0, row.present - row.summaries);
                 return (
                   <tr key={employeeId}>
-                    <td>{employeeCodeMap.get(employeeId) ?? "-"}</td>
-                    <td className="font-medium text-slate-900">{profile?.full_name ?? "-"}</td>
-                    <td>{profile?.department ?? "-"}</td>
-                    <td>{row.present}</td>
-                    <td>{row.absent}</td>
-                    <td>{row.late}</td>
-                    <td>{row.permissionsHours.toFixed(1)}</td>
-                    <td>{row.wfh}</td>
-                    <td>{toHours(row.minutes)}</td>
-                    <td>{attendancePercent}%</td>
-                    <td>{row.summaries}</td>
-                    <td>{pending}</td>
+                    <td className="px-5 py-3">{employeeCodeMap.get(employeeId) ?? "-"}</td>
+                    <td className="px-5 py-3 font-medium text-slate-900">{profile?.full_name ?? "-"}</td>
+                    <td className="px-5 py-3">{profile?.department ?? "-"}</td>
+                    <td className="px-5 py-3">{row.present}</td>
+                    <td className="px-5 py-3">{row.absent}</td>
+                    <td className="px-5 py-3">{row.late}</td>
+                    <td className="px-5 py-3">{row.permissionsHours.toFixed(1)}</td>
+                    <td className="px-5 py-3">{row.wfh}</td>
+                    <td className="px-5 py-3">{toHours(row.minutes)}</td>
+                    <td className="px-5 py-3">{attendancePercent}%</td>
+                    <td className="px-5 py-3">{row.summaries}</td>
+                    <td className="px-5 py-3">{pending}</td>
                   </tr>
                 );
               })}
               {!reportRows.length ? (
-                <tr><td colSpan={12} className="py-10 text-center text-slate-500">No monthly report records found.</td></tr>
+                <tr><td colSpan={12} className="px-4 py-8 text-center text-slate-500">No monthly report records found.</td></tr>
               ) : null}
             </tbody>
           </table>

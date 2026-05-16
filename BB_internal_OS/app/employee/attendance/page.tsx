@@ -526,8 +526,8 @@ export default function EmployeeAttendancePage() {
       <article className="rounded-2xl border border-[#dbe6f3] bg-white p-5">
         <h3 className="mb-3 text-lg font-semibold text-slate-900">Attendance History (Last 10)</h3>
         <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
-          <table className="w-full min-w-[1200px] text-left text-sm">
-            <thead>
+          <table className="w-full min-w-[900px] text-left text-sm">
+            <thead className="bg-[#f1f6fc] text-[#64748b]">
               <tr>
                 {[
                   "Date",
@@ -540,37 +540,39 @@ export default function EmployeeAttendancePage() {
                   "Check Out Location",
                   "Work Summary Status",
                 ].map((heading) => (
-                  <th key={heading}>{heading}</th>
+                  <th key={heading} className="px-5 py-3">
+                    {heading}
+                  </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-[#e8edf5] text-slate-700">
               {history.map((record) => (
                 <tr key={record.id}>
-                  <td className="whitespace-nowrap">{formatDate(record.attendance_date)}</td>
-                  <td className="whitespace-nowrap">{formatTime(record.check_in_time)}</td>
-                  <td className="whitespace-nowrap">{formatTime(record.check_out_time)}</td>
-                  <td className="whitespace-nowrap">{formatHours(record.total_working_minutes)}</td>
-                  <td className="capitalize">{record.status ?? "-"}</td>
-                  <td>{record.location_type ?? "-"}</td>
-                  <td className="min-w-[14rem] max-w-[22rem]">
+                  <td className="px-5 py-3">{formatDate(record.attendance_date)}</td>
+                  <td className="px-5 py-3">{formatTime(record.check_in_time)}</td>
+                  <td className="px-5 py-3">{formatTime(record.check_out_time)}</td>
+                  <td className="px-5 py-3">{formatHours(record.total_working_minutes)}</td>
+                  <td className="px-5 py-3 capitalize">{record.status ?? "-"}</td>
+                  <td className="px-5 py-3">{record.location_type ?? "-"}</td>
+                  <td className="max-w-[260px] px-5 py-3">
                     {record.check_in_address ??
                       (record.check_in_latitude && record.check_in_longitude
                         ? `${record.check_in_latitude}, ${record.check_in_longitude}`
                         : "-")}
                   </td>
-                  <td className="min-w-[14rem] max-w-[22rem]">
+                  <td className="max-w-[260px] px-5 py-3">
                     {record.check_out_address ??
                       (record.check_out_latitude && record.check_out_longitude
                         ? `${record.check_out_latitude}, ${record.check_out_longitude}`
                         : "-")}
                   </td>
-                  <td className="capitalize">{summaryStatusMap[record.id] ?? "-"}</td>
+                  <td className="px-5 py-3 capitalize">{summaryStatusMap[record.id] ?? "-"}</td>
                 </tr>
               ))}
               {!history.length && busy !== "loading" ? (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-slate-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                     No attendance records found.
                   </td>
                 </tr>
