@@ -109,7 +109,7 @@ create table if not exists public.work_from_home_requests (
 create table if not exists public.work_summaries (
   id uuid primary key default gen_random_uuid(),
   employee_id uuid references public.profiles(id),
-  attendance_id uuid references public.attendance_records(id),
+  attendance_id uuid references public.attendance_records(id) on delete cascade,
   summary_date date,
   completed_work text,
   pending_work text,
@@ -143,7 +143,7 @@ create table if not exists public.attendance_settings (
 grant usage on schema public to authenticated;
 
 grant select, insert, update, delete on table public.attendance_records to authenticated;
-grant select, insert, update on table public.work_summaries to authenticated;
+grant select, insert, update, delete on table public.work_summaries to authenticated;
 grant select, insert, update, delete on table public.permission_requests to authenticated;
 grant select on table public.profiles to authenticated;
 
@@ -214,6 +214,13 @@ for all
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
+
+drop policy if exists work_summary_admin_delete on public.work_summaries;
+create policy work_summary_admin_delete
+on public.work_summaries
+for delete
+to authenticated
+using (public.is_admin());
 
 drop policy if exists permission_employee_own on public.permission_requests;
 create policy permission_employee_own

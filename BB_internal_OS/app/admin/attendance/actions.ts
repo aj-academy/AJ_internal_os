@@ -30,6 +30,20 @@ function parseIds(formData: FormData): string[] {
     .filter(Boolean);
 }
 
+/** Remove attendance rows after clearing linked work_summaries (FK: work_summaries_attendance_id_fkey). */
+async function deleteAttendanceRecordsByIds(
+  supabase: Awaited<ReturnType<typeof createAttendanceSupabaseClient>>,
+  ids: string[],
+): Promise<AttendanceActionResult> {
+  const { error: summaryError } = await supabase.from("work_summaries").delete().in("attendance_id", ids);
+  if (summaryError) return { ok: false, error: summaryError.message };
+
+  const { error } = await supabase.from("attendance_records").delete().in("id", ids);
+  if (error) return { ok: false, error: error.message };
+
+  return { ok: true };
+}
+
 export async function handlePermissionAction(formData: FormData): Promise<AttendanceActionResult> {
   try {
     const profile = await requireAdmin();
@@ -111,8 +125,8 @@ export async function deleteAttendanceRecord(formData: FormData): Promise<Attend
     if (!id) return { ok: false, error: "Missing record id." };
 
     const supabase = await createAttendanceSupabaseClient();
-    const { error } = await supabase.from("attendance_records").delete().eq("id", id);
-    if (error) return { ok: false, error: error.message };
+    const result = await deleteAttendanceRecordsByIds(supabase, [id]);
+    if (!result.ok) return result;
 
     revalidatePath("/admin/attendance");
     return { ok: true };
@@ -128,8 +142,8 @@ export async function bulkDeleteAttendanceRecords(formData: FormData): Promise<A
     if (!ids.length) return { ok: false, error: "Select at least one row." };
 
     const supabase = await createAttendanceSupabaseClient();
-    const { error } = await supabase.from("attendance_records").delete().in("id", ids);
-    if (error) return { ok: false, error: error.message };
+    const result = await deleteAttendanceRecordsByIds(supabase, ids);
+    if (!result.ok) return result;
 
     revalidatePath("/admin/attendance");
     return { ok: true };

@@ -68,7 +68,7 @@ create table if not exists public.work_from_home_requests (
 create table if not exists public.work_summaries (
   id uuid primary key default gen_random_uuid(),
   employee_id uuid references public.profiles(id),
-  attendance_id uuid references public.attendance_records(id),
+  attendance_id uuid references public.attendance_records(id) on delete cascade,
   summary_date date,
   completed_work text,
   pending_work text,
