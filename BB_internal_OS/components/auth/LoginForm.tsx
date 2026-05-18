@@ -13,6 +13,23 @@ import { Input } from "@/components/ui/input";
 
 interface LoginFormProps {
   initialError?: string;
+  resetSuccess?: boolean;
+  initialEmail?: string;
+}
+
+async function accountNeedsFirstLogin(email: string): Promise<boolean> {
+  try {
+    const response = await fetch("/api/auth/needs-first-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!response.ok) return false;
+    const payload = (await response.json()) as { needsFirstLogin?: boolean };
+    return Boolean(payload.needsFirstLogin);
+  } catch {
+    return false;
+  }
 }
 
 const ERROR_MAP: Record<string, string> = {
@@ -67,13 +84,16 @@ async function initializeFirstLogin(payload: { email: string; role: string; pass
   return { ok: false, alreadyInitialized: true };
 }
 
-export function LoginForm({ initialError }: LoginFormProps) {
+export function LoginForm({ initialError, resetSuccess = false, initialEmail = "" }: LoginFormProps) {
   const router = useRouter();
   const [selectedRole, setSelectedRole] = useState<"admin" | "employee" | "manager" | "accounts">("employee");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [error, setError] = useState(
     initialError ? ERROR_MAP[initialError] ?? "Unable to login." : "",
+  );
+  const [resetNotice, setResetNotice] = useState(
+    resetSuccess ? "Password updated successfully. Sign in with your new password below." : "",
   );
   const [isLoading, setIsLoading] = useState(false);
 
@@ -100,22 +120,25 @@ export function LoginForm({ initialError }: LoginFormProps) {
     let firstLoginError: string | null = null;
 
     if (signInError || !signInData.user) {
-      // First-login only applies when the employee has never signed in (password bootstrap).
-      const firstLoginResult = await initializeFirstLogin({
-        email: normalizedEmail,
-        role: selectedRole,
-        password,
-      });
+      const tryFirstLogin = !resetSuccess && (await accountNeedsFirstLogin(normalizedEmail));
 
-      if (firstLoginResult.ok) {
-        const retry = await supabase.auth.signInWithPassword({
+      if (tryFirstLogin) {
+        const firstLoginResult = await initializeFirstLogin({
           email: normalizedEmail,
+          role: selectedRole,
           password,
         });
-        signInData = retry.data;
-        signInError = retry.error;
-      } else if (!firstLoginResult.alreadyInitialized) {
-        firstLoginError = firstLoginResult.error;
+
+        if (firstLoginResult.ok) {
+          const retry = await supabase.auth.signInWithPassword({
+            email: normalizedEmail,
+            password,
+          });
+          signInData = retry.data;
+          signInError = retry.error;
+        } else if (!firstLoginResult.alreadyInitialized) {
+          firstLoginError = firstLoginResult.error;
+        }
       }
     }
 
@@ -280,6 +303,7 @@ export function LoginForm({ initialError }: LoginFormProps) {
             </p>
           </div>
 
+          {resetNotice ? <p className="text-sm text-emerald-700">{resetNotice}</p> : null}
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
           <Button type="submit" className="w-full" disabled={isLoading}>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { KeyRound, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -15,11 +15,72 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [booting, setBooting] = useState(true);
+  const [accountEmail, setAccountEmail] = useState("");
+
+  useEffect(() => {
+    const supabase = createClient();
+
+    const finishBoot = (ready: boolean, message = "") => {
+      setSessionReady(ready);
+      if (message) setError(message);
+      setBooting(false);
+    };
+
+    const bootstrap = async () => {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get("code");
+
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (exchangeError) {
+          finishBoot(false, "Reset link is invalid or expired. Please request a new link from Forgot password.");
+          return;
+        }
+        window.history.replaceState({}, "", "/reset-password");
+      }
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session?.user?.email) {
+        setAccountEmail(session.user.email);
+        finishBoot(true);
+        return;
+      }
+
+      finishBoot(
+        false,
+        "Reset session expired. Open the link from your email again, or request a new reset link.",
+      );
+    };
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") && session?.user) {
+        setAccountEmail(session.user.email ?? "");
+        setSessionReady(true);
+        setBooting(false);
+        setError("");
+      }
+    });
+
+    void bootstrap();
+    return () => subscription.unsubscribe();
+  }, []);
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
     setNotice("");
+
+    if (!sessionReady) {
+      setError("Reset session expired. Please open the link from your email again.");
+      return;
+    }
 
     if (password.length < 8) {
       setError("Password must be at least 8 characters.");
@@ -33,15 +94,6 @@ export default function ResetPasswordPage() {
 
     setIsSaving(true);
     const supabase = createClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) {
-      setError("Reset session expired. Please request a new password reset link.");
-      setIsSaving(false);
-      return;
-    }
 
     const { error: updateError } = await supabase.auth.updateUser({ password });
 
@@ -52,9 +104,13 @@ export default function ResetPasswordPage() {
     }
 
     await supabase.auth.signOut();
-    setNotice("Password updated. You can now login with your new password.");
+    setNotice("Password updated. Redirecting to login…");
     setIsSaving(false);
-    setTimeout(() => router.replace("/login"), 1200);
+
+    const loginQuery = new URLSearchParams({ reset: "ok" });
+    if (accountEmail) loginQuery.set("email", accountEmail);
+
+    setTimeout(() => router.replace(`/login?${loginQuery.toString()}`), 900);
   };
 
   return (
@@ -65,38 +121,50 @@ export default function ResetPasswordPage() {
             <KeyRound className="h-5 w-5" />
           </div>
           <CardTitle className="text-2xl">Set New Password</CardTitle>
+          {accountEmail ? (
+            <p className="text-sm text-slate-500">Account: {accountEmail}</p>
+          ) : null}
         </CardHeader>
         <CardContent>
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">New Password</label>
-              <Input
-                type="password"
-                placeholder="Minimum 8 characters"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Confirm Password</label>
-              <Input
-                type="password"
-                placeholder="Re-enter new password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                required
-              />
-            </div>
+          {booting ? (
+            <p className="flex items-center gap-2 text-sm text-slate-600">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Verifying reset link…
+            </p>
+          ) : (
+            <form onSubmit={onSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">New Password</label>
+                <Input
+                  type="password"
+                  placeholder="Minimum 8 characters"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  disabled={!sessionReady || isSaving}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">Confirm Password</label>
+                <Input
+                  type="password"
+                  placeholder="Re-enter new password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  required
+                  disabled={!sessionReady || isSaving}
+                />
+              </div>
 
-            {error ? <p className="text-sm text-red-600">{error}</p> : null}
-            {notice ? <p className="text-sm text-emerald-700">{notice}</p> : null}
+              {error ? <p className="text-sm text-red-600">{error}</p> : null}
+              {notice ? <p className="text-sm text-emerald-700">{notice}</p> : null}
 
-            <Button type="submit" className="w-full" disabled={isSaving}>
-              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {isSaving ? "Saving..." : "Save New Password"}
-            </Button>
-          </form>
+              <Button type="submit" className="w-full" disabled={!sessionReady || isSaving}>
+                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {isSaving ? "Saving..." : "Save New Password"}
+              </Button>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>
