@@ -30,7 +30,12 @@ async function parseApiError(response: Response, fallback: string) {
   }
 }
 
-async function initializeFirstLogin(payload: { email: string; role: string; password: string }) {
+type FirstLoginResult =
+  | { ok: true }
+  | { ok: false; alreadyInitialized: true }
+  | { ok: false; alreadyInitialized: false; error: string };
+
+async function initializeFirstLogin(payload: { email: string; role: string; password: string }): Promise<FirstLoginResult> {
   const endpoints = ["/api/first-login", "/api/auth/first-login"];
 
   for (const endpoint of endpoints) {
@@ -45,16 +50,21 @@ async function initializeFirstLogin(payload: { email: string; role: string; pass
     }
 
     if (response.ok) {
-      return { ok: true as const, error: null };
+      return { ok: true };
+    }
+
+    if (response.status === 409) {
+      return { ok: false, alreadyInitialized: true };
     }
 
     return {
-      ok: false as const,
+      ok: false,
+      alreadyInitialized: false,
       error: await parseApiError(response, "Could not initialize first login."),
     };
   }
 
-  return { ok: false as const, error: null };
+  return { ok: false, alreadyInitialized: true };
 }
 
 export function LoginForm({ initialError }: LoginFormProps) {
@@ -90,7 +100,7 @@ export function LoginForm({ initialError }: LoginFormProps) {
     let firstLoginError: string | null = null;
 
     if (signInError || !signInData.user) {
-      // First-login initialization: if auth password is not yet set, initialize once and retry.
+      // First-login only applies when the employee has never signed in (password bootstrap).
       const firstLoginResult = await initializeFirstLogin({
         email: normalizedEmail,
         role: selectedRole,
@@ -104,13 +114,19 @@ export function LoginForm({ initialError }: LoginFormProps) {
         });
         signInData = retry.data;
         signInError = retry.error;
-      } else {
+      } else if (!firstLoginResult.alreadyInitialized) {
         firstLoginError = firstLoginResult.error;
       }
     }
 
     if (signInError || !signInData.user) {
-      setError(firstLoginError ?? signInError?.message ?? "Invalid credentials.");
+      const authMessage = signInError?.message ?? "";
+      const friendlyAuthError =
+        authMessage.toLowerCase().includes("invalid login credentials") ||
+        authMessage.toLowerCase().includes("invalid email or password")
+          ? "Incorrect email or password. Use Forgot / change password if you reset it, or ask admin to reset your password in Employee Master."
+          : authMessage || "Invalid credentials.";
+      setError(firstLoginError ?? friendlyAuthError);
       setIsLoading(false);
       return;
     }
