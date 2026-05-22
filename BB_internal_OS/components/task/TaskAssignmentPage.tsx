@@ -78,6 +78,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   const seesAllTasks = isAdmin || isManager;
   const canManageTasks = isAdmin || isManager;
   const [currentUserId, setCurrentUserId] = useState("");
+  const [selfProfile, setSelfProfile] = useState<ProfileOption | null>(null);
   const [employees, setEmployees] = useState<ProfileOption[]>([]);
   const [rows, setRows] = useState<TaskRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -312,6 +313,16 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         if (userError) throw new Error(userError.message);
         if (!user?.id) throw new Error("Unable to resolve current user.");
         setCurrentUserId(user.id);
+        if (isEmployee) {
+          const { data: me } = await supabase
+            .from("profiles")
+            .select("id,full_name,email,department,role")
+            .eq("id", user.id)
+            .maybeSingle();
+          setSelfProfile((me as ProfileOption | null) ?? null);
+        } else {
+          setSelfProfile(null);
+        }
         await loadAssignees();
         if (isAdmin || isManager) await loadProjectsForForm();
       } catch (bootstrapError) {
@@ -322,7 +333,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     };
 
     void bootstrap();
-  }, [isAdmin, isManager, loadAssignees, loadProjectsForForm, supabase]);
+  }, [isAdmin, isEmployee, isManager, loadAssignees, loadProjectsForForm, supabase]);
 
   const projectPrefillDone = useRef(false);
   useEffect(() => {
@@ -370,13 +381,22 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     [employees],
   );
 
+  /** Assign-task dropdown: employees cannot assign to themselves. */
+  const assigneePickerOptions = useMemo(
+    () => (isEmployee && currentUserId ? employeeOptions.filter((o) => o.id !== currentUserId) : employeeOptions),
+    [currentUserId, employeeOptions, isEmployee],
+  );
+
   const employeeNameMap = useMemo(() => {
     const map: Record<string, string> = {};
     employees.forEach((employee) => {
       map[employee.id] = employee.full_name || employee.email || "Unknown";
     });
+    if (selfProfile?.id && !map[selfProfile.id]) {
+      map[selfProfile.id] = selfProfile.full_name || selfProfile.email || "Unknown";
+    }
     return map;
-  }, [employees]);
+  }, [employees, selfProfile]);
 
   const overdueCount = useMemo(() => {
     const today = todayDateKey();
@@ -432,7 +452,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     }
     if (isEmployee) {
       if (!currentUserId) return;
-      setForm({ ...initialForm, assigned_to: currentUserId });
+      setForm({ ...initialForm, assigned_to: "" });
     } else {
       setForm(initialForm);
     }
@@ -479,7 +499,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         return;
       }
       if (!form.assigned_to.trim()) {
-        setError("Select an employee to assign this task to (yourself or a teammate).");
+        setError("Select a teammate to assign this task to.");
         return;
       }
       setSubmitting(true);
@@ -664,7 +684,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
             {isManager
               ? "Assign work to your team, edit tasks, and monitor progress — same task list your reports see when they are assignees."
               : isEmployee
-                ? "Admins and managers assign work to your user account; it appears here. You can also assign tasks to yourself or teammates in your department or shared projects."
+                ? "Admins and managers assign work to your user account; it appears here. You can also assign tasks to teammates in your department or on shared projects."
                 : "Assign, track and manage employee tasks"}
           </p>
         </div>
@@ -845,13 +865,13 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
                 open={panelOpen}
                 title={editId ? "Edit Task" : "Assign task"}
                 value={form}
-                employees={employeeOptions}
+                employees={assigneePickerOptions}
                 projects={projectOptions}
                 showProjectField={canManageTasks}
                 assigneeLockedToSelf={false}
                 assigneeHelperText={
                   isEmployee
-                    ? "All active employees, managers, and admins are listed. Choose who should own this task."
+                    ? "Teammates, managers, and admins you can assign to are listed. You are not shown — pick who should own this task."
                     : "List refreshes when you open this panel. Active employees, managers, and admins who can receive tasks are shown."
                 }
                 submitting={submitting}

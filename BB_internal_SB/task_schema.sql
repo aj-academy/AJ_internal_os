@@ -225,6 +225,7 @@ begin
     )
     and coalesce(lower(p.status), 'active') = 'active'
     and lower(coalesce(p.role, '')) in ('employee', 'manager', 'admin', 'super_admin')
+    and p.id <> auth.uid()
   order by p.full_name nulls last, p.email nulls last;
 end;
 $$;
