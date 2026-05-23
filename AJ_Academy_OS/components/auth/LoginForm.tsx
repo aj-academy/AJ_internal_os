@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Loader2, GraduationCap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchMyProfile } from "@/lib/auth/fetchMyProfile";
 import { getRoleRedirectPath } from "@/lib/auth/roleRedirect";
 import type { Profile, UserRole } from "@/types/profile";
 import { Button } from "@/components/ui/button";
@@ -34,8 +35,10 @@ async function accountNeedsFirstLogin(email: string): Promise<boolean> {
 }
 
 const ERROR_MAP: Record<string, string> = {
-  missing_role: "Role not assigned. Please contact admin.",
+  missing_role:
+    "No profile found for your account. In Supabase, add a row in public.profiles with your Auth user id, role (e.g. admin), and status active — then run profiles_rls_fix.sql.",
   inactive: "Your account is inactive. Please contact admin.",
+  session: "Session expired or not saved. Sign in again (restart npm run dev after changing .env.local).",
   reset_link_invalid: "Reset link is invalid or expired. Please request a new one.",
 };
 
@@ -157,29 +160,18 @@ export function LoginForm({ initialError, resetSuccess = false, initialEmail = "
     const authenticatedUserId = signInData.user.id;
     const authenticatedEmail = normalizedEmail;
 
-    let { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", authenticatedUserId)
-      .maybeSingle<Profile>();
+    await supabase.auth.getSession();
 
-    if (profileError && !profile) {
+    const { profile, loadError } = await fetchMyProfile(supabase, {
+      id: authenticatedUserId,
+      email: authenticatedEmail,
+    });
+
+    if (loadError && !profile) {
       await supabase.auth.signOut();
-      setError(`Could not load your profile (${profileError.message}). Contact admin.`);
+      setError(`Could not load your profile (${loadError}). Contact admin.`);
       setIsLoading(false);
       return;
-    }
-
-    if (!profile) {
-      const fallback = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("email", authenticatedEmail)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle<Profile>();
-      profile = fallback.data;
-      profileError = fallback.error;
     }
 
     if (!profile?.role) {

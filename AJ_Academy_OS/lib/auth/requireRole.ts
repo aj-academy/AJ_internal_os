@@ -14,7 +14,7 @@ export async function requireRole(
   const { user, profile } = await getUserProfile();
 
   if (!user) {
-    redirect("/login");
+    redirect("/login?error=session");
   }
 
   if (!profile?.role) {

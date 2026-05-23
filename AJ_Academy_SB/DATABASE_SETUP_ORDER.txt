@@ -20,10 +20,12 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 
 6) task_notifications_columns.sql
 7) in_app_notifications.sql
-8) project_master_schema.sql (optional — admin projects)
-9) company_policies_schema.sql (optional)
-10) rls-policies.sql
+8) profiles_rls_fix.sql   *** REQUIRED for login (RLS + get_my_profile RPC) ***
+9) project_master_schema.sql (optional — admin projects)
+10) company_policies_schema.sql (optional)
 11) attendance_delete_grants.sql (optional — admin delete attendance)
+
+DO NOT run rls-policies.sql — it is legacy Birthmark Brahma (employee/manager) and breaks AJ Academy login.
 
 Skip legacy BB-only scripts unless you need CRM/finance:
   client_lead_schema.sql, finance_schema.sql, employee_daily_mood_schema.sql, etc.

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchMyProfile } from "@/lib/auth/fetchMyProfile";
 import type { Profile } from "@/types/profile";
 
 export async function getUserProfile() {
@@ -11,35 +12,6 @@ export async function getUserProfile() {
     return { user: null, profile: null as Profile | null };
   }
 
-  let { data: profile } = await supabase
-    .from("profiles")
-    .select("id,full_name,email,role,department,designation,status,created_at")
-    .eq("id", user.id)
-    .maybeSingle<Profile>();
-
-  // Fallback for legacy/manual seeded rows where profile id may not match auth uid.
-  if (!profile && user.email) {
-    const fallback = await supabase
-      .from("profiles")
-      .select("id,full_name,email,role,department,designation,status,created_at")
-      .eq("email", user.email.toLowerCase())
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle<Profile>();
-    profile = fallback.data ?? null;
-  }
-
-  if (profile) {
-    const normalizedRole =
-      typeof profile.role === "string" ? profile.role.trim().toLowerCase() : profile.role;
-    const normalizedStatus =
-      typeof profile.status === "string" ? profile.status.trim().toLowerCase() : profile.status;
-    profile = {
-      ...profile,
-      role: normalizedRole as Profile["role"],
-      status: normalizedStatus as Profile["status"],
-    };
-  }
-
-  return { user, profile: profile as Profile | null };
+  const { profile } = await fetchMyProfile(supabase, user);
+  return { user, profile };
 }

@@ -40,6 +40,9 @@ Run files from **`AJ_Academy_SB`** in order (`DATABASE_SETUP_ORDER.txt`):
 5. `aj_academy_roles_patch.sql`  
 6. `task_notifications_columns.sql`  
 7. `in_app_notifications.sql`  
+8. **`profiles_rls_fix.sql`** (required — fixes login redirect loop)
+
+Do **not** run `rls-policies.sql` (legacy Birthmark Brahma; blocks AJ Academy profiles).
 
 ---
 
@@ -58,6 +61,29 @@ npm run dev
 ```
 
 Open `http://localhost:3000/login`.
+
+---
+
+## Login redirects back to `/login`?
+
+1. Check the URL after redirect:
+   - `?error=session` — browser did not keep auth cookies; restart `npm run dev`, clear site data for `localhost:3000`, sign in again.
+   - `?error=missing_role` — no `profiles` row (or wrong `id`). Fix in SQL Editor:
+
+```sql
+-- Replace with your Auth user id and email from Authentication → Users
+insert into public.profiles (id, full_name, email, role, status)
+values ('YOUR-AUTH-USER-UUID', 'Admin', 'you@example.com', 'admin', 'active')
+on conflict (id) do update set role = excluded.role, status = excluded.status, email = excluded.email;
+```
+
+2. Run **`profiles_rls_fix.sql`** if you have not already.
+3. On the login form, pick the role that matches `profiles.role` (Admin → `admin` or `super_admin`).
+4. Verify:
+
+```sql
+select id, email, role, status from public.profiles;
+```
 
 ---
 

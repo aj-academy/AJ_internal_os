@@ -21,7 +21,11 @@ values
 
 Valid roles: `super_admin`, `admin`, `student`, `freelancer`, `mentor`.
 
-## Step 4 (optional): employee_details
+## Step 4: Run profiles RLS fix
+
+In SQL Editor, run **`profiles_rls_fix.sql`** once (after `schema.sql` / `attendance_module.sql`). This prevents the app from sending you back to login after a successful sign-in.
+
+## Step 5 (optional): employee_details
 
 Only needed if you use extended profile fields in User Master:
 
