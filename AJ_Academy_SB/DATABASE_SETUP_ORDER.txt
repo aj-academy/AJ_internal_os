@@ -1,0 +1,31 @@
+AJ Academy — Supabase SQL setup order
+=====================================
+Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
+
+1) schema.sql
+   Profiles, employee_details, audit_logs, helpers (get_user_role, is_admin).
+   Roles: super_admin, admin, student, freelancer, mentor.
+
+2) attendance_module.sql
+   Attendance tables + RLS (includes check_in_selfie_url column).
+
+3) attendance_selfie_schema.sql
+   Storage bucket attendance-selfies for freelancer check-in photos.
+
+4) task_schema.sql
+   Tasks table + base RLS.
+
+5) aj_academy_roles_patch.sql
+   Task policies for student / freelancer / mentor assignees.
+
+6) task_notifications_columns.sql
+7) in_app_notifications.sql
+8) project_master_schema.sql (optional — admin projects)
+9) company_policies_schema.sql (optional)
+10) rls-policies.sql
+11) attendance_delete_grants.sql (optional — admin delete attendance)
+
+Skip legacy BB-only scripts unless you need CRM/finance:
+  client_lead_schema.sql, finance_schema.sql, employee_daily_mood_schema.sql, etc.
+
+After SQL: create users in Authentication, then insert profiles rows (see SUPABASE_SETUP_GUIDE.md).

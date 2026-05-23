@@ -1,34 +1,13 @@
 ---
-description: Update PROJECT_OVERVIEW.md when making major project changes (routes, DB, auth, APIs, modules)
+description: Keep AJ Academy setup docs in sync when changing routes, DB, or auth
 alwaysApply: true
 ---
 
-# Keep PROJECT_OVERVIEW.md in sync
+# Keep setup docs in sync
 
-The canonical project reference is **`PROJECT_OVERVIEW.md`** at the repository root.
+- **`SUPABASE_SETUP_GUIDE.md`**
+- **`AJ_Academy_SB/DATABASE_SETUP_ORDER.txt`**
 
-## When to update it
+Update after changes to `AJ_Academy_OS/app/`, `AJ_Academy_OS/app/api/`, SQL in `AJ_Academy_SB/`, auth, or env vars.
 
-After completing work that is **major**, update `PROJECT_OVERVIEW.md` in the same task (do not wait for the user to ask):
-
-- New or removed **app routes** (`BB_internal_OS/app/`)
-- New **API routes** (`BB_internal_OS/app/api/`)
-- New **Supabase tables**, RLS scripts, or changes to `BB_internal_SB/DATABASE_SETUP_ORDER.txt`
-- **Auth / login / roles / middleware** behavior changes
-- New **feature modules** (new workbench, new role area, new integration)
-- New **environment variables** required for deploy
-- **Architecture** changes (how frontend connects to Supabase)
-
-Skip doc updates for minor UI tweaks, single-line bug fixes, or dependency-only bumps unless the user asks.
-
-## How to update
-
-1. Edit the **relevant numbered sections** (routes, tables, flows, SQL order, env vars, etc.).
-2. Add a row at the **top** of **§17 Major changes log** with: date, short title, which sections changed.
-3. Bump **Document info → Last updated** date.
-
-## Do not
-
-- Duplicate full SQL from `BB_internal_SB` into the overview (summarize + link files).
-- Remove historical changelog rows unless consolidating with user approval.
-- Create a second overview file; keep one `PROJECT_OVERVIEW.md`.
+Do not re-add legacy BB employee/manager/accounts routes.
