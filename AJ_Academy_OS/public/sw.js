@@ -1,5 +1,5 @@
 /* AJ Academy — PWA service worker (static assets only) */
-const CACHE_VERSION = "aj-academy-v2";
+const CACHE_VERSION = "aj-academy-v3";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 

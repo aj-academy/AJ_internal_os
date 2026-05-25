@@ -32,7 +32,14 @@ await base
   .png()
   .toFile(path.join(iconsDir, "maskable-icon-512x512.png"));
 
-await base.clone().resize(180, 180, { fit: "contain", background: MASKABLE_BG }).png().toFile(path.join(root, "public", "apple-touch-icon.png"));
-await base.clone().resize(32, 32, { fit: "contain", background: MASKABLE_BG }).png().toFile(path.join(root, "public", "favicon.ico"));
+const favicon32 = base.clone().resize(32, 32, { fit: "contain", background: MASKABLE_BG });
 
-console.log("PWA icons generated from public/AJ Academy logo.jpeg");
+await base.clone().resize(180, 180, { fit: "contain", background: MASKABLE_BG }).png().toFile(path.join(root, "public", "apple-touch-icon.png"));
+
+// Browser tab + Next.js App Router metadata (app/* overrides public/*)
+await favicon32.clone().png().toFile(path.join(root, "public", "favicon.ico"));
+await favicon32.clone().png().toFile(path.join(root, "app", "favicon.ico"));
+await base.clone().resize(48, 48, { fit: "contain", background: MASKABLE_BG }).png().toFile(path.join(root, "app", "icon.png"));
+await base.clone().resize(180, 180, { fit: "contain", background: MASKABLE_BG }).png().toFile(path.join(root, "app", "apple-icon.png"));
+
+console.log("PWA icons generated from public/AJ Academy logo.jpeg (app/ + public/)");
