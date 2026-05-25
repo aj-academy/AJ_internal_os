@@ -116,9 +116,11 @@ export function MobileInstallHelp() {
             </p>
           ) : null}
           <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-            <strong>Still adding previous site?</strong> That is Chrome updating an old install. Delete old
-            icons, clear site data in Chrome settings, close Chrome fully, then open the URL above and Install
-            app again.
+            <strong>Still showing the old blue icon?</strong> Android keeps the previous app icon even after
+            you remove the shortcut. Remove every {PWA_APP_NAME} / old app icon from the home screen, then
+            Chrome ? Settings ? Site settings ? your site ? <strong>Clear &amp; reset</strong>. Also check
+            Chrome ? Settings ? Apps ? installed web apps and remove old entries. Force-close Chrome, open the
+            URL above, and tap <strong>Install app</strong> once.
           </p>
         </>
       )}

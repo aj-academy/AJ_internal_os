@@ -1,13 +1,17 @@
 import type { MetadataRoute } from "next";
-import { PWA_APP_NAME, PWA_THEME_COLOR } from "@/lib/pwa/branding";
-import { pwaAbsoluteUrl, resolvePwaSiteOrigin } from "@/lib/pwa/site-url";
-
-const PWA_APP_PATH = "/?app=aj-academy";
+import {
+  PWA_APP_NAME,
+  PWA_ICON_VERSION,
+  PWA_MANIFEST_APP_ID,
+  PWA_THEME_COLOR,
+} from "@/lib/pwa/branding";
+import { pwaAbsoluteUrl, pwaAssetUrl, resolvePwaSiteOrigin } from "@/lib/pwa/site-url";
 
 export default function manifest(): MetadataRoute.Manifest {
   const origin = resolvePwaSiteOrigin();
-  const appId = pwaAbsoluteUrl(origin, PWA_APP_PATH);
+  const appId = pwaAbsoluteUrl(origin, PWA_MANIFEST_APP_ID);
   const startUrl = pwaAbsoluteUrl(origin, "/login");
+  const icon = (path: string) => pwaAssetUrl(origin, path, PWA_ICON_VERSION);
 
   return {
     id: appId,
@@ -23,19 +27,19 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ["business", "productivity"],
     icons: [
       {
-        src: pwaAbsoluteUrl(origin, "/icons/icon-192x192.png"),
+        src: icon("/icons/icon-192x192.png"),
         sizes: "192x192",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: pwaAbsoluteUrl(origin, "/icons/icon-512x512.png"),
+        src: icon("/icons/icon-512x512.png"),
         sizes: "512x512",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: pwaAbsoluteUrl(origin, "/icons/maskable-icon-512x512.png"),
+        src: icon("/icons/maskable-icon-512x512.png"),
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",

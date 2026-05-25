@@ -1,15 +1,16 @@
 /* AJ Academy — PWA service worker (static assets only) */
-const CACHE_VERSION = "aj-academy-v3";
+const CACHE_VERSION = "aj-academy-v4-icons";
+const ICON_QUERY = "?v=2";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 
 const PRECACHE_URLS = [
   "/offline.html",
-  "/icons/icon-192x192.png",
-  "/icons/icon-512x512.png",
-  "/icons/maskable-icon-512x512.png",
-  "/apple-touch-icon.png",
-  "/favicon.ico",
+  `/icons/icon-192x192.png${ICON_QUERY}`,
+  `/icons/icon-512x512.png${ICON_QUERY}`,
+  `/icons/maskable-icon-512x512.png${ICON_QUERY}`,
+  `/apple-touch-icon.png${ICON_QUERY}`,
+  `/favicon.ico${ICON_QUERY}`,
 ];
 
 async function precacheShell(cache) {

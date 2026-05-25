@@ -24,3 +24,10 @@ export function resolvePwaSiteOrigin(): string | null {
 export function pwaAbsoluteUrl(origin: string | null, path: string): string {
   return origin ? `${origin}${path}` : path;
 }
+
+/** Cache-busted asset URL for manifest icons (Android caches by URL). */
+export function pwaAssetUrl(origin: string | null, path: string, version: string): string {
+  const base = pwaAbsoluteUrl(origin, path);
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}v=${encodeURIComponent(version)}`;
+}

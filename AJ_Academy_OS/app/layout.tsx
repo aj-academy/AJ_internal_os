@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Grotesk } from "next/font/google";
 import { PwaProvider } from "@/components/pwa/PwaProvider";
-import { PWA_APP_NAME, PWA_THEME_COLOR } from "@/lib/pwa/branding";
+import { PWA_APP_NAME, PWA_ICON_VERSION, PWA_THEME_COLOR } from "@/lib/pwa/branding";
 import { resolvePwaSiteOrigin } from "@/lib/pwa/site-url";
 import "./globals.css";
 
@@ -30,10 +30,24 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png" },
+      {
+        url: `/icons/icon-192x192.png?v=${PWA_ICON_VERSION}`,
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        url: `/icons/icon-512x512.png?v=${PWA_ICON_VERSION}`,
+        sizes: "512x512",
+        type: "image/png",
+      },
     ],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    apple: [
+      {
+        url: `/apple-touch-icon.png?v=${PWA_ICON_VERSION}`,
+        sizes: "180x180",
+        type: "image/png",
+      },
+    ],
   },
 };
 

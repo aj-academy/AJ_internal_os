@@ -130,6 +130,11 @@ export function PwaProvider({ children }: { children: ReactNode }) {
                 .map((key) => caches.delete(key)),
             );
           }
+          for (const key of Object.keys(window.localStorage)) {
+            if (key.startsWith("bb-os-pwa") || key.startsWith("aj-academy-pwa")) {
+              window.localStorage.removeItem(key);
+            }
+          }
           window.localStorage.setItem(PWA_BUILD_STORAGE_KEY, PWA_BUILD_VERSION);
         }
 
