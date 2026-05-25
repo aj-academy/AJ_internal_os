@@ -1,6 +1,6 @@
 export default function EmployeeMasterLoading() {
   return (
-    <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
+    <section className="space-y-6 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <div className="space-y-2">
         <div className="h-3 w-32 animate-pulse rounded bg-slate-200" />
         <div className="h-8 w-64 animate-pulse rounded bg-slate-200" />

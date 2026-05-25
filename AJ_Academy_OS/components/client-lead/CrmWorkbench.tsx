@@ -1049,7 +1049,7 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
   };
 
   return (
-    <section className="space-y-5 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
+    <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">Client / Lead Master</h2>
@@ -1060,12 +1060,12 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
             variant="outline"
             disabled={loading}
             onClick={() => void reload()}
-            className="h-9 rounded-full border-[#cfdceb] bg-[#f8fbff]"
+            className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
           >
             Refresh
           </Button>
           {isAdmin ? (
-            <Button data-requires-online onClick={openCreate} className="h-9 rounded-full bg-[#2563eb] px-5 text-white hover:bg-[#1d4ed8]">
+            <Button data-requires-online onClick={openCreate} className="h-9 rounded-full bg-[#c9a227] px-5 text-white hover:bg-[#b8921f]">
               + Add Lead
             </Button>
           ) : null}
@@ -1084,7 +1084,7 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
               onClick={() => setActiveTab(tabId)}
               className={
                 activeTab === tabId
-                  ? "rounded-xl bg-[#2563eb] px-3 py-2 text-sm font-semibold text-white shadow-md"
+                  ? "rounded-xl bg-[#c9a227] px-3 py-2 text-sm font-semibold text-white shadow-md"
                   : "rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[#475569] hover:bg-[#eaf1ff]"
               }
             >
@@ -1296,7 +1296,7 @@ function BarBlock({
       ? "bg-sky-500"
       : accent === "purple"
         ? "bg-purple-500"
-        : "bg-[#2563eb]";
+        : "bg-[#c9a227]";
   return (
     <div className="rounded-[18px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
       <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-[#64748b]">{title}</p>
@@ -1364,7 +1364,7 @@ function FiltersBar(props: {
   } = props;
 
   const selectClass =
-    "h-10 w-full rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb]";
+    "h-10 w-full rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227]";
 
   return (
     <CollapsibleFilterPanel>
@@ -1373,7 +1373,7 @@ function FiltersBar(props: {
           placeholder="Search name, email, phone, company…"
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
-          className="col-span-2 h-10 border-[#d4deea] lg:col-span-2"
+          className="col-span-2 h-10 border-[#e8dcc8] lg:col-span-2"
         />
         <FilterField label="Status">
           <select className={selectClass} value={fltStatus} onChange={(e) => setFltStatus(e.target.value)} aria-label="Status">
@@ -1437,7 +1437,7 @@ function FiltersBar(props: {
             value={fltFollowFrom}
             onChange={(e) => setFltFollowFrom(e.target.value)}
             aria-label="Follow-up from"
-            className="h-10 border-[#d4deea]"
+            className="h-10 border-[#e8dcc8]"
           />
         </FilterField>
         <FilterField label="Follow-up to">
@@ -1446,11 +1446,11 @@ function FiltersBar(props: {
             value={fltFollowTo}
             onChange={(e) => setFltFollowTo(e.target.value)}
             aria-label="Follow-up to"
-            className="h-10 border-[#d4deea]"
+            className="h-10 border-[#e8dcc8]"
           />
         </FilterField>
         <div className="col-span-2 flex gap-2 lg:col-span-1">
-          <Button type="button" className="h-11 flex-1 rounded-xl bg-[#2563eb] text-white hover:bg-[#1d4ed8] sm:h-9" onClick={onApply}>
+          <Button type="button" className="h-11 flex-1 rounded-xl bg-[#c9a227] text-white hover:bg-[#b8921f] sm:h-9" onClick={onApply}>
             Apply filters
           </Button>
           <Button type="button" variant="outline" className="h-11 flex-1 rounded-xl border-[#c9d8eb] sm:h-9" onClick={onReset}>
@@ -1672,7 +1672,7 @@ function AllLeadsTable({
                     className={[
                       overdue ? "bg-rose-50/80" : "",
                       hot ? "outline outline-2 outline-orange-200/70" : "",
-                      fu === today ? "shadow-[inset_3px_0_0_#2563eb]" : "",
+                      fu === today ? "shadow-[inset_3px_0_0_#c9a227]" : "",
                     ].join(" ")}
                   >
                     <td className="px-4 py-3 font-semibold text-slate-900">{displayLeadName(lead)}</td>
@@ -1908,7 +1908,7 @@ function ProposalEditModal({
   return (
     <>
       <button type="button" aria-label="Close" className="fixed inset-0 z-[60] bg-slate-900/40" onClick={onClose} />
-      <div className="fixed left-4 right-4 top-[8%] z-[61] mx-auto max-h-[85vh] max-w-lg overflow-y-auto rounded-[20px] border border-[#d4deea] bg-white p-6 shadow-2xl sm:left-auto sm:right-10">
+      <div className="fixed left-4 right-4 top-[8%] z-[61] mx-auto max-h-[85vh] max-w-lg overflow-y-auto rounded-[20px] border border-[#e8dcc8] bg-white p-6 shadow-2xl sm:left-auto sm:right-10">
         <h4 className="text-lg font-semibold text-[#0f172a]">Update proposal</h4>
         <p className="mt-1 text-xs text-[#64748b]">{displayLeadName(lead) || "—"} · {lead.company_name || "—"}</p>
         <div className="mt-4 space-y-3 text-sm">
@@ -1956,7 +1956,7 @@ function ProposalEditModal({
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" className="rounded-full bg-[#2563eb]" disabled={submitting} onClick={onSave}>
+          <Button type="button" className="rounded-full bg-[#c9a227]" disabled={submitting} onClick={onSave}>
             Save
           </Button>
         </div>
@@ -2247,7 +2247,7 @@ function QuickFollowModal({
   return (
     <>
       <button type="button" aria-label="Close" className="fixed inset-0 z-[60] bg-slate-900/40" onClick={onClose} />
-      <div className="fixed left-4 right-4 top-[15%] z-[61] mx-auto max-w-md rounded-[20px] border border-[#d4deea] bg-white p-5 shadow-2xl sm:left-auto">
+      <div className="fixed left-4 right-4 top-[15%] z-[61] mx-auto max-w-md rounded-[20px] border border-[#e8dcc8] bg-white p-5 shadow-2xl sm:left-auto">
         <h4 className="text-lg font-semibold text-[#0f172a]">Schedule follow-up</h4>
         <p className="mt-1 text-xs text-[#64748b]">{displayLeadName(target) || "Lead"} · {target.company_name || "—"}</p>
         <div className="mt-4 space-y-3 text-sm">
@@ -2298,7 +2298,7 @@ function QuickFollowModal({
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" className="rounded-full bg-[#2563eb]" disabled={submitting} onClick={onSave}>
+          <Button type="button" className="rounded-full bg-[#c9a227]" disabled={submitting} onClick={onSave}>
             Save
           </Button>
         </div>
@@ -2345,7 +2345,7 @@ function ProfileModal({
   return (
     <>
       <button type="button" aria-label="Close" className="fixed inset-0 z-[60] bg-slate-900/40" onClick={onClose} />
-      <div className="fixed inset-y-6 right-4 z-[61] mx-auto flex w-full max-w-2xl flex-col overflow-hidden rounded-[24px] border border-[#d4deea] bg-white shadow-2xl sm:right-10">
+      <div className="fixed inset-y-6 right-4 z-[61] mx-auto flex w-full max-w-2xl flex-col overflow-hidden rounded-[24px] border border-[#e8dcc8] bg-white shadow-2xl sm:right-10">
         <div className="flex items-start justify-between border-b border-[#e8edf5] px-5 py-4">
           <div>
             <h3 className="text-xl font-semibold text-[#0f172a]">{displayLeadName(lead) || "—"}</h3>
@@ -2410,7 +2410,7 @@ function ProfileModal({
                 <span className="text-xs text-[#64748b]">No services tagged</span>
               ) : (
                 servicesList.map((s) => (
-                  <span key={s} className="rounded-full bg-[#eff6ff] px-2 py-0.5 text-xs font-medium text-blue-800">
+                  <span key={s} className="rounded-full bg-[#faf3e3] px-2 py-0.5 text-xs font-medium text-blue-800">
                     {s}
                   </span>
                 ))

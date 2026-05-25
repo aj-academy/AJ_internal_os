@@ -77,7 +77,7 @@ function BarRow({ label, value, max }: { label: string; value: number; max: numb
         <span>{value}</span>
       </div>
       <div className="h-2 rounded-full bg-slate-100">
-        <div className="h-2 rounded-full bg-[#2563eb]" style={{ width: `${Math.max(4, pct)}%` }} />
+        <div className="h-2 rounded-full bg-[#c9a227]" style={{ width: `${Math.max(4, pct)}%` }} />
       </div>
     </div>
   );
@@ -539,13 +539,13 @@ export function ReportsWorkbench() {
   }, [attendanceRateOverall, taskStats]);
 
   return (
-    <section className="space-y-5 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
+    <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">Reports &amp; Analytics</h2>
           <p className="mt-1 text-xs text-[#64748b] sm:text-sm">View real-time business insights, company analytics and operational reports.</p>
         </div>
-        <Button variant="outline" className="h-9 rounded-full border-[#cfdceb]" disabled={loading} onClick={() => void loadAll()}>
+        <Button variant="outline" className="h-9 rounded-full border-[#e8dcc8]" disabled={loading} onClick={() => void loadAll()}>
           Refresh data
         </Button>
       </header>
@@ -561,7 +561,7 @@ export function ReportsWorkbench() {
               onClick={() => setActiveTab(tid)}
               className={
                 activeTab === tid
-                  ? "rounded-xl bg-[#2563eb] px-3 py-2 text-sm font-semibold text-white shadow-md"
+                  ? "rounded-xl bg-[#c9a227] px-3 py-2 text-sm font-semibold text-white shadow-md"
                   : "rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[#475569] hover:bg-[#eaf1ff]"
               }
             >
@@ -645,7 +645,7 @@ export function ReportsWorkbench() {
             <StatCard title="Departments" value={distinctDepts.length} loading={loading} />
           </div>
           <FilterBar>
-            <select className="h-9 rounded-lg border border-[#d4deea] bg-white px-2 text-sm" value={fltDept} onChange={(e) => setFltDept(e.target.value)}>
+            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltDept} onChange={(e) => setFltDept(e.target.value)}>
               <option value="">Department</option>
               {distinctDepts.map((d) => (
                 <option key={d} value={d}>
@@ -653,7 +653,7 @@ export function ReportsWorkbench() {
                 </option>
               ))}
             </select>
-            <select className="h-9 rounded-lg border border-[#d4deea] bg-white px-2 text-sm" value={fltRole} onChange={(e) => setFltRole(e.target.value)}>
+            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltRole} onChange={(e) => setFltRole(e.target.value)}>
               <option value="">Role</option>
               {["super_admin", "admin", "student", "freelancer", "mentor"].map((r) => (
                 <option key={r} value={r}>
@@ -661,7 +661,7 @@ export function ReportsWorkbench() {
                 </option>
               ))}
             </select>
-            <select className="h-9 rounded-lg border border-[#d4deea] bg-white px-2 text-sm" value={fltEmpStatus} onChange={(e) => setFltEmpStatus(e.target.value)}>
+            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltEmpStatus} onChange={(e) => setFltEmpStatus(e.target.value)}>
               <option value="">Status</option>
               <option value="active">active</option>
               <option value="inactive">inactive</option>
@@ -716,9 +716,9 @@ export function ReportsWorkbench() {
             <StatCard title="Avg attendance %" value={`${attendanceRateOverall}%`} loading={loading} subtitle="In loaded window" />
           </div>
           <FilterBar>
-            <Input type="date" className="h-9 border-[#d4deea]" value={fltAttFrom} onChange={(e) => setFltAttFrom(e.target.value)} />
-            <Input type="date" className="h-9 border-[#d4deea]" value={fltAttTo} onChange={(e) => setFltAttTo(e.target.value)} />
-            <select className="h-9 rounded-lg border border-[#d4deea] bg-white px-2 text-sm" value={fltAttEmp} onChange={(e) => setFltAttEmp(e.target.value)}>
+            <Input type="date" className="h-9 border-[#e8dcc8]" value={fltAttFrom} onChange={(e) => setFltAttFrom(e.target.value)} />
+            <Input type="date" className="h-9 border-[#e8dcc8]" value={fltAttTo} onChange={(e) => setFltAttTo(e.target.value)} />
+            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltAttEmp} onChange={(e) => setFltAttEmp(e.target.value)}>
               <option value="">Employee</option>
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -726,7 +726,7 @@ export function ReportsWorkbench() {
                 </option>
               ))}
             </select>
-            <select className="h-9 rounded-lg border border-[#d4deea] bg-white px-2 text-sm" value={fltDept} onChange={(e) => setFltDept(e.target.value)}>
+            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltDept} onChange={(e) => setFltDept(e.target.value)}>
               <option value="">Department</option>
               {distinctDepts.map((d) => (
                 <option key={d} value={d}>
@@ -763,8 +763,8 @@ export function ReportsWorkbench() {
             <StatCard title="Conversion rate %" value={`${clientStats.rate}%`} loading={loading} subtitle="Converted / all" />
           </div>
           <FilterBar>
-            <Input className="h-9 border-[#d4deea]" placeholder="Lead source" value={fltClientSource} onChange={(e) => setFltClientSource(e.target.value)} />
-            <Input className="h-9 border-[#d4deea]" placeholder="Status (exact)" value={fltClientStatus} onChange={(e) => setFltClientStatus(e.target.value)} />
+            <Input className="h-9 border-[#e8dcc8]" placeholder="Lead source" value={fltClientSource} onChange={(e) => setFltClientSource(e.target.value)} />
+            <Input className="h-9 border-[#e8dcc8]" placeholder="Status (exact)" value={fltClientStatus} onChange={(e) => setFltClientStatus(e.target.value)} />
           </FilterBar>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
@@ -845,7 +845,7 @@ export function ReportsWorkbench() {
             <StatCard title="Avg completion %" value={`${projectStats.avgProgress}%`} loading={loading} />
           </div>
           <FilterBar>
-            <select className="h-9 rounded-lg border border-[#d4deea] bg-white px-2 text-sm" value={fltProjMgr} onChange={(e) => setFltProjMgr(e.target.value)}>
+            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltProjMgr} onChange={(e) => setFltProjMgr(e.target.value)}>
               <option value="">Project manager</option>
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -853,7 +853,7 @@ export function ReportsWorkbench() {
                 </option>
               ))}
             </select>
-            <select className="h-9 rounded-lg border border-[#d4deea] bg-white px-2 text-sm" value={fltProjStatus} onChange={(e) => setFltProjStatus(e.target.value)}>
+            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltProjStatus} onChange={(e) => setFltProjStatus(e.target.value)}>
               <option value="">Status</option>
               {["Planning", "Active", "On Hold", "In Review", "Completed", "Cancelled", "Delayed"].map((s) => (
                 <option key={s} value={s}>
@@ -891,7 +891,7 @@ export function ReportsWorkbench() {
             <StatCard title="Delayed" value={taskStats.delayed} loading={loading} />
           </div>
           <FilterBar>
-            <select className="h-9 rounded-lg border border-[#d4deea] bg-white px-2 text-sm" value={fltTaskEmp} onChange={(e) => setFltTaskEmp(e.target.value)}>
+            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltTaskEmp} onChange={(e) => setFltTaskEmp(e.target.value)}>
               <option value="">Employee</option>
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -899,7 +899,7 @@ export function ReportsWorkbench() {
                 </option>
               ))}
             </select>
-            <select className="h-9 rounded-lg border border-[#d4deea] bg-white px-2 text-sm" value={fltTaskStatus} onChange={(e) => setFltTaskStatus(e.target.value)}>
+            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltTaskStatus} onChange={(e) => setFltTaskStatus(e.target.value)}>
               <option value="">Status</option>
               {["Pending", "In Progress", "Completed"].map((s) => (
                 <option key={s} value={s}>
@@ -907,7 +907,7 @@ export function ReportsWorkbench() {
                 </option>
               ))}
             </select>
-            <select className="h-9 rounded-lg border border-[#d4deea] bg-white px-2 text-sm" value={fltTaskProject} onChange={(e) => setFltTaskProject(e.target.value)}>
+            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltTaskProject} onChange={(e) => setFltTaskProject(e.target.value)}>
               <option value="">Project</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>

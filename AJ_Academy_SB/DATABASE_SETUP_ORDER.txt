@@ -21,8 +21,13 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 6) task_notifications_columns.sql
 7) in_app_notifications.sql
 8) profiles_rls_fix.sql   *** REQUIRED for login (RLS + get_my_profile RPC) ***
+8b) add_role_and_sync_profiles.sql  *** after Auth users exist — fills role column + links Auth → profiles ***
 9) project_master_schema.sql (optional — admin projects)
 10) company_policies_schema.sql (optional)
+10b) company_policies_category.sql (employee + freelancer policy tabs)
+10c) task_assignee_snapshot.sql (freelancer offboard — keep completed tasks)
+10d) mentor_department_tasks.sql (mentor sees students in same department)
+10e) system_settings_rls_fix.sql (admin can save departments / settings — run if RLS error on delete)
 11) attendance_delete_grants.sql (optional — admin delete attendance)
 
 DO NOT run rls-policies.sql — it is legacy Birthmark Brahma (employee/manager) and breaks AJ Academy login.

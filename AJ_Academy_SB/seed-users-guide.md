@@ -21,6 +21,22 @@ values
 
 Valid roles: `super_admin`, `admin`, `student`, `freelancer`, `mentor`.
 
+## Step 3b: Role column (not in Authentication → Users)
+
+Supabase **Authentication → Users** has no `role` column. Roles live in **`public.profiles.role`**.
+
+After creating users in Authentication, run **`add_role_and_sync_profiles.sql`** once. It:
+
+- Ensures the `role` column exists on `profiles`
+- Creates a profile row for every Auth user (with `role` filled)
+- Sets `admin` for `admin123@gmail.com` and `adminuser@gmail.com` (edit emails in the file if needed)
+
+View roles: **Table Editor → profiles** or:
+
+```sql
+select id, email, role, status from public.profiles;
+```
+
 ## Step 4: Run profiles RLS fix
 
 In SQL Editor, run **`profiles_rls_fix.sql`** once (after `schema.sql` / `attendance_module.sql`). This prevents the app from sending you back to login after a successful sign-in.

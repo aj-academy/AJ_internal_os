@@ -13,6 +13,8 @@ import {
   ClipboardList,
   FileText,
   FolderKanban,
+  GraduationCap,
+  Handshake,
   LayoutGrid,
   ListChecks,
   Settings,
@@ -37,17 +39,12 @@ interface SidebarProps {
   onNavigate?: () => void;
 }
 
-/** Strip trailing slash so `/employee/leave/` matches config `/employee/leave`. */
 function normalizeRoutePath(p: string | null) {
   if (!p) return "";
   const trimmed = p.replace(/\/$/, "");
   return trimmed || "/";
 }
 
-/**
- * Use a pathname object for simple app routes so client navigations do not keep a
- * stale hash (e.g. old `#my-leave`) that would otherwise stick on the next page.
- */
 function toLinkHref(href: string): string | { pathname: string } {
   try {
     const u = new URL(href, "https://example.com");
@@ -75,11 +72,12 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
   const activeTab = searchParams.get("tab") ?? "overview";
   const getIcon = (label: string) => {
     if (label.includes("Attendance")) return UserCheck;
-    if (label.includes("Employee")) return UsersRound;
+    if (label.includes("User") || label.includes("Employee")) return UsersRound;
     if (label.includes("Client")) return BriefcaseBusiness;
     if (label.includes("Project")) return FolderKanban;
     if (label.includes("Task")) return ListChecks;
     if (label.includes("Finance")) return Wallet;
+    if (label.includes("Freelance")) return Handshake;
     if (label.includes("Policies")) return ShieldCheck;
     if (label.includes("Reports")) return BarChart3;
     if (label.includes("Settings")) return Settings;
@@ -112,14 +110,25 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
   }, [items]);
 
   return (
-    <aside className="flex h-full w-full flex-col overflow-hidden rounded-r-[24px] rounded-l-[20px] border border-[#d4b84a] bg-gradient-to-b from-[#c9a227] to-[#a68b2e] shadow-[0_18px_45px_rgba(180,140,60,0.35)] transition-all duration-200 ease-out">
-      <div className="flex items-center justify-between px-4 py-5">
-        {!collapsed ? <p className="text-base font-semibold text-white">AJ Academy</p> : <span className="mx-auto text-sm font-semibold text-white">AJ</span>}
+    <aside className="flex h-full w-full flex-col overflow-hidden rounded-r-[24px] rounded-l-[20px] border border-[#d4b84a]/80 bg-gradient-to-b from-[#d4b84a] via-[#c9a227] to-[#a68b2e] shadow-[0_18px_45px_rgba(166,139,46,0.28)] transition-all duration-200 ease-out">
+      <div className="flex items-center justify-between gap-2 px-4 py-5">
+        {!collapsed ? (
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/20 text-white">
+              <GraduationCap className="h-5 w-5" />
+            </span>
+            <p className="truncate text-base font-semibold text-white">AJ Academy</p>
+          </div>
+        ) : (
+          <span className="mx-auto inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 text-white">
+            <GraduationCap className="h-5 w-5" />
+          </span>
+        )}
         {onToggleCollapse ? (
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="hidden rounded-full p-1.5 text-[#dbeafe] transition-colors duration-200 hover:bg-[#2b5cb0] hover:text-white lg:inline-flex"
+            className="hidden rounded-full p-1.5 text-white/90 transition-colors duration-200 hover:bg-white/20 hover:text-white lg:inline-flex"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -146,21 +155,19 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
                 href={toLinkHref(item.href)}
                 onClick={() => onNavigate?.()}
                 className={cn(
-                  "group flex items-center justify-between rounded-full px-3 py-2.5 text-sm font-medium transition-all duration-300 ease-out",
+                  "group flex items-center justify-between rounded-full px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-out",
                   isActive
-                    ? "bg-white text-[#1e3a8a] shadow-sm"
+                    ? "bg-[#fffdf8] text-[#3d3428] shadow-md"
                     : hasActiveChild
-                      ? "bg-white/12 text-white hover:bg-white/20"
-                      : "text-[#dbeafe] hover:bg-white hover:text-[#1e3a8a]",
+                      ? "bg-white/15 text-white"
+                      : "text-white/90 hover:bg-[#fffdf8] hover:text-[#3d3428]",
                 )}
               >
                 <span className="flex items-center gap-3">
                   <Icon
                     className={cn(
                       "h-4 w-4 transition-colors duration-200",
-                      isActive
-                        ? "text-[#1e3a8a]"
-                        : "text-white group-hover:text-[#1e3a8a]",
+                      isActive ? "text-[#c9a227]" : "text-white group-hover:text-[#c9a227]",
                     )}
                   />
                   <span
@@ -175,14 +182,14 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
                 {!collapsed && hasChildren ? (
                   <ChevronDown
                     className={cn(
-                      "h-4 w-4 text-[#bfdbfe] transition-transform",
+                      "h-4 w-4 text-white/70 transition-transform",
                       isExpanded ? "rotate-180" : "rotate-0",
                     )}
                   />
                 ) : null}
               </Link>
               {isExpanded && hasChildren ? (
-                <div className="ml-8 space-y-1 border-l border-[#4d74b8] pl-3">
+                <div className="ml-8 space-y-1 border-l border-white/25 pl-3">
                   {item.children!.map((child) => {
                     const childUrl = new URL(child.href, "http://localhost");
                     const childIsActive =
@@ -196,8 +203,8 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
                         className={cn(
                           "block rounded-md px-2 py-1.5 text-xs transition-colors duration-200",
                           childIsActive
-                            ? "bg-white/15 font-semibold text-white"
-                            : "text-[#cfe0ff] hover:bg-[#2b5cb0] hover:text-white",
+                            ? "bg-white/20 font-semibold text-white"
+                            : "text-white/80 hover:bg-white/15 hover:text-white",
                         )}
                       >
                         {child.label}

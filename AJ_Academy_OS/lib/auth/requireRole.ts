@@ -17,21 +17,26 @@ export async function requireRole(
     redirect("/login?error=session");
   }
 
-  if (!profile?.role) {
+  const roleRaw = profile?.role;
+  if (!roleRaw || typeof roleRaw !== "string") {
     redirect("/login?error=missing_role");
   }
 
-  const status = (profile.status ?? "active").trim().toLowerCase();
-  if (status !== "active") {
-    redirect("/login?error=inactive");
+  const role = roleRaw.trim().toLowerCase() as UserRole;
+
+  if (typeof profile?.status === "string") {
+    const status = profile.status.trim().toLowerCase();
+    if (status && status !== "active") {
+      redirect("/login?error=inactive");
+    }
   }
 
-  if (!allowedRoles.includes(profile.role)) {
-    redirect(getRoleRedirectPath(profile.role));
+  if (!allowedRoles.includes(role)) {
+    redirect(getRoleRedirectPath(role));
   }
 
   return {
-    profile,
+    profile: { ...profile!, role },
     userEmail: user.email ?? "",
   };
 }

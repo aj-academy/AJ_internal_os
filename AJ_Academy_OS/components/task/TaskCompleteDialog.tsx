@@ -36,7 +36,7 @@ export function TaskCompleteDialog({ task, submitting, onClose, onSubmit }: Task
   return (
     <>
       <button type="button" aria-label="Close" className="fixed inset-0 z-[62] bg-slate-900/40" onClick={() => !submitting && onClose()} />
-      <div className="fixed left-1/2 top-1/2 z-[63] w-[min(100%,420px)] -translate-x-1/2 -translate-y-1/2 rounded-[20px] border border-[#d4deea] bg-white p-5 shadow-2xl">
+      <div className="fixed left-1/2 top-1/2 z-[63] w-[min(100%,420px)] -translate-x-1/2 -translate-y-1/2 rounded-[20px] border border-[#e8dcc8] bg-white p-5 shadow-2xl">
         <h3 className="text-lg font-semibold text-[#0f172a]">Complete task</h3>
         <p className="mt-1 text-sm text-[#64748b]">
           <span className="font-medium text-[#334155]">{task.title}</span>
@@ -54,7 +54,7 @@ export function TaskCompleteDialog({ task, submitting, onClose, onSubmit }: Task
           disabled={submitting}
           rows={5}
           placeholder="Describe what was delivered or finished…"
-          className="mt-2 w-full resize-y rounded-xl border border-[#d4deea] bg-[#fbfdff] px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-[#2563eb] focus:ring-2 focus:ring-[#dbeafe] disabled:opacity-60"
+          className="mt-2 w-full resize-y rounded-xl border border-[#e8dcc8] bg-[#fbfdff] px-3 py-2 text-sm text-[#0f172a] outline-none focus:border-[#c9a227] focus:ring-2 focus:ring-[#c9a227]/25 disabled:opacity-60"
         />
         {localError ? <p className="mt-2 text-sm text-rose-600">{localError}</p> : null}
         <div className="mt-4 flex flex-wrap justify-end gap-2">

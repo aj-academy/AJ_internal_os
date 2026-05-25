@@ -77,7 +77,7 @@ export function InstallPrompt() {
 
   return (
     <div
-      className="fixed bottom-4 left-1/2 z-[90] flex w-[min(100vw-2rem,22rem)] -translate-x-1/2 flex-col gap-2 rounded-2xl border border-[#d4deea] bg-white p-4 shadow-xl sm:left-auto sm:right-4 sm:translate-x-0"
+      className="fixed bottom-4 left-1/2 z-[90] flex w-[min(100vw-2rem,22rem)] -translate-x-1/2 flex-col gap-2 rounded-2xl border border-[#e8dcc8] bg-white p-4 shadow-xl sm:left-auto sm:right-4 sm:translate-x-0"
       role="dialog"
       aria-label="Install app"
     >

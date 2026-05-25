@@ -87,7 +87,11 @@ export function TaskTable({
                       ].join(" ")}
                     >
                       <td className="px-4 py-3.5 align-middle font-medium text-[#0f172a]">{task.title}</td>
-                      <td className="px-4 py-3.5 align-middle">{employeeNameMap[task.assigned_to] || "Unknown"}</td>
+                      <td className="px-4 py-3.5 align-middle">
+                        {(task.assigned_to && employeeNameMap[task.assigned_to]) ||
+                          task.assignee_name ||
+                          "Unknown"}
+                      </td>
                       <td className="px-4 py-3.5 align-middle">
                         <Badge className={priorityClassMap[task.priority]}>{task.priority}</Badge>
                       </td>
@@ -127,7 +131,7 @@ export function TaskTable({
                             type="button"
                             disabled={disabled}
                             onClick={() => onView(task)}
-                            className="text-xs font-medium text-[#1d4ed8] hover:underline disabled:opacity-40"
+                            className="text-xs font-medium text-[#a68b2e] hover:underline disabled:opacity-40"
                           >
                             View Task
                           </button>
@@ -158,7 +162,7 @@ export function TaskTable({
                                 onChange={(event) =>
                                   onEmployeeStatusChange(task.id, event.target.value as TaskStatus, task.progress)
                                 }
-                                className="h-7 rounded-md border border-[#d4deea] bg-white px-2 text-xs text-[#334155] outline-none disabled:opacity-50"
+                                className="h-7 rounded-md border border-[#e8dcc8] bg-white px-2 text-xs text-[#334155] outline-none disabled:opacity-50"
                               >
                                 <option value="Pending">Pending</option>
                                 <option value="In Progress">In Progress</option>

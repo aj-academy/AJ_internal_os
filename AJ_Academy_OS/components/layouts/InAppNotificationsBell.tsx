@@ -87,7 +87,7 @@ export function InAppNotificationsBell({ fallbackTaskHref }: { fallbackTaskHref:
         type="button"
         variant="outline"
         size="icon"
-        className="touch-target relative rounded-full border-[#d4deea] bg-white text-[#1e3a8a]"
+        className="touch-target relative rounded-full border-[#e8dcc8] bg-white text-[#3d3428]"
         onClick={() => {
           setOpen((o) => !o);
           void load();
@@ -125,7 +125,7 @@ export function InAppNotificationsBell({ fallbackTaskHref }: { fallbackTaskHref:
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Link
                         href={href}
-                        className="text-xs font-medium text-[#2563eb] hover:underline"
+                        className="text-xs font-medium text-[#c9a227] hover:underline"
                         onClick={() => {
                           if (!n.read_at) void markRead(n.id);
                           setOpen(false);

@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Loader2, GraduationCap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { fetchMyProfile } from "@/lib/auth/fetchMyProfile";
+import { normalizeLoginProfile, type LoginProfileRow } from "@/lib/auth/profileSelect";
+import { validateLoginProfile, type LoginRoleOption } from "@/lib/auth/validateLoginProfile";
 import { getRoleRedirectPath } from "@/lib/auth/roleRedirect";
-import type { Profile, UserRole } from "@/types/profile";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,28 +17,32 @@ interface LoginFormProps {
   initialEmail?: string;
 }
 
-type LoginRoleOption = "admin" | "student" | "freelancer" | "mentor";
-
 async function accountNeedsFirstLogin(email: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 4000);
   try {
     const response = await fetch("/api/auth/needs-first-login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
+      signal: controller.signal,
     });
     if (!response.ok) return false;
     const payload = (await response.json()) as { needsFirstLogin?: boolean };
     return Boolean(payload.needsFirstLogin);
   } catch {
     return false;
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 
 const ERROR_MAP: Record<string, string> = {
   missing_role:
-    "No profile found for your account. In Supabase, add a row in public.profiles with your Auth user id, role (e.g. admin), and status active — then run profiles_rls_fix.sql.",
+    "Could not load your profile on the server after sign-in. Sign in again (wait for “Signing in…” to finish). If it repeats, run profiles_rls_fix.sql in Supabase.",
   inactive: "Your account is inactive. Please contact admin.",
-  session: "Session expired or not saved. Sign in again (restart npm run dev after changing .env.local).",
+  session:
+    "Server could not read your login session. Sign in again and wait until redirect completes.",
   reset_link_invalid: "Reset link is invalid or expired. Please request a new one.",
 };
 
@@ -56,28 +60,52 @@ type FirstLoginResult =
   | { ok: false; alreadyInitialized: true }
   | { ok: false; alreadyInitialized: false; error: string };
 
-async function initializeFirstLogin(payload: { email: string; role: string; password: string }): Promise<FirstLoginResult> {
-  const endpoints = ["/api/auth/first-login"];
+async function initializeFirstLogin(payload: {
+  email: string;
+  role: string;
+  password: string;
+}): Promise<FirstLoginResult> {
+  const response = await fetch("/api/auth/first-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 
-  for (const endpoint of endpoints) {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+  if (response.ok) return { ok: true };
+  if (response.status === 409) return { ok: false, alreadyInitialized: true };
 
-    if (response.status === 404) continue;
-    if (response.ok) return { ok: true };
-    if (response.status === 409) return { ok: false, alreadyInitialized: true };
+  return {
+    ok: false,
+    alreadyInitialized: false,
+    error: await parseApiError(response, "Could not initialize first login."),
+  };
+}
 
-    return {
-      ok: false,
-      alreadyInitialized: false,
-      error: await parseApiError(response, "Could not initialize first login."),
-    };
+async function syncSessionToServer(
+  session: {
+    access_token: string;
+    refresh_token: string;
+    expires_in?: number;
+    expires_at?: number;
+    token_type?: string;
+    user?: unknown;
+  },
+  profile: LoginProfileRow,
+) {
+  return fetch("/api/auth/set-session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ session, profile }),
+  });
+}
+
+function friendlyAuthError(message: string) {
+  const lower = message.toLowerCase();
+  if (lower.includes("invalid login credentials") || lower.includes("invalid email or password")) {
+    return "Incorrect email or password. In Supabase → Authentication → Users, reset the password for this email, then try again.";
   }
-
-  return { ok: false, alreadyInitialized: true };
+  return message || "Invalid credentials.";
 }
 
 export function LoginForm({ initialError, resetSuccess = false, initialEmail = "" }: LoginFormProps) {
@@ -92,18 +120,24 @@ export function LoginForm({ initialError, resetSuccess = false, initialEmail = "
   );
   const [isLoading, setIsLoading] = useState(false);
 
-  const validRoles = new Set<UserRole>([
-    "super_admin",
-    "admin",
-    "student",
-    "freelancer",
-    "mentor",
-  ]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (initialError === "session" || initialError === "missing_role") {
+      window.history.replaceState(null, "", "/login");
+      if (initialError === "missing_role") {
+        void fetch("/api/auth/clear-session", { method: "POST", credentials: "include" });
+      }
+    }
+  }, [initialError]);
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
     setIsLoading(true);
+
+    const normalizedEmail = email.trim().toLowerCase();
+    let firstLoginError: string | null = null;
 
     let supabase;
     try {
@@ -114,16 +148,17 @@ export function LoginForm({ initialError, resetSuccess = false, initialEmail = "
       return;
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
-
     let { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
       email: normalizedEmail,
       password,
     });
-    let firstLoginError: string | null = null;
 
     if (signInError || !signInData.user) {
-      const tryFirstLogin = !resetSuccess && (await accountNeedsFirstLogin(normalizedEmail));
+      const isInvalidPassword =
+        (signInError?.message ?? "").toLowerCase().includes("invalid login credentials") ||
+        (signInError?.message ?? "").toLowerCase().includes("invalid email or password");
+      const tryFirstLogin =
+        !resetSuccess && isInvalidPassword && (await accountNeedsFirstLogin(normalizedEmail));
 
       if (tryFirstLogin) {
         const firstLoginResult = await initializeFirstLogin({
@@ -146,75 +181,154 @@ export function LoginForm({ initialError, resetSuccess = false, initialEmail = "
     }
 
     if (signInError || !signInData.user) {
-      const authMessage = signInError?.message ?? "";
-      const friendlyAuthError =
-        authMessage.toLowerCase().includes("invalid login credentials") ||
-        authMessage.toLowerCase().includes("invalid email or password")
-          ? "Incorrect email or password. Use Forgot password or contact your admin."
-          : authMessage || "Invalid credentials.";
-      setError(firstLoginError ?? friendlyAuthError);
+      setError(firstLoginError ?? friendlyAuthError(signInError?.message ?? ""));
       setIsLoading(false);
       return;
     }
 
-    const authenticatedUserId = signInData.user.id;
-    const authenticatedEmail = normalizedEmail;
+    if (signInData.session) {
+      await supabase.auth.setSession({
+        access_token: signInData.session.access_token,
+        refresh_token: signInData.session.refresh_token,
+      });
+    }
 
     await supabase.auth.getSession();
 
-    const { profile, loadError } = await fetchMyProfile(supabase, {
-      id: authenticatedUserId,
-      email: authenticatedEmail,
-    });
+    const authUserId = signInData.user.id;
+    const authEmail = (signInData.user.email ?? normalizedEmail).trim().toLowerCase();
+    const sessionForProfile =
+      signInData.session ?? (await supabase.auth.getSession()).data.session;
 
-    if (loadError && !profile) {
-      await supabase.auth.signOut();
-      setError(`Could not load your profile (${loadError}). Contact admin.`);
-      setIsLoading(false);
-      return;
+    const isDev = process.env.NODE_ENV !== "production";
+    if (isDev) {
+      console.log("[login] auth user id", authUserId);
+      console.log("[login] auth email", authEmail);
+    }
+
+    let profile: LoginProfileRow | null = null;
+    let loadError: string | null = null;
+
+    const byId = await supabase
+      .from("profiles")
+      .select("id,full_name,email,role")
+      .eq("id", authUserId)
+      .maybeSingle<LoginProfileRow>();
+
+    if (isDev) {
+      console.log("[login] profile by id result", {
+        data: byId.data,
+        error: byId.error?.message ?? null,
+      });
+    }
+
+    if (byId.error) {
+      loadError = byId.error.message;
+    }
+
+    if (byId.data) {
+      profile = normalizeLoginProfile(byId.data);
+    }
+
+    if (!profile) {
+      const byEmail = await supabase
+        .from("profiles")
+        .select("id,full_name,email,role")
+        .eq("email", normalizedEmail)
+        .maybeSingle<LoginProfileRow>();
+
+      if (isDev) {
+        console.log("[login] profile by email result", {
+          data: byEmail.data,
+          error: byEmail.error?.message ?? null,
+        });
+      }
+
+      if (byEmail.error) {
+        loadError = byEmail.error.message;
+      }
+
+      if (byEmail.data) {
+        profile = normalizeLoginProfile(byEmail.data);
+        if (profile.id !== authUserId) {
+          console.warn(
+            "Profile email found but id mismatch with auth user id.",
+            { authUserId, profileId: profile.id, email: profile.email },
+          );
+        }
+      }
+    }
+
+    if (isDev) {
+      console.log("[login] profile result", profile);
+      console.log("[login] final profile role", profile?.role?.toLowerCase() ?? "(none)");
     }
 
     if (!profile?.role) {
       await supabase.auth.signOut();
-      setError("Role not assigned. Please contact admin.");
+      setError(
+        loadError
+          ? `Could not load profile (${loadError}). Run profiles_rls_fix.sql in Supabase.`
+          : "Profile not found. Ensure public.profiles has your email and role.",
+      );
       setIsLoading(false);
       return;
     }
 
-    const normalizedRole = profile.role.trim().toLowerCase() as UserRole;
-    const normalizedStatus =
-      typeof profile?.status === "string" ? profile.status.trim().toLowerCase() : null;
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", "/login");
+    }
 
-    if (!validRoles.has(normalizedRole)) {
+    const validation = validateLoginProfile(profile, selectedRole);
+    if (!validation.ok) {
       await supabase.auth.signOut();
-      setError("Role not assigned. Please contact admin.");
+      setError(validation.error);
       setIsLoading(false);
       return;
     }
 
-    const selectedRoleMatches = (() => {
-      if (selectedRole === "admin") {
-        return normalizedRole === "admin" || normalizedRole === "super_admin";
+    if (!sessionForProfile?.access_token || !sessionForProfile.refresh_token) {
+      await supabase.auth.signOut();
+      setError("Sign-in succeeded but no session was created. Try again.");
+      setIsLoading(false);
+      return;
+    }
+
+    const redirectTo = getRoleRedirectPath(validation.role);
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[login] redirect path", redirectTo);
+    }
+
+    try {
+      const syncResponse = await syncSessionToServer(
+        {
+          access_token: sessionForProfile.access_token,
+          refresh_token: sessionForProfile.refresh_token,
+          expires_in: sessionForProfile.expires_in,
+          expires_at: sessionForProfile.expires_at,
+          token_type: sessionForProfile.token_type,
+          user: sessionForProfile.user,
+        },
+        profile,
+      );
+
+      if (!syncResponse.ok) {
+        await supabase.auth.signOut();
+        setError(
+          "Login succeeded but the server session could not be saved. Please try signing in again.",
+        );
+        setIsLoading(false);
+        return;
       }
-      return normalizedRole === selectedRole;
-    })();
-
-    if (!selectedRoleMatches) {
+    } catch {
       await supabase.auth.signOut();
-      setError("Selected role does not match your account access.");
+      setError("Could not reach the server to save your session. Check that npm run dev is running.");
       setIsLoading(false);
       return;
     }
 
-    if (normalizedStatus && normalizedStatus !== "active") {
-      await supabase.auth.signOut();
-      setError("Your account is inactive. Please contact admin.");
-      setIsLoading(false);
-      return;
-    }
-
-    // Full navigation so auth cookies are sent before the server layout runs.
-    window.location.assign(getRoleRedirectPath(normalizedRole));
+    window.location.replace(redirectTo);
   };
 
   return (
@@ -246,7 +360,7 @@ export function LoginForm({ initialError, resetSuccess = false, initialEmail = "
             <label className="text-sm font-medium text-[#3d3428]">Email</label>
             <Input
               type="email"
-              placeholder="you@ajacademy.com"
+              placeholder="admin123@gmail.com"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               required

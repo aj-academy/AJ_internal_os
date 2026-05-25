@@ -62,10 +62,10 @@ export function ProjectFormPanel({
   return (
     <>
       <button type="button" aria-label="Close" className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px]" onClick={onClose} />
-      <aside className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white shadow-[0_16px_30px_rgba(30,64,175,0.12)] lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[540px] lg:max-w-[100vw] lg:rounded-l-[24px] lg:border-l lg:border-[#d4deea]">
+      <aside className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white shadow-[0_16px_30px_rgba(30,64,175,0.12)] lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[540px] lg:max-w-[100vw] lg:rounded-l-[24px] lg:border-l lg:border-[#e8dcc8]">
           <div className="flex shrink-0 items-center justify-between border-b border-[#e8edf5] px-4 py-4 sm:px-5">
             <h3 className="text-lg font-semibold text-[#0f172a]">{title}</h3>
-            <button type="button" aria-label="Close" onClick={onClose} className="touch-target flex items-center justify-center rounded-full border border-[#d4deea] bg-white p-2 text-[#1e3a8a] shadow-sm transition hover:bg-[#eff6ff] active:scale-95">
+            <button type="button" aria-label="Close" onClick={onClose} className="touch-target flex items-center justify-center rounded-full border border-[#e8dcc8] bg-white p-2 text-[#3d3428] shadow-sm transition hover:bg-[#faf3e3] active:scale-95">
               <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">×</span>
             </button>
           </div>
@@ -79,7 +79,7 @@ export function ProjectFormPanel({
                   disabled={!canEdit}
                   value={value.project_name}
                   onChange={(e) => onChange({ ...value, project_name: e.target.value })}
-                  className="border-[#d4deea]"
+                  className="border-[#e8dcc8]"
                 />
               </label>
               <label className="grid gap-1">
@@ -89,14 +89,14 @@ export function ProjectFormPanel({
                   placeholder="Auto if left blank on create"
                   value={value.project_code}
                   onChange={(e) => onChange({ ...value, project_code: e.target.value })}
-                  className="border-[#d4deea]"
+                  className="border-[#e8dcc8]"
                 />
               </label>
               <label className="grid gap-1">
                 <span className="font-medium text-[#334155]">Client</span>
                 <select
                   disabled={!canEdit}
-                  className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3"
+                  className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3"
                   value={value.client_id}
                   onChange={(e) => onChange({ ...value, client_id: e.target.value })}
                 >
@@ -112,7 +112,7 @@ export function ProjectFormPanel({
                 <span className="font-medium text-[#334155]">Project type</span>
                 <select
                   disabled={!canEdit}
-                  className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3"
+                  className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3"
                   value={value.project_type}
                   onChange={(e) => onChange({ ...value, project_type: e.target.value })}
                 >
@@ -131,7 +131,7 @@ export function ProjectFormPanel({
                   rows={3}
                   value={value.description}
                   onChange={(e) => onChange({ ...value, description: e.target.value })}
-                  className="w-full rounded-lg border border-[#d4deea] px-3 py-2"
+                  className="w-full rounded-lg border border-[#e8dcc8] px-3 py-2"
                 />
               </label>
             </section>
@@ -146,7 +146,7 @@ export function ProjectFormPanel({
                     type="date"
                     value={value.start_date}
                     onChange={(e) => onChange({ ...value, start_date: e.target.value })}
-                    className="border-[#d4deea]"
+                    className="border-[#e8dcc8]"
                   />
                 </label>
                 <label className="grid gap-1">
@@ -156,7 +156,7 @@ export function ProjectFormPanel({
                     type="date"
                     value={value.deadline}
                     onChange={(e) => onChange({ ...value, deadline: e.target.value })}
-                    className="border-[#d4deea]"
+                    className="border-[#e8dcc8]"
                   />
                 </label>
                 <label className="grid gap-1">
@@ -166,7 +166,7 @@ export function ProjectFormPanel({
                     type="date"
                     value={value.estimated_completion}
                     onChange={(e) => onChange({ ...value, estimated_completion: e.target.value })}
-                    className="border-[#d4deea]"
+                    className="border-[#e8dcc8]"
                   />
                 </label>
               </div>
@@ -183,7 +183,7 @@ export function ProjectFormPanel({
                   step="0.01"
                   value={value.budget}
                   onChange={(e) => onChange({ ...value, budget: e.target.value })}
-                  className="border-[#d4deea]"
+                  className="border-[#e8dcc8]"
                 />
               </label>
               <label className="grid gap-1">
@@ -195,7 +195,7 @@ export function ProjectFormPanel({
                   step="0.01"
                   value={value.advance_paid}
                   onChange={(e) => onChange({ ...value, advance_paid: e.target.value })}
-                  className="border-[#d4deea]"
+                  className="border-[#e8dcc8]"
                 />
               </label>
               <p className="rounded-lg border border-[#dbe6f3] bg-[#f8fbff] px-3 py-2 text-xs text-[#475569]">
@@ -209,7 +209,7 @@ export function ProjectFormPanel({
                 <span className="font-medium text-[#334155]">Project manager</span>
                 <select
                   disabled={!canEdit}
-                  className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3"
+                  className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3"
                   value={value.project_manager}
                   onChange={(e) => onChange({ ...value, project_manager: e.target.value })}
                 >
@@ -223,7 +223,7 @@ export function ProjectFormPanel({
               </label>
               <div>
                 <p className="mb-2 font-medium text-[#334155]">Assigned team</p>
-                <div className="max-h-40 space-y-2 overflow-y-auto rounded-lg border border-[#d4deea] p-2">
+                <div className="max-h-40 space-y-2 overflow-y-auto rounded-lg border border-[#e8dcc8] p-2">
                   {employees.map((em) => (
                     <label key={em.id} className="flex items-center gap-2 text-xs">
                       <input
@@ -249,7 +249,7 @@ export function ProjectFormPanel({
                 <span className="font-medium text-[#334155]">Status</span>
                 <select
                   disabled={!canEdit}
-                  className="h-9 rounded-lg border border-[#d4deea] bg-white px-3"
+                  className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-3"
                   value={value.status}
                   onChange={(e) => onChange({ ...value, status: e.target.value })}
                 >
@@ -264,7 +264,7 @@ export function ProjectFormPanel({
                 <span className="font-medium text-[#334155]">Priority</span>
                 <select
                   disabled={!canEdit}
-                  className="h-9 rounded-lg border border-[#d4deea] bg-white px-3"
+                  className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-3"
                   value={value.priority}
                   onChange={(e) => onChange({ ...value, priority: e.target.value })}
                 >
@@ -284,7 +284,7 @@ export function ProjectFormPanel({
                 rows={3}
                 value={value.notes}
                 onChange={(e) => onChange({ ...value, notes: e.target.value })}
-                className="rounded-lg border border-[#d4deea] px-3 py-2"
+                className="rounded-lg border border-[#e8dcc8] px-3 py-2"
               />
             </label>
           </div>
@@ -293,7 +293,7 @@ export function ProjectFormPanel({
             <Button
               type="button"
               data-requires-online
-              className="mt-6 h-10 w-full rounded-full bg-[#2563eb] text-white"
+              className="mt-6 h-10 w-full rounded-full bg-[#c9a227] text-white"
               disabled={submitting || !value.project_name.trim() || !value.client_id}
               onClick={onSubmit}
             >

@@ -84,7 +84,7 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
   };
 
   return (
-    <section className="rounded-2xl border border-[#d4deea] bg-white p-4">
+    <section className="rounded-2xl border border-[#e8dcc8] bg-white p-4">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <button
           type="button"

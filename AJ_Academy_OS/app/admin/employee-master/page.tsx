@@ -1,14 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { AdminEmployeeProfileView } from "@/components/admin/AdminEmployeeProfileView";
 import { useHrOrgSettings } from "@/hooks/useHrOrgSettings";
-import { jobDomainsForDepartment } from "@/lib/hrOrg";
 import type { Profile, ProfileStatus, UserRole } from "@/types/profile";
 
 type EmployeeRole = UserRole;
@@ -19,7 +18,6 @@ interface EmployeeRow {
   email: string;
   role: EmployeeRole;
   department: string | null;
-  designation: string | null;
   status: ProfileStatus | null;
 }
 
@@ -31,19 +29,17 @@ interface FormState {
   email: string;
   role: EmployeeRole;
   department: string;
-  designation: string;
   status: ProfileStatus;
   password: string;
 }
 
-function emptyForm(department: string, designation: string): FormState {
+function emptyForm(department: string): FormState {
   return {
     id: null,
     full_name: "",
     email: "",
     role: "student",
     department,
-    designation,
     status: "active",
     password: "",
   };
@@ -56,7 +52,6 @@ function mapProfileToRow(p: Profile): EmployeeRow {
     email: p.email ?? "",
     role: (p.role ?? "student") as EmployeeRole,
     department: p.department,
-    designation: p.designation,
     status: p.status,
   };
 }
@@ -74,7 +69,6 @@ export default function EmployeeMasterPage() {
   const { settings: hrOrg } = useHrOrgSettings();
   const departments = hrOrg.departments;
   const defaultDepartment = departments[0] ?? "General";
-  const defaultDesignation = jobDomainsForDepartment(hrOrg, defaultDepartment)[0] ?? "General";
 
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -82,15 +76,21 @@ export default function EmployeeMasterPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ProfileStatus>("all");
   const [mode, setMode] = useState<"add" | "edit" | "view">("add");
-  const [form, setForm] = useState<FormState>(() => emptyForm(defaultDepartment, defaultDesignation));
+  const [form, setForm] = useState<FormState>(() => emptyForm(defaultDepartment));
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [viewProfileId, setViewProfileId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const formCardRef = useRef<HTMLDivElement>(null);
 
-  const designationOptions = useMemo(
-    () => jobDomainsForDepartment(hrOrg, form.department),
-    [hrOrg, form.department],
-  );
+  const departmentOptions = useMemo(() => {
+    const list = [...departments];
+    if (form.department && !list.includes(form.department)) {
+      list.unshift(form.department);
+    }
+    return list.length ? list : [form.department || "General"];
+  }, [departments, form.department]);
 
   const loadEmployees = useCallback(async () => {
     setLoadingList(true);
@@ -98,7 +98,7 @@ export default function EmployeeMasterPage() {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("profiles")
-      .select("id,full_name,email,role,department,designation,status,created_at")
+      .select("id,full_name,email,role,department,status,created_at")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -135,22 +135,56 @@ export default function EmployeeMasterPage() {
     }
     setMode(selectedMode);
     setSubmitError(null);
+    setSuccessMessage(null);
     setForm({
       id: employee.id,
       full_name: employee.full_name,
       email: employee.email,
       role: employee.role,
       department: employee.department ?? defaultDepartment,
-      designation: employee.designation ?? jobDomainsForDepartment(hrOrg, employee.department ?? defaultDepartment)[0] ?? defaultDesignation,
       status: (employee.status ?? "active") as ProfileStatus,
       password: "",
+    });
+    requestAnimationFrame(() => {
+      formCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
 
   const onCreateNew = () => {
     setMode("add");
     setSubmitError(null);
-    setForm(emptyForm(defaultDepartment, defaultDesignation));
+    setSuccessMessage(null);
+    setForm(emptyForm(defaultDepartment));
+  };
+
+  const onRemoveUser = async (employee: EmployeeRow) => {
+    const confirmed = window.confirm(
+      `Remove ${employee.full_name} permanently?\n\nTheir login will be deleted. Completed tasks stay in the system with their name on file.\n\nTo only block login, use Edit → status "inactive" instead.`,
+    );
+    if (!confirmed) return;
+
+    setRemovingId(employee.id);
+    setSubmitError(null);
+    setSuccessMessage(null);
+
+    try {
+      const res = await fetch(`/api/admin/employees/${employee.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!res.ok) {
+        setSubmitError(payload.error ?? "Could not remove user.");
+        return;
+      }
+      setSuccessMessage(payload.message ?? "User removed.");
+      if (form.id === employee.id) onCreateNew();
+      await loadEmployees();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Remove failed.");
+    } finally {
+      setRemovingId(null);
+    }
   };
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -173,12 +207,12 @@ export default function EmployeeMasterPage() {
         const res = await fetch("/api/admin/employees", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             full_name: form.full_name.trim(),
             email: form.email.trim().toLowerCase(),
             role: form.role,
             department: form.department.trim(),
-            designation: form.designation.trim(),
             status: form.status,
             password: form.password,
           }),
@@ -191,12 +225,12 @@ export default function EmployeeMasterPage() {
         const res = await fetch(`/api/admin/employees/${form.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             full_name: form.full_name.trim(),
             email: form.email.trim().toLowerCase(),
             role: form.role,
             department: form.department.trim(),
-            designation: form.designation.trim(),
             status: form.status,
           }),
         });
@@ -207,7 +241,8 @@ export default function EmployeeMasterPage() {
       }
 
       await loadEmployees();
-      onCreateNew();
+      setSuccessMessage(mode === "add" ? "User created successfully." : "Changes saved.");
+      if (mode === "add") onCreateNew();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Request failed while saving employee.";
       setSubmitError(message);
@@ -221,17 +256,17 @@ export default function EmployeeMasterPage() {
   const mentorsCount = employees.filter((employee) => employee.role === "mentor").length;
 
   return (
-    <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
+    <section className="aj-card space-y-6 rounded-[24px] p-4 sm:p-6 shadow-[0_12px_32px_rgba(166,139,46,0.08)] lg:p-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#64748b]">Admin Control</p>
-          <h2 className="mt-2 text-3xl font-semibold text-[#0f172a]">Employee Master</h2>
-          <p className="mt-2 text-sm text-[#64748b]">
-            Directory and creation form match the Supabase profiles columns (full name, email, role, department, designation, status).
-            New employees sign in with their work email, the matching role, and the initial password you set below.
+          <p className="aj-page-label">Admin Control</p>
+          <h2 className="mt-2 text-3xl font-semibold text-[#3d3428]">User Master</h2>
+          <p className="mt-2 text-sm text-[#6b5d4d]">
+            Edit a user in the form below (scrolls into view). Save Changes updates their profile and login email.
+            Trash icon removes login permanently (task history kept). To only disable login, set status to inactive.
           </p>
         </div>
-        <Button className="rounded-full bg-[#2563eb] px-5 text-white hover:bg-[#1d4ed8]" onClick={onCreateNew}>
+        <Button className="rounded-full px-5" onClick={onCreateNew}>
           Add Employee
         </Button>
       </div>
@@ -266,12 +301,12 @@ export default function EmployeeMasterPage() {
                 placeholder="Search by name, email, or profile ID"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                className="h-9 rounded-xl border-[#cfdceb]"
+                className="h-9 rounded-xl border-[#e8dcc8]"
               />
               <select
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value as "all" | ProfileStatus)}
-                className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#2563eb] focus:ring-2 focus:ring-[#dbeafe]"
+                className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#c9a227] focus:ring-2 focus:ring-[#c9a227]/25"
               >
                 <option value="all">All Status</option>
                 <option value="active">Active</option>
@@ -290,7 +325,7 @@ export default function EmployeeMasterPage() {
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="bg-[#f1f6fc] text-[#64748b]">
                     <tr>
-                      {["Name", "Role", "Department", "Designation", "Status", "Action"].map((heading) => (
+                      {["Name", "Role", "Department", "Status", "Action"].map((heading) => (
                         <th key={heading} className="px-4 py-3">
                           {heading}
                         </th>
@@ -306,7 +341,6 @@ export default function EmployeeMasterPage() {
                         </td>
                         <td className="px-4 py-3 capitalize">{employee.role.replace("_", " ")}</td>
                         <td className="px-4 py-3">{employee.department ?? "—"}</td>
-                        <td className="px-4 py-3">{employee.designation ?? "—"}</td>
                         <td className="px-4 py-3">
                           <span
                             className={[
@@ -324,17 +358,30 @@ export default function EmployeeMasterPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-7 rounded-lg border-[#cfdceb]"
+                              className="h-7 rounded-lg border-[#e8dcc8]"
                               onClick={() => onPickEmployee(employee, "view")}
                             >
                               View
                             </Button>
                             <Button
                               size="sm"
-                              className="h-7 rounded-lg bg-[#2563eb] text-white hover:bg-[#1d4ed8]"
+                              className="h-7 rounded-lg bg-[#c9a227] text-white hover:bg-[#b8921f]"
                               onClick={() => onPickEmployee(employee, "edit")}
                             >
                               Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 rounded-lg border-red-200 text-red-600 hover:bg-red-50"
+                              disabled={removingId === employee.id}
+                              onClick={() => void onRemoveUser(employee)}
+                            >
+                              {removingId === employee.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
+                              )}
                             </Button>
                           </div>
                         </td>
@@ -342,7 +389,7 @@ export default function EmployeeMasterPage() {
                     ))}
                     {!filteredEmployees.length ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
+                        <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">
                           No employees found for current filters.
                         </td>
                       </tr>
@@ -354,7 +401,13 @@ export default function EmployeeMasterPage() {
           </CardContent>
         </Card>
 
-        <Card className="w-full rounded-2xl border-[#dbe6f3] py-0 shadow-sm">
+        <Card
+          ref={formCardRef}
+          className={[
+            "w-full rounded-2xl border py-0 shadow-sm transition-colors",
+            mode === "edit" ? "border-[#c9a227] ring-2 ring-[#c9a227]/20" : "border-[#dbe6f3]",
+          ].join(" ")}
+        >
           <CardHeader className="pb-0 pt-4">
             <CardTitle className="text-lg text-slate-900">
               {mode === "add" ? "Add Employee" : mode === "edit" ? "Edit Employee" : "View Employee"}
@@ -362,7 +415,7 @@ export default function EmployeeMasterPage() {
             <p className="text-xs text-slate-500">
               {mode === "view"
                 ? "Read-only profile fields (matches Supabase profiles)."
-                : "Fields match the profiles table: full name, email, role, department, designation, status. On create, set an initial password the employee will use at login."}
+                : "Full name, email, role, department, status. On create, set an initial password for first login."}
             </p>
           </CardHeader>
           <CardContent className="pb-4">
@@ -371,7 +424,7 @@ export default function EmployeeMasterPage() {
                 value={form.full_name}
                 onChange={(event) => setForm((prev) => ({ ...prev, full_name: event.target.value }))}
                 placeholder="Full Name"
-                className="h-9 rounded-xl border-[#cfdceb]"
+                className="h-9 rounded-xl border-[#e8dcc8]"
                 disabled={mode === "view"}
                 required
               />
@@ -380,7 +433,7 @@ export default function EmployeeMasterPage() {
                 value={form.email}
                 onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
                 placeholder="Work Email"
-                className="h-9 rounded-xl border-[#cfdceb]"
+                className="h-9 rounded-xl border-[#e8dcc8]"
                 disabled={mode === "view"}
                 required
               />
@@ -388,7 +441,7 @@ export default function EmployeeMasterPage() {
               <select
                 value={form.role}
                 onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value as EmployeeRole }))}
-                className="h-9 w-full rounded-xl border border-[#cfdceb] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#2563eb] focus:ring-2 focus:ring-[#dbeafe]"
+                className="h-9 w-full rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#c9a227] focus:ring-2 focus:ring-[#c9a227]/25"
                 disabled={mode === "view"}
               >
                 {roles.map((role) => (
@@ -400,34 +453,15 @@ export default function EmployeeMasterPage() {
 
               <select
                 value={form.department}
-                onChange={(event) => {
-                  const nextDept = event.target.value;
-                  const jobs = jobDomainsForDepartment(hrOrg, nextDept);
-                  setForm((prev) => ({
-                    ...prev,
-                    department: nextDept,
-                    designation: jobs.includes(prev.designation) ? prev.designation : jobs[0] ?? "General",
-                  }));
-                }}
-                className="h-9 w-full rounded-xl border border-[#cfdceb] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#2563eb] focus:ring-2 focus:ring-[#dbeafe]"
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, department: event.target.value }))
+                }
+                className="h-9 w-full rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#c9a227] focus:ring-2 focus:ring-[#c9a227]/25"
                 disabled={mode === "view"}
               >
-                {departments.map((department) => (
+                {departmentOptions.map((department) => (
                   <option key={department} value={department}>
                     {department}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={form.designation}
-                onChange={(event) => setForm((prev) => ({ ...prev, designation: event.target.value }))}
-                className="h-9 w-full rounded-xl border border-[#cfdceb] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#2563eb] focus:ring-2 focus:ring-[#dbeafe]"
-                disabled={mode === "view"}
-              >
-                {designationOptions.map((designation) => (
-                  <option key={designation} value={designation}>
-                    {designation}
                   </option>
                 ))}
               </select>
@@ -437,7 +471,7 @@ export default function EmployeeMasterPage() {
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, status: event.target.value as ProfileStatus }))
                 }
-                className="h-9 w-full rounded-xl border border-[#cfdceb] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#2563eb] focus:ring-2 focus:ring-[#dbeafe]"
+                className="h-9 w-full rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#c9a227] focus:ring-2 focus:ring-[#c9a227]/25"
                 disabled={mode === "view"}
               >
                 <option value="active">active</option>
@@ -451,7 +485,7 @@ export default function EmployeeMasterPage() {
                     value={form.password}
                     onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
                     placeholder="Initial login password (min 8 characters)"
-                    className="h-9 rounded-xl border-[#cfdceb]"
+                    className="h-9 rounded-xl border-[#e8dcc8]"
                     autoComplete="new-password"
                     required
                   />
@@ -462,20 +496,42 @@ export default function EmployeeMasterPage() {
               ) : null}
 
               {submitError ? <p className="md:col-span-2 text-sm text-red-600">{submitError}</p> : null}
+              {successMessage ? (
+                <p className="md:col-span-2 text-sm text-emerald-700">{successMessage}</p>
+              ) : null}
 
               <div className="flex flex-wrap gap-2 pt-1 md:col-span-2">
-                <Button type="button" variant="outline" className="rounded-xl border-[#cfdceb]" onClick={onCreateNew}>
+                <Button type="button" variant="outline" className="rounded-xl border-[#e8dcc8]" onClick={onCreateNew}>
                   Reset
                 </Button>
                 <Button
                   type="submit"
                   data-requires-online
-                  className="rounded-xl bg-[#2563eb] text-white hover:bg-[#1d4ed8]"
+                  className="rounded-xl bg-[#c9a227] text-white hover:bg-[#b8921f]"
                   disabled={mode === "view" || submitting}
                 >
                   {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {mode === "add" ? "Create Employee" : mode === "edit" ? "Save Changes" : ""}
                 </Button>
+                {mode === "edit" && form.id ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-xl border-red-200 text-red-600 hover:bg-red-50"
+                    disabled={submitting || removingId === form.id}
+                    onClick={() => {
+                      const row = employees.find((e) => e.id === form.id);
+                      if (row) void onRemoveUser(row);
+                    }}
+                  >
+                    {removingId === form.id ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="mr-2 h-4 w-4" />
+                    )}
+                    Remove user
+                  </Button>
+                ) : null}
               </div>
             </form>
           </CardContent>

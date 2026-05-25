@@ -62,7 +62,7 @@ export function EmployeeTaskPreview() {
         </div>
         <Link
           href="/student/my-tasks"
-          className="inline-flex h-9 items-center gap-1 rounded-full bg-[#2563eb] px-4 text-sm font-medium text-white hover:bg-[#1d4ed8]"
+          className="inline-flex h-9 items-center gap-1 rounded-full bg-[#c9a227] px-4 text-sm font-medium text-white hover:bg-[#b8921f]"
         >
           Open My Tasks
           <ArrowRight className="h-4 w-4" />
@@ -90,7 +90,7 @@ export function EmployeeTaskPreview() {
                   {task.due_date ? ` · Due ${task.due_date}` : ""}
                 </p>
               </div>
-              <span className="rounded-full bg-[#eff6ff] px-2.5 py-0.5 text-xs font-medium text-[#1d4ed8]">{task.progress}%</span>
+              <span className="rounded-full bg-[#faf3e3] px-2.5 py-0.5 text-xs font-medium text-[#a68b2e]">{task.progress}%</span>
             </div>
           ))
         )}

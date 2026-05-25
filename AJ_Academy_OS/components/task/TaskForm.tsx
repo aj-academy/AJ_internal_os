@@ -63,7 +63,7 @@ export function TaskForm({
   if (!open) return null;
 
   return (
-    <aside className="h-full max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[24px] border border-[#d4deea] bg-white p-5 shadow-[0_16px_30px_rgba(30,64,175,0.12)]">
+    <aside className="h-full max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[24px] border border-[#e8dcc8] bg-white p-5 shadow-[0_16px_30px_rgba(30,64,175,0.12)]">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-lg font-semibold text-[#0f172a]">{title}</h3>
         <button onClick={onClose} type="button" className="text-sm text-[#64748b] hover:text-[#0f172a]">
@@ -80,7 +80,7 @@ export function TaskForm({
             rows={4}
             value={value.description}
             onChange={(event) => onChange({ ...value, description: event.target.value })}
-            className="w-full rounded-lg border border-[#d4deea] px-3 py-2 text-sm outline-none focus:border-[#2563eb]"
+            className="w-full rounded-lg border border-[#e8dcc8] px-3 py-2 text-sm outline-none focus:border-[#c9a227]"
           />
         </Field>
         {showProjectField ? (
@@ -88,7 +88,7 @@ export function TaskForm({
             <select
               value={value.project_id}
               onChange={(event) => onChange({ ...value, project_id: event.target.value })}
-              className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb]"
+              className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227]"
             >
               <option value="">No project</option>
               {projects.map((project) => (
@@ -109,7 +109,7 @@ export function TaskForm({
             <select
               value={value.assigned_to}
               onChange={(event) => onChange({ ...value, assigned_to: event.target.value })}
-              className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb]"
+              className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227]"
             >
               <option value="">Select employee</option>
               {employees.map((employee) => (
@@ -125,7 +125,7 @@ export function TaskForm({
           <select
             value={value.priority}
             onChange={(event) => onChange({ ...value, priority: event.target.value as TaskPriority })}
-            className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb]"
+            className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227]"
           >
             {priorities.map((priority) => (
               <option key={priority} value={priority}>
@@ -138,7 +138,7 @@ export function TaskForm({
           <select
             value={value.status}
             onChange={(event) => onChange({ ...value, status: event.target.value as TaskStatus })}
-            className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb]"
+            className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227]"
           >
             {statuses.map((status) => (
               <option key={status} value={status}>
@@ -167,7 +167,7 @@ export function TaskForm({
         data-requires-online
         onClick={onSubmit}
         disabled={submitting || !value.title.trim() || (!assigneeLockedToSelf && !value.assigned_to)}
-        className="mt-4 h-9 w-full rounded-full bg-[#2563eb] text-white hover:bg-[#1d4ed8]"
+        className="mt-4 h-9 w-full rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]"
       >
         {submitting ? "Saving..." : "Save Task"}
       </Button>

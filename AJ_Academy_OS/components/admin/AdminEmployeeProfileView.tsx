@@ -61,7 +61,7 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
 function SectionTitle({ letter, title }: { letter: string; title: string }) {
   return (
     <div className="flex items-center gap-2 border-b border-[#e8edf5] pb-2">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#2563eb] text-xs font-bold text-white">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#c9a227] text-xs font-bold text-white">
         {letter}
       </div>
       <div className="text-sm font-semibold uppercase tracking-wide text-[#0f172a]">{title}</div>
@@ -76,7 +76,7 @@ function Chips({ items }: { items: string[] }) {
       {items.map((item) => (
         <div
           key={item}
-          className="inline-flex rounded-full bg-[#eff6ff] px-2.5 py-1 text-xs font-medium text-[#1d4ed8]"
+          className="inline-flex rounded-full bg-[#faf3e3] px-2.5 py-1 text-xs font-medium text-[#a68b2e]"
         >
           {item}
         </div>
@@ -88,7 +88,7 @@ function Chips({ items }: { items: string[] }) {
 function LinkValue({ href }: { href: string | null }) {
   if (!href?.trim()) return <div>—</div>;
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="text-[#2563eb] underline break-all">
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-[#c9a227] underline break-all">
       {href}
     </a>
   );
@@ -265,7 +265,7 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
         tabIndex={0}
         aria-label="Close"
       />
-      <div className="relative z-[71] flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[24px] border border-[#d4deea] bg-white shadow-[0_24px_48px_rgba(30,64,175,0.18)]">
+      <div className="relative z-[71] flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[24px] border border-[#e8dcc8] bg-white shadow-[0_24px_48px_rgba(30,64,175,0.18)]">
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[#e8edf5] px-5 py-4">
           <div className="min-w-0">
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748b]">Employee profile</div>
@@ -277,7 +277,7 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#d4deea] text-[#64748b] hover:bg-[#f8fbff]"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#e8dcc8] text-[#64748b] hover:bg-[#f8fbff]"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
@@ -287,7 +287,7 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-16 text-sm text-[#64748b]">
-              <Loader2 className="h-5 w-5 animate-spin text-[#2563eb]" />
+              <Loader2 className="h-5 w-5 animate-spin text-[#c9a227]" />
               Loading profile…
             </div>
           ) : error ? (
@@ -302,14 +302,14 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
                     className="h-16 w-16 shrink-0 rounded-full object-cover ring-2 ring-white"
                   />
                 ) : (
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-white text-lg font-semibold text-[#2563eb] ring-1 ring-[#dbe6f3]">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-white text-lg font-semibold text-[#c9a227] ring-1 ring-[#dbe6f3]">
                     {initials}
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="text-lg font-semibold text-[#0f172a]">{display(profile?.full_name)}</div>
-                  <div className="text-sm text-[#64748b]">{display(profile?.designation ?? profile?.department)}</div>
-                  <div className="mt-2 inline-flex rounded-full bg-[#dbeafe] px-2.5 py-0.5 text-xs font-semibold text-[#1d4ed8]">
+                  <div className="text-sm text-[#64748b]">{display(profile?.department)}</div>
+                  <div className="mt-2 inline-flex rounded-full bg-[#dbeafe] px-2.5 py-0.5 text-xs font-semibold text-[#a68b2e]">
                     Profile completion {details.profile_completion}%
                   </div>
                 </div>
@@ -330,7 +330,6 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
                   <Field label="Work phone" value={display(employeeDetails?.phone)} />
                   <Field label="Role" value={display(profile?.role?.replace("_", " "))} />
                   <Field label="Department" value={display(profile?.department)} />
-                  <Field label="Designation" value={display(profile?.designation)} />
                   <Field label="Reporting manager" value={display(managerName)} />
                   <Field
                     label="Joining date"
@@ -479,7 +478,7 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
                       {details.account_number ? (
                         <button
                           type="button"
-                          className="text-xs font-medium text-[#2563eb] hover:underline"
+                          className="text-xs font-medium text-[#c9a227] hover:underline"
                           onClick={() => setRevealSensitive((s) => ({ ...s, account: !s.account }))}
                         >
                           {revealSensitive.account ? "Hide" : "Show"}
@@ -499,7 +498,7 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
                       {details.pan_number ? (
                         <button
                           type="button"
-                          className="text-xs font-medium text-[#2563eb] hover:underline"
+                          className="text-xs font-medium text-[#c9a227] hover:underline"
                           onClick={() => setRevealSensitive((s) => ({ ...s, pan: !s.pan }))}
                         >
                           {revealSensitive.pan ? "Hide" : "Show"}
@@ -516,7 +515,7 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
                       {details.aadhaar_number ? (
                         <button
                           type="button"
-                          className="text-xs font-medium text-[#2563eb] hover:underline"
+                          className="text-xs font-medium text-[#c9a227] hover:underline"
                           onClick={() => setRevealSensitive((s) => ({ ...s, aadhaar: !s.aadhaar }))}
                         >
                           {revealSensitive.aadhaar ? "Hide" : "Show"}
@@ -576,7 +575,7 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
                                 <div className="flex flex-wrap gap-1.5">
                                   <button
                                     type="button"
-                                    className="rounded-lg border border-[#cfdceb] px-2 py-1 text-xs font-medium text-[#334155] hover:bg-[#f8fbff]"
+                                    className="rounded-lg border border-[#e8dcc8] px-2 py-1 text-xs font-medium text-[#334155] hover:bg-[#f8fbff]"
                                     onClick={() => void viewDocument(doc)}
                                   >
                                     View

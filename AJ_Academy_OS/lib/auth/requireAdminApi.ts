@@ -1,31 +1,32 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getUserProfile } from "@/lib/auth/getUserProfile";
+import type { Profile, UserRole } from "@/types/profile";
+
+const ADMIN_ROLES = new Set<UserRole>(["admin", "super_admin"]);
 
 export async function requireAdminApiSession() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, profile } = await getUserProfile();
 
   if (!user) {
     return {
       response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
       user: null,
+      profile: null as Profile | null,
     };
   }
 
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
+  const role = profile?.role?.trim().toLowerCase() as UserRole | undefined;
 
-  if (error || !profile?.role || !["admin", "super_admin"].includes(profile.role)) {
+  if (!role || !ADMIN_ROLES.has(role)) {
     return {
-      response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+      response: NextResponse.json(
+        { error: "Forbidden — admin access required." },
+        { status: 403 },
+      ),
       user: null,
+      profile: null as Profile | null,
     };
   }
 
-  return { response: null, user };
+  return { response: null, user, profile };
 }

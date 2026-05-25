@@ -11,6 +11,8 @@ create table if not exists public.company_policies (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   policy_url text not null,
+  policy_category text not null default 'employee'
+    check (policy_category in ('employee', 'freelancer')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

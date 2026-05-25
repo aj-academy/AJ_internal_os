@@ -67,20 +67,20 @@
   --border: #e8dcc8;
   --input: #e8dcc8;
   --ring: #c9a227;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --chart-1: #c9a227;
+  --chart-2: #d4b84a;
+  --chart-3: #a68b2e;
+  --chart-4: #10b981;
+  --chart-5: #6b5d4d;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.56 0.2 258);
-  --sidebar-primary-foreground: oklch(0.98 0.02 258);
-  --sidebar-accent: oklch(0.96 0.03 258);
-  --sidebar-accent-foreground: oklch(0.38 0.12 258);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #c9a227;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #fffdf8;
+  --sidebar-primary-foreground: #3d3428;
+  --sidebar-accent: rgba(255, 255, 255, 0.15);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #d4b84a;
+  --sidebar-ring: #b8921f;
 }
 
 .dark {
@@ -90,8 +90,8 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: #c9a227;
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -101,23 +101,36 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --ring: #c9a227;
+  --chart-1: #c9a227;
+  --chart-2: #d4b84a;
+  --chart-3: #a68b2e;
+  --chart-4: #10b981;
+  --chart-5: #6b5d4d;
+  --sidebar: #a68b2e;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #fffdf8;
+  --sidebar-primary-foreground: #3d3428;
+  --sidebar-accent: rgba(255, 255, 255, 0.12);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #c9a227;
+  --sidebar-ring: #d4b84a;
 }
 
 @layer base {
+  *,
+  *::before,
+  *::after {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
   * {
     @apply border-border outline-ring/50;
   }
@@ -147,7 +160,6 @@
   }
 }
 
-/* PWA / mobile: comfortable tap targets without changing desktop density */
 @layer utilities {
   .touch-target {
     @apply min-h-11 min-w-11 sm:min-h-0 sm:min-w-0;
@@ -162,7 +174,6 @@
     -webkit-overflow-scrolling: touch;
   }
 
-  /* Stat / KPI cards: 2 per row on phone & tablet */
   .stat-cards-grid {
     @apply grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4;
   }
@@ -187,7 +198,6 @@
     @apply flex flex-col gap-2 sm:flex-row sm:flex-wrap;
   }
 
-  /* Full-screen add/edit forms on phone & tablet; side panel on laptop+ */
   .mobile-form-panel {
     inset: 0;
     max-height: 100dvh;
@@ -204,7 +214,7 @@
       width: 100%;
       max-height: calc(100dvh - 2rem);
       border-radius: 1.5rem;
-      box-shadow: 0 25px 50px -12px rgb(15 23 42 / 0.25);
+      box-shadow: 0 25px 50px -12px rgb(61 52 40 / 0.12);
       padding-top: 0;
       padding-bottom: 0;
     }
@@ -216,5 +226,13 @@
 
   .sidebar-sheet-close svg {
     @apply transition-transform duration-200 group-hover:rotate-90;
+  }
+
+  .aj-page-label {
+    @apply text-xs font-semibold uppercase tracking-wider text-[#a68b2e];
+  }
+
+  .aj-card {
+    @apply rounded-2xl border border-[#e8dcc8] bg-white shadow-sm;
   }
 }

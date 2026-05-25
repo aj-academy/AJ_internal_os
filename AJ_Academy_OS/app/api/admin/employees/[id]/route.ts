@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { removeUserAccount } from "@/lib/admin/removeUserAccount";
 import { requireAdminApiSession } from "@/lib/auth/requireAdminApi";
+import type { UserRole } from "@/types/profile";
 
 const ROLES = new Set(["super_admin", "admin", "student", "freelancer", "mentor"]);
 const STATUSES = new Set(["active", "inactive"]);
@@ -31,14 +33,12 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   const role = typeof record.role === "string" ? record.role.trim().toLowerCase() : "";
   const department =
     typeof record.department === "string" ? record.department.trim() : "";
-  const designation =
-    typeof record.designation === "string" ? record.designation.trim() : "";
   const status =
     typeof record.status === "string" ? record.status.trim().toLowerCase() : "";
 
-  if (!full_name || !emailRaw || !role || !department || !designation) {
+  if (!full_name || !emailRaw || !role || !department) {
     return NextResponse.json(
-      { error: "full_name, email, role, department, and designation are required." },
+      { error: "full_name, email, role, and department are required." },
       { status: 400 },
     );
   }
@@ -53,7 +53,11 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   const admin = createAdminClient();
 
-  const { data: existing } = await admin.from("profiles").select("email").eq("id", id).maybeSingle();
+  const { data: existing } = await admin
+    .from("profiles")
+    .select("email,role")
+    .eq("id", id)
+    .maybeSingle();
 
   if (!existing) {
     return NextResponse.json({ error: "Employee not found." }, { status: 404 });
@@ -74,17 +78,31 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
   }
 
-  const { error: profileError } = await admin
-    .from("profiles")
-    .update({
-      full_name,
-      email: emailRaw,
-      role,
-      department,
-      designation,
-      status,
-    })
-    .eq("id", id);
+  const profileFull = {
+    full_name,
+    email: emailRaw,
+    role,
+    department,
+    designation: null,
+    status,
+  };
+
+  let profileError = (await admin.from("profiles").update(profileFull).eq("id", id)).error;
+
+  if (profileError && /column|schema cache/i.test(profileError.message ?? "")) {
+    profileError = (
+      await admin
+        .from("profiles")
+        .update({
+          full_name,
+          email: emailRaw,
+          role,
+          department,
+          status,
+        })
+        .eq("id", id)
+    ).error;
+  }
 
   if (profileError) {
     return NextResponse.json(
@@ -99,7 +117,62 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     email: emailRaw,
     role,
     department,
-    designation,
     status,
+  });
+}
+
+/** Permanently remove user: delete login + profile; keep task history with assignee name on file. */
+export async function DELETE(_request: Request, { params }: RouteParams) {
+  const { response, user, profile: actor } = await requireAdminApiSession();
+  if (response || !user) return response!;
+
+  const { id } = await params;
+  if (!id) {
+    return NextResponse.json({ error: "Missing user id." }, { status: 400 });
+  }
+
+  if (id === user.id) {
+    return NextResponse.json({ error: "You cannot remove your own account." }, { status: 400 });
+  }
+
+  const admin = createAdminClient();
+  const { data: target, error: loadError } = await admin
+    .from("profiles")
+    .select("id,full_name,email,role")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (loadError) {
+    return NextResponse.json({ error: loadError.message }, { status: 400 });
+  }
+  if (!target) {
+    return NextResponse.json({ error: "User not found." }, { status: 404 });
+  }
+
+  const targetRole = (target.role ?? "").trim().toLowerCase() as UserRole;
+  const actorRole = (actor?.role ?? "").trim().toLowerCase() as UserRole;
+
+  if (targetRole === "super_admin" && actorRole !== "super_admin") {
+    return NextResponse.json(
+      { error: "Only a super admin can remove another super admin." },
+      { status: 403 },
+    );
+  }
+
+  try {
+    await removeUserAccount(
+      admin,
+      target.id,
+      target.full_name ?? "User",
+      target.email ?? "",
+    );
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : "Remove user failed.";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    message: "User removed. Login deleted; completed tasks keep their name on record.",
   });
 }

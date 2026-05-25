@@ -495,13 +495,13 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
   }, [clientMap, incomeRows]);
 
   return (
-    <section className="space-y-5 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
+    <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">Finance &amp; Expense Management</h2>
           <p className="mt-1 text-sm text-[#64748b]">Manage company revenue, expenses, project payments and financial tracking.</p>
         </div>
-        <Button variant="outline" className="h-9 rounded-full border-[#cfdceb]" disabled={loading || schemaMissing} onClick={() => void reload()}>
+        <Button variant="outline" className="h-9 rounded-full border-[#e8dcc8]" disabled={loading || schemaMissing} onClick={() => void reload()}>
           Refresh
         </Button>
       </header>
@@ -518,7 +518,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
       ) : null}
 
       {schemaMissing ? (
-        <div className="rounded-xl border border-blue-200 bg-[#eff6ff] px-4 py-3 text-sm text-blue-900">
+        <div className="rounded-xl border border-blue-200 bg-[#faf3e3] px-4 py-3 text-sm text-blue-900">
           <p className="font-semibold">Database setup</p>
           <p className="mt-1">Run <strong>AJ_Academy_SB/finance_schema.sql</strong> in Supabase after Project Master, then refresh.</p>
         </div>
@@ -534,7 +534,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
               onClick={() => setActiveTab(tid)}
               className={
                 activeTab === tid
-                  ? "rounded-xl bg-[#2563eb] px-3 py-2 text-sm font-semibold text-white shadow-md"
+                  ? "rounded-xl bg-[#c9a227] px-3 py-2 text-sm font-semibold text-white shadow-md"
                   : "rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[#475569] hover:bg-[#eaf1ff]"
               }
             >
@@ -564,7 +564,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                   <p className="text-[#64748b]">Revenue</p>
                   <div className="mt-1 h-3 rounded-full bg-slate-100">
                     <div
-                      className="h-3 rounded-full bg-[#2563eb]"
+                      className="h-3 rounded-full bg-[#c9a227]"
                       style={{ width: `${Math.min(100, totals.revenue + totals.officeExp > 0 ? (totals.revenue / (totals.revenue + totals.officeExp)) * 100 : 0)}%` }}
                     />
                   </div>
@@ -668,7 +668,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
         <div className="space-y-3">
           {(isPrivileged || variant === "employee") ? (
             <div className="flex justify-end">
-              <Button className="h-9 rounded-full bg-[#2563eb] px-4 text-white" onClick={() => setPanel("claim")} disabled={schemaMissing}>
+              <Button className="h-9 rounded-full bg-[#c9a227] px-4 text-white" onClick={() => setPanel("claim")} disabled={schemaMissing}>
                 + New claim
               </Button>
             </div>
@@ -738,7 +738,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
       {activeTab === "payments" && (isPrivileged || isManager) ? (
         <div className="space-y-3">
           <div className="flex justify-end">
-            <Button className="h-9 rounded-full bg-[#2563eb] px-4 text-white" onClick={() => setPanel("payment")} disabled={schemaMissing}>
+            <Button className="h-9 rounded-full bg-[#c9a227] px-4 text-white" onClick={() => setPanel("payment")} disabled={schemaMissing}>
               + Add payment
             </Button>
           </div>
@@ -929,15 +929,15 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
         <div className="space-y-3">
           <article className="rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-4">
             <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
-              <select className="h-9 rounded-lg border border-[#d4deea] bg-white px-2 text-sm" value={fltTxType} onChange={(e) => setFltTxType(e.target.value)}>
+              <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltTxType} onChange={(e) => setFltTxType(e.target.value)}>
                 <option value="">Type</option>
                 <option value="Income">Income</option>
                 <option value="Expense">Expense</option>
               </select>
-              <Input className="h-9 border-[#d4deea]" placeholder="Category" value={fltTxCat} onChange={(e) => setFltTxCat(e.target.value)} />
-              <Input type="date" className="h-9 border-[#d4deea]" value={fltTxFrom} onChange={(e) => setFltTxFrom(e.target.value)} />
-              <Input type="date" className="h-9 border-[#d4deea]" value={fltTxTo} onChange={(e) => setFltTxTo(e.target.value)} />
-              <select className="h-9 rounded-lg border border-[#d4deea] bg-white px-2 text-sm" value={fltTxMethod} onChange={(e) => setFltTxMethod(e.target.value)}>
+              <Input className="h-9 border-[#e8dcc8]" placeholder="Category" value={fltTxCat} onChange={(e) => setFltTxCat(e.target.value)} />
+              <Input type="date" className="h-9 border-[#e8dcc8]" value={fltTxFrom} onChange={(e) => setFltTxFrom(e.target.value)} />
+              <Input type="date" className="h-9 border-[#e8dcc8]" value={fltTxTo} onChange={(e) => setFltTxTo(e.target.value)} />
+              <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltTxMethod} onChange={(e) => setFltTxMethod(e.target.value)}>
                 <option value="">Method</option>
                 {PAYMENT_METHODS.map((m) => (
                   <option key={m} value={m}>
@@ -945,7 +945,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                   </option>
                 ))}
               </select>
-              <select className="h-9 rounded-lg border border-[#d4deea] bg-white px-2 text-sm" value={fltTxStatus} onChange={(e) => setFltTxStatus(e.target.value)}>
+              <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltTxStatus} onChange={(e) => setFltTxStatus(e.target.value)}>
                 <option value="">Status</option>
                 <option value="Paid">Paid</option>
                 <option value="Pending">Pending</option>
@@ -1018,7 +1018,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
               <h3 className="text-lg font-semibold text-[#0f172a]">
                 {panel === "income" ? "Add income" : panel === "expense" ? "Add expense" : panel === "payment" ? "Add project payment" : "New expense claim"}
               </h3>
-              <button type="button" aria-label="Close" onClick={() => setPanel("none")} className="touch-target flex items-center justify-center rounded-full border border-[#d4deea] bg-white p-2 text-[#1e3a8a] shadow-sm transition hover:bg-[#eff6ff] active:scale-95">
+              <button type="button" aria-label="Close" onClick={() => setPanel("none")} className="touch-target flex items-center justify-center rounded-full border border-[#e8dcc8] bg-white p-2 text-[#3d3428] shadow-sm transition hover:bg-[#faf3e3] active:scale-95">
                 <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">×</span>
               </button>
             </div>
@@ -1027,7 +1027,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
               {panel === "income" ? (
                 <>
                   <Field label="Category">
-                    <select className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-2" value={incomeForm.category} onChange={(e) => setIncomeForm({ ...incomeForm, category: e.target.value })}>
+                    <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={incomeForm.category} onChange={(e) => setIncomeForm({ ...incomeForm, category: e.target.value })}>
                       {INCOME_CATEGORIES.map((c) => (
                         <option key={c} value={c}>
                           {c}
@@ -1036,10 +1036,10 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                     </select>
                   </Field>
                   <Field label="Amount">
-                    <Input className="h-9 border-[#d4deea]" value={incomeForm.amount} onChange={(e) => setIncomeForm({ ...incomeForm, amount: e.target.value })} />
+                    <Input className="h-9 border-[#e8dcc8]" value={incomeForm.amount} onChange={(e) => setIncomeForm({ ...incomeForm, amount: e.target.value })} />
                   </Field>
                   <Field label="Payment method">
-                    <select className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-2" value={incomeForm.payment_method} onChange={(e) => setIncomeForm({ ...incomeForm, payment_method: e.target.value })}>
+                    <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={incomeForm.payment_method} onChange={(e) => setIncomeForm({ ...incomeForm, payment_method: e.target.value })}>
                       {PAYMENT_METHODS.map((m) => (
                         <option key={m} value={m}>
                           {m}
@@ -1048,17 +1048,17 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                     </select>
                   </Field>
                   <Field label="Status">
-                    <select className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-2" value={incomeForm.payment_status} onChange={(e) => setIncomeForm({ ...incomeForm, payment_status: e.target.value })}>
+                    <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={incomeForm.payment_status} onChange={(e) => setIncomeForm({ ...incomeForm, payment_status: e.target.value })}>
                       <option value="Paid">Paid</option>
                       <option value="Pending">Pending</option>
                       <option value="Partial">Partial</option>
                     </select>
                   </Field>
                   <Field label="Date">
-                    <Input type="date" className="h-9 border-[#d4deea]" value={incomeForm.transaction_date} onChange={(e) => setIncomeForm({ ...incomeForm, transaction_date: e.target.value })} />
+                    <Input type="date" className="h-9 border-[#e8dcc8]" value={incomeForm.transaction_date} onChange={(e) => setIncomeForm({ ...incomeForm, transaction_date: e.target.value })} />
                   </Field>
                   <Field label="Client">
-                    <select className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-2" value={incomeForm.client_id} onChange={(e) => setIncomeForm({ ...incomeForm, client_id: e.target.value })}>
+                    <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={incomeForm.client_id} onChange={(e) => setIncomeForm({ ...incomeForm, client_id: e.target.value })}>
                       <option value="">—</option>
                       {clients.map((c) => (
                         <option key={c.id} value={c.id}>
@@ -1068,7 +1068,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                     </select>
                   </Field>
                   <Field label="Project">
-                    <select className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-2" value={incomeForm.project_id} onChange={(e) => setIncomeForm({ ...incomeForm, project_id: e.target.value })}>
+                    <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={incomeForm.project_id} onChange={(e) => setIncomeForm({ ...incomeForm, project_id: e.target.value })}>
                       <option value="">—</option>
                       {projects.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -1078,15 +1078,15 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                     </select>
                   </Field>
                   <Field label="Reference #">
-                    <Input className="h-9 border-[#d4deea]" value={incomeForm.reference_number} onChange={(e) => setIncomeForm({ ...incomeForm, reference_number: e.target.value })} />
+                    <Input className="h-9 border-[#e8dcc8]" value={incomeForm.reference_number} onChange={(e) => setIncomeForm({ ...incomeForm, reference_number: e.target.value })} />
                   </Field>
                   <Field label="Description">
-                    <Input className="h-9 border-[#d4deea]" value={incomeForm.description} onChange={(e) => setIncomeForm({ ...incomeForm, description: e.target.value })} />
+                    <Input className="h-9 border-[#e8dcc8]" value={incomeForm.description} onChange={(e) => setIncomeForm({ ...incomeForm, description: e.target.value })} />
                   </Field>
                   <Field label="Attachment URL">
-                    <Input className="h-9 border-[#d4deea]" placeholder="https://…" value={incomeForm.attachment_url} onChange={(e) => setIncomeForm({ ...incomeForm, attachment_url: e.target.value })} />
+                    <Input className="h-9 border-[#e8dcc8]" placeholder="https://…" value={incomeForm.attachment_url} onChange={(e) => setIncomeForm({ ...incomeForm, attachment_url: e.target.value })} />
                   </Field>
-                  <Button data-requires-online className="mt-2 w-full rounded-full bg-[#2563eb] text-white" onClick={() => void saveIncome()}>
+                  <Button data-requires-online className="mt-2 w-full rounded-full bg-[#c9a227] text-white" onClick={() => void saveIncome()}>
                     Save income
                   </Button>
                 </>
@@ -1094,7 +1094,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
               {panel === "expense" ? (
                 <>
                   <Field label="Category">
-                    <select className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-2" value={expenseForm.category} onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })}>
+                    <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={expenseForm.category} onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })}>
                       {EXPENSE_CATEGORIES.map((c) => (
                         <option key={c} value={c}>
                           {c}
@@ -1103,10 +1103,10 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                     </select>
                   </Field>
                   <Field label="Amount">
-                    <Input className="h-9 border-[#d4deea]" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} />
+                    <Input className="h-9 border-[#e8dcc8]" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} />
                   </Field>
                   <Field label="Payment method">
-                    <select className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-2" value={expenseForm.payment_method} onChange={(e) => setExpenseForm({ ...expenseForm, payment_method: e.target.value })}>
+                    <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={expenseForm.payment_method} onChange={(e) => setExpenseForm({ ...expenseForm, payment_method: e.target.value })}>
                       {PAYMENT_METHODS.map((m) => (
                         <option key={m} value={m}>
                           {m}
@@ -1115,21 +1115,21 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                     </select>
                   </Field>
                   <Field label="Status">
-                    <select className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-2" value={expenseForm.payment_status} onChange={(e) => setExpenseForm({ ...expenseForm, payment_status: e.target.value })}>
+                    <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={expenseForm.payment_status} onChange={(e) => setExpenseForm({ ...expenseForm, payment_status: e.target.value })}>
                       <option value="Paid">Paid</option>
                       <option value="Pending">Pending</option>
                     </select>
                   </Field>
                   <Field label="Date">
-                    <Input type="date" className="h-9 border-[#d4deea]" value={expenseForm.transaction_date} onChange={(e) => setExpenseForm({ ...expenseForm, transaction_date: e.target.value })} />
+                    <Input type="date" className="h-9 border-[#e8dcc8]" value={expenseForm.transaction_date} onChange={(e) => setExpenseForm({ ...expenseForm, transaction_date: e.target.value })} />
                   </Field>
                   <Field label="Description">
-                    <Input className="h-9 border-[#d4deea]" value={expenseForm.description} onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} />
+                    <Input className="h-9 border-[#e8dcc8]" value={expenseForm.description} onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} />
                   </Field>
                   <Field label="Attachment URL">
-                    <Input className="h-9 border-[#d4deea]" value={expenseForm.attachment_url} onChange={(e) => setExpenseForm({ ...expenseForm, attachment_url: e.target.value })} />
+                    <Input className="h-9 border-[#e8dcc8]" value={expenseForm.attachment_url} onChange={(e) => setExpenseForm({ ...expenseForm, attachment_url: e.target.value })} />
                   </Field>
-                  <Button data-requires-online className="mt-2 w-full rounded-full bg-[#2563eb] text-white" onClick={() => void saveExpense()}>
+                  <Button data-requires-online className="mt-2 w-full rounded-full bg-[#c9a227] text-white" onClick={() => void saveExpense()}>
                     Save expense
                   </Button>
                 </>
@@ -1137,7 +1137,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
               {panel === "payment" ? (
                 <>
                   <Field label="Project">
-                    <select className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-2" value={paymentForm.project_id} onChange={(e) => setPaymentForm({ ...paymentForm, project_id: e.target.value })}>
+                    <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={paymentForm.project_id} onChange={(e) => setPaymentForm({ ...paymentForm, project_id: e.target.value })}>
                       <option value="">Select project</option>
                       {projects.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -1147,13 +1147,13 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                     </select>
                   </Field>
                   <Field label="Amount">
-                    <Input className="h-9 border-[#d4deea]" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} />
+                    <Input className="h-9 border-[#e8dcc8]" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} />
                   </Field>
                   <Field label="Payment date">
-                    <Input type="date" className="h-9 border-[#d4deea]" value={paymentForm.payment_date} onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })} />
+                    <Input type="date" className="h-9 border-[#e8dcc8]" value={paymentForm.payment_date} onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })} />
                   </Field>
                   <Field label="Method">
-                    <select className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-2" value={paymentForm.payment_method} onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })}>
+                    <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={paymentForm.payment_method} onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })}>
                       {PAYMENT_METHODS.map((m) => (
                         <option key={m} value={m}>
                           {m}
@@ -1162,7 +1162,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                     </select>
                   </Field>
                   <Field label="Status">
-                    <select className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-2" value={paymentForm.payment_status} onChange={(e) => setPaymentForm({ ...paymentForm, payment_status: e.target.value })}>
+                    <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={paymentForm.payment_status} onChange={(e) => setPaymentForm({ ...paymentForm, payment_status: e.target.value })}>
                       {PAYMENT_STATUSES.map((s) => (
                         <option key={s} value={s}>
                           {s}
@@ -1171,12 +1171,12 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                     </select>
                   </Field>
                   <Field label="Invoice #">
-                    <Input className="h-9 border-[#d4deea]" value={paymentForm.invoice_number} onChange={(e) => setPaymentForm({ ...paymentForm, invoice_number: e.target.value })} />
+                    <Input className="h-9 border-[#e8dcc8]" value={paymentForm.invoice_number} onChange={(e) => setPaymentForm({ ...paymentForm, invoice_number: e.target.value })} />
                   </Field>
                   <Field label="Notes">
-                    <Input className="h-9 border-[#d4deea]" value={paymentForm.notes} onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })} />
+                    <Input className="h-9 border-[#e8dcc8]" value={paymentForm.notes} onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })} />
                   </Field>
-                  <Button data-requires-online className="mt-2 w-full rounded-full bg-[#2563eb] text-white" onClick={() => void savePayment()}>
+                  <Button data-requires-online className="mt-2 w-full rounded-full bg-[#c9a227] text-white" onClick={() => void savePayment()}>
                     Save payment
                   </Button>
                 </>
@@ -1184,16 +1184,16 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
               {panel === "claim" ? (
                 <>
                   <Field label="Expense type">
-                    <Input className="h-9 border-[#d4deea]" value={claimForm.expense_type} onChange={(e) => setClaimForm({ ...claimForm, expense_type: e.target.value })} />
+                    <Input className="h-9 border-[#e8dcc8]" value={claimForm.expense_type} onChange={(e) => setClaimForm({ ...claimForm, expense_type: e.target.value })} />
                   </Field>
                   <Field label="Amount">
-                    <Input className="h-9 border-[#d4deea]" value={claimForm.amount} onChange={(e) => setClaimForm({ ...claimForm, amount: e.target.value })} />
+                    <Input className="h-9 border-[#e8dcc8]" value={claimForm.amount} onChange={(e) => setClaimForm({ ...claimForm, amount: e.target.value })} />
                   </Field>
                   <Field label="Date">
-                    <Input type="date" className="h-9 border-[#d4deea]" value={claimForm.expense_date} onChange={(e) => setClaimForm({ ...claimForm, expense_date: e.target.value })} />
+                    <Input type="date" className="h-9 border-[#e8dcc8]" value={claimForm.expense_date} onChange={(e) => setClaimForm({ ...claimForm, expense_date: e.target.value })} />
                   </Field>
                   <Field label="Payment method (reimbursement)">
-                    <select className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-2" value={claimForm.payment_method} onChange={(e) => setClaimForm({ ...claimForm, payment_method: e.target.value })}>
+                    <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={claimForm.payment_method} onChange={(e) => setClaimForm({ ...claimForm, payment_method: e.target.value })}>
                       {PAYMENT_METHODS.map((m) => (
                         <option key={m} value={m}>
                           {m}
@@ -1202,12 +1202,12 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                     </select>
                   </Field>
                   <Field label="Reason">
-                    <Input className="h-9 border-[#d4deea]" value={claimForm.reason} onChange={(e) => setClaimForm({ ...claimForm, reason: e.target.value })} />
+                    <Input className="h-9 border-[#e8dcc8]" value={claimForm.reason} onChange={(e) => setClaimForm({ ...claimForm, reason: e.target.value })} />
                   </Field>
                   <Field label="Receipt URL">
-                    <Input className="h-9 border-[#d4deea]" placeholder="https://…" value={claimForm.receipt_url} onChange={(e) => setClaimForm({ ...claimForm, receipt_url: e.target.value })} />
+                    <Input className="h-9 border-[#e8dcc8]" placeholder="https://…" value={claimForm.receipt_url} onChange={(e) => setClaimForm({ ...claimForm, receipt_url: e.target.value })} />
                   </Field>
-                  <Button data-requires-online className="mt-2 w-full rounded-full bg-[#2563eb] text-white" onClick={() => void saveClaim()}>
+                  <Button data-requires-online className="mt-2 w-full rounded-full bg-[#c9a227] text-white" onClick={() => void saveClaim()}>
                     Submit claim
                   </Button>
                 </>
@@ -1251,7 +1251,7 @@ function FinanceTableSection<T>({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-lg font-semibold text-[#0f172a]">{title}</h3>
-        <Button className="h-9 rounded-full bg-[#2563eb] px-4 text-white" onClick={onAction}>
+        <Button className="h-9 rounded-full bg-[#c9a227] px-4 text-white" onClick={onAction}>
           {actionLabel}
         </Button>
       </div>

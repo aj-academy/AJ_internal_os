@@ -81,7 +81,7 @@ export function AdminPermissionRequestsTable({ rows }: { rows: AdminPermissionTa
   };
 
   return (
-    <section className="rounded-2xl border border-[#d4deea] bg-white p-4">
+    <section className="rounded-2xl border border-[#e8dcc8] bg-white p-4">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -171,7 +171,7 @@ export function AdminPermissionRequestsTable({ rows }: { rows: AdminPermissionTa
                         <input
                           name="rejection_reason"
                           placeholder="Rejection reason (optional)"
-                          className="h-8 w-full rounded-md border border-[#cfdceb] px-2 text-xs"
+                          className="h-8 w-full rounded-md border border-[#e8dcc8] px-2 text-xs"
                         />
                         <div className="flex flex-wrap gap-2">
                           <button

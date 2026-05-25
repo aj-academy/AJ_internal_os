@@ -1,13 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { CompanyPolicy } from "@/types/company-policy";
+import type { CompanyPolicy, PolicyCategory } from "@/types/company-policy";
+
+const FREELANCER_POLICY_SUGGESTIONS = [
+  "Independent Contractor Agreement",
+  "NDA & Confidentiality",
+  "Payment & Invoicing Terms",
+  "IP & Work Product Assignment",
+  "Security & Acceptable Use",
+];
 
 export default function AdminPoliciesPage() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const [category, setCategory] = useState<PolicyCategory>(
+    tabParam === "freelancer" ? "freelancer" : "employee",
+  );
   const [policies, setPolicies] = useState<CompanyPolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -15,19 +30,29 @@ export default function AdminPoliciesPage() {
   const [policy_url, setPolicyUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (tabParam === "freelancer") setCategory("freelancer");
+    if (tabParam === "employee") setCategory("employee");
+  }, [tabParam]);
+
   const loadPolicies = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const res = await fetch("/api/admin/policies");
+    const res = await fetch(`/api/admin/policies?category=${category}`);
     const payload = (await res.json()) as { policies?: CompanyPolicy[]; error?: string };
     if (!res.ok) {
       setError(payload.error ?? "Could not load policies.");
       setPolicies([]);
     } else {
-      setPolicies(payload.policies ?? []);
+      setPolicies(
+        (payload.policies ?? []).map((p) => ({
+          ...p,
+          policy_category: p.policy_category ?? category,
+        })),
+      );
     }
     setLoading(false);
-  }, []);
+  }, [category]);
 
   useEffect(() => {
     void loadPolicies();
@@ -40,7 +65,11 @@ export default function AdminPoliciesPage() {
     const res = await fetch("/api/admin/policies", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim(), policy_url: policy_url.trim() }),
+      body: JSON.stringify({
+        name: name.trim(),
+        policy_url: policy_url.trim(),
+        policy_category: category,
+      }),
     });
     const payload = (await res.json()) as { error?: string };
     if (!res.ok) {
@@ -55,9 +84,7 @@ export default function AdminPoliciesPage() {
   };
 
   const onDelete = async (id: string) => {
-    if (!confirm("Delete this policy? Employees who already agreed keep their record; new employees will not see a deleted policy.")) {
-      return;
-    }
+    if (!confirm("Delete this policy?")) return;
     setError(null);
     const res = await fetch(`/api/admin/policies/${id}`, { method: "DELETE" });
     const payload = (await res.json()) as { error?: string };
@@ -68,19 +95,76 @@ export default function AdminPoliciesPage() {
     await loadPolicies();
   };
 
+  const applySuggestion = (label: string) => {
+    setName(label);
+  };
+
   return (
-    <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
+    <section className="space-y-6 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#64748b]">Admin Control</p>
         <h2 className="mt-2 text-3xl font-semibold text-[#0f172a]">Company policies</h2>
         <p className="mt-2 text-sm text-[#64748b]">
-          Add policy names and document links (for example Google Drive). Employees must agree after login when new policies are pending.
+          Employee policies for staff, students, and mentors. Freelancer policies for contractors — manage roster in{" "}
+          <Link href="/admin/freelancers" className="text-[#c9a227] hover:underline">
+            Freelance management
+          </Link>
+          .
         </p>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant={category === "employee" ? "default" : "outline"}
+          className={
+            category === "employee"
+              ? "rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]"
+              : "rounded-full border-[#e8dcc8]"
+          }
+          onClick={() => setCategory("employee")}
+        >
+          Employee policies
+        </Button>
+        <Button
+          type="button"
+          variant={category === "freelancer" ? "default" : "outline"}
+          className={
+            category === "freelancer"
+              ? "rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]"
+              : "rounded-full border-[#e8dcc8]"
+          }
+          onClick={() => setCategory("freelancer")}
+        >
+          Freelancer policies
+        </Button>
+      </div>
+
+      {category === "freelancer" ? (
+        <Card className="rounded-2xl border-[#e8dcc8] bg-[#faf8f3] py-0 shadow-sm">
+          <CardContent className="p-4 text-sm text-[#475569]">
+            <p className="font-medium text-[#0f172a]">Quick-add templates (CRM best practice)</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {FREELANCER_POLICY_SUGGESTIONS.map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  className="rounded-full border border-[#e8dcc8] bg-white px-3 py-1 text-xs font-medium text-[#3d3428] hover:bg-[#fff9eb]"
+                  onClick={() => applySuggestion(label)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card className="rounded-2xl border-[#dbe6f3] py-0 shadow-sm">
         <CardHeader className="pb-2 pt-4">
-          <CardTitle className="text-lg text-slate-900">Add policy</CardTitle>
+          <CardTitle className="text-lg text-slate-900">
+            Add {category === "freelancer" ? "freelancer" : "employee"} policy
+          </CardTitle>
         </CardHeader>
         <CardContent className="pb-4">
           <form className="grid gap-3 md:grid-cols-2" onSubmit={onAdd}>
@@ -88,20 +172,20 @@ export default function AdminPoliciesPage() {
               placeholder="Policy name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="h-9 rounded-xl border-[#cfdceb]"
+              className="h-9 rounded-xl border-[#e8dcc8]"
               required
             />
             <Input
               placeholder="Policy URL (https://…)"
               value={policy_url}
               onChange={(e) => setPolicyUrl(e.target.value)}
-              className="h-9 rounded-xl border-[#cfdceb]"
+              className="h-9 rounded-xl border-[#e8dcc8]"
               required
             />
             <div className="md:col-span-2 flex flex-wrap gap-2">
               <Button
                 type="submit"
-                className="rounded-xl bg-[#2563eb] text-white hover:bg-[#1d4ed8]"
+                className="rounded-xl bg-[#c9a227] text-white hover:bg-[#b8921f]"
                 disabled={submitting}
               >
                 {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
@@ -116,7 +200,9 @@ export default function AdminPoliciesPage() {
 
       <Card className="rounded-2xl border-[#dbe6f3] py-0 shadow-sm">
         <CardHeader className="pb-2 pt-4">
-          <CardTitle className="text-lg text-slate-900">Policies ({policies.length})</CardTitle>
+          <CardTitle className="text-lg text-slate-900">
+            {category === "freelancer" ? "Freelancer" : "Employee"} policies ({policies.length})
+          </CardTitle>
         </CardHeader>
         <CardContent className="pb-4">
           {loading ? (
@@ -124,7 +210,7 @@ export default function AdminPoliciesPage() {
               <Loader2 className="h-4 w-4 animate-spin" /> Loading…
             </div>
           ) : policies.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-500">No policies yet. Add one above.</p>
+            <p className="py-8 text-center text-sm text-slate-500">No policies in this category yet.</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
               <table className="w-full min-w-[560px] text-left text-sm">
@@ -146,7 +232,7 @@ export default function AdminPoliciesPage() {
                           href={p.policy_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[#2563eb] hover:underline"
+                          className="text-[#c9a227] hover:underline"
                         >
                           {p.policy_url}
                         </a>

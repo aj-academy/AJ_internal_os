@@ -8,5 +8,9 @@ export function createClient() {
       "Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to AJ_Academy_OS/.env.local, save the file, then restart npm run dev.",
     );
   }
-  return createBrowserClient(url, anonKey);
+  return createBrowserClient(url, anonKey, {
+    cookieOptions: {
+      secure: process.env.NODE_ENV === "production",
+    },
+  });
 }

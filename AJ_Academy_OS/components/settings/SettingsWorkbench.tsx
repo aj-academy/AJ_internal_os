@@ -37,7 +37,7 @@ const SETTINGS_TAB_ORDER: SettingsTabId[] = [
 const SETTINGS_TAB_LABELS: Record<SettingsTabId, string> = {
   company: "Company Settings",
   users: "User & Role Settings",
-  hr_org: "Departments & Job Domains",
+  hr_org: "Departments",
   attendance: "Attendance Settings",
   crm: "CRM Settings",
   project: "Project Settings",
@@ -128,17 +128,19 @@ export function SettingsWorkbench() {
   const saveKey = async (key: string) => {
     if (!userId || schemaMissing) return;
     setSaving(true);
-    const { error } = await supabase.from("system_settings").upsert(
-      {
+    const res = await fetch("/api/admin/settings", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         setting_key: key,
         setting_value: settings[key] || {},
-        updated_by: userId,
-      },
-      { onConflict: "setting_key" },
-    );
+      }),
+    });
     setSaving(false);
-    if (error) {
-      showToast("err", error.message);
+    if (!res.ok) {
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      showToast("err", payload.error ?? "Could not save settings.");
       return;
     }
     showToast("ok", "Settings saved.");
@@ -155,7 +157,7 @@ export function SettingsWorkbench() {
   const pref = settings.preferences || mergeSettings("preferences", {});
 
   return (
-    <section className="space-y-5 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
+    <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       {toast ? (
         <div
           className={[
@@ -172,13 +174,13 @@ export function SettingsWorkbench() {
           <h2 className="text-3xl font-semibold text-[#0f172a]">System Settings</h2>
           <p className="mt-1 text-xs text-[#64748b] sm:text-sm">Configure company operations, workflows and platform preferences.</p>
         </div>
-        <Button variant="outline" className="h-9 rounded-full border-[#cfdceb]" disabled={loading || schemaMissing} onClick={() => void loadSettings()}>
+        <Button variant="outline" className="h-9 rounded-full border-[#e8dcc8]" disabled={loading || schemaMissing} onClick={() => void loadSettings()}>
           Reload
         </Button>
       </header>
 
       {schemaMissing ? (
-        <div className="rounded-xl border border-blue-200 bg-[#eff6ff] px-4 py-3 text-sm text-blue-900">
+        <div className="rounded-xl border border-blue-200 bg-[#faf3e3] px-4 py-3 text-sm text-blue-900">
           Run <strong>AJ_Academy_SB/system_settings_schema.sql</strong> in Supabase, then refresh.
         </div>
       ) : null}
@@ -192,7 +194,7 @@ export function SettingsWorkbench() {
               onClick={() => setActiveTab(tid)}
               className={
                 activeTab === tid
-                  ? "rounded-xl bg-[#2563eb] px-3 py-2 text-sm font-semibold text-white shadow-md"
+                  ? "rounded-xl bg-[#c9a227] px-3 py-2 text-sm font-semibold text-white shadow-md"
                   : "rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[#475569] hover:bg-[#eaf1ff]"
               }
             >
@@ -221,7 +223,7 @@ export function SettingsWorkbench() {
       ) : null}
 
       {activeTab === "hr_org" ? (
-        <HrOrgSettingsPanel userId={userId} schemaMissing={schemaMissing} onToast={showToast} />
+        <HrOrgSettingsPanel schemaMissing={schemaMissing} onToast={showToast} />
       ) : null}
 
       {activeTab === "users" ? (
@@ -407,7 +409,7 @@ function SettingsPanel({
     <div className="rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-lg font-semibold text-[#0f172a]">{title}</h3>
-        <Button className="h-9 rounded-full bg-[#2563eb] px-4 text-white" disabled={disabled || saving} onClick={onSave}>
+        <Button className="h-9 rounded-full bg-[#c9a227] px-4 text-white" disabled={disabled || saving} onClick={onSave}>
           {saving ? "Saving…" : "Save changes"}
         </Button>
       </div>
@@ -420,7 +422,7 @@ function LabeledInput({ label, value, onChange }: { label: string; value: string
   return (
     <label className="block text-sm">
       <span className="text-xs font-semibold uppercase text-[#64748b]">{label}</span>
-      <Input className="mt-1 h-9 border-[#d4deea]" value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input className="mt-1 h-9 border-[#e8dcc8]" value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }
@@ -430,7 +432,7 @@ function LabeledTextarea({ label, value, onChange }: { label: string; value: str
     <label className="block text-sm">
       <span className="text-xs font-semibold uppercase text-[#64748b]">{label}</span>
       <textarea
-        className="mt-1 min-h-[100px] w-full rounded-lg border border-[#d4deea] bg-white px-3 py-2 text-sm text-[#334155] outline-none focus:border-[#2563eb]"
+        className="mt-1 min-h-[100px] w-full rounded-lg border border-[#e8dcc8] bg-white px-3 py-2 text-sm text-[#334155] outline-none focus:border-[#c9a227]"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />

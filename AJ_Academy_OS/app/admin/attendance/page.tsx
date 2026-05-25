@@ -276,7 +276,7 @@ function AttendanceSubCategoryNav({ activeTab }: { activeTab: string }) {
               className={[
                 "rounded-xl px-3 py-2 text-sm font-medium transition-all",
                 isActive
-                  ? "bg-[#2563eb] text-white shadow-[0_8px_18px_rgba(37,99,235,0.24)]"
+                  ? "bg-[#c9a227] text-white shadow-[0_8px_18px_rgba(201,162,39,0.24)]"
                   : "bg-white text-slate-700 hover:bg-[#eaf1ff]",
               ].join(" ")}
             >
@@ -393,11 +393,11 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const pendingCheckout = todayRecords.filter((r) => r.check_in_time && !r.check_out_time).length;
 
     return (
-      <section className="dashboard-section space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
+      <section className="dashboard-section space-y-6 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
         <header className="space-y-2">
           <h2 className="text-2xl font-semibold text-slate-900 sm:text-3xl">Attendance System</h2>
           <p className="text-sm text-slate-600">Overview of today's attendance status from real employee entries.</p>
-          <p className="inline-flex rounded-full bg-[#e8f1ff] px-3 py-1 text-xs font-semibold text-[#1d4ed8]">
+          <p className="inline-flex rounded-full bg-[#faf3e3] px-3 py-1 text-xs font-semibold text-[#a68b2e]">
             Overview: Live today snapshot
           </p>
           <AdminAttendanceLiveSync tab={selectedTab} />
@@ -411,7 +411,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         </div>
 
         <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-          <section className="min-w-0 overflow-hidden rounded-2xl border border-[#d4deea] bg-white p-4 sm:p-5">
+          <section className="min-w-0 overflow-hidden rounded-2xl border border-[#e8dcc8] bg-white p-4 sm:p-5">
             <h3 className="text-base font-semibold text-slate-900 sm:text-lg">Today Status Distribution</h3>
             <p className="mt-1 text-xs text-slate-500">Quick comparison of attendance states for today</p>
             <div className="mt-4 space-y-3">
@@ -432,7 +432,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
             </div>
           </section>
 
-          <section className="min-w-0 overflow-hidden rounded-2xl border border-[#d4deea] bg-white p-4 sm:p-5">
+          <section className="min-w-0 overflow-hidden rounded-2xl border border-[#e8dcc8] bg-white p-4 sm:p-5">
             <h3 className="text-base font-semibold text-slate-900 sm:text-lg">Last 7 Days Trend</h3>
             <p className="mt-1 text-xs text-slate-500">Check-ins vs completed check-outs per day</p>
             <div className="mt-4 w-full min-w-0">
@@ -524,7 +524,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const remoteCheckins = todayRows.filter((r) => r.check_in_time && isWfh(r.location_type)).length;
 
     return (
-      <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
+      <section className="space-y-6 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
         <header className="space-y-2">
           <h2 className="text-3xl font-semibold text-slate-900">Check In / Check Out Logs</h2>
           <p className="text-sm text-slate-600">Real employee attendance logs from check-in and check-out submissions.</p>
@@ -538,31 +538,31 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <StatCard label="Remote Check-ins" value={remoteCheckins} />
         </div>
 
-        <section className="rounded-2xl border border-[#d4deea] bg-[#f8fbff] p-4">
+        <section className="rounded-2xl border border-[#e8dcc8] bg-[#f8fbff] p-4">
           <form method="get" className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <input type="hidden" name="tab" value="logs" />
-            <input name="date" type="date" defaultValue={dateFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
-            <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
+            <input name="date" type="date" defaultValue={dateFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm" />
+            <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
               <option value="">All Departments</option>
               {departments.map((department) => <option key={department} value={department}>{department}</option>)}
             </select>
-            <select name="status" defaultValue={statusFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
+            <select name="status" defaultValue={statusFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
               <option value="">All Status</option>
               <option value="present">Present</option>
               <option value="completed">Completed</option>
               <option value="late">Late</option>
               <option value="absent">Absent</option>
             </select>
-            <select name="location" defaultValue={locationFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
+            <select name="location" defaultValue={locationFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
               <option value="">All Location Types</option>
               <option value="Remote">Remote</option>
               <option value="Work From Home">Work From Home</option>
               <option value="Office">Office</option>
             </select>
-            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
+            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm" />
             <div className="xl:col-span-5 flex gap-2">
-              <button className="rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
-              <Link href="/admin/attendance?tab=logs" className="rounded-xl border border-[#cfdceb] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
+              <button className="rounded-xl bg-[#c9a227] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
+              <Link href="/admin/attendance?tab=logs" className="rounded-xl border border-[#e8dcc8] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
             </div>
           </form>
         </section>
@@ -628,7 +628,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const totalPermissionHours = rows.reduce((acc, row) => acc + calcPermissionHours(row.from_time, row.to_time), 0);
 
     return (
-      <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
+      <section className="space-y-6 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
         <header className="space-y-2">
           <h2 className="text-3xl font-semibold text-slate-900">Permission Requests</h2>
           <p className="text-sm text-slate-600">Review and take action on employee permission submissions.</p>
@@ -642,24 +642,24 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <StatCard label="Total Permission Hours" value={totalPermissionHours.toFixed(1)} />
         </div>
 
-        <section className="rounded-2xl border border-[#d4deea] bg-[#f8fbff] p-4">
+        <section className="rounded-2xl border border-[#e8dcc8] bg-[#f8fbff] p-4">
           <form method="get" className="responsive-filter-grid">
             <input type="hidden" name="tab" value="permission" />
-            <input name="date" type="date" defaultValue={dateFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
-            <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
+            <input name="date" type="date" defaultValue={dateFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm" />
+            <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
               <option value="">All Departments</option>
               {departments.map((department) => <option key={department} value={department}>{department}</option>)}
             </select>
-            <select name="status" defaultValue={statusFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
+            <select name="status" defaultValue={statusFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
               <option value="">All Status</option>
               <option value="pending">Pending</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
             </select>
-            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
+            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm" />
             <div className="xl:col-span-4 flex gap-2">
-              <button className="cursor-pointer rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
-              <Link href="/admin/attendance?tab=permission" className="rounded-xl border border-[#cfdceb] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
+              <button className="cursor-pointer rounded-xl bg-[#c9a227] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
+              <Link href="/admin/attendance?tab=permission" className="rounded-xl border border-[#e8dcc8] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
             </div>
           </form>
         </section>
@@ -753,7 +753,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const delayedSummaries = rows.filter((r) => (r.status ?? "submitted") !== "reviewed").length;
 
     return (
-      <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
+      <section className="space-y-6 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
         <header className="space-y-2">
           <h2 className="text-3xl font-semibold text-slate-900">Work Summary</h2>
           <p className="text-sm text-slate-600">Review checkout work summaries submitted by employees.</p>
@@ -781,28 +781,28 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           </div>
         ) : null}
 
-        <section className="rounded-2xl border border-[#d4deea] bg-[#f8fbff] p-4">
+        <section className="rounded-2xl border border-[#e8dcc8] bg-[#f8fbff] p-4">
           <form method="get" className="responsive-filter-grid">
             <input type="hidden" name="tab" value="summary" />
-            <input name="date" type="date" defaultValue={dateFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
-            <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
+            <input name="date" type="date" defaultValue={dateFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm" />
+            <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
               <option value="">All Departments</option>
               {departments.map((department) => <option key={department} value={department}>{department}</option>)}
             </select>
-            <select name="status" defaultValue={statusFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
+            <select name="status" defaultValue={statusFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
               <option value="">All Status</option>
               <option value="submitted">Submitted</option>
               <option value="reviewed">Reviewed</option>
             </select>
-            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
+            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm" />
             <div className="xl:col-span-4 flex gap-2">
-              <button className="cursor-pointer rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
-              <Link href="/admin/attendance?tab=summary" className="rounded-xl border border-[#cfdceb] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
+              <button className="cursor-pointer rounded-xl bg-[#c9a227] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
+              <Link href="/admin/attendance?tab=summary" className="rounded-xl border border-[#e8dcc8] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
             </div>
           </form>
         </section>
 
-        <section className="rounded-2xl border border-[#d4deea] bg-white p-4">
+        <section className="rounded-2xl border border-[#e8dcc8] bg-white p-4">
           <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
             <table className="w-full min-w-[1200px] text-left text-sm">
               <thead className="bg-[#f1f6fc] text-[#64748b]">
@@ -837,8 +837,8 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
                           </details>
                           <form action={handleSummaryReview} className="space-y-1">
                             <input type="hidden" name="id" value={row.id} />
-                            <input name="remark" defaultValue={row.manager_remarks ?? ""} placeholder="Add remark" className="h-8 w-full rounded-md border border-[#cfdceb] px-2 text-xs" />
-                            <button className="cursor-pointer rounded-md bg-[#2563eb] px-2 py-1 text-xs font-semibold text-white">Mark as Reviewed</button>
+                            <input name="remark" defaultValue={row.manager_remarks ?? ""} placeholder="Add remark" className="h-8 w-full rounded-md border border-[#e8dcc8] px-2 text-xs" />
+                            <button className="cursor-pointer rounded-md bg-[#c9a227] px-2 py-1 text-xs font-semibold text-white">Mark as Reviewed</button>
                           </form>
                         </div>
                       </td>
@@ -947,7 +947,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     : "0.0";
 
   return (
-    <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
+    <section className="space-y-6 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_22px_40px_rgba(30,64,175,0.09)] lg:p-8">
       <header className="space-y-2">
         <h2 className="text-3xl font-semibold text-slate-900">Monthly Report</h2>
         <p className="text-sm text-slate-600">Employee-wise monthly attendance and productivity report.</p>
@@ -965,15 +965,15 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         <StatCard label="Work Summary Completion %" value={`${totalWorkSummaryCompletion}%`} />
       </div>
 
-      <section className="rounded-2xl border border-[#d4deea] bg-[#f8fbff] p-4">
+      <section className="rounded-2xl border border-[#e8dcc8] bg-[#f8fbff] p-4">
         <form method="get" className="responsive-filter-grid">
           <input type="hidden" name="tab" value="monthly" />
-          <input name="month" type="month" defaultValue={monthFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm" />
-          <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
+          <input name="month" type="month" defaultValue={monthFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm" />
+          <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
             <option value="">All Departments</option>
             {departments.map((department) => <option key={department} value={department}>{department}</option>)}
           </select>
-          <select name="employee" defaultValue={employeeFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
+          <select name="employee" defaultValue={employeeFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
             <option value="">All Employees</option>
             {(profilesRes.data ?? []).map((profile) => (
               <option key={profile.id} value={profile.id}>
@@ -981,27 +981,27 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
               </option>
             ))}
           </select>
-          <select name="status" defaultValue={statusFilter} className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
+          <select name="status" defaultValue={statusFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
             <option value="">All Status</option>
             <option value="present">Present</option>
             <option value="completed">Completed</option>
             <option value="late">Late</option>
             <option value="absent">Absent</option>
           </select>
-          <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm xl:col-span-2" />
+          <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm xl:col-span-2" />
           <div className="xl:col-span-2 flex gap-2">
-              <button className="cursor-pointer rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
-            <Link href="/admin/attendance?tab=monthly" className="rounded-xl border border-[#cfdceb] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
+              <button className="cursor-pointer rounded-xl bg-[#c9a227] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
+            <Link href="/admin/attendance?tab=monthly" className="rounded-xl border border-[#e8dcc8] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
           </div>
         </form>
       </section>
 
       <div className="flex gap-2">
-        <button type="button" className="cursor-pointer rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white">Export Excel</button>
-        <button type="button" className="cursor-pointer rounded-xl border border-[#cfdceb] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Export PDF</button>
+        <button type="button" className="cursor-pointer rounded-xl bg-[#c9a227] px-4 py-2 text-sm font-semibold text-white">Export Excel</button>
+        <button type="button" className="cursor-pointer rounded-xl border border-[#e8dcc8] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Export PDF</button>
       </div>
 
-      <section className="rounded-2xl border border-[#d4deea] bg-white p-4">
+      <section className="rounded-2xl border border-[#e8dcc8] bg-white p-4">
         <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
           <table className="w-full min-w-[1550px] text-left text-sm">
             <thead className="bg-[#f1f6fc] text-[#64748b]">

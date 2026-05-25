@@ -53,7 +53,7 @@ type Permission = { status: string | null };
 type Wfh = { status: string | null };
 type ActivityRow = { id: string; title: string; module: string; status: string; at: string };
 
-const PIE_COLORS = ["#2563eb", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+const PIE_COLORS = ["#c9a227", "#d4b84a", "#a68b2e", "#10b981", "#f59e0b", "#6b5d4d"];
 
 /** PostgREST 404 / missing relation — tables not created in this Supabase project yet. */
 const SKIP_LEAVE_SESSION_KEY = "bb_admin_dashboard_skip_rest_leave_requests";
@@ -428,23 +428,23 @@ export default function AdminDashboardPage() {
   ];
 
   return (
-    <section className="dashboard-section space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 shadow-[0_20px_40px_rgba(30,64,175,0.08)] sm:p-6 lg:p-8">
+    <section className="dashboard-section space-y-6 rounded-[24px] border border-[#e8dcc8] bg-white p-4 shadow-[0_20px_40px_rgba(30,64,175,0.08)] sm:p-6 lg:p-8">
       <header className="grid gap-4 xl:grid-cols-[1fr_auto] xl:items-center">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748b]">Company Operations Control Center</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[#0f172a] sm:text-3xl">Admin Dashboard</h2>
-          <p className="mt-1 text-sm text-[#64748b]">{new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+          <p className="aj-page-label">Company Operations Control Center</p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[#3d3428] sm:text-3xl">Admin Dashboard</h2>
+          <p className="mt-1 text-sm text-[#6b5d4d]">{new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
         </div>
         <div className="hidden" aria-hidden>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search activities" className="h-10 rounded-full border-[#d4deea] bg-[#f8fbff] pl-9" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search activities" className="h-10 rounded-full border-[#e8dcc8] bg-[#f8fbff] pl-9" />
         </div>
         <div className="-mx-1 flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto px-1 pb-1 xl:mx-0 xl:flex-wrap xl:justify-end xl:overflow-visible xl:px-0 xl:pb-0">
-          <Button variant="outline" size="icon" className="rounded-full border-[#d4deea]"><Bell className="h-4 w-4" /></Button>
-          <Button className="rounded-full bg-[#2563eb] px-3 text-white hover:bg-[#1d4ed8]"><Plus className="mr-1 h-4 w-4" />Quick Action</Button>
-          <Avatar size="sm" className="border border-[#dbe6f3] bg-[#eff6ff]"><AvatarFallback>{initials(userName)}</AvatarFallback></Avatar>
-          <Link href="/admin/reports"><Button variant="outline" className="rounded-full border-[#d4deea]"><FileText className="mr-1 h-4 w-4" />Generate Report</Button></Link>
-          <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value as DateFilter)} className="h-10 rounded-full border border-[#d4deea] bg-white px-3 text-sm text-[#334155]">
+          <Button variant="outline" size="icon" className="rounded-full border-[#e8dcc8]"><Bell className="h-4 w-4" /></Button>
+          <Button className="rounded-full bg-[#c9a227] px-3 text-white hover:bg-[#b8921f]"><Plus className="mr-1 h-4 w-4" />Quick Action</Button>
+          <Avatar size="sm" className="border border-[#e8dcc8] bg-[#faf3e3]"><AvatarFallback>{initials(userName)}</AvatarFallback></Avatar>
+          <Link href="/admin/reports"><Button variant="outline" className="rounded-full border-[#e8dcc8]"><FileText className="mr-1 h-4 w-4" />Generate Report</Button></Link>
+          <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value as DateFilter)} className="h-10 rounded-full border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155]">
             <option value="today">Today</option>
             <option value="week">This Week</option>
             <option value="month">This Month</option>
@@ -489,9 +489,9 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <section className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
+        <section className="rounded-[20px] border border-[#e8dcc8] bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-[#0f172a]">Attendance Trend</h3>
+            <h3 className="text-base font-semibold text-[#3d3428]">Attendance Trend</h3>
             <div className="flex gap-1">
               <Button variant={attWindow === "week" ? "default" : "outline"} className="h-8 rounded-full px-3 text-xs" onClick={() => setAttWindow("week")}>Weekly</Button>
               <Button variant={attWindow === "month" ? "default" : "outline"} className="h-8 rounded-full px-3 text-xs" onClick={() => setAttWindow("month")}>Monthly</Button>
@@ -513,8 +513,8 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
-        <section className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-base font-semibold text-[#0f172a]">Revenue vs Expense</h3>
+        <section className="rounded-[20px] border border-[#e8dcc8] bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-base font-semibold text-[#3d3428]">Revenue vs Expense</h3>
           <div className="h-[260px] min-h-[260px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyFinance}>
@@ -523,7 +523,7 @@ export default function AdminDashboardPage() {
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="revenue" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="revenue" fill="#c9a227" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="expenses" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="profit" fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -531,8 +531,8 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
-        <section className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-base font-semibold text-[#0f172a]">Project Status Mix</h3>
+        <section className="rounded-[20px] border border-[#e8dcc8] bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-base font-semibold text-[#3d3428]">Project Status Mix</h3>
           <div className="h-[250px] min-h-[250px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -548,8 +548,8 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
-        <section className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-base font-semibold text-[#0f172a]">Task Productivity</h3>
+        <section className="rounded-[20px] border border-[#e8dcc8] bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-base font-semibold text-[#3d3428]">Task Productivity</h3>
           <div className="h-[250px] min-h-[250px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={taskProductivity}>
@@ -557,7 +557,7 @@ export default function AdminDashboardPage() {
                 <XAxis dataKey="employee" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip />
-                <Bar dataKey="done" fill="#2563eb" />
+                <Bar dataKey="done" fill="#c9a227" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -565,27 +565,27 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-12">
-        <section className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm xl:col-span-7">
-          <h3 className="mb-3 text-base font-semibold text-[#0f172a]">Activity Timeline</h3>
+        <section className="rounded-[20px] border border-[#e8dcc8] bg-white p-4 shadow-sm xl:col-span-7">
+          <h3 className="mb-3 text-base font-semibold text-[#3d3428]">Activity Timeline</h3>
           <div className="max-h-[340px] space-y-2 overflow-auto pr-1">
             {activity.map((row) => (
               <div key={row.id} className="rounded-lg border border-[#e8edf5] bg-[#fbfdff] p-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-[#0f172a]">{row.title}</p>
-                    <p className="text-xs text-[#64748b]">{row.module}</p>
+                    <p className="text-sm font-medium text-[#3d3428]">{row.title}</p>
+                    <p className="text-xs text-[#6b5d4d]">{row.module}</p>
                   </div>
                   <span className="rounded-full bg-[#eef2ff] px-2 py-0.5 text-xs font-medium text-[#334155]">{row.status}</span>
                 </div>
                 <p className="mt-1 text-xs text-[#94a3b8]">{new Date(row.at).toLocaleString()}</p>
               </div>
             ))}
-            {!activity.length && !loading ? <p className="rounded-lg border border-dashed border-[#dbe6f3] p-5 text-sm text-[#64748b]">No activities found.</p> : null}
+            {!activity.length && !loading ? <p className="rounded-lg border border-dashed border-[#e8dcc8] p-5 text-sm text-[#6b5d4d]">No activities found.</p> : null}
           </div>
         </section>
 
-        <section className="space-y-3 rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm xl:col-span-5">
-          <h3 className="text-base font-semibold text-[#0f172a]">Today's Operations</h3>
+        <section className="space-y-3 rounded-[20px] border border-[#e8dcc8] bg-white p-4 shadow-sm xl:col-span-5">
+          <h3 className="text-base font-semibold text-[#3d3428]">Today's Operations</h3>
           <OpRow label="Today Attendance" value={`${presentToday}/${activeEmployees.length}`} />
           <OpRow label="Leave Requests (Pending)" value={leaves.filter((x) => (x.status || "").toLowerCase() === "pending").length} />
           <OpRow label="Active Meetings" value={activeMeetings} />
@@ -598,11 +598,11 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="grid min-w-0 gap-4 xl:grid-cols-12">
-        <section className="min-w-0 overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm xl:col-span-8">
-          <h3 className="mb-3 text-base font-semibold text-[#0f172a]">Project Overview (Active)</h3>
+        <section className="min-w-0 overflow-hidden rounded-[20px] border border-[#e8dcc8] bg-white p-4 shadow-sm xl:col-span-8">
+          <h3 className="mb-3 text-base font-semibold text-[#3d3428]">Project Overview (Active)</h3>
           <div className="responsive-table-wrap -mx-1 px-1 sm:mx-0 sm:px-0">
             <table className="w-full min-w-[480px] text-sm">
-              <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
+              <thead className="bg-[#faf3e3] text-xs uppercase text-[#6b5d4d]">
                 <tr>
                   <th className="px-3 py-2 text-left">Project</th>
                   <th className="px-3 py-2 text-left">Client</th>
@@ -625,7 +625,7 @@ export default function AdminDashboardPage() {
                 ))}
                 {!activeProjectRows.length && !loading ? (
                   <tr>
-                    <td colSpan={6} className="px-3 py-8 text-center text-[#64748b]">No active projects.</td>
+                    <td colSpan={6} className="px-3 py-8 text-center text-[#6b5d4d]">No active projects.</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -633,8 +633,8 @@ export default function AdminDashboardPage() {
           </div>
         </section>
 
-        <section className="min-w-0 overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm xl:col-span-4">
-          <h3 className="mb-3 text-base font-semibold text-[#0f172a]">Finance Snapshot</h3>
+        <section className="min-w-0 overflow-hidden rounded-[20px] border border-[#e8dcc8] bg-white p-4 shadow-sm xl:col-span-4">
+          <h3 className="mb-3 text-base font-semibold text-[#3d3428]">Finance Snapshot</h3>
           <Metric label="Revenue" value={formatInr(revenue)} />
           <Metric label="Expenses" value={formatInr(expenses)} />
           <Metric label="Profit" value={formatInr(netProfit)} />
@@ -666,8 +666,8 @@ function OpRow({ label, value, tone = "slate" }: { label: string; value: string 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="mb-2 flex min-w-0 items-center justify-between gap-2 rounded-lg border border-[#e8edf5] bg-[#fbfdff] px-3 py-2 text-sm">
-      <span className="shrink-0 text-[#64748b]">{label}</span>
-      <span className="min-w-0 truncate text-right font-semibold text-[#0f172a]">{value}</span>
+      <span className="shrink-0 text-[#6b5d4d]">{label}</span>
+      <span className="min-w-0 truncate text-right font-semibold text-[#3d3428]">{value}</span>
     </div>
   );
 }

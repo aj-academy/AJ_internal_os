@@ -37,7 +37,7 @@ export function CollapsibleFilterPanel({
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-sm font-medium text-[#475569] marker:content-none [&::-webkit-details-marker]:hidden lg:cursor-default lg:px-4 lg:py-3">
         <span className="flex items-center gap-2">
-          <Filter className="h-4 w-4 shrink-0 text-[#2563eb]" aria-hidden />
+          <Filter className="h-4 w-4 shrink-0 text-[#c9a227]" aria-hidden />
           {title}
         </span>
         <ChevronDown

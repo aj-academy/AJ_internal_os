@@ -1,55 +1,61 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useCallback, useEffect, useState } from "react";
 import { HR_ORG_SETTING_KEY, mergeHrOrgSettings, type HrOrgSettings } from "@/lib/hrOrg";
 
-function isMissingSettingsTable(msg: string) {
-  const m = msg.toLowerCase();
-  return m.includes("system_settings") && (m.includes("does not exist") || m.includes("could not find"));
-}
-
 export function useHrOrgSettings() {
-  const supabase = useMemo(() => createClient(), []);
   const [settings, setSettings] = useState<HrOrgSettings>(() => mergeHrOrgSettings(null));
   const [loading, setLoading] = useState(true);
   const [schemaMissing, setSchemaMissing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("system_settings")
-      .select("setting_value")
-      .eq("setting_key", HR_ORG_SETTING_KEY)
-      .maybeSingle();
+    try {
+      const res = await fetch(`/api/admin/settings?key=${HR_ORG_SETTING_KEY}`, {
+        credentials: "include",
+      });
 
-    if (error) {
-      if (isMissingSettingsTable(error.message)) {
-        setSchemaMissing(true);
-        setSettings(mergeHrOrgSettings(null));
+      if (res.status === 401 || res.status === 403) {
+        setSchemaMissing(false);
+        setLoading(false);
+        return;
       }
-      setLoading(false);
-      return;
-    }
 
-    setSchemaMissing(false);
-    setSettings(mergeHrOrgSettings(data?.setting_value ?? null));
-    setLoading(false);
-  }, [supabase]);
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({}))) as { error?: string };
+        const msg = payload.error ?? "";
+        if (/does not exist|could not find|system_settings/i.test(msg)) {
+          setSchemaMissing(true);
+        }
+        setLoading(false);
+        return;
+      }
+
+      const payload = (await res.json()) as {
+        setting?: { setting_value?: unknown } | null;
+      };
+      setSchemaMissing(false);
+      setSettings(mergeHrOrgSettings(payload.setting?.setting_value ?? null));
+    } catch {
+      setSchemaMissing(false);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const applySettings = useCallback((value: HrOrgSettings) => {
+    setSettings(value);
+  }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    const ch = supabase
-      .channel("hr-org-settings")
-      .on("postgres_changes", { event: "*", schema: "public", table: "system_settings" }, () => void load())
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(ch);
-    };
-  }, [load, supabase]);
-
-  return { settings, loading, schemaMissing, reload: load };
+  return {
+    settings,
+    loading,
+    schemaMissing,
+    reload: load,
+    applySettings,
+  };
 }

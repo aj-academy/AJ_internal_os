@@ -73,9 +73,11 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   const supabase = useMemo(() => createClient(), []);
   const searchParams = useSearchParams();
   const isAdmin = role === "admin";
-  const isMember = role === "student" || role === "freelancer" || role === "mentor";
+  const isMentor = role === "mentor";
+  const isMember = role === "student" || role === "freelancer" || isMentor;
   const seesAllTasks = isAdmin;
-  const canManageTasks = isAdmin;
+  const canManageTasks = isAdmin || isMentor;
+  const mentorManagesTeam = isMentor;
   const [currentUserId, setCurrentUserId] = useState("");
   const [selfProfile, setSelfProfile] = useState<ProfileOption | null>(null);
   const [employees, setEmployees] = useState<ProfileOption[]>([]);
@@ -130,11 +132,63 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   }, [supabase]);
 
   const loadAssignees = useCallback(async () => {
-    if (isMember) return;
+    if (role === "student" || role === "freelancer") return;
+
+    if (isMentor) {
+      const { data: rpcRows, error: rpcError } = await supabase.rpc("get_department_task_assignees");
+      if (!rpcError && Array.isArray(rpcRows)) {
+        const rows = rpcRows as {
+          id: string;
+          full_name: string | null;
+          email: string | null;
+          department: string | null;
+          role: string | null;
+        }[];
+        setEmployees(
+          rows.map((r) => ({
+            id: r.id,
+            full_name: r.full_name,
+            email: r.email,
+            department: r.department,
+            role: r.role,
+          })),
+        );
+        return;
+      }
+      if (selfProfile?.department) {
+        const { data, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id,full_name,email,department,role")
+          .eq("role", "student")
+          .eq("department", selfProfile.department)
+          .or("status.is.null,status.eq.active")
+          .order("full_name", { ascending: true });
+        if (profilesError) throw new Error(profilesError.message);
+        setEmployees((data ?? []) as ProfileOption[]);
+        return;
+      }
+      setEmployees([]);
+      return;
+    }
+
     const { data: rpcRows, error: rpcError } = await supabase.rpc("get_task_assignees");
     if (!rpcError && Array.isArray(rpcRows)) {
-      const rows = rpcRows as { id: string; full_name: string | null; email: string | null; department: string | null; role: string | null }[];
-      setEmployees(rows.map((r) => ({ id: r.id, full_name: r.full_name, email: r.email, department: r.department, role: r.role })));
+      const rows = rpcRows as {
+        id: string;
+        full_name: string | null;
+        email: string | null;
+        department: string | null;
+        role: string | null;
+      }[];
+      setEmployees(
+        rows.map((r) => ({
+          id: r.id,
+          full_name: r.full_name,
+          email: r.email,
+          department: r.department,
+          role: r.role,
+        })),
+      );
       return;
     }
     const { data, error: profilesError } = await supabase
@@ -146,7 +200,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       .returns<ProfileOption[]>();
     if (profilesError) throw new Error(profilesError.message);
     setEmployees(data ?? []);
-  }, [isMember, supabase]);
+  }, [isMentor, role, selfProfile?.department, supabase]);
 
   const loadSummary = useCallback(
     async (userId: string) => {
@@ -155,7 +209,12 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       let inProgressQuery = supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "In Progress");
       let completedQuery = supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "Completed");
 
-      if (!seesAllTasks) {
+      if (mentorManagesTeam) {
+        totalQuery = totalQuery.eq("assigned_by", userId);
+        pendingQuery = pendingQuery.eq("assigned_by", userId);
+        inProgressQuery = inProgressQuery.eq("assigned_by", userId);
+        completedQuery = completedQuery.eq("assigned_by", userId);
+      } else if (!seesAllTasks) {
         totalQuery = totalQuery.eq("assigned_to", userId);
         pendingQuery = pendingQuery.eq("assigned_to", userId);
         inProgressQuery = inProgressQuery.eq("assigned_to", userId);
@@ -187,7 +246,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         completed: completedRes.count ?? 0,
       });
     },
-    [seesAllTasks, supabase],
+    [mentorManagesTeam, seesAllTasks, supabase],
   );
 
   const loadTasks = useCallback(
@@ -195,10 +254,11 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       let query = supabase
         .from("tasks")
         .select(
-          "id,title,description,assigned_to,assigned_by,completion_summary,priority,status,start_date,due_date,progress,project_id,created_at,updated_at",
+          "id,title,description,assigned_to,assignee_name,assignee_email,assigned_by,completion_summary,priority,status,start_date,due_date,progress,project_id,created_at,updated_at",
         );
 
-      if (!seesAllTasks) query = query.eq("assigned_to", userId);
+      if (mentorManagesTeam) query = query.eq("assigned_by", userId);
+      else if (!seesAllTasks) query = query.eq("assigned_to", userId);
       if (applied.status) query = query.eq("status", applied.status);
       if (applied.priority) query = query.eq("priority", applied.priority);
       if (applied.assigned) query = query.eq("assigned_to", applied.assigned);
@@ -222,7 +282,9 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         id: string;
         title: string;
         description: string | null;
-        assigned_to: string;
+        assigned_to: string | null;
+        assignee_name?: string | null;
+        assignee_email?: string | null;
         assigned_by?: string | null;
         completion_summary?: string | null;
         priority: TaskPriority;
@@ -259,7 +321,16 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
 
       setRows(mapped);
     },
-    [applied.assigned, applied.dueDate, applied.priority, applied.search, applied.status, seesAllTasks, supabase],
+    [
+      applied.assigned,
+      applied.dueDate,
+      applied.priority,
+      applied.search,
+      applied.status,
+      mentorManagesTeam,
+      seesAllTasks,
+      supabase,
+    ],
   );
 
   const refreshTaskData = useCallback(
@@ -312,11 +383,12 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
             .select("id,full_name,email,department,role")
             .eq("id", user.id)
             .maybeSingle();
-          setSelfProfile((me as ProfileOption | null) ?? null);
+          const profileRow = (me as ProfileOption | null) ?? null;
+          setSelfProfile(profileRow);
         } else {
           setSelfProfile(null);
+          await loadAssignees();
         }
-        await loadAssignees();
         if (isAdmin) await loadProjectsForForm();
       } catch (bootstrapError) {
         setError(toReadableTaskError(bootstrapError));
@@ -326,7 +398,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     };
 
     void bootstrap();
-  }, [isAdmin, isMember, loadAssignees, loadProjectsForForm, supabase]);
+  }, [isAdmin, isMember, isMentor, loadAssignees, loadProjectsForForm, supabase]);
 
   const projectPrefillDone = useRef(false);
   useEffect(() => {
@@ -342,6 +414,12 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (isMentor && selfProfile?.department && currentUserId) {
+      void loadAssignees().catch((e) => setError(toReadableTaskError(e)));
+    }
+  }, [currentUserId, isMentor, loadAssignees, selfProfile?.department]);
 
   useEffect(() => {
     if (!currentUserId || tasksTableMissing) return;
@@ -388,8 +466,14 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     if (selfProfile?.id && !map[selfProfile.id]) {
       map[selfProfile.id] = selfProfile.full_name || selfProfile.email || "Unknown";
     }
+    rows.forEach((task) => {
+      if (task.assignee_name) {
+        const key = task.assigned_to ?? `archived:${task.assignee_email ?? task.id}`;
+        map[key] = task.assignee_name;
+      }
+    });
     return map;
-  }, [employees, selfProfile]);
+  }, [employees, rows, selfProfile]);
 
   const overdueCount = useMemo(() => {
     const today = todayDateKey();
@@ -460,7 +544,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
     setForm({
       title: task.title,
       description: task.description ?? "",
-      assigned_to: task.assigned_to,
+      assigned_to: task.assigned_to ?? "",
       project_id: task.project_id ?? "",
       priority: task.priority,
       status: task.status,
@@ -617,22 +701,24 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   };
 
   return (
-    <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
+    <section className="space-y-6 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">Task Assignment</h2>
           <p className="mt-1 text-sm text-[#64748b]">
-            {isMember
-              ? "Tasks assigned to you by admins appear here. Update status and mark work complete."
-              : "Assign, track and manage tasks for students, freelancers, and mentors"}
+            {role === "student" || role === "freelancer"
+              ? "Tasks assigned to you appear here. Update status and mark work complete."
+              : isMentor
+                ? `Assign work to students in your department (${selfProfile?.department ?? "set department in User Master"}). Only matching students appear in the assignee list.`
+                : "Assign, track and manage tasks for students, freelancers, and mentors"}
           </p>
         </div>
-        {isAdmin ? (
+        {canManageTasks ? (
           <Button
             data-requires-online
             onClick={() => void openCreate()}
-            disabled={tasksTableMissing}
-            className="h-9 rounded-full bg-[#2563eb] px-4 text-white hover:bg-[#1d4ed8] disabled:opacity-50"
+            disabled={tasksTableMissing || (isMentor && !selfProfile?.department)}
+            className="h-9 rounded-full bg-[#c9a227] px-4 text-white hover:bg-[#b8921f] disabled:opacity-50"
           >
             + Assign task
           </Button>
@@ -640,7 +726,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       </div>
 
       {tasksTableMissing ? (
-        <div className="rounded-xl border border-blue-200 bg-[#eff6ff] px-4 py-3 text-sm text-blue-900">
+        <div className="rounded-xl border border-blue-200 bg-[#faf3e3] px-4 py-3 text-sm text-blue-900">
           <p className="font-semibold">Database setup required</p>
           <p className="mt-1 text-blue-800/90">
             The <code className="rounded bg-white/80 px-1">public.tasks</code> table is not available in this Supabase project. Open the SQL
@@ -677,7 +763,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as TaskStatus | "")}
             disabled={tasksTableMissing}
-              className="h-10 w-full rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8]"
+              className="h-10 w-full rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227] disabled:bg-[#eff3f8]"
             >
               <option value="">All statuses</option>
               <option value="Pending">Pending</option>
@@ -690,7 +776,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
             value={priorityFilter}
             onChange={(event) => setPriorityFilter(event.target.value as TaskPriority | "")}
             disabled={tasksTableMissing}
-              className="h-10 w-full rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8]"
+              className="h-10 w-full rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227] disabled:bg-[#eff3f8]"
             >
               <option value="">All priorities</option>
               <option value="Low">Low</option>
@@ -702,8 +788,8 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
             <select
             value={assignedFilter}
             onChange={(event) => setAssignedFilter(event.target.value)}
-            disabled={!seesAllTasks || tasksTableMissing}
-              className="h-10 w-full rounded-xl border border-[#d4deea] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#2563eb] disabled:bg-[#eff3f8]"
+            disabled={(!seesAllTasks && !mentorManagesTeam) || tasksTableMissing}
+              className="h-10 w-full rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227] disabled:bg-[#eff3f8]"
             >
               <option value="">All employees</option>
               {employeeOptions.map((employee) => (
@@ -720,7 +806,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
               onChange={(event) => setDueDateFilter(event.target.value)}
               disabled={tasksTableMissing}
               aria-label="Due date"
-              className="h-10 border-[#d4deea] bg-white disabled:bg-[#eff3f8]"
+              className="h-10 border-[#e8dcc8] bg-white disabled:bg-[#eff3f8]"
             />
           </FilterField>
           <FilterField label="Search">
@@ -729,14 +815,14 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
               onChange={(event) => setSearchText(event.target.value)}
               placeholder="Search task title…"
               disabled={tasksTableMissing}
-              className="h-10 border-[#d4deea] bg-white disabled:bg-[#eff3f8]"
+              className="h-10 border-[#e8dcc8] bg-white disabled:bg-[#eff3f8]"
             />
           </FilterField>
           <div className="col-span-2 flex gap-2 lg:col-span-1">
             <Button
               onClick={applyFilters}
               disabled={tasksTableMissing}
-              className="h-11 flex-1 rounded-xl bg-[#2563eb] text-white hover:bg-[#1d4ed8] disabled:opacity-50 sm:h-9"
+              className="h-11 flex-1 rounded-xl bg-[#c9a227] text-white hover:bg-[#b8921f] disabled:opacity-50 sm:h-9"
             >
               Apply Filters
             </Button>
@@ -794,7 +880,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
                 type="button"
                 onClick={() => setPanelOpen(false)}
                 aria-label="Close"
-                className="touch-target flex items-center justify-center rounded-full border border-[#d4deea] bg-white p-2 text-[#1e3a8a] shadow-sm transition hover:bg-[#eff6ff] active:scale-95"
+                className="touch-target flex items-center justify-center rounded-full border border-[#e8dcc8] bg-white p-2 text-[#3d3428] shadow-sm transition hover:bg-[#faf3e3] active:scale-95"
               >
                 <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">×</span>
               </button>
@@ -808,7 +894,11 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
                 projects={projectOptions}
                 showProjectField={canManageTasks}
                 assigneeLockedToSelf={false}
-                assigneeHelperText="Active students, freelancers, mentors, and admins who can receive tasks are shown."
+                assigneeHelperText={
+                  isMentor
+                    ? "Only active students in your department are listed (e.g. Digital Marketing mentor sees Digital Marketing students)."
+                    : "Active students, freelancers, mentors, and admins who can receive tasks are shown."
+                }
                 submitting={submitting}
                 onChange={setForm}
                 onClose={() => setPanelOpen(false)}
@@ -834,11 +924,14 @@ function TaskViewPanel({
   return (
     <>
       <button type="button" aria-label="Close" className="fixed inset-0 z-[60] bg-slate-900/40" onClick={onClose} />
-      <div className="fixed inset-y-6 right-4 z-[61] mx-auto flex w-full max-w-md flex-col overflow-hidden rounded-[24px] border border-[#d4deea] bg-white shadow-2xl sm:right-10">
+      <div className="fixed inset-y-6 right-4 z-[61] mx-auto flex w-full max-w-md flex-col overflow-hidden rounded-[24px] border border-[#e8dcc8] bg-white shadow-2xl sm:right-10">
         <div className="flex items-start justify-between border-b border-[#e8edf5] px-5 py-4">
           <div>
             <h3 className="text-lg font-semibold text-[#0f172a]">{task.title}</h3>
-            <p className="mt-1 text-xs text-[#64748b]">Assigned to {employeeNameMap[task.assigned_to] || "—"}</p>
+            <p className="mt-1 text-xs text-[#64748b]">
+              Assigned to{" "}
+              {(task.assigned_to && employeeNameMap[task.assigned_to]) || task.assignee_name || "—"}
+            </p>
             {task.assigner_display_name ? (
               <p className="mt-0.5 text-xs text-[#64748b]">Assigned by {task.assigner_display_name}</p>
             ) : null}

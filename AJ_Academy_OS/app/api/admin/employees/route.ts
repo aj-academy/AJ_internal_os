@@ -5,6 +5,17 @@ import { requireAdminApiSession } from "@/lib/auth/requireAdminApi";
 const ROLES = new Set(["super_admin", "admin", "student", "freelancer", "mentor"]);
 const STATUSES = new Set(["active", "inactive"]);
 
+function friendlySupabaseError(message: string) {
+  const lower = message.toLowerCase();
+  if (lower.includes("fetch failed") || lower.includes("unable to verify")) {
+    return "Server cannot reach Supabase (SSL/network). Restart npm run dev, or add SUPABASE_DEV_INSECURE_SSL=0 only if you fixed Windows certificates.";
+  }
+  if (lower.includes("already been registered") || lower.includes("already exists")) {
+    return "This email is already registered in Supabase Auth. Use a different email or delete the old user in Authentication → Users.";
+  }
+  return message;
+}
+
 export async function POST(request: Request) {
   try {
     const { response, user } = await requireAdminApiSession();
@@ -23,15 +34,13 @@ export async function POST(request: Request) {
     const role = typeof record.role === "string" ? record.role.trim().toLowerCase() : "";
     const department =
       typeof record.department === "string" ? record.department.trim() : "";
-    const designation =
-      typeof record.designation === "string" ? record.designation.trim() : "";
     const status =
       typeof record.status === "string" ? record.status.trim().toLowerCase() : "active";
     const password = typeof record.password === "string" ? record.password : "";
 
-    if (!full_name || !emailRaw || !role || !department || !designation) {
+    if (!full_name || !emailRaw || !role || !department) {
       return NextResponse.json(
-        { error: "full_name, email, role, department, and designation are required." },
+        { error: "full_name, email, role, and department are required." },
         { status: 400 },
       );
     }
@@ -51,37 +60,70 @@ export async function POST(request: Request) {
       );
     }
 
-    const admin = createAdminClient();
+    let admin;
+    try {
+      admin = createAdminClient();
+    } catch (configError) {
+      const message =
+        configError instanceof Error ? configError.message : "Supabase admin client not configured.";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
 
-    const { data: authData, error: authError } = await admin.auth.admin.createUser({
-      email: emailRaw,
-      password,
-      email_confirm: true,
-      user_metadata: { full_name },
-    });
-
-    if (authError || !authData.user) {
+    let authData;
+    let authError;
+    try {
+      const result = await admin.auth.admin.createUser({
+        email: emailRaw,
+        password,
+        email_confirm: true,
+        user_metadata: { full_name, role },
+      });
+      authData = result.data;
+      authError = result.error;
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "fetch failed";
       return NextResponse.json(
-        { error: authError?.message ?? "Could not create auth user." },
+        { error: friendlySupabaseError(message) },
+        { status: 503 },
+      );
+    }
+
+    if (authError || !authData?.user) {
+      const raw = authError?.message ?? "Could not create auth user.";
+      return NextResponse.json(
+        { error: friendlySupabaseError(raw) },
         { status: 400 },
       );
     }
 
-    const userId = authData.user.id;
+    const userId = authData.user!.id;
 
-    const profilePayload = {
+    const profileCore = {
       id: userId,
       full_name,
       email: emailRaw,
       role,
+    };
+
+    const profileFull = {
+      ...profileCore,
       department,
-      designation,
+      designation: null,
       status,
     };
 
-    const { error: profileError } = await admin
-      .from("profiles")
-      .upsert(profilePayload, { onConflict: "id" });
+    let profileError = (
+      await admin.from("profiles").upsert(profileFull, { onConflict: "id" })
+    ).error;
+
+    if (
+      profileError &&
+      /column|schema cache/i.test(profileError.message ?? "")
+    ) {
+      profileError = (
+        await admin.from("profiles").upsert(profileCore, { onConflict: "id" })
+      ).error;
+    }
 
     if (profileError) {
       await admin.auth.admin.deleteUser(userId);
@@ -101,7 +143,7 @@ export async function POST(request: Request) {
     if (readBackError || !savedProfile?.id) {
       const { error: retryError } = await admin
         .from("profiles")
-        .upsert(profilePayload, { onConflict: "id" });
+        .upsert(profileCore, { onConflict: "id" });
 
       if (retryError) {
         await admin.auth.admin.deleteUser(userId);
@@ -118,11 +160,10 @@ export async function POST(request: Request) {
       email: emailRaw,
       role,
       department,
-      designation,
       status,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected server error while creating employee.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const raw = error instanceof Error ? error.message : "Unexpected server error while creating employee.";
+    return NextResponse.json({ error: friendlySupabaseError(raw) }, { status: 500 });
   }
 }

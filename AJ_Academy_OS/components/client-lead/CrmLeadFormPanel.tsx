@@ -79,11 +79,11 @@ export function CrmLeadFormPanel({
   if (!open) return null;
 
   return (
-    <aside className="flex h-full max-h-[100dvh] flex-col overflow-hidden bg-white shadow-[0_16px_30px_rgba(30,64,175,0.12)] lg:rounded-[24px] lg:border lg:border-[#d4deea]">
+    <aside className="flex h-full max-h-[100dvh] flex-col overflow-hidden bg-white shadow-[0_16px_30px_rgba(30,64,175,0.12)] lg:rounded-[24px] lg:border lg:border-[#e8dcc8]">
       <div className="border-b border-[#e8edf5] px-4 py-4 sm:px-5">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-lg font-semibold text-[#0f172a]">{title}</h3>
-          <button type="button" onClick={onClose} aria-label="Close" className="touch-target flex items-center justify-center rounded-full border border-[#d4deea] bg-white p-2 text-[#1e3a8a] shadow-sm transition hover:bg-[#eff6ff] active:scale-95">
+          <button type="button" onClick={onClose} aria-label="Close" className="touch-target flex items-center justify-center rounded-full border border-[#e8dcc8] bg-white p-2 text-[#3d3428] shadow-sm transition hover:bg-[#faf3e3] active:scale-95">
             <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">×</span>
           </button>
         </div>
@@ -121,7 +121,7 @@ export function CrmLeadFormPanel({
           <select
             value={value.source}
             onChange={(e) => onChange({ ...value, source: e.target.value })}
-            className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3 text-sm outline-none focus:border-[#2563eb]"
+            className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm outline-none focus:border-[#c9a227]"
           >
             {CRM_SOURCES.map((option) => (
               <option key={option} value={option}>
@@ -158,7 +158,7 @@ export function CrmLeadFormPanel({
                 rows={3}
                 value={value.requirement}
                 onChange={(e) => onChange({ ...value, requirement: e.target.value })}
-                className="w-full rounded-lg border border-[#d4deea] px-3 py-2 text-sm outline-none focus:border-[#2563eb]"
+                className="w-full rounded-lg border border-[#e8dcc8] px-3 py-2 text-sm outline-none focus:border-[#c9a227]"
               />
             </Field>
             <Field label="Budget">
@@ -172,7 +172,7 @@ export function CrmLeadFormPanel({
                 rows={2}
                 value={value.notes}
                 onChange={(e) => onChange({ ...value, notes: e.target.value })}
-                className="w-full rounded-lg border border-[#d4deea] px-3 py-2 text-sm outline-none focus:border-[#2563eb]"
+                className="w-full rounded-lg border border-[#e8dcc8] px-3 py-2 text-sm outline-none focus:border-[#c9a227]"
               />
             </Field>
           </div>
@@ -185,7 +185,7 @@ export function CrmLeadFormPanel({
               <select
                 value={value.status}
                 onChange={(e) => onChange({ ...value, status: e.target.value })}
-                className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3 text-sm outline-none focus:border-[#2563eb]"
+                className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm outline-none focus:border-[#c9a227]"
               >
                 {CRM_LEAD_STATUSES.map((option) => (
                   <option key={option} value={option}>
@@ -198,7 +198,7 @@ export function CrmLeadFormPanel({
               <select
                 value={value.priority}
                 onChange={(e) => onChange({ ...value, priority: e.target.value })}
-                className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3 text-sm outline-none focus:border-[#2563eb]"
+                className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm outline-none focus:border-[#c9a227]"
               >
                 {CRM_PRIORITIES.map((option) => (
                   <option key={option} value={option}>
@@ -221,7 +221,7 @@ export function CrmLeadFormPanel({
                 value={value.assigned_to}
                 disabled={!canAssign}
                 onChange={(e) => onChange({ ...value, assigned_to: e.target.value })}
-                className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3 text-sm outline-none focus:border-[#2563eb] disabled:bg-[#f1f5f9]"
+                className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm outline-none focus:border-[#c9a227] disabled:bg-[#f1f5f9]"
               >
                 <option value="">Select team member</option>
                 {employees.map((employee) => (
@@ -241,7 +241,7 @@ export function CrmLeadFormPanel({
               <select
                 value={value.follow_up_type}
                 onChange={(e) => onChange({ ...value, follow_up_type: e.target.value })}
-                className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3 text-sm outline-none focus:border-[#2563eb]"
+                className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm outline-none focus:border-[#c9a227]"
               >
                 <option value="">—</option>
                 {CRM_FOLLOW_UP_TYPES_UI.map((option) => (
@@ -261,7 +261,7 @@ export function CrmLeadFormPanel({
               <select
                 value={value.proposal_status}
                 onChange={(e) => onChange({ ...value, proposal_status: e.target.value })}
-                className="h-9 w-full rounded-lg border border-[#d4deea] bg-white px-3 text-sm outline-none focus:border-[#2563eb]"
+                className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm outline-none focus:border-[#c9a227]"
               >
                 {CRM_PROPOSAL_STATUSES.map((option) => (
                   <option key={option} value={option}>
@@ -293,7 +293,7 @@ export function CrmLeadFormPanel({
           data-requires-online
           onClick={onSubmit}
           disabled={submitting || !value.lead_name.trim()}
-          className="w-full rounded-xl bg-[#2563eb] text-white hover:bg-[#1d4ed8]"
+          className="w-full rounded-xl bg-[#c9a227] text-white hover:bg-[#b8921f]"
         >
           {submitting ? "Saving…" : "Save"}
         </Button>

@@ -33,28 +33,35 @@ execute function public.system_settings_set_updated_at ();
 alter table public.system_settings enable row level security;
 
 drop policy if exists "system_settings_admin_all" on public.system_settings;
-create policy "system_settings_admin_all"
+drop policy if exists "system_settings_admin_select" on public.system_settings;
+drop policy if exists "system_settings_admin_insert" on public.system_settings;
+drop policy if exists "system_settings_admin_update" on public.system_settings;
+drop policy if exists "system_settings_admin_delete" on public.system_settings;
+
+create policy "system_settings_admin_select"
 on public.system_settings
-for all
+for select
 to authenticated
-using (
-  exists (
-    select 1
-    from public.profiles p
-    where
-      p.id = auth.uid ()
-      and lower(coalesce(p.role, '')) in ('admin', 'super_admin')
-  )
-)
-with check (
-  exists (
-    select 1
-    from public.profiles p
-    where
-      p.id = auth.uid ()
-      and lower(coalesce(p.role, '')) in ('admin', 'super_admin')
-  )
-);
+using (public.is_admin());
+
+create policy "system_settings_admin_insert"
+on public.system_settings
+for insert
+to authenticated
+with check (public.is_admin());
+
+create policy "system_settings_admin_update"
+on public.system_settings
+for update
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+create policy "system_settings_admin_delete"
+on public.system_settings
+for delete
+to authenticated
+using (public.is_admin());
 
 insert into public.system_settings (setting_key, setting_value)
 values
@@ -65,7 +72,11 @@ values
   ('finance', '{}'::jsonb),
   ('notifications', '{}'::jsonb),
   ('security', '{}'::jsonb),
-  ('preferences', '{}'::jsonb)
+  ('preferences', '{}'::jsonb),
+  (
+    'hr_org',
+    '{"departments":["Engineering","Digital Marketing","Human Resources","Finance","Operations","Sales"]}'::jsonb
+  )
 on conflict (setting_key) do nothing;
 
 do $$
