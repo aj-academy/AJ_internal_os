@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Grotesk } from "next/font/google";
 import { PwaProvider } from "@/components/pwa/PwaProvider";
+import { PWA_APP_NAME, PWA_THEME_COLOR } from "@/lib/pwa/branding";
 import { resolvePwaSiteOrigin } from "@/lib/pwa/site-url";
 import "./globals.css";
 
@@ -18,10 +19,10 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "AJ Academy",
   description: "AJ Academy learning and operations platform",
-  applicationName: "AJ Academy",
+  applicationName: PWA_APP_NAME,
   appleWebApp: {
     capable: true,
-    title: "AJ Academy",
+    title: PWA_APP_NAME,
     statusBarStyle: "default",
   },
   formatDetection: {
@@ -38,7 +39,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#c9a227",
+  themeColor: PWA_THEME_COLOR,
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",

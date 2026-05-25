@@ -3,8 +3,8 @@ import { InstallLoginLink } from "@/components/pwa/InstallLoginLink";
 import { InstallPageRedirect } from "@/components/pwa/InstallPageRedirect";
 
 export const metadata: Metadata = {
-  title: "Install BB Internal OS",
-  description: "Install BB Internal OS on your phone",
+  title: "Install AJ_Academy_OS",
+  description: "Install AJ_Academy_OS on your phone",
 };
 
 export default function InstallPage() {
@@ -13,7 +13,7 @@ export default function InstallPage() {
       <InstallPageRedirect />
       <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#eff6ff] to-white p-6">
         <div className="w-full max-w-md rounded-2xl border border-[#c9d8eb] bg-white p-6 shadow-lg">
-          <h1 className="text-center text-xl font-semibold text-[#0f172a]">Install BB Internal OS</h1>
+          <h1 className="text-center text-xl font-semibold text-[#3d3428]">Install AJ_Academy_OS</h1>
           <p className="mt-2 text-center text-sm text-[#64748b]">
             Use this page once to add the app to your phone. After that, open from your home screen.
           </p>

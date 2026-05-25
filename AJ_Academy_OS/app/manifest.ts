@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { PWA_APP_NAME, PWA_THEME_COLOR } from "@/lib/pwa/branding";
 import { pwaAbsoluteUrl, resolvePwaSiteOrigin } from "@/lib/pwa/site-url";
 
 const PWA_APP_PATH = "/?app=aj-academy";
@@ -10,15 +11,15 @@ export default function manifest(): MetadataRoute.Manifest {
 
   return {
     id: appId,
-    name: "AJ Academy",
-    short_name: "AJ Academy",
+    name: PWA_APP_NAME,
+    short_name: PWA_APP_NAME,
     description: "AJ Academy learning and operations platform",
     start_url: startUrl,
     scope: pwaAbsoluteUrl(origin, "/"),
     display: "standalone",
     orientation: "portrait-primary",
     background_color: "#ffffff",
-    theme_color: "#c9a227",
+    theme_color: PWA_THEME_COLOR,
     categories: ["business", "productivity"],
     icons: [
       {

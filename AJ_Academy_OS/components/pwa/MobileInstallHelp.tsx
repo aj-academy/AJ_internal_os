@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Smartphone, X } from "lucide-react";
+import { PWA_APP_NAME } from "@/lib/pwa/branding";
 import {
   hasCompletedPwaInstall,
   isPwaStandalone,
@@ -87,12 +88,14 @@ export function MobileInstallHelp() {
         <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-xs text-[#3d3428]">
           <li>Open in <strong>Safari</strong> (not WhatsApp).</li>
           <li>Share, then Add to Home Screen, then Add.</li>
-          <li>Open only from the AJ Academy home screen icon.</li>
+          <li>Open only from the {PWA_APP_NAME} home screen icon.</li>
         </ol>
       ) : installedPendingIcon ? (
         <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-xs text-[#3d3428]">
           <li>Swipe up and open <strong>All apps / App drawer</strong>.</li>
-          <li>Search for <strong>AJ Academy</strong>.</li>
+          <li>
+            Search for <strong>{PWA_APP_NAME}</strong>.
+          </li>
           <li>Long-press the icon, then <strong>Add to Home screen</strong>.</li>
           <li>
             <strong>Stop tapping Install</strong> in Chrome - that can cause an installing loop.
@@ -103,7 +106,9 @@ export function MobileInstallHelp() {
           <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-xs text-[#3d3428]">
             <li>Open in <strong>Chrome</strong> (Open in Chrome from WhatsApp).</li>
             <li>Menu, then <strong>Install app</strong> (once only).</li>
-            <li>If no home icon, check <strong>App drawer</strong> for AJ Academy.</li>
+            <li>
+              If no home icon, check <strong>App drawer</strong> for {PWA_APP_NAME}.
+            </li>
           </ol>
           {installUrl ? (
             <p className="mt-3 break-all rounded-lg bg-[#faf3e3] px-3 py-2 font-mono text-[11px] text-[#3d3428]">
