@@ -1,46 +1,64 @@
 # Deploy AJ Academy OS (Vercel)
 
-The Next.js app is in **`AJ_Academy_OS`**. The Git repo root (`AJ_Academy`) is not a Next.js app.
+## Why deploy says "Ready" but the link shows 404
 
-## Required: set Root Directory in Vercel (one time)
+Vercel built the **wrong folder**. The app is in **`AJ_Academy_OS`**, not the Git repo root.
 
-`rootDirectory` is **not** allowed in `vercel.json` (schema error). Configure it in the dashboard:
+Symptoms:
 
-1. Open [Vercel](https://vercel.com) → project **aj-internal-os**
+- Deployment status: **Ready**
+- Opening the URL: **404 NOT_FOUND** (Vercel platform page)
+- Observability: **Edge requests** but **0 Function invocations**
+
+That means no Next.js app was deployed.
+
+## Fix (do this once)
+
+1. [Vercel Dashboard](https://vercel.com) → project **aj-internal-os**
 2. **Settings** → **General**
-3. **Root Directory** → **Edit** → enter: `AJ_Academy_OS`
-4. Confirm / Save
-5. **Deployments** → **Redeploy** (enable **Clear build cache** if needed)
+3. **Root Directory** → **Edit**
+4. Type exactly: `AJ_Academy_OS`
+5. Click **Save**
+6. **Deployments** tab → **⋯** on latest → **Redeploy**
+7. Enable **Clear build cache** → Redeploy
 
-After this, builds run inside `AJ_Academy_OS` and `/login` works.
+## Check the build log
+
+Open the new deployment → **Building** → search for:
+
+- Good: `Running "install"` in `AJ_Academy_OS` or paths containing `AJ_Academy_OS`
+- Bad: build only at repo root with no `AJ_Academy_OS` in paths
+
+If Root Directory is wrong, the repo now runs `scripts/vercel-root-check.mjs` and the build should **fail** with a clear error instead of a silent 404.
 
 ## Environment variables
 
-Vercel → **Settings** → **Environment Variables** (Production + Preview):
+**Settings** → **Environment Variables** (Production + Preview):
 
-| Name | Notes |
-|------|--------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service role (server only) |
-| `NEXT_PUBLIC_SITE_URL` | e.g. `https://your-app.vercel.app` |
+| Name |
+|------|
+| `NEXT_PUBLIC_SUPABASE_URL` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
+| `SUPABASE_SERVICE_ROLE_KEY` |
 
-## Supabase auth
+Optional: `NEXT_PUBLIC_SITE_URL` = your `https://….vercel.app` URL
 
-Supabase → **Authentication** → **URL configuration**:
+## Supabase
 
-- **Site URL:** your Vercel URL  
+**Authentication** → **URL configuration**:
+
+- **Site URL:** `https://your-app.vercel.app`
 - **Redirect URLs:** `https://your-app.vercel.app/**`
 
-## URLs
+## Correct URLs
 
-| Path | Purpose |
-|------|---------|
-| `/` | Redirects to `/login` |
-| `/login` | Sign in |
+| URL | Result |
+|-----|--------|
+| `https://your-project.vercel.app/` | → `/login` |
+| `https://your-project.vercel.app/login` | Login page |
 
-Use the **Vercel deployment URL** (Domains tab), not the GitHub repo page.
+Use the domain from **Deployments** → **Domains**, not the GitHub repo URL.
 
-## Build failed with `rootDirectory` in vercel.json?
+## `vercel.json` note
 
-Remove any repo-root `vercel.json` that sets `rootDirectory`. Use the dashboard setting above instead.
+Do **not** put `rootDirectory` in `vercel.json` (invalid schema). Use the dashboard **Root Directory** field only.
