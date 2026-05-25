@@ -1,8 +1,0 @@
-{
-  "name": "aj-academy-monorepo",
-  "private": true,
-  "description": "Repo root wrapper — Vercel must use Root Directory AJ_Academy_OS",
-  "scripts": {
-    "build": "node scripts/vercel-root-check.mjs"
-  }
-}

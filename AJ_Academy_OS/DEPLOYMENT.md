@@ -29,7 +29,7 @@ Open the new deployment → **Building** → search for:
 - Good: `Running "install"` in `AJ_Academy_OS` or paths containing `AJ_Academy_OS`
 - Bad: build only at repo root with no `AJ_Academy_OS` in paths
 
-If Root Directory is wrong, the repo now runs `scripts/vercel-root-check.mjs` and the build should **fail** with a clear error instead of a silent 404.
+If Root Directory is wrong, the deployment may show **Ready** but every URL returns **404** until you set **Root Directory** to `AJ_Academy_OS` and redeploy.
 
 ## Environment variables
 
