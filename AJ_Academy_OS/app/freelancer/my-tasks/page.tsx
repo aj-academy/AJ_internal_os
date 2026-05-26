@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { TaskAssignmentPage } from "@/components/task/TaskAssignmentPage";
 
-export default function MentorTasksRoute() {
+export default function FreelancerMyTasksRoute() {
   return (
     <Suspense
       fallback={
@@ -10,7 +10,7 @@ export default function MentorTasksRoute() {
         </section>
       }
     >
-      <TaskAssignmentPage role="mentor" variant="assigner" />
+      <TaskAssignmentPage role="freelancer" variant="assignee" />
     </Suspense>
   );
 }

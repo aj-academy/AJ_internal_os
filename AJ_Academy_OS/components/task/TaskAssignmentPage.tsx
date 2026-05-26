@@ -15,8 +15,12 @@ import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 
 type AppRole = "admin" | "student" | "freelancer" | "mentor";
 
+/** assignee = tasks assigned to me; assigner = department-scoped task assignment (mentor / freelancer). */
+export type TaskAssignmentVariant = "assignee" | "assigner";
+
 interface TaskAssignmentPageProps {
   role: AppRole;
+  variant?: TaskAssignmentVariant;
 }
 
 interface ProfileOption {
@@ -69,15 +73,21 @@ function toReadableTaskError(input: unknown) {
   return raw;
 }
 
-export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
+export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const supabase = useMemo(() => createClient(), []);
   const searchParams = useSearchParams();
   const isAdmin = role === "admin";
   const isMentor = role === "mentor";
-  const isMember = role === "student" || role === "freelancer" || isMentor;
+  const isFreelancer = role === "freelancer";
+  const resolvedVariant: TaskAssignmentVariant =
+    variant ?? (isMentor ? "assigner" : role === "student" ? "assignee" : "assignee");
+  const isAssigneeView = resolvedVariant === "assignee";
+  const isMember = role === "student" || isFreelancer || isMentor;
   const seesAllTasks = isAdmin;
-  const canManageTasks = isAdmin || isMentor;
-  const mentorManagesTeam = isMentor;
+  const departmentAssigner =
+    isMentor || (isFreelancer && resolvedVariant === "assigner");
+  const canManageTasks = isAdmin || departmentAssigner;
+  const mentorManagesTeam = departmentAssigner;
   const [currentUserId, setCurrentUserId] = useState("");
   const [selfProfile, setSelfProfile] = useState<ProfileOption | null>(null);
   const [employees, setEmployees] = useState<ProfileOption[]>([]);
@@ -132,9 +142,9 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   }, [supabase]);
 
   const loadAssignees = useCallback(async () => {
-    if (role === "student" || role === "freelancer") return;
+    if (isAssigneeView && (role === "student" || isFreelancer)) return;
 
-    if (isMentor) {
+    if (departmentAssigner) {
       const { data: rpcRows, error: rpcError } = await supabase.rpc("get_department_task_assignees");
       if (!rpcError && Array.isArray(rpcRows)) {
         const rows = rpcRows as {
@@ -200,7 +210,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
       .returns<ProfileOption[]>();
     if (profilesError) throw new Error(profilesError.message);
     setEmployees(data ?? []);
-  }, [isMentor, role, selfProfile?.department, supabase]);
+  }, [departmentAssigner, isAssigneeView, isFreelancer, role, selfProfile?.department, supabase]);
 
   const loadSummary = useCallback(
     async (userId: string) => {
@@ -416,10 +426,10 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
   }, [reload]);
 
   useEffect(() => {
-    if (isMentor && selfProfile?.department && currentUserId) {
+    if (departmentAssigner && selfProfile?.department && currentUserId) {
       void loadAssignees().catch((e) => setError(toReadableTaskError(e)));
     }
-  }, [currentUserId, isMentor, loadAssignees, selfProfile?.department]);
+  }, [currentUserId, departmentAssigner, loadAssignees, selfProfile?.department]);
 
   useEffect(() => {
     if (!currentUserId || tasksTableMissing) return;
@@ -706,9 +716,9 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">Task Assignment</h2>
           <p className="mt-1 text-sm text-[#64748b]">
-            {role === "student" || role === "freelancer"
+            {isAssigneeView && (role === "student" || isFreelancer)
               ? "Tasks assigned to you appear here. Update status and mark work complete."
-              : isMentor
+              : departmentAssigner
                 ? `Assign work to students in your department (${selfProfile?.department ?? "set department in User Master"}). Only matching students appear in the assignee list.`
                 : "Assign, track and manage tasks for students, freelancers, and mentors"}
           </p>
@@ -717,7 +727,7 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
           <Button
             data-requires-online
             onClick={() => void openCreate()}
-            disabled={tasksTableMissing || (isMentor && !selfProfile?.department)}
+            disabled={tasksTableMissing || (departmentAssigner && !selfProfile?.department)}
             className="h-9 rounded-full bg-[#c9a227] px-4 text-white hover:bg-[#b8921f] disabled:opacity-50"
           >
             + Assign task
@@ -895,8 +905,8 @@ export function TaskAssignmentPage({ role }: TaskAssignmentPageProps) {
                 showProjectField={canManageTasks}
                 assigneeLockedToSelf={false}
                 assigneeHelperText={
-                  isMentor
-                    ? "Only active students in your department are listed (e.g. Digital Marketing mentor sees Digital Marketing students)."
+                  departmentAssigner
+                    ? "Only active students in your department are listed (same department as your profile in User Master)."
                     : "Active students, freelancers, mentors, and admins who can receive tasks are shown."
                 }
                 submitting={submitting}

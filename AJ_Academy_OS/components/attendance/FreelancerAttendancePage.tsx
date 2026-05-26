@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera } from "lucide-react";
+import { AttendanceLocationBlock } from "@/components/attendance/AttendanceLocationBlock";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/types/profile";
 
@@ -403,6 +404,22 @@ export function FreelancerAttendancePage() {
             }
           />
         </div>
+        {todayRecord?.check_in_time ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <AttendanceLocationBlock
+              label="Check-in location"
+              address={todayRecord.check_in_address}
+              latitude={todayRecord.check_in_latitude}
+              longitude={todayRecord.check_in_longitude}
+            />
+            <AttendanceLocationBlock
+              label="Check-out location"
+              address={todayRecord.check_out_address}
+              latitude={todayRecord.check_out_latitude}
+              longitude={todayRecord.check_out_longitude}
+            />
+          </div>
+        ) : null}
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
@@ -455,10 +472,10 @@ export function FreelancerAttendancePage() {
       <article className="rounded-2xl border border-[#ede4d4] bg-white p-5">
         <h3 className="mb-3 text-lg font-semibold text-[#3d3428]">History (last 10)</h3>
         <div className="overflow-x-auto rounded-xl border border-[#ede4d4]">
-          <table className="w-full min-w-[640px] text-left text-sm">
+          <table className="w-full min-w-[960px] text-left text-sm">
             <thead className="bg-[#faf6ee] text-[#6b5d4d]">
               <tr>
-                {["Date", "In", "Out", "Duration", "Status"].map((h) => (
+                {["Date", "In", "Out", "Check-in", "Check-out", "Duration", "Status"].map((h) => (
                   <th key={h} className="px-4 py-3">
                     {h}
                   </th>
@@ -471,6 +488,18 @@ export function FreelancerAttendancePage() {
                   <td className="px-4 py-3">{row.attendance_date}</td>
                   <td className="px-4 py-3">{formatTime(row.check_in_time)}</td>
                   <td className="px-4 py-3">{formatTime(row.check_out_time)}</td>
+                  <td className="max-w-[200px] px-4 py-3 text-xs text-[#6b5d4d]">
+                    {row.check_in_address?.trim() ||
+                      (row.check_in_latitude !== null && row.check_in_longitude !== null
+                        ? `${row.check_in_latitude.toFixed(4)}, ${row.check_in_longitude.toFixed(4)}`
+                        : "—")}
+                  </td>
+                  <td className="max-w-[200px] px-4 py-3 text-xs text-[#6b5d4d]">
+                    {row.check_out_address?.trim() ||
+                      (row.check_out_latitude !== null && row.check_out_longitude !== null
+                        ? `${row.check_out_latitude.toFixed(4)}, ${row.check_out_longitude.toFixed(4)}`
+                        : "—")}
+                  </td>
                   <td className="px-4 py-3">{formatHours(row.total_working_minutes)}</td>
                   <td className="px-4 py-3 capitalize">{row.status ?? "-"}</td>
                 </tr>
