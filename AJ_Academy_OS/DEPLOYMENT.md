@@ -31,17 +31,27 @@ Open the new deployment → **Building** → search for:
 
 If Root Directory is wrong, the deployment may show **Ready** but every URL returns **404** until you set **Root Directory** to `AJ_Academy_OS` and redeploy.
 
-## Environment variables
+## Environment variables (required for login)
 
-**Settings** → **Environment Variables** (Production + Preview):
+`.env.local` works only on your PC. **Vercel does not read it.** Copy the same values into the dashboard:
 
-| Name |
-|------|
-| `NEXT_PUBLIC_SUPABASE_URL` |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
-| `SUPABASE_SERVICE_ROLE_KEY` |
+**Settings** → **Environment Variables** → add each for **Production** and **Preview**:
 
-Optional: `NEXT_PUBLIC_SITE_URL` = your `https://….vercel.app` URL
+| Name | Where to copy from |
+|------|-------------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API → Project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → API → `anon` `public` key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → API → `service_role` key (server only; never expose in client code) |
+
+After saving, **Deployments** → **Redeploy** (clear build cache once if login still fails).
+
+Optional (PWA manifest / install icon URLs only — **not** required for sign-in):
+
+| Name | Example |
+|------|---------|
+| `NEXT_PUBLIC_SITE_URL` | `https://your-project.vercel.app` |
+
+If you skip `NEXT_PUBLIC_SITE_URL`, Vercel’s deploy URL is used automatically; login still works once the three Supabase variables above are set.
 
 ## Supabase
 
