@@ -1,15 +1,55 @@
--- BB Internal OS — Project Master
--- Run AFTER: schema.sql, client_lead_schema.sql (public.clients), task_schema.sql (public.tasks).
+-- AJ Academy — Project Master + tasks.project_id
+-- Run AFTER: schema.sql, task_schema.sql (public.tasks + profiles).
 -- Path: AJ_Academy_SB/project_master_schema.sql
 --
--- Creates: projects, project_activities, project_team_members
+-- Creates: clients (minimal stub if missing), projects, project_activities, project_team_members
 -- Adds: tasks.project_id + trigger to sync task counts / progress on projects
+-- Optional later: client_lead_schema.sql upgrades clients for full CRM (not required for tasks).
 -- RLS: admin full; manager read/update projects they manage or are on; employee read team projects;
 --       accounts read all projects (financial visibility); task visibility extended for project team.
 -- RLS helpers (SECURITY DEFINER) avoid recursion between projects, project_team_members, and policies
 -- that referenced the same table twice (e.g. EXISTS (SELECT … FROM project_team_members …) inside ptm RLS).
 
 create extension if not exists pgcrypto;
+
+-- ------------------------------
+-- clients (minimal — AJ Academy does not require client_lead_schema.sql first)
+-- ------------------------------
+
+create table if not exists public.clients (
+  id uuid primary key default gen_random_uuid(),
+  name text not null default '',
+  lead_name text,
+  company_name text,
+  status text not null default 'Active',
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists clients_updated_at_idx on public.clients (updated_at desc);
+
+alter table public.clients enable row level security;
+
+drop policy if exists "clients_admin_all" on public.clients;
+create policy "clients_admin_all"
+on public.clients
+for all
+to authenticated
+using (
+  exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and lower(coalesce(p.role, '')) in ('admin', 'super_admin')
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and lower(coalesce(p.role, '')) in ('admin', 'super_admin')
+  )
+);
 
 -- ------------------------------
 -- projects

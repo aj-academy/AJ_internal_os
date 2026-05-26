@@ -22,7 +22,7 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 7) in_app_notifications.sql
 8) profiles_rls_fix.sql   *** REQUIRED for login (RLS + get_my_profile RPC) ***
 8b) add_role_and_sync_profiles.sql  *** after Auth users exist — fills role column + links Auth → profiles ***
-9) project_master_schema.sql (optional — admin projects)
+9) project_master_schema.sql (projects + tasks.project_id; includes minimal clients stub)
 10) company_policies_schema.sql (optional)
 10b) company_policies_category.sql (employee + freelancer policy tabs)
 10c) task_assignee_snapshot.sql (freelancer offboard — keep completed tasks)

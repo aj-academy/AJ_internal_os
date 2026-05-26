@@ -429,7 +429,7 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
         <div className="rounded-xl border border-blue-200 bg-[#faf3e3] px-4 py-3 text-sm text-blue-900">
           <p className="font-semibold">Database setup</p>
           <p className="mt-1">
-            Run <strong>AJ_Academy_SB/project_master_schema.sql</strong> in Supabase (after <code className="rounded bg-white/80 px-1">clients</code> and{" "}
+            Run <strong>AJ_Academy_SB/project_master_schema.sql</strong> in Supabase (after <code className="rounded bg-white/80 px-1">schema.sql</code> and{" "}
             <code className="rounded bg-white/80 px-1">tasks</code>), then refresh. See DATABASE_SETUP_ORDER.txt.
           </p>
         </div>

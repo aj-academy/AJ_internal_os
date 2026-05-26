@@ -51,7 +51,7 @@ export function isDelayedProject(p: ProjectRowLoose, today: string): boolean {
 export function friendlyProjectError(e: unknown) {
   const msg = e instanceof Error ? e.message : "Unexpected error.";
   if (msg.includes("Could not find") && msg.includes("projects")) {
-    return "Run `AJ_Academy_SB/project_master_schema.sql` in Supabase (after clients + tasks). See DATABASE_SETUP_ORDER.txt.";
+    return "Run `AJ_Academy_SB/project_master_schema.sql` in Supabase (after schema.sql + task_schema.sql). See DATABASE_SETUP_ORDER.txt.";
   }
   return msg;
 }
