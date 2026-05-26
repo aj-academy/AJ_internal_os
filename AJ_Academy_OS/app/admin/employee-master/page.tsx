@@ -12,12 +12,16 @@ import type { Profile, ProfileStatus, UserRole } from "@/types/profile";
 
 type EmployeeRole = UserRole;
 
+type RoleTab = "all" | "student" | "mentor" | "freelancer";
+
 interface EmployeeRow {
   id: string;
   full_name: string;
   email: string;
   role: EmployeeRole;
   department: string | null;
+  course: string | null;
+  assigned_mentor_id: string | null;
   status: ProfileStatus | null;
 }
 
@@ -29,29 +33,35 @@ interface FormState {
   email: string;
   role: EmployeeRole;
   department: string;
+  course: string;
+  assigned_mentor_id: string;
   status: ProfileStatus;
   password: string;
 }
 
-function emptyForm(department: string): FormState {
+function emptyForm(department: string, course: string): FormState {
   return {
     id: null,
     full_name: "",
     email: "",
     role: "student",
     department,
+    course,
+    assigned_mentor_id: "",
     status: "active",
     password: "",
   };
 }
 
-function mapProfileToRow(p: Profile): EmployeeRow {
+function mapProfileToRow(p: Profile & { course?: string | null; assigned_mentor_id?: string | null }): EmployeeRow {
   return {
     id: p.id,
     full_name: p.full_name ?? "",
     email: p.email ?? "",
     role: (p.role ?? "student") as EmployeeRole,
     department: p.department,
+    course: p.course ?? null,
+    assigned_mentor_id: p.assigned_mentor_id ?? null,
     status: p.status,
   };
 }
@@ -68,15 +78,18 @@ async function readApiError(response: Response, fallback: string) {
 export default function EmployeeMasterPage() {
   const { settings: hrOrg } = useHrOrgSettings();
   const departments = hrOrg.departments;
+  const courses = hrOrg.courses;
   const defaultDepartment = departments[0] ?? "General";
+  const defaultCourse = courses[0] ?? "";
 
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ProfileStatus>("all");
+  const [roleTab, setRoleTab] = useState<RoleTab>("all");
   const [mode, setMode] = useState<"add" | "edit" | "view">("add");
-  const [form, setForm] = useState<FormState>(() => emptyForm(defaultDepartment));
+  const [form, setForm] = useState<FormState>(() => emptyForm(defaultDepartment, defaultCourse));
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -98,7 +111,7 @@ export default function EmployeeMasterPage() {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("profiles")
-      .select("id,full_name,email,role,department,status,created_at")
+      .select("id,full_name,email,role,department,course,assigned_mentor_id,status,created_at")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -114,6 +127,17 @@ export default function EmployeeMasterPage() {
     void loadEmployees();
   }, [loadEmployees]);
 
+  const mentorOptions = useMemo(
+    () => employees.filter((e) => e.role === "mentor" && (e.status ?? "active") === "active"),
+    [employees],
+  );
+
+  const courseOptions = useMemo(() => {
+    const list = [...courses];
+    if (form.course && !list.includes(form.course)) list.unshift(form.course);
+    return list;
+  }, [courses, form.course]);
+
   const filteredEmployees = useMemo(() => {
     const q = search.trim().toLowerCase();
     return employees.filter((employee) => {
@@ -121,12 +145,15 @@ export default function EmployeeMasterPage() {
         !q ||
         employee.full_name.toLowerCase().includes(q) ||
         employee.email.toLowerCase().includes(q) ||
-        employee.id.toLowerCase().includes(q);
+        employee.id.toLowerCase().includes(q) ||
+        (employee.course ?? "").toLowerCase().includes(q);
       const matchesStatus =
         statusFilter === "all" ? true : (employee.status ?? "active") === statusFilter;
-      return matchesSearch && matchesStatus;
+      const matchesRole =
+        roleTab === "all" ? true : employee.role === roleTab;
+      return matchesSearch && matchesStatus && matchesRole;
     });
-  }, [employees, search, statusFilter]);
+  }, [employees, search, statusFilter, roleTab]);
 
   const onPickEmployee = (employee: EmployeeRow, selectedMode: "view" | "edit") => {
     if (selectedMode === "view") {
@@ -142,6 +169,8 @@ export default function EmployeeMasterPage() {
       email: employee.email,
       role: employee.role,
       department: employee.department ?? defaultDepartment,
+      course: employee.course ?? defaultCourse,
+      assigned_mentor_id: employee.assigned_mentor_id ?? "",
       status: (employee.status ?? "active") as ProfileStatus,
       password: "",
     });
@@ -154,7 +183,7 @@ export default function EmployeeMasterPage() {
     setMode("add");
     setSubmitError(null);
     setSuccessMessage(null);
-    setForm(emptyForm(defaultDepartment));
+    setForm(emptyForm(defaultDepartment, defaultCourse));
   };
 
   const onRemoveUser = async (employee: EmployeeRow) => {
@@ -213,6 +242,8 @@ export default function EmployeeMasterPage() {
             email: form.email.trim().toLowerCase(),
             role: form.role,
             department: form.department.trim(),
+            course: form.course.trim() || null,
+            assigned_mentor_id: form.role === "student" && form.assigned_mentor_id ? form.assigned_mentor_id : null,
             status: form.status,
             password: form.password,
           }),
@@ -231,6 +262,8 @@ export default function EmployeeMasterPage() {
             email: form.email.trim().toLowerCase(),
             role: form.role,
             department: form.department.trim(),
+            course: form.course.trim() || null,
+            assigned_mentor_id: form.role === "student" && form.assigned_mentor_id ? form.assigned_mentor_id : null,
             status: form.status,
           }),
         });
@@ -313,6 +346,30 @@ export default function EmployeeMasterPage() {
                 <option value="inactive">Inactive</option>
               </select>
             </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(
+                [
+                  ["all", "All users"],
+                  ["student", "Students"],
+                  ["mentor", "Mentors"],
+                  ["freelancer", "Freelancers"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setRoleTab(key)}
+                  className={[
+                    "rounded-full px-4 py-1.5 text-sm font-medium transition",
+                    roleTab === key
+                      ? "bg-[#c9a227] text-white"
+                      : "border border-[#e8dcc8] bg-white text-[#3d3428] hover:bg-[#faf6ee]",
+                  ].join(" ")}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </CardHeader>
           <CardContent className="pb-4">
             {listError ? <p className="mb-3 text-sm text-red-600">{listError}</p> : null}
@@ -325,7 +382,7 @@ export default function EmployeeMasterPage() {
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="bg-[#f1f6fc] text-[#64748b]">
                     <tr>
-                      {["Name", "Role", "Department", "Status", "Action"].map((heading) => (
+                      {["Name", "Role", "Department", "Course", "Status", "Action"].map((heading) => (
                         <th key={heading} className="px-4 py-3">
                           {heading}
                         </th>
@@ -341,6 +398,7 @@ export default function EmployeeMasterPage() {
                         </td>
                         <td className="px-4 py-3 capitalize">{employee.role.replace("_", " ")}</td>
                         <td className="px-4 py-3">{employee.department ?? "—"}</td>
+                        <td className="px-4 py-3">{employee.course ?? "—"}</td>
                         <td className="px-4 py-3">
                           <span
                             className={[
@@ -389,7 +447,7 @@ export default function EmployeeMasterPage() {
                     ))}
                     {!filteredEmployees.length ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">
+                        <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
                           No employees found for current filters.
                         </td>
                       </tr>
@@ -465,6 +523,38 @@ export default function EmployeeMasterPage() {
                   </option>
                 ))}
               </select>
+
+              <select
+                value={form.course}
+                onChange={(event) => setForm((prev) => ({ ...prev, course: event.target.value }))}
+                className="h-9 w-full rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#c9a227] focus:ring-2 focus:ring-[#c9a227]/25"
+                disabled={mode === "view"}
+              >
+                <option value="">No course</option>
+                {courseOptions.map((course) => (
+                  <option key={course} value={course}>
+                    {course}
+                  </option>
+                ))}
+              </select>
+
+              {form.role === "student" ? (
+                <select
+                  value={form.assigned_mentor_id}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, assigned_mentor_id: event.target.value }))
+                  }
+                  className="h-9 w-full rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#c9a227] focus:ring-2 focus:ring-[#c9a227]/25 md:col-span-2"
+                  disabled={mode === "view"}
+                >
+                  <option value="">Assigned mentor (optional)</option>
+                  {mentorOptions.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.full_name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
 
               <select
                 value={form.status}

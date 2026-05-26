@@ -20,6 +20,7 @@ export interface TaskRecord {
   due_date: string | null;
   progress: number;
   project_id?: string | null;
+  attachment_urls?: { name: string; url: string; mime: string; size: number }[];
   created_at: string;
   updated_at: string;
 }

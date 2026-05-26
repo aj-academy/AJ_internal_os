@@ -5,6 +5,7 @@ const studentSidebarItems = [
   { label: "Dashboard", href: "/student/dashboard" },
   { label: "My Attendance", href: "/student/attendance" },
   { label: "My Tasks", href: "/student/my-tasks" },
+  { label: "Leave", href: "/student/leaves" },
 ];
 
 export default async function StudentLayout({

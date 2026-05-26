@@ -11,6 +11,7 @@ import { TaskForm, type TaskFormValue } from "@/components/task/TaskForm";
 import { TaskTable } from "@/components/task/TaskTable";
 import { TaskCompleteDialog } from "@/components/task/TaskCompleteDialog";
 import { assignerDisplayFromProfile } from "@/lib/profileDisplayName";
+import { parseTaskAttachments, uploadTaskAttachments, type TaskAttachment } from "@/lib/taskAttachments";
 import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 
 type AppRole = "admin" | "student" | "freelancer" | "mentor";
@@ -105,6 +106,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const [completeTask, setCompleteTask] = useState<TaskRecord | null>(null);
   const [completeSubmitting, setCompleteSubmitting] = useState(false);
   const [projectOptions, setProjectOptions] = useState<{ id: string; label: string }[]>([]);
+  const [pendingAttachmentFiles, setPendingAttachmentFiles] = useState<File[]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<TaskAttachment[]>([]);
 
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "">("");
@@ -264,7 +267,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       let query = supabase
         .from("tasks")
         .select(
-          "id,title,description,assigned_to,assignee_name,assignee_email,assigned_by,completion_summary,priority,status,start_date,due_date,progress,project_id,created_at,updated_at",
+          "id,title,description,assigned_to,assignee_name,assignee_email,assigned_by,completion_summary,priority,status,start_date,due_date,progress,project_id,attachment_urls,created_at,updated_at",
         );
 
       if (mentorManagesTeam) query = query.eq("assigned_by", userId);
@@ -303,6 +306,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         due_date: string | null;
         progress: number;
         project_id?: string | null;
+        attachment_urls?: unknown;
         created_at: string;
         updated_at: string;
       };
@@ -324,6 +328,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
 
       const mapped: TaskRecord[] = rawRows.map((row) => ({
         ...row,
+        attachment_urls: parseTaskAttachments(row.attachment_urls),
         assigner_display_name: row.assigned_by
           ? assignerDisplayFromProfile(assignerMap[row.assigned_by] ?? null) ?? null
           : null,
@@ -538,6 +543,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       setError(toReadableTaskError(assigneeLoadError));
     }
     setForm(initialForm);
+    setPendingAttachmentFiles([]);
+    setExistingAttachments([]);
     setPanelOpen(true);
   };
 
@@ -562,6 +569,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       due_date: task.due_date ?? "",
       progress: task.progress,
     });
+    setPendingAttachmentFiles([]);
+    setExistingAttachments(task.attachment_urls ?? []);
     setPanelOpen(true);
   };
 
@@ -598,10 +607,20 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       progress: form.progress,
     };
     try {
+      const mergeAttachments = async (taskId: string, current: TaskAttachment[]) => {
+        if (!pendingAttachmentFiles.length) return current;
+        const uploaded = await uploadTaskAttachments(supabase, currentUserId, taskId, pendingAttachmentFiles);
+        return [...current, ...uploaded];
+      };
+
       if (editId) {
         const priorAssignee = assigneeBeforeEditRef.current;
         const savedTaskId = editId;
-        const updatePayload: typeof basePayload & { assigned_by?: string } = { ...basePayload };
+        const merged = await mergeAttachments(editId, existingAttachments);
+        const updatePayload: typeof basePayload & {
+          assigned_by?: string;
+          attachment_urls?: TaskAttachment[];
+        } = { ...basePayload, attachment_urls: merged };
         if (priorAssignee !== null && basePayload.assigned_to !== priorAssignee) {
           updatePayload.assigned_by = currentUserId;
         }
@@ -612,6 +631,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         setPanelOpen(false);
         setForm(initialForm);
         setEditId(null);
+        setPendingAttachmentFiles([]);
         await reload();
         if (priorAssignee !== basePayload.assigned_to) {
           void notifyAssigneeInApp(savedTaskId);
@@ -619,14 +639,19 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       } else {
         const { data: inserted, error: insertError } = await supabase
           .from("tasks")
-          .insert({ ...basePayload, assigned_by: currentUserId })
+          .insert({ ...basePayload, assigned_by: currentUserId, attachment_urls: [] })
           .select("id")
           .single();
         if (insertError) throw new Error(insertError.message);
+        if (inserted?.id && pendingAttachmentFiles.length) {
+          const merged = await mergeAttachments(inserted.id, []);
+          await supabase.from("tasks").update({ attachment_urls: merged }).eq("id", inserted.id);
+        }
         setSuccess("Task assigned successfully.");
         setPanelOpen(false);
         setForm(initialForm);
         setEditId(null);
+        setPendingAttachmentFiles([]);
         await reload();
         if (inserted?.id) void notifyAssigneeInApp(inserted.id);
       }
@@ -914,6 +939,31 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                 onClose={() => setPanelOpen(false)}
                 onSubmit={() => void handleSaveTask()}
               />
+              {canManageTasks ? (
+                <div className="mt-4 space-y-2 rounded-xl border border-[#e8dcc8] bg-[#fffdf8] p-3">
+                  <p className="text-sm font-medium text-[#3d3428]">Attachments (optional)</p>
+                  <p className="text-xs text-[#6b5d4d]">
+                    PDF, Word, Excel, images, video — max 25 MB each. Students can download from task view.
+                  </p>
+                  <input
+                    type="file"
+                    multiple
+                    className="block w-full text-xs"
+                    onChange={(e) => setPendingAttachmentFiles(Array.from(e.target.files ?? []))}
+                  />
+                  {existingAttachments.length ? (
+                    <ul className="text-xs text-[#6b5d4d]">
+                      {existingAttachments.map((a) => (
+                        <li key={a.url}>
+                          <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-[#a68b2e] underline">
+                            {a.name}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
         </>
@@ -983,6 +1033,26 @@ function TaskViewPanel({
               </div>
             ) : null}
           </dl>
+          {task.attachment_urls?.length ? (
+            <div>
+              <p className="text-xs font-semibold uppercase text-[#94a3b8]">Attachments</p>
+              <ul className="mt-2 space-y-1">
+                {task.attachment_urls.map((a) => (
+                  <li key={a.url}>
+                    <a
+                      href={a.url}
+                      download={a.name}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium text-[#a68b2e] underline"
+                    >
+                      Download {a.name}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       </div>
     </>

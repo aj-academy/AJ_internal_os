@@ -172,8 +172,8 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
     const { data: es } = await supabase
       .from("profiles")
       .select("id,full_name,email,role,department")
-      .in("role", ["employee", "manager", "admin", "super_admin"])
-      .eq("status", "active")
+      .in("role", ["student", "freelancer", "mentor", "admin", "super_admin"])
+      .or("status.is.null,status.eq.active")
       .order("full_name", { ascending: true });
     setEmployees((es as ProfileMini[] | null) ?? []);
 

@@ -34,6 +34,9 @@ export async function POST(request: Request) {
     const role = typeof record.role === "string" ? record.role.trim().toLowerCase() : "";
     const department =
       typeof record.department === "string" ? record.department.trim() : "";
+    const course = typeof record.course === "string" ? record.course.trim() : "";
+    const assigned_mentor_id =
+      typeof record.assigned_mentor_id === "string" ? record.assigned_mentor_id.trim() : "";
     const status =
       typeof record.status === "string" ? record.status.trim().toLowerCase() : "active";
     const password = typeof record.password === "string" ? record.password : "";
@@ -108,6 +111,9 @@ export async function POST(request: Request) {
     const profileFull = {
       ...profileCore,
       department,
+      course: course || null,
+      assigned_mentor_id:
+        role === "student" && assigned_mentor_id ? assigned_mentor_id : null,
       designation: null,
       status,
     };

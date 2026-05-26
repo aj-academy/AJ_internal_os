@@ -13,6 +13,8 @@ export interface Profile {
   email: string | null;
   role: UserRole | null;
   department: string | null;
+  course?: string | null;
+  assigned_mentor_id?: string | null;
   designation: string | null;
   status: ProfileStatus | null;
   created_at: string;

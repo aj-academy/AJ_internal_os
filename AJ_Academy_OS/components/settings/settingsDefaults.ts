@@ -69,6 +69,12 @@ export const SETTINGS_DEFAULTS: Record<string, Record<string, unknown>> = {
       "Operations",
       "Sales",
     ],
+    courses: [
+      "Full Stack Development",
+      "Digital Marketing",
+      "Data Analytics",
+      "UI/UX Design",
+    ],
   },
 };
 

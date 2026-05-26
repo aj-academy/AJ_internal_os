@@ -37,7 +37,7 @@ const SETTINGS_TAB_ORDER: SettingsTabId[] = [
 const SETTINGS_TAB_LABELS: Record<SettingsTabId, string> = {
   company: "Company Settings",
   users: "User & Role Settings",
-  hr_org: "Departments",
+  hr_org: "Departments & courses",
   attendance: "Attendance Settings",
   crm: "CRM Settings",
   project: "Project Settings",
