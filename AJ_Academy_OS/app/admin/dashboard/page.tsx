@@ -58,7 +58,6 @@ type Task = { id: string; assigned_to: string; status: string; due_date: string 
 type Tx = { id: string; transaction_type: "Income" | "Expense"; amount: number; transaction_date: string; payment_status: string | null; created_at: string };
 type Team = { project_id: string; profile_id: string };
 type Claim = { approval_status: string | null };
-type Leave = { status: string | null };
 type Permission = { status: string | null };
 type Wfh = { status: string | null };
 type ActivityRow = { id: string; title: string; module: string; status: string; at: string };
@@ -66,7 +65,6 @@ type ActivityRow = { id: string; title: string; module: string; status: string; 
 const PIE_COLORS = ["#c9a227", "#d4b84a", "#a68b2e", "#10b981", "#f59e0b", "#6b5d4d"];
 
 /** PostgREST 404 / missing relation — tables not created in this Supabase project yet. */
-const SKIP_LEAVE_SESSION_KEY = "bb_admin_dashboard_skip_rest_leave_requests";
 const SKIP_PERM_SESSION_KEY = "bb_admin_dashboard_skip_rest_permission_requests";
 const SKIP_WFH_SESSION_KEY = "bb_admin_dashboard_skip_rest_wfh_requests";
 
@@ -157,7 +155,6 @@ export default function AdminDashboardPage() {
   const [transactions, setTransactions] = useState<Tx[]>([]);
   const [teamMembers, setTeamMembers] = useState<Team[]>([]);
   const [claims, setClaims] = useState<Claim[]>([]);
-  const [leaves, setLeaves] = useState<Leave[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [wfh, setWfh] = useState<Wfh[]>([]);
 
@@ -199,14 +196,10 @@ export default function AdminDashboardPage() {
       ]);
 
       const w = typeof window !== "undefined";
-      const skipL = w && sessionStorage.getItem(SKIP_LEAVE_SESSION_KEY) === "1";
       const skipP = w && sessionStorage.getItem(SKIP_PERM_SESSION_KEY) === "1";
       const skipW = w && sessionStorage.getItem(SKIP_WFH_SESSION_KEY) === "1";
 
-      const [lvR, pmR, wfR] = await Promise.all([
-        skipL
-          ? Promise.resolve({ data: [] as Leave[] | null, error: null })
-          : supabase.from("leave_requests").select("status").limit(5000).returns<Leave[]>(),
+      const [pmR, wfR] = await Promise.all([
         skipP
           ? Promise.resolve({ data: [] as Permission[] | null, error: null })
           : supabase.from("permission_requests").select("status").limit(5000).returns<Permission[]>(),
@@ -216,27 +209,23 @@ export default function AdminDashboardPage() {
       ]);
 
       if (w) {
-        if (!lvR.error) sessionStorage.removeItem(SKIP_LEAVE_SESSION_KEY);
-        else if (isMissingRelationError(lvR.error)) sessionStorage.setItem(SKIP_LEAVE_SESSION_KEY, "1");
         if (!pmR.error) sessionStorage.removeItem(SKIP_PERM_SESSION_KEY);
         else if (isMissingRelationError(pmR.error)) sessionStorage.setItem(SKIP_PERM_SESSION_KEY, "1");
         if (!wfR.error) sessionStorage.removeItem(SKIP_WFH_SESSION_KEY);
         else if (isMissingRelationError(wfR.error)) sessionStorage.setItem(SKIP_WFH_SESSION_KEY, "1");
       }
 
-      const lv: Leave[] = !lvR.error ? (lvR.data ?? []) : [];
       const pm: Permission[] = !pmR.error ? (pmR.data ?? []) : [];
       const wf: Wfh[] = !wfR.error ? (wfR.data ?? []) : [];
 
       const rtSkip =
         w &&
-        (sessionStorage.getItem(SKIP_LEAVE_SESSION_KEY) === "1" ||
-          sessionStorage.getItem(SKIP_PERM_SESSION_KEY) === "1" ||
+        (sessionStorage.getItem(SKIP_PERM_SESSION_KEY) === "1" ||
           sessionStorage.getItem(SKIP_WFH_SESSION_KEY) === "1");
       setSkipAttendanceOpsFetch(Boolean(rtSkip));
       setAttendanceSchemaWarning(
         rtSkip
-          ? "Some attendance tables are missing in Supabase (leave_requests, permission_requests, and/or work_from_home_requests return REST 404). The rest of the dashboard still works. In SQL Editor run AJ_Academy_SB/attendance_module.sql (see DATABASE_SETUP_ORDER.txt). After the tables exist, click Retry."
+          ? "Some attendance tables are missing in Supabase (permission_requests and/or work_from_home_requests return REST 404). The rest of the dashboard still works. In SQL Editor run AJ_Academy_SB/attendance_module.sql (see DATABASE_SETUP_ORDER.txt). After the tables exist, click Retry."
           : null,
       );
 
@@ -248,7 +237,6 @@ export default function AdminDashboardPage() {
       setTransactions(tx);
       setTeamMembers(tm);
       setClaims(ec);
-      setLeaves(lv);
       setPermissions(pm);
       setWfh(wf);
 
@@ -279,7 +267,6 @@ export default function AdminDashboardPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "expense_claims" }, scheduleLoad);
     if (!skipAttendanceOpsFetch) {
       ch = ch
-        .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, scheduleLoad)
         .on("postgres_changes", { event: "*", schema: "public", table: "permission_requests" }, scheduleLoad)
         .on("postgres_changes", { event: "*", schema: "public", table: "work_from_home_requests" }, scheduleLoad);
     }
@@ -411,7 +398,6 @@ export default function AdminDashboardPage() {
 
   const pendingApprovals =
     claims.filter((x) => (x.approval_status || "").toLowerCase() === "pending").length +
-    leaves.filter((x) => (x.status || "").toLowerCase() === "pending").length +
     permissions.filter((x) => (x.status || "").toLowerCase() === "pending").length +
     wfh.filter((x) => (x.status || "").toLowerCase() === "pending").length;
 
@@ -504,7 +490,6 @@ export default function AdminDashboardPage() {
             className="shrink-0 border-amber-300 bg-white text-amber-950 hover:bg-amber-100"
             onClick={() => {
               if (typeof window !== "undefined") {
-                sessionStorage.removeItem(SKIP_LEAVE_SESSION_KEY);
                 sessionStorage.removeItem(SKIP_PERM_SESSION_KEY);
                 sessionStorage.removeItem(SKIP_WFH_SESSION_KEY);
               }
@@ -664,7 +649,7 @@ export default function AdminDashboardPage() {
         <section className="space-y-3 rounded-[20px] border border-[#e8dcc8] bg-white p-4 shadow-sm xl:col-span-5">
           <h3 className="text-base font-semibold text-[#3d3428]">Today's Operations</h3>
           <OpRow label="Today Attendance" value={`${presentToday}/${activeEmployees.length}`} />
-          <OpRow label="Leave Requests (Pending)" value={leaves.filter((x) => (x.status || "").toLowerCase() === "pending").length} />
+          <OpRow label="Permission Requests (Pending)" value={permissions.filter((x) => (x.status || "").toLowerCase() === "pending").length} />
           <OpRow label="Active Meetings" value={activeMeetings} />
           <OpRow label="Pending Approvals" value={pendingApprovals} />
           <OpRow label="Due Follow-ups" value={dueFollowups} />

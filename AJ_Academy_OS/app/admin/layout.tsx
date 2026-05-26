@@ -4,7 +4,6 @@ import { requireRole } from "@/lib/auth/requireRole";
 const adminSidebarItems = [
   { label: "Dashboard", href: "/admin/dashboard" },
   { label: "Attendance System", href: "/admin/attendance" },
-  { label: "Leave Management", href: "/admin/leaves" },
   { label: "Counselling", href: "/admin/counselling" },
   { label: "User Master", href: "/admin/employee-master" },
   { label: "Client / Lead Master", href: "/admin/client-lead-master" },

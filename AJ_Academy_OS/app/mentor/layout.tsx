@@ -4,7 +4,6 @@ import { requireRole } from "@/lib/auth/requireRole";
 const mentorSidebarItems = [
   { label: "Dashboard", href: "/mentor/dashboard" },
   { label: "Assign Tasks", href: "/mentor/my-tasks" },
-  { label: "Leave", href: "/mentor/leaves" },
   { label: "Counselling", href: "/mentor/counselling" },
 ];
 

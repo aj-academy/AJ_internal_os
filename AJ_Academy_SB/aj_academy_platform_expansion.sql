@@ -1,6 +1,6 @@
 -- AJ Academy platform expansion
 -- Run after: schema.sql, attendance_module.sql, task_schema.sql, in_app_notifications.sql
--- Adds: course, assigned_mentor_id, leave RLS, task attachments, counselling, notification RPCs
+-- Adds: course, assigned_mentor_id, mentor helpers, task attachments, counselling, notification RPCs
 
 -- Profiles
 alter table public.profiles add column if not exists course text;
@@ -9,7 +9,7 @@ create index if not exists profiles_assigned_mentor_idx on public.profiles (assi
 create index if not exists profiles_course_idx on public.profiles (course);
 
 comment on column public.profiles.course is 'Academic / training course (from Settings courses list).';
-comment on column public.profiles.assigned_mentor_id is 'Primary mentor for a student (leave + counselling visibility).';
+comment on column public.profiles.assigned_mentor_id is 'Primary mentor for a student (counselling visibility).';
 
 -- Tasks: optional attachment metadata [{name, url, mime, size}]
 alter table public.tasks add column if not exists attachment_urls jsonb not null default '[]'::jsonb;
@@ -40,10 +40,7 @@ insert into storage.buckets (id, name, public)
 values ('task-attachments', 'task-attachments', true)
 on conflict (id) do nothing;
 
--- Leave requests: grants + RLS
-grant select, insert, update, delete on table public.leave_requests to authenticated;
-alter table public.leave_requests enable row level security;
-
+-- Mentor helpers (counselling visibility)
 create or replace function public.is_mentor_role()
 returns boolean
 language sql stable security definer set search_path = public
@@ -72,23 +69,6 @@ $$;
 
 grant execute on function public.mentor_can_see_profile(uuid) to authenticated;
 
-drop policy if exists leave_own_all on public.leave_requests;
-create policy leave_own_all on public.leave_requests for all to authenticated
-using (employee_id = auth.uid()) with check (employee_id = auth.uid());
-
-drop policy if exists leave_admin_all on public.leave_requests;
-create policy leave_admin_all on public.leave_requests for all to authenticated
-using (public.is_admin()) with check (public.is_admin());
-
-drop policy if exists leave_mentor_select_department on public.leave_requests;
-create policy leave_mentor_select_department on public.leave_requests for select to authenticated
-using (public.mentor_can_see_profile(employee_id));
-
-drop policy if exists leave_mentor_update_department on public.leave_requests;
-create policy leave_mentor_update_department on public.leave_requests for update to authenticated
-using (public.mentor_can_see_profile(employee_id))
-with check (public.mentor_can_see_profile(employee_id));
-
 -- Counselling RLS
 alter table public.counselling_sessions enable row level security;
 grant select, insert, update, delete on public.counselling_sessions to authenticated;
@@ -104,98 +84,6 @@ using (student_id = auth.uid());
 drop policy if exists counselling_mentor_select on public.counselling_sessions;
 create policy counselling_mentor_select on public.counselling_sessions for select to authenticated
 using (mentor_id = auth.uid() or public.mentor_can_see_profile(student_id));
-
--- Leave notification RPC
-create or replace function public.create_leave_request_notification(p_leave_id uuid)
-returns void language plpgsql security definer set search_path = public set row_security = off as $$
-declare
-  lv record;
-  st record;
-  admin_id uuid;
-  link_admin text := '/admin/leaves';
-  link_mentor text := '/mentor/leaves';
-begin
-  select lr.*, p.full_name as emp_name, p.role as emp_role, p.assigned_mentor_id
-  into lv
-  from public.leave_requests lr
-  join public.profiles p on p.id = lr.employee_id
-  where lr.id = p_leave_id;
-
-  if not found then return; end if;
-
-  if lv.employee_id <> auth.uid() and not public.is_admin() then
-    raise exception 'forbidden';
-  end if;
-
-  for admin_id in
-    select id from public.profiles
-    where lower(coalesce(role, '')) in ('admin', 'super_admin') and lower(coalesce(status, 'active')) = 'active'
-  loop
-    insert into public.in_app_notifications (user_id, type, title, body, link_path, meta)
-    values (
-      admin_id,
-      'leave_pending',
-      'Leave request pending',
-      coalesce(lv.emp_name, 'User') || ' requested leave.',
-      link_admin,
-      jsonb_build_object('leave_id', p_leave_id)
-    );
-  end loop;
-
-  if lv.assigned_mentor_id is not null and lower(coalesce(lv.emp_role, '')) = 'student' then
-    insert into public.in_app_notifications (user_id, type, title, body, link_path, meta)
-    values (
-      lv.assigned_mentor_id,
-      'leave_pending',
-      'Student leave request',
-      coalesce(lv.emp_name, 'Student') || ' applied for leave.',
-      link_mentor,
-      jsonb_build_object('leave_id', p_leave_id)
-    );
-  end if;
-end;
-$$;
-
-grant execute on function public.create_leave_request_notification(uuid) to authenticated;
-
-create or replace function public.create_leave_status_notification(p_leave_id uuid)
-returns void language plpgsql security definer set search_path = public set row_security = off as $$
-declare
-  lv record;
-  link text;
-begin
-  select lr.*, p.role as emp_role
-  into lv
-  from public.leave_requests lr
-  join public.profiles p on p.id = lr.employee_id
-  where lr.id = p_leave_id;
-
-  if not found then return; end if;
-
-  if not public.is_admin() and not (public.is_mentor_role() and public.mentor_can_see_profile(lv.employee_id)) then
-    raise exception 'forbidden';
-  end if;
-
-  link := case lower(coalesce(lv.emp_role, ''))
-    when 'student' then '/student/leaves'
-    when 'freelancer' then '/freelancer/leaves'
-    when 'mentor' then '/mentor/leaves'
-    else '/login'
-  end;
-
-  insert into public.in_app_notifications (user_id, type, title, body, link_path, meta)
-  values (
-    lv.employee_id,
-    'leave_status',
-    'Leave ' || coalesce(lv.status, 'updated'),
-    coalesce(nullif(trim(lv.rejection_reason), ''), 'Your leave request was ' || coalesce(lv.status, 'updated') || '.'),
-    link,
-    jsonb_build_object('leave_id', p_leave_id)
-  );
-end;
-$$;
-
-grant execute on function public.create_leave_status_notification(uuid) to authenticated;
 
 -- Task assignment notifications: mentor + freelancer assigners, role-based links
 create or replace function public.create_task_assignment_notification(p_task_id uuid)
