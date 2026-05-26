@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera } from "lucide-react";
 import { AttendanceLocationBlock } from "@/components/attendance/AttendanceLocationBlock";
+import { AttendanceSelfieThumb } from "@/components/attendance/AttendanceSelfieThumb";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/types/profile";
 
@@ -475,7 +476,7 @@ export function FreelancerAttendancePage() {
           <table className="w-full min-w-[960px] text-left text-sm">
             <thead className="bg-[#faf6ee] text-[#6b5d4d]">
               <tr>
-                {["Date", "In", "Out", "Check-in", "Check-out", "Duration", "Status"].map((h) => (
+                {["Date", "Selfie", "In", "Out", "Check-in", "Check-out", "Duration", "Status"].map((h) => (
                   <th key={h} className="px-4 py-3">
                     {h}
                   </th>
@@ -486,6 +487,9 @@ export function FreelancerAttendancePage() {
               {history.map((row) => (
                 <tr key={row.id}>
                   <td className="px-4 py-3">{row.attendance_date}</td>
+                  <td className="px-4 py-3">
+                    <AttendanceSelfieThumb url={row.check_in_selfie_url} alt={`Selfie ${row.attendance_date}`} />
+                  </td>
                   <td className="px-4 py-3">{formatTime(row.check_in_time)}</td>
                   <td className="px-4 py-3">{formatTime(row.check_out_time)}</td>
                   <td className="max-w-[200px] px-4 py-3 text-xs text-[#6b5d4d]">

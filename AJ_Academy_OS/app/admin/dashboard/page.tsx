@@ -34,14 +34,24 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
+import { AttendanceSelfieThumb } from "@/components/attendance/AttendanceSelfieThumb";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 type DateFilter = "today" | "week" | "month" | "year";
-type Profile = { id: string; full_name: string | null; email: string | null; department: string | null; status: string | null; created_at: string };
-type Attendance = { employee_id: string | null; attendance_date: string; status: string | null; check_in_time: string | null; total_working_minutes: number | null; created_at: string };
+type Profile = { id: string; full_name: string | null; email: string | null; department: string | null; role?: string | null; status: string | null; created_at: string };
+type Attendance = {
+  id?: string;
+  employee_id: string | null;
+  attendance_date: string;
+  status: string | null;
+  check_in_time: string | null;
+  check_in_selfie_url?: string | null;
+  total_working_minutes: number | null;
+  created_at: string;
+};
 type Client = { id: string; name: string; company_name: string | null; status: string | null; follow_up_date: string | null; created_at: string; updated_at: string };
 type Project = { id: string; project_name: string; client_id: string | null; deadline: string | null; status: string | null; progress: number | null; pending_amount: number | null; created_at: string; updated_at: string };
 type Task = { id: string; assigned_to: string; status: string; due_date: string | null; project_id: string | null; created_at: string; updated_at: string };
@@ -170,8 +180,16 @@ export default function AdminDashboardPage() {
       };
 
       const [pr, at, cl, pj, tk, tx, tm, ec] = await Promise.all([
-        safe(supabase.from("profiles").select("id,full_name,email,department,status,created_at").limit(3000).returns<Profile[]>(), []),
-        safe(supabase.from("attendance_records").select("employee_id,attendance_date,status,check_in_time,total_working_minutes,created_at").gte("attendance_date", isoDate(new Date(Date.now() - 120 * 86400000))).limit(12000).returns<Attendance[]>(), []),
+        safe(supabase.from("profiles").select("id,full_name,email,department,role,status,created_at").limit(3000).returns<Profile[]>(), []),
+        safe(
+          supabase
+            .from("attendance_records")
+            .select("id,employee_id,attendance_date,status,check_in_time,check_in_selfie_url,total_working_minutes,created_at")
+            .gte("attendance_date", isoDate(new Date(Date.now() - 120 * 86400000)))
+            .limit(12000)
+            .returns<Attendance[]>(),
+          [],
+        ),
         safe(supabase.from("clients").select("id,name,company_name,status,follow_up_date,created_at,updated_at").limit(10000).returns<Client[]>(), []),
         safe(supabase.from("projects").select("id,project_name,client_id,deadline,status,progress,pending_amount,created_at,updated_at").limit(6000).returns<Project[]>(), []),
         safe(supabase.from("tasks").select("id,assigned_to,status,due_date,project_id,created_at,updated_at").limit(15000).returns<Task[]>(), []),
@@ -403,6 +421,24 @@ export default function AdminDashboardPage() {
   const pendingPayments = projects.reduce((a, p) => a + Number(p.pending_amount || 0), 0);
   const activeMeetings = attendanceToday.filter((a) => (a.check_in_time || "").toLowerCase().includes("t")).length;
 
+  const todayFreelancerSelfies = useMemo(() => {
+    return attendanceToday
+      .filter((a) => {
+        if (!a.check_in_selfie_url || !a.employee_id) return false;
+        const p = profiles.find((pr) => pr.id === a.employee_id);
+        return (p?.role ?? "").toLowerCase() === "freelancer";
+      })
+      .map((a) => ({
+        id: a.id ?? a.employee_id!,
+        selfie: a.check_in_selfie_url!,
+        name: nameMap[a.employee_id!] ?? "Freelancer",
+        checkIn: a.check_in_time
+          ? new Date(a.check_in_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          : "—",
+        status: attStatus(a.status),
+      }));
+  }, [attendanceToday, nameMap, profiles]);
+
   const activeProjectRows = useMemo(() => {
     return projects
       .filter((p) => projectStatus(p.status).toLowerCase() === "active")
@@ -563,6 +599,47 @@ export default function AdminDashboardPage() {
           </div>
         </section>
       </div>
+
+      <section className="overflow-hidden rounded-[20px] border border-[#e8dcc8] bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-base font-semibold text-[#3d3428]">Freelancer check-ins today</h3>
+          <Link href="/admin/attendance?tab=logs" className="text-xs font-medium text-[#a68b2e] hover:underline">
+            View all attendance logs →
+          </Link>
+        </div>
+        <div className="responsive-table-wrap">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead className="bg-[#faf3e3] text-xs uppercase text-[#6b5d4d]">
+              <tr>
+                {["Selfie", "Name", "Check-in", "Status"].map((h) => (
+                  <th key={h} className="px-3 py-2 text-left">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {todayFreelancerSelfies.map((row) => (
+                <tr key={row.id} className="border-t border-[#eef2ff]">
+                  <td className="px-3 py-2">
+                    <AttendanceSelfieThumb url={row.selfie} alt={`${row.name} selfie`} size="md" />
+                  </td>
+                  <td className="px-3 py-2 font-medium">{row.name}</td>
+                  <td className="px-3 py-2">{row.checkIn}</td>
+                  <td className="px-3 py-2">{row.status}</td>
+                </tr>
+              ))}
+              {!todayFreelancerSelfies.length && !loading ? (
+                <tr>
+                  <td colSpan={4} className="px-3 py-6 text-center text-[#6b5d4d]">
+                    No freelancer selfie check-ins today.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <div className="grid gap-4 xl:grid-cols-12">
         <section className="rounded-[20px] border border-[#e8dcc8] bg-white p-4 shadow-sm xl:col-span-7">

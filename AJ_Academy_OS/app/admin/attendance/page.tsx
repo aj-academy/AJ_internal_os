@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { AdminAttendanceLiveSync } from "@/components/attendance/AdminAttendanceLiveSync";
 import { AdminAttendanceLogsTable } from "@/components/attendance/AdminAttendanceLogsTable";
+import { AttendanceSelfieThumb } from "@/components/attendance/AttendanceSelfieThumb";
 import {
   AdminPermissionRequestsTable,
   type AdminPermissionTableRow,
@@ -37,6 +38,7 @@ type AttendanceRecord = {
   status: string | null;
   location_type: string | null;
   total_working_minutes: number | null;
+  check_in_selfie_url?: string | null;
 };
 
 type ProfileMini = {
@@ -45,6 +47,7 @@ type ProfileMini = {
   email: string | null;
   department: string | null;
   designation: string | null;
+  role?: string | null;
 };
 
 type EmployeeDetailMini = {
@@ -325,7 +328,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
   const queryFilter = (params.q ?? "").trim().toLowerCase();
 
   const [profilesRes, employeeDetailsRes] = await Promise.all([
-    supabase.from("profiles").select("id,full_name,email,department,designation").returns<ProfileMini[]>(),
+    supabase.from("profiles").select("id,full_name,email,department,designation,role").returns<(ProfileMini & { role?: string | null })[]>(),
     supabase.from("employee_details").select("*").returns<EmployeeDetailMini[]>(),
   ]);
   const profileMap = new Map((profilesRes.data ?? []).map((row) => [row.id, row]));
@@ -355,7 +358,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
     const [{ data: todayRecordsData }, { data: weekRecordsData }] = await Promise.all([
       supabase
         .from("attendance_records")
-        .select("id,employee_id,attendance_date,check_in_time,check_out_time,status,location_type,total_working_minutes")
+        .select("id,employee_id,attendance_date,check_in_time,check_out_time,status,location_type,total_working_minutes,check_in_selfie_url")
         .eq("attendance_date", today)
         .returns<AttendanceRecord[]>(),
       supabase
@@ -409,6 +412,61 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <StatCard label="Pending Check-outs" value={pendingCheckout} />
           <StatCard label="Remote Check-ins" value={remoteToday} />
         </div>
+
+        <section className="overflow-x-auto rounded-2xl border border-[#e8dcc8] bg-white p-4">
+          <h3 className="text-base font-semibold text-slate-900">Today&apos;s check-ins (selfie)</h3>
+          <p className="mt-1 text-xs text-slate-500">Freelancer selfie photos from check-in today.</p>
+          <table className="mt-4 w-full min-w-[640px] text-left text-sm">
+            <thead className="bg-[#faf6ee] text-xs uppercase text-[#6b5d4d]">
+              <tr>
+                {["Selfie", "Name", "Check-in", "Status"].map((h) => (
+                  <th key={h} className="px-4 py-3">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#f0e8da]">
+              {todayRecords
+                .filter((row) => {
+                  const role = (profileMap.get(row.employee_id)?.role ?? "").toLowerCase();
+                  return Boolean(row.check_in_selfie_url) && role === "freelancer";
+                })
+                .map((row) => {
+                  const profile = profileMap.get(row.employee_id);
+                  const displayName =
+                    profile?.full_name ??
+                    employeeNameFallbackMap.get(row.employee_id) ??
+                    "Employee";
+                  return (
+                    <tr key={row.id}>
+                      <td className="px-4 py-3">
+                        <AttendanceSelfieThumb
+                          url={row.check_in_selfie_url}
+                          alt={`${displayName} selfie`}
+                          size="md"
+                        />
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{displayName}</td>
+                      <td className="px-4 py-3">{formatDateTimeAsTime(row.check_in_time)}</td>
+                      <td className="px-4 py-3 capitalize">{row.status ?? "—"}</td>
+                    </tr>
+                  );
+                })}
+              {!todayRecords.some(
+                (r) =>
+                  r.check_in_selfie_url &&
+                  (profileMap.get(r.employee_id)?.role ?? "").toLowerCase() === "freelancer",
+              ) ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                    No freelancer selfie check-ins today yet.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </section>
 
         <div className="grid min-w-0 gap-4 xl:grid-cols-2">
           <section className="min-w-0 overflow-hidden rounded-2xl border border-[#e8dcc8] bg-white p-4 sm:p-5">
@@ -478,7 +536,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
 
     let logsQuery = supabase
       .from("attendance_records")
-      .select("id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,check_in_address,check_out_address,status,location_type,total_working_minutes")
+      .select("id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,check_in_address,check_out_address,status,location_type,total_working_minutes,check_in_selfie_url")
       .order("attendance_date", { ascending: false })
       .limit(400);
 
@@ -588,6 +646,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
               locationType: row.location_type ?? "-",
               checkInAddress: row.check_in_address ?? "-",
               checkOutAddress: row.check_out_address ?? "-",
+              checkInSelfieUrl: row.check_in_selfie_url ?? null,
               mood: moodByEmployeeDate.get(`${row.employee_id}:${row.attendance_date}`) ?? null,
             };
           })}

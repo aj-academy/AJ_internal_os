@@ -6,6 +6,7 @@ import {
   bulkDeleteAttendanceRecords,
   deleteAttendanceRecord,
 } from "@/app/admin/attendance/actions";
+import { AttendanceSelfieThumb } from "@/components/attendance/AttendanceSelfieThumb";
 import { MOOD_EMOJI, MOOD_LABEL } from "@/lib/moodDisplay";
 
 export type AdminAttendanceLogRow = {
@@ -21,6 +22,7 @@ export type AdminAttendanceLogRow = {
   locationType: string;
   checkInAddress: string;
   checkOutAddress: string;
+  checkInSelfieUrl: string | null;
   mood: string | null;
 };
 
@@ -116,6 +118,7 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
                 "Email",
                 "Department",
                 "Date",
+                "Selfie",
                 "Mood",
                 "Check In Time",
                 "Check Out Time",
@@ -149,6 +152,13 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
                   <td className="px-5 py-3">{row.email}</td>
                   <td className="px-5 py-3">{row.department}</td>
                   <td className="px-5 py-3">{row.date}</td>
+                  <td className="px-5 py-3">
+                    <AttendanceSelfieThumb
+                      url={row.checkInSelfieUrl}
+                      alt={`${row.employeeName} check-in`}
+                      size="md"
+                    />
+                  </td>
                   <td className="px-5 py-3 whitespace-nowrap">
                     {row.mood ? (
                       <span className="inline-flex items-center gap-1.5" title={MOOD_LABEL[moodKey] ?? row.mood}>
@@ -185,7 +195,7 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
             })}
             {!rows.length ? (
               <tr>
-                <td colSpan={14} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={15} className="px-4 py-8 text-center text-slate-500">
                   No check-in/check-out records found.
                 </td>
               </tr>
