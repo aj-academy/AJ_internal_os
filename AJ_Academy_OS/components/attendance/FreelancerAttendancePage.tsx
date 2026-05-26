@@ -272,7 +272,7 @@ export function FreelancerAttendancePage() {
 
       if (error) throw error;
       await loadAttendanceData(userId);
-      setMessage({ type: "success", text: "Check-in with selfie recorded." });
+      setMessage({ type: "success", text: "Check-in recorded with selfie and location." });
     } catch (e) {
       setMessage({ type: "error", text: e instanceof Error ? e.message : "Check-in failed." });
     } finally {

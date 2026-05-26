@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarClock, ClipboardList, ListTodo } from "lucide-react";
+import { CalendarClock, ClipboardList } from "lucide-react";
 import { AttendanceLocationBlock } from "@/components/attendance/AttendanceLocationBlock";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { createClient } from "@/lib/supabase/server";
@@ -53,8 +53,7 @@ export default async function FreelancerDashboardPage() {
           Welcome, {firstName}
         </h1>
         <p className="mt-2 text-sm text-[#6b5d4d]">
-          Check in with selfie and GPS, assign tasks to students in your department, and complete work
-          assigned to you.
+          Check in with selfie and GPS, then assign tasks to students in your department.
         </p>
         {department ? (
           <p className="mt-1 text-xs font-medium text-[#a68b2e]">Department: {department}</p>
@@ -130,16 +129,6 @@ export default async function FreelancerDashboardPage() {
             <p className="mt-1 text-sm text-[#6b5d4d]">
               Assign work to students in {department || "your department"}.
             </p>
-          </div>
-        </Link>
-        <Link
-          href="/freelancer/my-tasks"
-          className="flex items-start gap-3 rounded-2xl border border-[#e8dcc8] bg-white p-5 transition hover:border-[#c9a227] sm:col-span-2"
-        >
-          <ListTodo className="mt-0.5 h-6 w-6 text-[#c9a227]" />
-          <div>
-            <h2 className="font-semibold text-[#3d3428]">My Tasks</h2>
-            <p className="mt-1 text-sm text-[#6b5d4d]">Tasks others assigned to you — update progress and complete.</p>
           </div>
         </Link>
       </div>

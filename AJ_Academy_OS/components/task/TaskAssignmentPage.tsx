@@ -80,7 +80,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const isMentor = role === "mentor";
   const isFreelancer = role === "freelancer";
   const resolvedVariant: TaskAssignmentVariant =
-    variant ?? (isMentor ? "assigner" : role === "student" ? "assignee" : "assignee");
+    variant ?? (isMentor || isFreelancer ? "assigner" : "assignee");
   const isAssigneeView = resolvedVariant === "assignee";
   const isMember = role === "student" || isFreelancer || isMentor;
   const seesAllTasks = isAdmin;
@@ -142,7 +142,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   }, [supabase]);
 
   const loadAssignees = useCallback(async () => {
-    if (isAssigneeView && (role === "student" || isFreelancer)) return;
+    if (role === "student") return;
 
     if (departmentAssigner) {
       const { data: rpcRows, error: rpcError } = await supabase.rpc("get_department_task_assignees");
@@ -716,7 +716,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">Task Assignment</h2>
           <p className="mt-1 text-sm text-[#64748b]">
-            {isAssigneeView && (role === "student" || isFreelancer)
+            {role === "student"
               ? "Tasks assigned to you appear here. Update status and mark work complete."
               : departmentAssigner
                 ? `Assign work to students in your department (${selfProfile?.department ?? "set department in User Master"}). Only matching students appear in the assignee list.`

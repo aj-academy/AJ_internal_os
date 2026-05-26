@@ -5,7 +5,6 @@ const freelancerSidebarItems = [
   { label: "Dashboard", href: "/freelancer/dashboard" },
   { label: "My Attendance", href: "/freelancer/attendance" },
   { label: "Assign Tasks", href: "/freelancer/assign-tasks" },
-  { label: "My Tasks", href: "/freelancer/my-tasks" },
 ];
 
 export default async function FreelancerLayout({
