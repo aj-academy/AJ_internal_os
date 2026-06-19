@@ -2,7 +2,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text,
   email text,
-  role text check (role in ('super_admin', 'admin', 'student', 'freelancer', 'mentor')),
+  role text check (role in ('super_admin', 'admin', 'employee', 'student', 'freelancer', 'mentor')),
   department text,
   designation text,
   status text default 'active',

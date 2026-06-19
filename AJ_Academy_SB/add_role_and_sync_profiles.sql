@@ -11,7 +11,7 @@ alter table public.profiles add column if not exists status text default 'active
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles
   add constraint profiles_role_check
-  check (role in ('super_admin', 'admin', 'student', 'freelancer', 'mentor'));
+  check (role in ('super_admin', 'admin', 'employee', 'student', 'freelancer', 'mentor'));
 
 -- ── Create missing profile rows (role column filled) ──
 insert into public.profiles (id, full_name, email, role, status)
@@ -22,7 +22,7 @@ select
   case
     when lower(u.email) in ('admin123@gmail.com', 'adminuser@gmail.com') then 'admin'
     when lower(coalesce(u.raw_user_meta_data->>'role', '')) in (
-      'super_admin', 'admin', 'student', 'freelancer', 'mentor'
+      'super_admin', 'admin', 'employee', 'student', 'freelancer', 'mentor'
     ) then lower(u.raw_user_meta_data->>'role')
     else 'student'
   end,
