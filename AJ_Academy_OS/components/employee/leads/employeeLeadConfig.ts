@@ -10,6 +10,17 @@ export const EMPLOYEE_LEAD_STATUSES = [
 
 export const EMPLOYEE_LEAD_PRIORITIES = ["Hot", "Warm", "Cold"] as const;
 
+export const EMPLOYEE_LEAD_SOURCES = [
+  "Website",
+  "Referral",
+  "Social Media",
+  "Cold Call",
+  "Walk-in",
+  "Student",
+  "Event",
+  "Other",
+] as const;
+
 export type EmployeeLeadStatus = (typeof EMPLOYEE_LEAD_STATUSES)[number];
 export type EmployeeLeadPriority = (typeof EMPLOYEE_LEAD_PRIORITIES)[number];
 

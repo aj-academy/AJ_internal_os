@@ -20,6 +20,7 @@ import {
   CustomColumnDef,
   EMPLOYEE_LEAD_PRIORITIES,
   EMPLOYEE_LEAD_SELECT,
+  EMPLOYEE_LEAD_SOURCES,
   EMPLOYEE_LEAD_STATUSES,
   EmployeeLeadRow,
   LeadActivityRow,
@@ -28,6 +29,35 @@ import {
   slugColumnKey,
   whatsAppHref,
 } from "@/components/employee/leads/employeeLeadConfig";
+import {
+  EmployeeLeadFormPanel,
+  type EmployeeLeadFormValue,
+} from "@/components/employee/leads/EmployeeLeadFormPanel";
+
+const emptyLeadForm = (): EmployeeLeadFormValue => ({
+  lead_name: "",
+  company_name: "",
+  phone: "",
+  whatsapp: "",
+  email: "",
+  requirement: "",
+  source: "",
+  status: "New",
+  priority: "Warm",
+  notes: "",
+  custom_fields: {},
+});
+
+function exportFilterSlug(parts: string[]) {
+  const slug = parts
+    .filter(Boolean)
+    .join("-")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48);
+  return slug || "all";
+}
 
 function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
@@ -53,7 +83,12 @@ export function EmployeeLeadManagement() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("");
   const [commFilter, setCommFilter] = useState<CommFilter>("");
+
+  const [addLeadOpen, setAddLeadOpen] = useState(false);
+  const [leadForm, setLeadForm] = useState<EmployeeLeadFormValue>(emptyLeadForm);
+  const [savingLead, setSavingLead] = useState(false);
 
   const [activityLead, setActivityLead] = useState<EmployeeLeadRow | null>(null);
   const [activities, setActivities] = useState<LeadActivityRow[]>([]);
@@ -127,6 +162,16 @@ export function EmployeeLeadManagement() {
     void loadCustomColumns();
   }, [loadCustomColumns]);
 
+  const sourceOptions = useMemo(() => {
+    const fromData = new Set<string>();
+    leads.forEach((row) => {
+      const s = (row.source ?? "").trim();
+      if (s) fromData.add(s);
+    });
+    EMPLOYEE_LEAD_SOURCES.forEach((s) => fromData.add(s));
+    return Array.from(fromData).sort((a, b) => a.localeCompare(b));
+  }, [leads]);
+
   const filteredLeads = useMemo(() => {
     const q = search.trim().toLowerCase();
     return leads.filter((row) => {
@@ -137,6 +182,7 @@ export function EmployeeLeadManagement() {
         row.whatsapp,
         row.email,
         row.requirement,
+        row.source,
       ]
         .filter(Boolean)
         .join(" ")
@@ -144,13 +190,16 @@ export function EmployeeLeadManagement() {
       if (q && !hay.includes(q)) return false;
       if (statusFilter && (row.status ?? "") !== statusFilter) return false;
       if (priorityFilter && (row.priority ?? "") !== priorityFilter) return false;
+      if (sourceFilter && (row.source ?? "") !== sourceFilter) return false;
       if (commFilter === "called" && !row.phone_called) return false;
       if (commFilter === "not_called" && row.phone_called) return false;
       if (commFilter === "whatsapp_sent" && !row.whatsapp_sent) return false;
       if (commFilter === "whatsapp_pending" && row.whatsapp_sent) return false;
       return true;
     });
-  }, [commFilter, leads, priorityFilter, search, statusFilter]);
+  }, [commFilter, leads, priorityFilter, search, sourceFilter, statusFilter]);
+
+  const filtersActive = Boolean(search.trim() || statusFilter || priorityFilter || sourceFilter || commFilter);
 
   const stats = useMemo(() => {
     const total = leads.length;
@@ -263,6 +312,11 @@ export function EmployeeLeadManagement() {
   };
 
   const handleExport = () => {
+    if (!filteredLeads.length) {
+      setError("No rows match the current filters to export.");
+      return;
+    }
+
     const headers = [
       "Lead Name",
       "Company",
@@ -270,12 +324,16 @@ export function EmployeeLeadManagement() {
       "WhatsApp",
       "Email",
       "Description",
+      "Source",
       "Status",
       "Priority",
       "Phone Called",
       "WhatsApp Sent",
       "Last Contacted",
+      "Notes",
+      ...customColumns.map((c) => c.column_name),
     ];
+
     const rows = filteredLeads.map((r) => [
       displayLeadName(r),
       r.company_name ?? "",
@@ -283,13 +341,102 @@ export function EmployeeLeadManagement() {
       r.whatsapp ?? "",
       r.email ?? "",
       r.requirement ?? "",
+      r.source ?? "",
       r.status ?? "",
       r.priority ?? "",
       r.phone_called ? "Yes" : "No",
       r.whatsapp_sent ? "Yes" : "No",
       r.last_contacted_at ? formatDateTimeIST(r.last_contacted_at) : "",
+      r.notes ?? "",
+      ...customColumns.map((c) => String((r.custom_fields ?? {})[c.column_key] ?? "")),
     ]);
-    downloadCsv(`employee-leads-${todayDateIST()}.csv`, buildCsv(headers, rows));
+
+    const slug = exportFilterSlug([
+      sourceFilter,
+      statusFilter,
+      priorityFilter,
+      commFilter,
+      search.trim(),
+    ]);
+    downloadCsv(`employee-leads-${slug}-${todayDateIST()}.csv`, buildCsv(headers, rows));
+    setSuccess(
+      filtersActive
+        ? `Exported ${filteredLeads.length} filtered row(s) (of ${leads.length} assigned).`
+        : `Exported all ${filteredLeads.length} assigned lead(s).`,
+    );
+  };
+
+  const handleSaveLead = async () => {
+    if (!userId) return;
+    const leadName = leadForm.lead_name.trim();
+    if (!leadName) {
+      setError("Lead name is required.");
+      return;
+    }
+    const email = leadForm.email.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Enter a valid email address.");
+      return;
+    }
+
+    setSavingLead(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const phone = leadForm.phone.trim() || null;
+      const customFields: Record<string, unknown> = {};
+      Object.entries(leadForm.custom_fields).forEach(([key, val]) => {
+        if (val.trim()) customFields[key] = val.trim();
+      });
+
+      const payload = {
+        name: leadName,
+        lead_name: leadName,
+        company_name: leadForm.company_name.trim() || null,
+        phone,
+        whatsapp: leadForm.whatsapp.trim() || phone,
+        email: email || null,
+        requirement: leadForm.requirement.trim() || null,
+        source: leadForm.source.trim() || null,
+        status: leadForm.status || "New",
+        priority: leadForm.priority || "Warm",
+        notes: leadForm.notes.trim() || null,
+        assigned_to: userId,
+        assigned_by: userId,
+        phone_called: false,
+        whatsapp_sent: false,
+        custom_fields: customFields,
+      };
+
+      const { data: inserted, error: insertError } = await supabase
+        .from("clients")
+        .insert(payload)
+        .select("id")
+        .single();
+
+      if (insertError) throw new Error(insertError.message);
+
+      if (inserted?.id) {
+        await logActivity(inserted.id, "Lead Created", "Employee added a new lead from Lead Management.");
+      }
+
+      setAddLeadOpen(false);
+      setLeadForm(emptyLeadForm());
+      setSuccess(`Lead "${leadName}" added successfully.`);
+      await loadLeads();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save lead.");
+    } finally {
+      setSavingLead(false);
+    }
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("");
+    setPriorityFilter("");
+    setSourceFilter("");
+    setCommFilter("");
   };
 
   const handleImportFile = async (file: File) => {
@@ -414,6 +561,17 @@ export function EmployeeLeadManagement() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            className="rounded-full bg-[#2563eb] text-white hover:bg-[#1d4ed8]"
+            onClick={() => {
+              setLeadForm(emptyLeadForm());
+              setAddLeadOpen(true);
+            }}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            Add lead
+          </Button>
           <input
             ref={fileRef}
             type="file"
@@ -430,7 +588,7 @@ export function EmployeeLeadManagement() {
           </Button>
           <Button type="button" variant="outline" className="rounded-full border-[#d4deea]" onClick={handleExport} disabled={!filteredLeads.length}>
             <Download className="mr-1 h-4 w-4" />
-            Export
+            Export{filteredLeads.length ? ` (${filteredLeads.length})` : ""}
           </Button>
           <Button type="button" variant="outline" className="rounded-full border-[#d4deea]" onClick={() => setColumnsOpen(true)}>
             <Plus className="mr-1 h-4 w-4" />
@@ -451,12 +609,26 @@ export function EmployeeLeadManagement() {
       </div>
 
       <section className="rounded-2xl border border-[#d4deea] bg-[#f8fbff] p-4">
-        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[#334155]">
-          <Filter className="h-4 w-4 text-[#2563eb]" />
-          Search & filters
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm font-medium text-[#334155]">
+            <Filter className="h-4 w-4 text-[#2563eb]" />
+            Search & filters
+          </div>
+          <p className="text-xs text-[#64748b]">
+            Showing {filteredLeads.length} of {leads.length} assigned lead(s)
+            {filtersActive ? " · filtered view" : ""}
+          </p>
         </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, company, phone, email…" className="h-10 border-[#d4deea] xl:col-span-2" />
+          <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="h-10 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
+            <option value="">All sources</option>
+            {sourceOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-10 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
             <option value="">All statuses</option>
             {EMPLOYEE_LEAD_STATUSES.map((s) => (
@@ -480,6 +652,13 @@ export function EmployeeLeadManagement() {
             <option value="whatsapp_sent">WhatsApp sent</option>
             <option value="whatsapp_pending">WhatsApp pending</option>
           </select>
+          {filtersActive ? (
+            <Button type="button" variant="outline" className="h-10 rounded-xl border-[#d4deea] text-sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          ) : (
+            <div className="hidden xl:block" />
+          )}
         </div>
       </section>
 
@@ -492,6 +671,7 @@ export function EmployeeLeadManagement() {
               <th className="px-3 py-2">Contact</th>
               <th className="px-3 py-2">Email</th>
               <th className="px-3 py-2">Description</th>
+              <th className="px-3 py-2">Source</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Priority</th>
               <th className="px-3 py-2">Last Contacted</th>
@@ -506,14 +686,14 @@ export function EmployeeLeadManagement() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={9 + customColumns.length} className="px-3 py-10 text-center text-[#64748b]">
+                <td colSpan={10 + customColumns.length} className="px-3 py-10 text-center text-[#64748b]">
                   Loading leads…
                 </td>
               </tr>
             ) : !filteredLeads.length ? (
               <tr>
-                <td colSpan={9 + customColumns.length} className="px-3 py-10 text-center text-[#64748b]">
-                  No leads assigned yet.
+                <td colSpan={10 + customColumns.length} className="px-3 py-10 text-center text-[#64748b]">
+                  {filtersActive ? "No leads match the current filters." : "No leads assigned yet."}
                 </td>
               </tr>
             ) : (
@@ -560,6 +740,7 @@ export function EmployeeLeadManagement() {
                   <td className="max-w-[200px] px-3 py-2 text-[#64748b]">
                     <p className="line-clamp-2">{row.requirement || "—"}</p>
                   </td>
+                  <td className="px-3 py-2 text-[#64748b]">{row.source || "—"}</td>
                   <td className="px-3 py-2">
                     <select
                       value={row.status ?? "New"}
@@ -639,7 +820,7 @@ export function EmployeeLeadManagement() {
                       {a.notes ? <p className="mt-0.5 text-xs text-[#64748b]">{a.notes}</p> : null}
                       {a.old_value || a.new_value ? (
                         <p className="mt-0.5 text-xs text-[#64748b]">
-                          {a.old_value} ΓåÆ {a.new_value}
+                          {a.old_value} → {a.new_value}
                         </p>
                       ) : null}
                       <p className="mt-1 text-[11px] text-[#94a3b8]">{formatDateTimeIST(a.created_at)}</p>
@@ -686,6 +867,16 @@ export function EmployeeLeadManagement() {
           </div>
         </div>
       ) : null}
+
+      <EmployeeLeadFormPanel
+        open={addLeadOpen}
+        value={leadForm}
+        customColumns={customColumns}
+        submitting={savingLead}
+        onChange={setLeadForm}
+        onClose={() => setAddLeadOpen(false)}
+        onSubmit={() => void handleSaveLead()}
+      />
     </section>
   );
 }
