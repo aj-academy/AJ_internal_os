@@ -14,7 +14,7 @@ import { assignerDisplayFromProfile } from "@/lib/profileDisplayName";
 import { parseTaskAttachments, uploadTaskAttachments, type TaskAttachment } from "@/lib/taskAttachments";
 import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 
-type AppRole = "admin" | "student" | "freelancer" | "mentor";
+type AppRole = "admin" | "employee" | "student" | "freelancer" | "mentor";
 
 /** assignee = tasks assigned to me; assigner = department-scoped task assignment (mentor / freelancer). */
 export type TaskAssignmentVariant = "assignee" | "assigner";
@@ -78,12 +78,13 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const supabase = useMemo(() => createClient(), []);
   const searchParams = useSearchParams();
   const isAdmin = role === "admin";
+  const isEmployee = role === "employee";
   const isMentor = role === "mentor";
   const isFreelancer = role === "freelancer";
   const resolvedVariant: TaskAssignmentVariant =
     variant ?? (isMentor || isFreelancer ? "assigner" : "assignee");
   const isAssigneeView = resolvedVariant === "assignee";
-  const isMember = role === "student" || isFreelancer || isMentor;
+  const isMember = role === "student" || isEmployee || isFreelancer || isMentor;
   const seesAllTasks = isAdmin;
   const departmentAssigner =
     isMentor || (isFreelancer && resolvedVariant === "assigner");
@@ -146,6 +147,37 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
 
   const loadAssignees = useCallback(async () => {
     if (role === "student") return;
+
+    if (isEmployee) {
+      const { data: rpcRows, error: rpcError } = await supabase.rpc("get_team_assignees");
+      if (!rpcError && Array.isArray(rpcRows)) {
+        const rows = rpcRows as {
+          id: string;
+          full_name: string | null;
+          email: string | null;
+          department?: string | null;
+        }[];
+        setEmployees(
+          rows.map((r) => ({
+            id: r.id,
+            full_name: r.full_name,
+            email: r.email,
+            department: r.department ?? null,
+          })),
+        );
+        return;
+      }
+      const { data, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id,full_name,email,department,role")
+        .in("role", ["employee", "admin", "super_admin"])
+        .or("status.is.null,status.eq.active")
+        .order("full_name", { ascending: true })
+        .returns<ProfileOption[]>();
+      if (profilesError) throw new Error(profilesError.message);
+      setEmployees(data ?? []);
+      return;
+    }
 
     if (departmentAssigner) {
       const { data: rpcRows, error: rpcError } = await supabase.rpc("get_department_task_assignees");
@@ -213,7 +245,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       .returns<ProfileOption[]>();
     if (profilesError) throw new Error(profilesError.message);
     setEmployees(data ?? []);
-  }, [departmentAssigner, isAssigneeView, isFreelancer, role, selfProfile?.department, supabase]);
+  }, [departmentAssigner, isEmployee, role, selfProfile?.department, supabase]);
 
   const loadSummary = useCallback(
     async (userId: string) => {
@@ -545,6 +577,10 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     setForm(initialForm);
     setPendingAttachmentFiles([]);
     setExistingAttachments([]);
+    if (isEmployee) {
+      if (!currentUserId) return;
+      setForm({ ...initialForm, assigned_to: currentUserId });
+    }
     setPanelOpen(true);
   };
 
@@ -576,6 +612,57 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
 
   const handleSaveTask = async () => {
     if (tasksTableMissing) return;
+    if (isEmployee) {
+      if (editId) {
+        setError("Use the task list to update status and progress. Ask an admin to change title, dates, or assignee.");
+        return;
+      }
+      if (!currentUserId) {
+        setError("Session not ready; try again in a moment.");
+        return;
+      }
+      if (!form.title.trim()) {
+        setError("Please enter a task title.");
+        return;
+      }
+      if (!form.assigned_to.trim()) {
+        setError("Select an employee to assign this task to (yourself or a teammate).");
+        return;
+      }
+      setSubmitting(true);
+      setError(null);
+      setSuccess(null);
+      const employeePayload = {
+        title: form.title.trim(),
+        description: form.description || null,
+        assigned_to: form.assigned_to.trim(),
+        assigned_by: currentUserId,
+        project_id: null as string | null,
+        priority: form.priority,
+        status: form.status,
+        start_date: form.start_date || null,
+        due_date: form.due_date || null,
+        progress: form.progress,
+      };
+      try {
+        const { data: inserted, error: insertError } = await supabase
+          .from("tasks")
+          .insert(employeePayload)
+          .select("id")
+          .single();
+        if (insertError) throw new Error(insertError.message);
+        setSuccess("Task assigned.");
+        setPanelOpen(false);
+        setForm(initialForm);
+        await reload();
+        if (inserted?.id) void notifyAssigneeInApp(inserted.id);
+      } catch (saveError) {
+        setError(toReadableTaskError(saveError));
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
     if (!canManageTasks) {
       setError("You do not have permission to assign tasks here.");
       return;
@@ -736,24 +823,26 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   };
 
   return (
-    <section className="space-y-6 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
+    <section className={`space-y-6 rounded-[24px] border bg-white p-4 sm:p-6 lg:p-8 ${isEmployee ? "border-[#d4deea] shadow-[0_20px_40px_rgba(30,64,175,0.08)]" : "border-[#e8dcc8] shadow-[0_20px_40px_rgba(30,64,175,0.08)]"}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">Task Assignment</h2>
           <p className="mt-1 text-sm text-[#64748b]">
-            {role === "student"
+            {isEmployee
+              ? "Admins assign work to your user account; it appears here. You can also assign tasks to yourself or teammates in your department or shared projects."
+              : role === "student"
               ? "Tasks assigned to you appear here. Update status and mark work complete."
               : departmentAssigner
                 ? `Assign work to students in your department (${selfProfile?.department ?? "set department in User Master"}). Only matching students appear in the assignee list.`
                 : "Assign, track and manage tasks for students, freelancers, and mentors"}
           </p>
         </div>
-        {canManageTasks ? (
+        {canManageTasks || isEmployee ? (
           <Button
             data-requires-online
             onClick={() => void openCreate()}
             disabled={tasksTableMissing || (departmentAssigner && !selfProfile?.department)}
-            className="h-9 rounded-full bg-[#c9a227] px-4 text-white hover:bg-[#b8921f] disabled:opacity-50"
+            className={`h-9 rounded-full px-4 text-white disabled:opacity-50 ${isEmployee ? "bg-[#2563eb] hover:bg-[#1d4ed8]" : "bg-[#c9a227] hover:bg-[#b8921f]"}`}
           >
             + Assign task
           </Button>
@@ -930,7 +1019,9 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                 showProjectField={canManageTasks}
                 assigneeLockedToSelf={false}
                 assigneeHelperText={
-                  departmentAssigner
+                  isEmployee
+                    ? "All active employees and admins are listed. Choose who should own this task."
+                    : departmentAssigner
                     ? "Only active students in your department are listed (same department as your profile in User Master)."
                     : "Active students, freelancers, mentors, and admins who can receive tasks are shown."
                 }

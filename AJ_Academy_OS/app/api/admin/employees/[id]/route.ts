@@ -4,7 +4,7 @@ import { removeUserAccount } from "@/lib/admin/removeUserAccount";
 import { requireAdminApiSession } from "@/lib/auth/requireAdminApi";
 import type { UserRole } from "@/types/profile";
 
-const ROLES = new Set(["super_admin", "admin", "student", "freelancer", "mentor"]);
+const ROLES = new Set(["super_admin", "admin", "employee", "student", "freelancer", "mentor"]);
 const STATUSES = new Set(["active", "inactive"]);
 
 interface RouteParams {

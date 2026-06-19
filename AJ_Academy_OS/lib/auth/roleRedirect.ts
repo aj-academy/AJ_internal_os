@@ -4,6 +4,7 @@ import type { UserRole } from "@/types/profile";
 const ROLE_PATHS: Record<UserRole, string> = {
   super_admin: "/admin/dashboard",
   admin: "/admin/dashboard",
+  employee: "/employee/dashboard",
   student: "/student/dashboard",
   freelancer: "/freelancer/dashboard",
   mentor: "/mentor/dashboard",

@@ -1,11 +1,12 @@
 import type { UserRole } from "@/types/profile";
 import type { LoginProfileRow } from "@/lib/auth/profileSelect";
 
-export type LoginRoleOption = "admin" | "student" | "freelancer" | "mentor";
+export type LoginRoleOption = "admin" | "employee" | "student" | "freelancer" | "mentor";
 
 const VALID_ROLES = new Set<UserRole>([
   "super_admin",
   "admin",
+  "employee",
   "student",
   "freelancer",
   "mentor",

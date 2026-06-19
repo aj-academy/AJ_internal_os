@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const ROLES = new Set(["super_admin", "admin", "student", "freelancer", "mentor"]);
+const ROLES = new Set(["super_admin", "admin", "employee", "student", "freelancer", "mentor"]);
 
 export async function POST(request: Request) {
   let body: unknown;

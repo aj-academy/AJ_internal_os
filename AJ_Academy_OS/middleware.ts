@@ -19,5 +19,6 @@ export const config = {
     "/student/:path*",
     "/freelancer/:path*",
     "/mentor/:path*",
+    "/employee/:path*",
   ],
 };

@@ -1,6 +1,7 @@
 export type UserRole =
   | "super_admin"
   | "admin"
+  | "employee"
   | "student"
   | "freelancer"
   | "mentor";

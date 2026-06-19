@@ -12,7 +12,7 @@ import type { Profile, ProfileStatus, UserRole } from "@/types/profile";
 
 type EmployeeRole = UserRole;
 
-type RoleTab = "all" | "student" | "mentor" | "freelancer";
+type RoleTab = "all" | "employee" | "student" | "mentor" | "freelancer";
 
 interface EmployeeRow {
   id: string;
@@ -25,7 +25,7 @@ interface EmployeeRow {
   status: ProfileStatus | null;
 }
 
-const roles: EmployeeRole[] = ["super_admin", "admin", "student", "freelancer", "mentor"];
+const roles: EmployeeRole[] = ["super_admin", "admin", "employee", "student", "freelancer", "mentor"];
 
 interface FormState {
   id: string | null;
@@ -350,6 +350,7 @@ export default function EmployeeMasterPage() {
               {(
                 [
                   ["all", "All users"],
+                  ["employee", "Employees"],
                   ["student", "Students"],
                   ["mentor", "Mentors"],
                   ["freelancer", "Freelancers"],

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminApiSession } from "@/lib/auth/requireAdminApi";
 
-const ROLES = new Set(["super_admin", "admin", "student", "freelancer", "mentor"]);
+const ROLES = new Set(["super_admin", "admin", "employee", "student", "freelancer", "mentor"]);
 const STATUSES = new Set(["active", "inactive"]);
 
 function friendlySupabaseError(message: string) {

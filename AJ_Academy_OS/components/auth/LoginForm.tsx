@@ -359,6 +359,7 @@ export function LoginForm({ initialError, resetSuccess = false, initialEmail = "
               required
             >
               <option value="admin">Admin</option>
+              <option value="employee">Employee</option>
               <option value="student">Student</option>
               <option value="freelancer">Freelancer</option>
               <option value="mentor">Mentor</option>
