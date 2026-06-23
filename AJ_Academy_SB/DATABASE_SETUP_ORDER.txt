@@ -43,3 +43,6 @@ Skip legacy BB-only scripts unless you need CRM/finance:
   client_lead_schema.sql, finance_schema.sql, employee_daily_mood_schema.sql, etc.
 
 After SQL: create users in Authentication, then insert profiles rows (see SUPABASE_SETUP_GUIDE.md).
+
+Optional email notifications:
+  Set RESEND_API_KEY (+ TASK_EMAIL_FROM) in AJ_Academy_OS env to send counselling schedule emails.

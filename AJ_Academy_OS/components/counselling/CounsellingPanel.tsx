@@ -40,6 +40,8 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
   const [success, setSuccess] = useState<string | null>(null);
   const [schemaMissing, setSchemaMissing] = useState(false);
   const [userId, setUserId] = useState("");
+  const [studentQuery, setStudentQuery] = useState("");
+  const [mentorQuery, setMentorQuery] = useState("");
 
   const [form, setForm] = useState({
     student_id: "",
@@ -127,9 +129,18 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
     void load();
   }, [load]);
 
+  const findProfileIdByText = (list: ProfileOpt[], query: string) => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return "";
+    return list.find((item) => item.label.trim().toLowerCase() === needle)?.id ?? "";
+  };
+
   const onSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userId || !form.student_id || !form.purpose.trim() || !form.session_at) {
+    const studentId = findProfileIdByText(students, studentQuery);
+    const mentorId = findProfileIdByText(mentors, mentorQuery);
+
+    if (!userId || !studentId || !form.purpose.trim() || !form.session_at) {
       setError("Student, purpose, and date/time are required.");
       return;
     }
@@ -138,8 +149,8 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
     setSuccess(null);
     try {
       const { error: insErr } = await supabase.from("counselling_sessions").insert({
-        student_id: form.student_id,
-        mentor_id: form.mentor_id || null,
+        student_id: studentId,
+        mentor_id: mentorId || null,
         scheduled_by: userId,
         purpose: form.purpose.trim(),
         mode: form.mode,
@@ -154,12 +165,12 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
 
       const { data: student } = await supabase
         .from("profiles")
-        .select("full_name")
-        .eq("id", form.student_id)
+        .select("full_name,email")
+        .eq("id", studentId)
         .maybeSingle();
 
       await supabase.from("in_app_notifications").insert({
-        user_id: form.student_id,
+        user_id: studentId,
         type: "counselling_scheduled",
         title: "Counselling scheduled",
         body: `Session: ${form.purpose.trim()} (${form.mode})`,
@@ -167,9 +178,9 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
         meta: {},
       });
 
-      if (form.mentor_id) {
+      if (mentorId) {
         await supabase.from("in_app_notifications").insert({
-          user_id: form.mentor_id,
+          user_id: mentorId,
           type: "counselling_scheduled",
           title: "Counselling assigned",
           body: `Student ${student?.full_name ?? ""} — ${form.purpose.trim()}`,
@@ -177,6 +188,21 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
           meta: {},
         });
       }
+
+      await fetch("/api/notifications/counselling-scheduled", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentEmail: student?.email ?? "",
+          studentName: student?.full_name ?? "",
+          purpose: form.purpose.trim(),
+          mode: form.mode,
+          sessionAtIso: new Date(form.session_at).toISOString(),
+          durationMinutes: parseInt(form.duration_minutes, 10) || 30,
+          meetingLink: form.mode === "online" ? form.meeting_link.trim() : "",
+          venue: form.mode === "offline" ? form.venue.trim() : "",
+        }),
+      }).catch(() => {});
 
       setSuccess("Counselling session scheduled.");
       setForm({
@@ -190,6 +216,8 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
         venue: "",
         notes: "",
       });
+      setStudentQuery("");
+      setMentorQuery("");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not schedule.");
@@ -222,34 +250,34 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1 text-sm">
               <span className="font-medium">Student *</span>
-              <select
-                className="h-9 w-full rounded-xl border border-[#e8dcc8] px-3"
-                value={form.student_id}
-                onChange={(e) => setForm((p) => ({ ...p, student_id: e.target.value }))}
+              <Input
+                list="counselling-students"
+                className="h-9 border-[#e8dcc8]"
+                value={studentQuery}
+                onChange={(e) => setStudentQuery(e.target.value)}
+                placeholder="Type and pick exact student name"
                 required
-              >
-                <option value="">Select student</option>
+              />
+              <datalist id="counselling-students">
                 {students.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
+                  <option key={s.id} value={s.label} />
                 ))}
-              </select>
+              </datalist>
             </label>
             <label className="space-y-1 text-sm">
               <span className="font-medium">Mentor (optional)</span>
-              <select
-                className="h-9 w-full rounded-xl border border-[#e8dcc8] px-3"
-                value={form.mentor_id}
-                onChange={(e) => setForm((p) => ({ ...p, mentor_id: e.target.value }))}
-              >
-                <option value="">Auto / none</option>
+              <Input
+                list="counselling-mentors"
+                className="h-9 border-[#e8dcc8]"
+                value={mentorQuery}
+                onChange={(e) => setMentorQuery(e.target.value)}
+                placeholder="Type mentor name (optional)"
+              />
+              <datalist id="counselling-mentors">
                 {mentors.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
+                  <option key={m.id} value={m.label} />
                 ))}
-              </select>
+              </datalist>
             </label>
             <label className="space-y-1 text-sm sm:col-span-2">
               <span className="font-medium">Purpose *</span>

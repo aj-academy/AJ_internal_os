@@ -10,6 +10,7 @@ import { TX_SELECT } from "@/components/finance/financeHelpers";
 import { PROJECT_SELECT, normalizeProjectStatus } from "@/components/project-master/projectHelpers";
 import { REPORTS_TAB_LABELS, REPORTS_TAB_ORDER, type ReportsTabId } from "@/components/reports/reportsConfig";
 import { formatInr, friendlyReportsError, isMissingTable, minutesToHoursLabel, monthKey, todayISO } from "@/components/reports/reportsHelpers";
+import { exportRowsAsCsv, exportRowsAsExcel, exportRowsAsPdf, type ExportRow } from "@/components/reports/reportsExport";
 import type { FinanceTransactionRow } from "@/types/finance";
 import type { ProjectRow } from "@/types/project";
 
@@ -89,6 +90,8 @@ export function ReportsWorkbench() {
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [exportBusy, setExportBusy] = useState<"pdf" | "excel" | "csv" | null>(null);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
 
   const [profiles, setProfiles] = useState<ProfileLite[]>([]);
   const [clients, setClients] = useState<ClientLite[]>([]);
@@ -400,6 +403,139 @@ export function ReportsWorkbench() {
       return true;
     });
   }, [fltTaskEmp, fltTaskProject, fltTaskStatus, tasks]);
+
+  const exportRows = useMemo<ExportRow[]>(() => {
+    const tab = activeTab === "export" ? "overview" : activeTab;
+    if (tab === "employees") {
+      return filteredProfiles.map((p) => ({
+        employee: p.full_name || p.email || p.id.slice(0, 8),
+        role: p.role || "—",
+        department: p.department || "—",
+        status: p.status || "active",
+        attendance_rate_pct: perEmployeeAttendanceRate[p.id] ?? 0,
+        tasks_total: perEmployeeTaskCounts[p.id]?.total ?? 0,
+        tasks_completed: perEmployeeTaskCounts[p.id]?.done ?? 0,
+      }));
+    }
+    if (tab === "attendance") {
+      return filteredAttendance.map((a) => ({
+        employee: a.employee_id ? employeeNameMap[a.employee_id] || "—" : "—",
+        attendance_date: String(a.attendance_date).slice(0, 10),
+        check_in: a.check_in_time ? new Date(a.check_in_time).toLocaleString() : "—",
+        check_out: a.check_out_time ? new Date(a.check_out_time).toLocaleString() : "—",
+        working_hours: minutesToHoursLabel(a.total_working_minutes),
+        status: a.status || "—",
+        location: a.check_in_address || "—",
+      }));
+    }
+    if (tab === "clients") {
+      return filteredClients.map((c) => ({
+        name: c.name,
+        company: c.company_name || "—",
+        status: normalizeStatus(String(c.status)),
+        source: c.source || "—",
+        service: c.service_interest || "—",
+        proposal: c.proposal_status || "—",
+        budget: c.budget ?? "",
+      }));
+    }
+    if (tab === "projects") {
+      return filteredProjects.map((p) => ({
+        project: p.project_name,
+        client: p.client_id ? clients.find((c) => c.id === p.client_id)?.company_name || clients.find((c) => c.id === p.client_id)?.name || "—" : "—",
+        manager: p.project_manager ? employeeNameMap[p.project_manager] || "—" : "—",
+        budget: p.budget ?? "",
+        pending_amount: p.pending_amount ?? 0,
+        progress_pct: p.progress ?? 0,
+        status: normalizeProjectStatus(String(p.status)),
+        deadline: p.deadline ? String(p.deadline).slice(0, 10) : "—",
+      }));
+    }
+    if (tab === "tasks") {
+      return filteredTasks.map((t) => ({
+        task_id: t.id,
+        assignee: employeeNameMap[t.assigned_to] || t.assigned_to,
+        project: t.project_id ? projects.find((p) => p.id === t.project_id)?.project_name || "—" : "—",
+        priority: t.priority,
+        status: t.status,
+        due_date: t.due_date || "—",
+      }));
+    }
+    if (tab === "finance") {
+      return financeTx.map((t) => ({
+        transaction_date: t.transaction_date,
+        type: t.transaction_type,
+        category: t.category || "—",
+        amount: t.amount,
+        project_id: t.project_id || "—",
+        client_id: t.client_id || "—",
+        description: t.description || "—",
+      }));
+    }
+
+    return [
+      {
+        total_employees: profiles.length,
+        active_employees: activeEmployees.length,
+        total_clients: clients.length,
+        total_projects: projects.length,
+        total_tasks: taskStats.total,
+        completed_tasks: taskStats.completed,
+        attendance_rate_pct: attendanceRateOverall,
+        monthly_revenue: financeStats.revThis,
+        monthly_expense: financeStats.expThis,
+      },
+    ];
+  }, [
+    activeEmployees.length,
+    activeTab,
+    attendanceRateOverall,
+    clientStats.total,
+    clients,
+    employeeNameMap,
+    filteredAttendance,
+    filteredClients,
+    filteredProfiles,
+    filteredProjects,
+    filteredTasks,
+    financeStats.expThis,
+    financeStats.revThis,
+    financeTx,
+    perEmployeeAttendanceRate,
+    perEmployeeTaskCounts,
+    profiles.length,
+    projects,
+    taskStats.completed,
+    taskStats.total,
+  ]);
+
+  const exportLabel = activeTab === "export" ? "overview" : activeTab;
+
+  const runExport = useCallback(
+    async (format: "pdf" | "excel" | "csv") => {
+      if (!exportRows.length) {
+        setExportMessage("No data available for current report filters.");
+        return;
+      }
+      setExportBusy(format);
+      setExportMessage(null);
+      const stamp = new Date().toISOString().slice(0, 10);
+      const base = `report-${exportLabel}-${stamp}`;
+      try {
+        if (format === "csv") {
+          exportRowsAsCsv(`${base}.csv`, exportRows);
+        } else if (format === "excel") {
+          await exportRowsAsExcel(`${base}.xlsx`, exportRows);
+        } else {
+          await exportRowsAsPdf(`AJ Academy ${exportLabel} report`, `${base}.pdf`, exportRows);
+        }
+        setExportMessage(`Exported ${exportRows.length} row(s) as ${format.toUpperCase()}.`);
+      } finally {
+        setExportBusy(null);
+      }
+    },
+    [exportLabel, exportRows],
+  );
 
   const distinctDepts = useMemo(() => {
     const s = new Set<string>();
@@ -1041,18 +1177,20 @@ export function ReportsWorkbench() {
       {activeTab === "export" ? (
         <div className="rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-6 text-sm text-[#475569]">
           <p className="font-semibold text-[#0f172a]">Export center</p>
-          <p className="mt-2">Server-side PDF/Excel/CSV generation can be wired to Edge Functions or an API route. Buttons below are placeholders.</p>
+          <p className="mt-2">Download report data for the active tab in PDF, Excel, or CSV format.</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button type="button" variant="outline" className="rounded-full" disabled title="Coming soon">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => void runExport("pdf")} disabled={exportBusy !== null || !exportRows.length}>
               Export PDF
             </Button>
-            <Button type="button" variant="outline" className="rounded-full" disabled title="Coming soon">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => void runExport("excel")} disabled={exportBusy !== null || !exportRows.length}>
               Export Excel
             </Button>
-            <Button type="button" variant="outline" className="rounded-full" disabled title="Coming soon">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => void runExport("csv")} disabled={exportBusy !== null || !exportRows.length}>
               Export CSV
             </Button>
           </div>
+          <p className="mt-3 text-xs text-[#64748b]">Current dataset: <span className="font-semibold">{exportLabel}</span> ({exportRows.length} row(s))</p>
+          {exportMessage ? <p className="mt-2 text-xs text-emerald-700">{exportMessage}</p> : null}
           <ul className="mt-4 list-inside list-disc text-xs text-[#64748b]">
             <li>Employee reports</li>
             <li>Attendance reports</li>

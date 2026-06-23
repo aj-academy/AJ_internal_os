@@ -1,4 +1,5 @@
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
+import { StudentExperienceLayer } from "@/components/student/StudentExperienceLayer";
 import { requireRole } from "@/lib/auth/requireRole";
 
 const studentSidebarItems = [
@@ -20,6 +21,7 @@ export default async function StudentLayout({
       userEmail={userEmail}
       notificationFallbackHref="/student/my-tasks"
     >
+      <StudentExperienceLayer />
       {children}
     </DashboardLayout>
   );

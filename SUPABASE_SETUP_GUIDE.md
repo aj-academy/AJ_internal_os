@@ -19,7 +19,11 @@ NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
+RESEND_API_KEY=re_...
+TASK_EMAIL_FROM="AJ Academy <onboarding@resend.dev>"
 ```
+
+`RESEND_API_KEY` is optional, but required if you want counselling schedule emails to be sent to students.
 
 ---
 
