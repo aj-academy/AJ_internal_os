@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 import { InAppNotificationsBell } from "@/components/layouts/InAppNotificationsBell";
+import { NotificationSoundControl } from "@/components/layouts/NotificationSoundControl";
 
 interface TopbarProps {
   fullName: string;
@@ -49,6 +50,7 @@ export const Topbar = memo(function Topbar({
           </div>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            <NotificationSoundControl />
             <InAppNotificationsBell fallbackTaskHref={notificationFallbackHref} />
             <Button
               type="button"

@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { AdminAttendanceLiveSync } from "@/components/attendance/AdminAttendanceLiveSync";
 import { AdminAttendanceLogsTable } from "@/components/attendance/AdminAttendanceLogsTable";
+import { AttendanceTabFilters } from "@/components/attendance/AttendanceTabFilters";
 import { AttendanceSelfieThumb } from "@/components/attendance/AttendanceSelfieThumb";
 import {
   AdminPermissionRequestsTable,
@@ -596,36 +597,10 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <StatCard label="Remote Check-ins" value={remoteCheckins} />
         </div>
 
-        <section className="rounded-2xl border border-[#e8dcc8] bg-[#f8fbff] p-4">
-          <form method="get" className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <input type="hidden" name="tab" value="logs" />
-            <input name="date" type="date" defaultValue={dateFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm" />
-            <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
-              <option value="">All Departments</option>
-              {departments.map((department) => <option key={department} value={department}>{department}</option>)}
-            </select>
-            <select name="status" defaultValue={statusFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
-              <option value="">All Status</option>
-              <option value="present">Present</option>
-              <option value="completed">Completed</option>
-              <option value="late">Late</option>
-              <option value="absent">Absent</option>
-            </select>
-            <select name="location" defaultValue={locationFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
-              <option value="">All Location Types</option>
-              <option value="Remote">Remote</option>
-              <option value="Work From Home">Work From Home</option>
-              <option value="Office">Office</option>
-            </select>
-            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm" />
-            <div className="xl:col-span-5 flex gap-2">
-              <button className="rounded-xl bg-[#c9a227] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
-              <Link href="/admin/attendance?tab=logs" className="rounded-xl border border-[#e8dcc8] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
-            </div>
-          </form>
-        </section>
+        <AttendanceTabFilters tab="logs" />
 
         <AdminAttendanceLogsTable
+          departments={departments}
           rows={records.map((row) => {
             const profile = profileMap.get(row.employee_id);
             const computedMinutes = getWorkingMinutes(row);
@@ -701,29 +676,10 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           <StatCard label="Total Permission Hours" value={totalPermissionHours.toFixed(1)} />
         </div>
 
-        <section className="rounded-2xl border border-[#e8dcc8] bg-[#f8fbff] p-4">
-          <form method="get" className="responsive-filter-grid">
-            <input type="hidden" name="tab" value="permission" />
-            <input name="date" type="date" defaultValue={dateFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm" />
-            <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
-              <option value="">All Departments</option>
-              {departments.map((department) => <option key={department} value={department}>{department}</option>)}
-            </select>
-            <select name="status" defaultValue={statusFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
-              <option value="">All Status</option>
-              <option value="pending">Pending</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-            </select>
-            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm" />
-            <div className="xl:col-span-4 flex gap-2">
-              <button className="cursor-pointer rounded-xl bg-[#c9a227] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
-              <Link href="/admin/attendance?tab=permission" className="rounded-xl border border-[#e8dcc8] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
-            </div>
-          </form>
-        </section>
+        <AttendanceTabFilters tab="permission" />
 
         <AdminPermissionRequestsTable
+          departments={departments}
           rows={rows.map((row): AdminPermissionTableRow => {
             const profile = profileMap.get(row.employee_id);
             return {
@@ -840,26 +796,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
           </div>
         ) : null}
 
-        <section className="rounded-2xl border border-[#e8dcc8] bg-[#f8fbff] p-4">
-          <form method="get" className="responsive-filter-grid">
-            <input type="hidden" name="tab" value="summary" />
-            <input name="date" type="date" defaultValue={dateFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm" />
-            <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
-              <option value="">All Departments</option>
-              {departments.map((department) => <option key={department} value={department}>{department}</option>)}
-            </select>
-            <select name="status" defaultValue={statusFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
-              <option value="">All Status</option>
-              <option value="submitted">Submitted</option>
-              <option value="reviewed">Reviewed</option>
-            </select>
-            <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm" />
-            <div className="xl:col-span-4 flex gap-2">
-              <button className="cursor-pointer rounded-xl bg-[#c9a227] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
-              <Link href="/admin/attendance?tab=summary" className="rounded-xl border border-[#e8dcc8] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
-            </div>
-          </form>
-        </section>
+        <AttendanceTabFilters tab="summary" />
 
         <section className="rounded-2xl border border-[#e8dcc8] bg-white p-4">
           <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
@@ -1024,36 +961,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
         <StatCard label="Work Summary Completion %" value={`${totalWorkSummaryCompletion}%`} />
       </div>
 
-      <section className="rounded-2xl border border-[#e8dcc8] bg-[#f8fbff] p-4">
-        <form method="get" className="responsive-filter-grid">
-          <input type="hidden" name="tab" value="monthly" />
-          <input name="month" type="month" defaultValue={monthFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm" />
-          <select name="department" defaultValue={departmentFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
-            <option value="">All Departments</option>
-            {departments.map((department) => <option key={department} value={department}>{department}</option>)}
-          </select>
-          <select name="employee" defaultValue={employeeFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
-            <option value="">All Employees</option>
-            {(profilesRes.data ?? []).map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profile.full_name ?? profile.email ?? profile.id}
-              </option>
-            ))}
-          </select>
-          <select name="status" defaultValue={statusFilter} className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm">
-            <option value="">All Status</option>
-            <option value="present">Present</option>
-            <option value="completed">Completed</option>
-            <option value="late">Late</option>
-            <option value="absent">Absent</option>
-          </select>
-          <input name="q" defaultValue={params.q ?? ""} placeholder="Search name or email" className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm xl:col-span-2" />
-          <div className="xl:col-span-2 flex gap-2">
-              <button className="cursor-pointer rounded-xl bg-[#c9a227] px-4 py-2 text-sm font-semibold text-white">Apply Filters</button>
-            <Link href="/admin/attendance?tab=monthly" className="rounded-xl border border-[#e8dcc8] bg-white px-4 py-2 text-sm font-semibold text-slate-700">Reset</Link>
-          </div>
-        </form>
-      </section>
+      <AttendanceTabFilters tab="monthly" />
 
       <div className="flex gap-2">
         <button type="button" className="cursor-pointer rounded-xl bg-[#c9a227] px-4 py-2 text-sm font-semibold text-white">Export Excel</button>

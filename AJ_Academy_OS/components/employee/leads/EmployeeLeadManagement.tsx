@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Download,
-  Filter,
   MessageCircle,
   Phone,
   Plus,
@@ -15,6 +14,8 @@ import { buildCsv, downloadCsv, parseCsv } from "@/lib/csv";
 import { formatDateTimeIST, todayDateIST } from "@/lib/datetime";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
+import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import {
   CommFilter,
   CustomColumnDef,
@@ -608,91 +609,74 @@ export function EmployeeLeadManagement() {
         <StatCard label="Follow-up Required" value={stats.followUp} />
       </div>
 
-      <section className="rounded-2xl border border-[#d4deea] bg-[#f8fbff] p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-sm font-medium text-[#334155]">
-            <Filter className="h-4 w-4 text-[#2563eb]" />
-            Search & filters
-          </div>
-          <p className="text-xs text-[#64748b]">
-            Showing {filteredLeads.length} of {leads.length} assigned lead(s)
-            {filtersActive ? " · filtered view" : ""}
-          </p>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, company, phone, email…" className="h-10 border-[#d4deea] xl:col-span-2" />
-          <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="h-10 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
-            <option value="">All sources</option>
-            {sourceOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-10 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
-            <option value="">All statuses</option>
-            {EMPLOYEE_LEAD_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="h-10 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
-            <option value="">All priorities</option>
-            {EMPLOYEE_LEAD_PRIORITIES.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-          <select value={commFilter} onChange={(e) => setCommFilter(e.target.value as CommFilter)} className="h-10 rounded-xl border border-[#cfdceb] bg-white px-3 text-sm">
-            <option value="">All communication</option>
-            <option value="called">Called</option>
-            <option value="not_called">Not called</option>
-            <option value="whatsapp_sent">WhatsApp sent</option>
-            <option value="whatsapp_pending">WhatsApp pending</option>
-          </select>
-          {filtersActive ? (
-            <Button type="button" variant="outline" className="h-10 rounded-xl border-[#d4deea] text-sm" onClick={clearFilters}>
-              Clear filters
-            </Button>
-          ) : (
-            <div className="hidden xl:block" />
-          )}
-        </div>
-      </section>
+      <TableSearchBar
+        value={search}
+        onChange={setSearch}
+        placeholder="Name, company, phone, email…"
+        showClear={filtersActive}
+        onClear={clearFilters}
+        hint={`Showing ${filteredLeads.length} of ${leads.length} assigned lead(s)`}
+      />
 
       <div className="responsive-table-wrap overflow-x-auto rounded-2xl border border-[#dbe6f3]">
         <table className="w-full min-w-[1100px] text-left text-sm">
           <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
             <tr>
-              <th className="px-3 py-2">Lead Name</th>
-              <th className="px-3 py-2">Company</th>
-              <th className="px-3 py-2">Contact</th>
-              <th className="px-3 py-2">Email</th>
-              <th className="px-3 py-2">Description</th>
-              <th className="px-3 py-2">Source</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Priority</th>
-              <th className="px-3 py-2">Last Contacted</th>
+              <TableHeaderCell label="Lead Name" />
+              <TableHeaderCell label="Company" />
+              <TableHeaderCell label="Contact" />
+              <TableHeaderCell label="Email" />
+              <TableHeaderCell label="Description" />
+              <TableHeaderFilter
+                label="Source"
+                value={sourceFilter}
+                onChange={setSourceFilter}
+                options={sourceOptions.map((s) => ({ value: s, label: s }))}
+                allLabel="All sources"
+              />
+              <TableHeaderFilter
+                label="Status"
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={EMPLOYEE_LEAD_STATUSES.map((s) => ({ value: s, label: s }))}
+                allLabel="All statuses"
+              />
+              <TableHeaderFilter
+                label="Priority"
+                value={priorityFilter}
+                onChange={setPriorityFilter}
+                options={EMPLOYEE_LEAD_PRIORITIES.map((p) => ({ value: p, label: p }))}
+                allLabel="All priorities"
+              />
+              <TableHeaderFilter
+                label="Communication"
+                value={commFilter}
+                onChange={(v) => setCommFilter(v as CommFilter)}
+                options={[
+                  { value: "called", label: "Called" },
+                  { value: "not_called", label: "Not called" },
+                  { value: "whatsapp_sent", label: "WhatsApp sent" },
+                  { value: "whatsapp_pending", label: "WhatsApp pending" },
+                ]}
+                allLabel="All"
+              />
+              <TableHeaderCell label="Last Contacted" />
               {customColumns.map((col) => (
-                <th key={col.id} className="px-3 py-2">
-                  {col.column_name}
-                </th>
+                <TableHeaderCell key={col.id} label={col.column_name} />
               ))}
-              <th className="px-3 py-2">Actions</th>
+              <TableHeaderCell label="Actions" />
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={10 + customColumns.length} className="px-3 py-10 text-center text-[#64748b]">
+                <td colSpan={11 + customColumns.length} className="px-3 py-10 text-center text-[#64748b]">
                   Loading leads…
                 </td>
               </tr>
             ) : !filteredLeads.length ? (
               <tr>
-                <td colSpan={10 + customColumns.length} className="px-3 py-10 text-center text-[#64748b]">
+                <td colSpan={11 + customColumns.length} className="px-3 py-10 text-center text-[#64748b]">
                   {filtersActive ? "No leads match the current filters." : "No leads assigned yet."}
                 </td>
               </tr>

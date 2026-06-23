@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
+import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/client-lead/LeadSummaryCard";
 import {
@@ -82,6 +84,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
   const [fltTxTo, setFltTxTo] = useState("");
   const [fltTxMethod, setFltTxMethod] = useState("");
   const [fltTxStatus, setFltTxStatus] = useState("");
+  const [txSearch, setTxSearch] = useState("");
 
   const clientMap = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
   const projectMap = useMemo(() => Object.fromEntries(projects.map((p) => [p.id, p])), [projects]);
@@ -233,6 +236,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
   }, [projects]);
 
   const filteredTransactions = useMemo(() => {
+    const q = txSearch.trim().toLowerCase();
     return transactions.filter((r) => {
       if (fltTxType && r.transaction_type !== fltTxType) return false;
       if (fltTxCat && (r.category || "") !== fltTxCat) return false;
@@ -241,9 +245,35 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
       const d = String(r.transaction_date).slice(0, 10);
       if (fltTxFrom && d < fltTxFrom) return false;
       if (fltTxTo && d > fltTxTo) return false;
+      if (q) {
+        const hay = `${r.transaction_code ?? ""} ${r.category ?? ""} ${r.description ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       return true;
     });
-  }, [transactions, fltTxCat, fltTxFrom, fltTxMethod, fltTxStatus, fltTxTo, fltTxType]);
+  }, [transactions, fltTxCat, fltTxFrom, fltTxMethod, fltTxStatus, fltTxTo, fltTxType, txSearch]);
+
+  const txCategoryOptions = useMemo(
+    () =>
+      Array.from(new Set(transactions.map((t) => t.category).filter(Boolean) as string[]))
+        .sort()
+        .map((c) => ({ value: c, label: c })),
+    [transactions],
+  );
+
+  const txFiltersActive = Boolean(
+    txSearch.trim() || fltTxType || fltTxCat || fltTxFrom || fltTxTo || fltTxMethod || fltTxStatus,
+  );
+
+  const clearTxFilters = () => {
+    setTxSearch("");
+    setFltTxType("");
+    setFltTxCat("");
+    setFltTxFrom("");
+    setFltTxTo("");
+    setFltTxMethod("");
+    setFltTxStatus("");
+  };
 
   const [panel, setPanel] = useState<"none" | "income" | "expense" | "payment" | "claim">("none");
   const [incomeForm, setIncomeForm] = useState({
@@ -927,42 +957,59 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
 
       {activeTab === "transactions" && (isPrivileged || isManager) ? (
         <div className="space-y-3">
-          <article className="rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-4">
-            <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
-              <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltTxType} onChange={(e) => setFltTxType(e.target.value)}>
-                <option value="">Type</option>
-                <option value="Income">Income</option>
-                <option value="Expense">Expense</option>
-              </select>
-              <Input className="h-9 border-[#e8dcc8]" placeholder="Category" value={fltTxCat} onChange={(e) => setFltTxCat(e.target.value)} />
-              <Input type="date" className="h-9 border-[#e8dcc8]" value={fltTxFrom} onChange={(e) => setFltTxFrom(e.target.value)} />
-              <Input type="date" className="h-9 border-[#e8dcc8]" value={fltTxTo} onChange={(e) => setFltTxTo(e.target.value)} />
-              <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltTxMethod} onChange={(e) => setFltTxMethod(e.target.value)}>
-                <option value="">Method</option>
-                {PAYMENT_METHODS.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-              <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltTxStatus} onChange={(e) => setFltTxStatus(e.target.value)}>
-                <option value="">Status</option>
-                <option value="Paid">Paid</option>
-                <option value="Pending">Pending</option>
-                <option value="Partial">Partial</option>
-                <option value="Overdue">Overdue</option>
-              </select>
-            </div>
-          </article>
+          <TableSearchBar
+            value={txSearch}
+            onChange={setTxSearch}
+            placeholder="Search code, category, description…"
+            showClear={txFiltersActive}
+            onClear={clearTxFilters}
+            hint={`Showing ${filteredTransactions.length} of ${transactions.length} transaction(s)`}
+          />
           <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
             <table className="w-full min-w-[960px] text-sm">
               <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
                 <tr>
-                  {["Code", "Type", "Category", "Amount", "Date", "Method", "Status", "Actions"].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left">
-                      {h}
-                    </th>
-                  ))}
+                  <TableHeaderCell label="Code" />
+                  <TableHeaderFilter
+                    label="Type"
+                    value={fltTxType}
+                    onChange={setFltTxType}
+                    options={[
+                      { value: "Income", label: "Income" },
+                      { value: "Expense", label: "Expense" },
+                    ]}
+                    allLabel="All types"
+                  />
+                  <TableHeaderFilter
+                    label="Category"
+                    value={fltTxCat}
+                    onChange={setFltTxCat}
+                    options={txCategoryOptions}
+                    allLabel="All categories"
+                  />
+                  <TableHeaderCell label="Amount" />
+                  <TableHeaderFilter label="Date from" type="date" value={fltTxFrom} onChange={setFltTxFrom} />
+                  <TableHeaderFilter label="Date to" type="date" value={fltTxTo} onChange={setFltTxTo} />
+                  <TableHeaderFilter
+                    label="Method"
+                    value={fltTxMethod}
+                    onChange={setFltTxMethod}
+                    options={PAYMENT_METHODS.map((m) => ({ value: m, label: m }))}
+                    allLabel="All methods"
+                  />
+                  <TableHeaderFilter
+                    label="Status"
+                    value={fltTxStatus}
+                    onChange={setFltTxStatus}
+                    options={[
+                      { value: "Paid", label: "Paid" },
+                      { value: "Pending", label: "Pending" },
+                      { value: "Partial", label: "Partial" },
+                      { value: "Overdue", label: "Overdue" },
+                    ]}
+                    allLabel="All statuses"
+                  />
+                  <TableHeaderCell label="Actions" />
                 </tr>
               </thead>
               <tbody>

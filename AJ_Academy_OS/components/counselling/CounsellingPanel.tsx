@@ -8,7 +8,9 @@ import { createClient } from "@/lib/supabase/client";
 
 type CounsellingRow = {
   id: string;
-  student_id: string;
+  student_id: string | null;
+  student_display_name: string | null;
+  student_email: string | null;
   mentor_id: string | null;
   purpose: string;
   mode: string;
@@ -22,10 +24,17 @@ type CounsellingRow = {
   mentor_name?: string;
 };
 
-type ProfileOpt = { id: string; label: string };
+type ProfileOpt = { id: string; label: string; email: string | null };
 
 interface CounsellingPanelProps {
   mode: "admin" | "view";
+}
+
+const SESSION_SELECT =
+  "id,student_id,student_display_name,student_email,mentor_id,purpose,mode,session_at,duration_minutes,meeting_link,venue,notes,status";
+
+function isMissingContactColumns(msg: string) {
+  return /student_display_name|student_email|schema cache/i.test(msg);
 }
 
 export function CounsellingPanel({ mode }: CounsellingPanelProps) {
@@ -39,13 +48,13 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [schemaMissing, setSchemaMissing] = useState(false);
+  const [contactColumnsMissing, setContactColumnsMissing] = useState(false);
   const [userId, setUserId] = useState("");
   const [studentQuery, setStudentQuery] = useState("");
   const [mentorQuery, setMentorQuery] = useState("");
 
   const [form, setForm] = useState({
-    student_id: "",
-    mentor_id: "",
+    student_email: "",
     purpose: "",
     mode: "online" as "online" | "offline",
     session_at: "",
@@ -60,9 +69,7 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
     setError(null);
     const { data, error: qErr } = await supabase
       .from("counselling_sessions")
-      .select(
-        "id,student_id,mentor_id,purpose,mode,session_at,duration_minutes,meeting_link,venue,notes,status",
-      )
+      .select(SESSION_SELECT)
       .order("session_at", { ascending: true })
       .limit(100);
 
@@ -73,26 +80,42 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
         setLoading(false);
         return;
       }
+      if (isMissingContactColumns(qErr.message)) {
+        setContactColumnsMissing(true);
+        setError("Run counselling_student_contact_schema.sql in Supabase, then refresh.");
+        setRows([]);
+        setLoading(false);
+        return;
+      }
       setError(qErr.message);
       setLoading(false);
       return;
     }
 
     const raw = (data ?? []) as CounsellingRow[];
-    const ids = [...new Set([...raw.map((r) => r.student_id), ...raw.map((r) => r.mentor_id).filter(Boolean)])] as string[];
-    const { data: profs } = await supabase.from("profiles").select("id,full_name,email").in("id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
-    const map = Object.fromEntries(
+    const ids = [
+      ...new Set([
+        ...raw.map((r) => r.student_id).filter(Boolean),
+        ...raw.map((r) => r.mentor_id).filter(Boolean),
+      ]),
+    ] as string[];
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id,full_name,email")
+      .in("id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
+    const nameMap = Object.fromEntries(
       (profs ?? []).map((p) => [p.id, p.full_name || p.email || p.id.slice(0, 8)]),
     );
 
     setRows(
       raw.map((r) => ({
         ...r,
-        student_name: map[r.student_id],
-        mentor_name: r.mentor_id ? map[r.mentor_id] : undefined,
+        student_name: r.student_id ? nameMap[r.student_id] : undefined,
+        mentor_name: r.mentor_id ? nameMap[r.mentor_id] : undefined,
       })),
     );
     setSchemaMissing(false);
+    setContactColumnsMissing(false);
     setLoading(false);
   }, [supabase]);
 
@@ -116,10 +139,18 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
           .or("status.is.null,status.eq.active")
           .order("full_name");
         setStudents(
-          (st ?? []).map((p) => ({ id: p.id, label: p.full_name || p.email || p.id.slice(0, 8) })),
+          (st ?? []).map((p) => ({
+            id: p.id,
+            label: p.full_name || p.email || p.id.slice(0, 8),
+            email: p.email,
+          })),
         );
         setMentors(
-          (mt ?? []).map((p) => ({ id: p.id, label: p.full_name || p.email || p.id.slice(0, 8) })),
+          (mt ?? []).map((p) => ({
+            id: p.id,
+            label: p.full_name || p.email || p.id.slice(0, 8),
+            email: p.email,
+          })),
         );
       }
     })();
@@ -137,19 +168,31 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
 
   const onSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
-    const studentId = findProfileIdByText(students, studentQuery);
-    const mentorId = findProfileIdByText(mentors, mentorQuery);
+    const studentName = studentQuery.trim();
+    const studentId = findProfileIdByText(students, studentQuery) || null;
+    const mentorId = findProfileIdByText(mentors, mentorQuery) || null;
+    const studentEmailInput = form.student_email.trim().toLowerCase();
 
-    if (!userId || !studentId || !form.purpose.trim() || !form.session_at) {
-      setError("Student, purpose, and date/time are required.");
+    if (!userId || !studentName || !form.purpose.trim() || !form.session_at) {
+      setError("Student name, purpose, and date/time are required.");
       return;
     }
+    if (studentEmailInput && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studentEmailInput)) {
+      setError("Enter a valid student email or leave the field blank.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     setSuccess(null);
     try {
+      const matchedStudent = studentId ? students.find((s) => s.id === studentId) : undefined;
+      const emailToStore = studentEmailInput || matchedStudent?.email?.trim().toLowerCase() || null;
+
       const { error: insErr } = await supabase.from("counselling_sessions").insert({
         student_id: studentId,
+        student_display_name: studentName,
+        student_email: emailToStore,
         mentor_id: mentorId || null,
         scheduled_by: userId,
         purpose: form.purpose.trim(),
@@ -161,53 +204,71 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
         notes: form.notes.trim() || null,
         status: "scheduled",
       });
-      if (insErr) throw insErr;
+      if (insErr) {
+        if (isMissingContactColumns(insErr.message)) {
+          throw new Error("Run counselling_student_contact_schema.sql in Supabase, then try again.");
+        }
+        throw insErr;
+      }
 
-      const { data: student } = await supabase
-        .from("profiles")
-        .select("full_name,email")
-        .eq("id", studentId)
-        .maybeSingle();
+      let profileEmail = matchedStudent?.email ?? null;
+      let profileName = matchedStudent?.label ?? studentName;
+      if (studentId) {
+        const { data: student } = await supabase
+          .from("profiles")
+          .select("full_name,email")
+          .eq("id", studentId)
+          .maybeSingle();
+        profileEmail = student?.email ?? profileEmail;
+        profileName = student?.full_name ?? profileName;
 
-      await supabase.from("in_app_notifications").insert({
-        user_id: studentId,
-        type: "counselling_scheduled",
-        title: "Counselling scheduled",
-        body: `Session: ${form.purpose.trim()} (${form.mode})`,
-        link_path: "/student/dashboard",
-        meta: {},
-      });
+        await supabase.from("in_app_notifications").insert({
+          user_id: studentId,
+          type: "counselling_scheduled",
+          title: "Counselling scheduled",
+          body: `Session: ${form.purpose.trim()} (${form.mode})`,
+          link_path: "/student/dashboard",
+          meta: {},
+        });
+      }
 
       if (mentorId) {
         await supabase.from("in_app_notifications").insert({
           user_id: mentorId,
           type: "counselling_scheduled",
           title: "Counselling assigned",
-          body: `Student ${student?.full_name ?? ""} — ${form.purpose.trim()}`,
+          body: `Student ${studentName} — ${form.purpose.trim()}`,
           link_path: "/mentor/counselling",
           meta: {},
         });
       }
 
-      await fetch("/api/notifications/counselling-scheduled", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentEmail: student?.email ?? "",
-          studentName: student?.full_name ?? "",
-          purpose: form.purpose.trim(),
-          mode: form.mode,
-          sessionAtIso: new Date(form.session_at).toISOString(),
-          durationMinutes: parseInt(form.duration_minutes, 10) || 30,
-          meetingLink: form.mode === "online" ? form.meeting_link.trim() : "",
-          venue: form.mode === "offline" ? form.venue.trim() : "",
-        }),
-      }).catch(() => {});
+      const emailToSend = emailToStore || profileEmail || "";
+      if (emailToSend) {
+        await fetch("/api/notifications/counselling-scheduled", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            studentEmail: emailToSend,
+            studentName: profileName,
+            purpose: form.purpose.trim(),
+            mode: form.mode,
+            sessionAtIso: new Date(form.session_at).toISOString(),
+            durationMinutes: parseInt(form.duration_minutes, 10) || 30,
+            meetingLink: form.mode === "online" ? form.meeting_link.trim() : "",
+            venue: form.mode === "offline" ? form.venue.trim() : "",
+          }),
+        }).catch(() => {});
+      }
 
-      setSuccess("Counselling session scheduled.");
+      const parts = ["Counselling session scheduled."];
+      if (studentId) parts.push("Student dashboard notification sent.");
+      if (emailToSend) parts.push(`Email sent to ${emailToSend}.`);
+      else if (!studentId) parts.push("Add a student email to send the meeting link by mail.");
+
+      setSuccess(parts.join(" "));
       setForm({
-        student_id: "",
-        mentor_id: "",
+        student_email: "",
         purpose: "",
         mode: "online",
         session_at: "",
@@ -231,7 +292,8 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
       <div>
         <h2 className="text-2xl font-semibold text-[#3d3428]">Student counselling</h2>
         <p className="mt-1 text-sm text-[#6b5d4d]">
-          Schedule career or academic counselling — online (meet link) or offline (venue). Students and mentors are notified in-app.
+          Schedule career or academic counselling — online (meet link) or offline (venue). Registered students get an
+          in-app alert; optional email sends the meeting link to walk-in or external students.
         </p>
       </div>
 
@@ -240,11 +302,16 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
           Run <strong>aj_academy_platform_expansion.sql</strong> in Supabase.
         </p>
       ) : null}
+      {contactColumnsMissing ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          Run <strong>counselling_student_contact_schema.sql</strong> in Supabase.
+        </p>
+      ) : null}
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {success ? <p className="text-sm text-emerald-700">{success}</p> : null}
 
-      {isAdmin && !schemaMissing ? (
+      {isAdmin && !schemaMissing && !contactColumnsMissing ? (
         <form onSubmit={onSchedule} className="rounded-2xl border border-[#ede4d4] bg-[#fffdf8] p-5 space-y-3">
           <h3 className="font-semibold text-[#3d3428]">Schedule session</h3>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -255,7 +322,7 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
                 className="h-9 border-[#e8dcc8]"
                 value={studentQuery}
                 onChange={(e) => setStudentQuery(e.target.value)}
-                placeholder="Type and pick exact student name"
+                placeholder="Type student name (pick from list if registered)"
                 required
               />
               <datalist id="counselling-students">
@@ -265,6 +332,16 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
               </datalist>
             </label>
             <label className="space-y-1 text-sm">
+              <span className="font-medium">Student email (optional)</span>
+              <Input
+                type="email"
+                className="h-9 border-[#e8dcc8]"
+                value={form.student_email}
+                onChange={(e) => setForm((p) => ({ ...p, student_email: e.target.value }))}
+                placeholder="For walk-in / external students without dashboard"
+              />
+            </label>
+            <label className="space-y-1 text-sm sm:col-span-2">
               <span className="font-medium">Mentor (optional)</span>
               <Input
                 list="counselling-mentors"
@@ -347,10 +424,10 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
         {loading ? (
           <p className="p-8 text-sm text-[#6b5d4d]">Loading…</p>
         ) : (
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="w-full min-w-[860px] text-left text-sm">
             <thead className="bg-[#faf6ee] text-[#6b5d4d]">
               <tr>
-                {["Student", "Mentor", "Purpose", "When", "Mode", "Link / venue", "Status"].map((h) => (
+                {["Student", "Email", "Mentor", "Purpose", "When", "Mode", "Link / venue", "Status"].map((h) => (
                   <th key={h} className="px-4 py-3">
                     {h}
                   </th>
@@ -360,16 +437,20 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
             <tbody className="divide-y divide-[#f0e8da]">
               {rows.map((row) => (
                 <tr key={row.id}>
-                  <td className="px-4 py-3">{row.student_name ?? "—"}</td>
+                  <td className="px-4 py-3">{row.student_display_name || row.student_name || "—"}</td>
+                  <td className="px-4 py-3 text-xs">{row.student_email || "—"}</td>
                   <td className="px-4 py-3">{row.mentor_name ?? "—"}</td>
                   <td className="px-4 py-3">{row.purpose}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {new Date(row.session_at).toLocaleString()}
-                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">{new Date(row.session_at).toLocaleString()}</td>
                   <td className="px-4 py-3 capitalize">{row.mode}</td>
                   <td className="max-w-[200px] px-4 py-3 text-xs">
                     {row.mode === "online" && row.meeting_link ? (
-                      <a href={row.meeting_link} target="_blank" rel="noopener noreferrer" className="text-[#a68b2e] underline">
+                      <a
+                        href={row.meeting_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#a68b2e] underline"
+                      >
                         Join meeting
                       </a>
                     ) : (
@@ -381,7 +462,7 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
               ))}
               {!rows.length ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-[#6b5d4d]">
+                  <td colSpan={8} className="px-4 py-8 text-center text-[#6b5d4d]">
                     No sessions scheduled.
                   </td>
                 </tr>

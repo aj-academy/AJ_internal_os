@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { ProgressBar } from "@/components/task/ProgressBar";
 import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 
@@ -11,6 +12,17 @@ interface TaskTableProps {
   employeeNameMap: Record<string, string>;
   /** Admin or manager: full task management UI */
   canManageTasks: boolean;
+  statusFilter: TaskStatus | "";
+  setStatusFilter: (value: TaskStatus | "") => void;
+  priorityFilter: TaskPriority | "";
+  setPriorityFilter: (value: TaskPriority | "") => void;
+  assignedFilter: string;
+  setAssignedFilter: (value: string) => void;
+  dueDateFilter: string;
+  setDueDateFilter: (value: string) => void;
+  employeeOptions: { id: string; label: string }[];
+  assigneeFilterDisabled?: boolean;
+  filtersDisabled?: boolean;
   onView: (task: TaskRecord) => void;
   onEdit: (task: TaskRecord) => void;
   onDelete: (taskId: string) => void;
@@ -42,6 +54,17 @@ export function TaskTable({
   tableMissing = false,
   employeeNameMap,
   canManageTasks,
+  statusFilter,
+  setStatusFilter,
+  priorityFilter,
+  setPriorityFilter,
+  assignedFilter,
+  setAssignedFilter,
+  dueDateFilter,
+  setDueDateFilter,
+  employeeOptions,
+  assigneeFilterDisabled = false,
+  filtersDisabled = false,
   onView,
   onEdit,
   onDelete,
@@ -50,7 +73,7 @@ export function TaskTable({
   onRequestCompleteTask,
 }: TaskTableProps) {
   const today = todayDateKey();
-  const disabled = tableMissing;
+  const disabled = tableMissing || filtersDisabled;
 
   return (
     <article className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
@@ -58,11 +81,53 @@ export function TaskTable({
         <table className="w-full min-w-[1160px] text-sm">
           <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
             <tr>
-              {["Task Title", "Assigned To", "Priority", "Status", "Start Date", "Due Date", "Progress", "Actions"].map((heading) => (
-                <th key={heading} className="px-4 py-3 text-center font-semibold whitespace-nowrap">
-                  {heading}
-                </th>
-              ))}
+              <TableHeaderCell label="Task Title" className="px-4 py-3 text-center" />
+              <TableHeaderFilter
+                label="Assigned To"
+                value={assignedFilter}
+                onChange={setAssignedFilter}
+                options={employeeOptions.map((e) => ({ value: e.id, label: e.label }))}
+                allLabel="All employees"
+                disabled={disabled || assigneeFilterDisabled}
+                className="px-4 py-3"
+              />
+              <TableHeaderFilter
+                label="Priority"
+                value={priorityFilter}
+                onChange={(v) => setPriorityFilter(v as TaskPriority | "")}
+                options={[
+                  { value: "Low", label: "Low" },
+                  { value: "Medium", label: "Medium" },
+                  { value: "High", label: "High" },
+                ]}
+                allLabel="All priorities"
+                disabled={disabled}
+                className="px-4 py-3"
+              />
+              <TableHeaderFilter
+                label="Status"
+                value={statusFilter}
+                onChange={(v) => setStatusFilter(v as TaskStatus | "")}
+                options={[
+                  { value: "Pending", label: "Pending" },
+                  { value: "In Progress", label: "In Progress" },
+                  { value: "Completed", label: "Completed" },
+                ]}
+                allLabel="All statuses"
+                disabled={disabled}
+                className="px-4 py-3"
+              />
+              <TableHeaderCell label="Start Date" className="px-4 py-3 text-center" />
+              <TableHeaderFilter
+                label="Due Date"
+                type="date"
+                value={dueDateFilter}
+                onChange={setDueDateFilter}
+                disabled={disabled}
+                className="px-4 py-3"
+              />
+              <TableHeaderCell label="Progress" className="px-4 py-3 text-center" />
+              <TableHeaderCell label="Actions" className="px-4 py-3 text-center" />
             </tr>
           </thead>
           <tbody className="divide-y divide-[#e8edf5] text-[#334155]">

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
+import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { AdminEmployeeProfileView } from "@/components/admin/AdminEmployeeProfileView";
@@ -137,6 +139,13 @@ export default function EmployeeMasterPage() {
     if (form.course && !list.includes(form.course)) list.unshift(form.course);
     return list;
   }, [courses, form.course]);
+
+  const filtersActive = Boolean(search.trim() || statusFilter !== "all");
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+  };
 
   const filteredEmployees = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -329,23 +338,14 @@ export default function EmployeeMasterPage() {
         <Card className="w-full rounded-2xl border-[#dbe6f3] py-0 shadow-sm">
           <CardHeader className="pb-2 pt-4">
             <CardTitle className="text-lg text-slate-900">Employee Directory</CardTitle>
-            <div className="grid gap-3 md:grid-cols-2">
-              <Input
-                placeholder="Search by name, email, or profile ID"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                className="h-9 rounded-xl border-[#e8dcc8]"
-              />
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as "all" | ProfileStatus)}
-                className="h-9 rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#c9a227] focus:ring-2 focus:ring-[#c9a227]/25"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </div>
+            <TableSearchBar
+              value={search}
+              onChange={setSearch}
+              placeholder="Search by name, email, or profile ID"
+              showClear={filtersActive}
+              onClear={clearFilters}
+              hint={`Showing ${filteredEmployees.length} of ${employees.length} user(s)`}
+            />
             <div className="mt-3 flex flex-wrap gap-2">
               {(
                 [
@@ -383,11 +383,22 @@ export default function EmployeeMasterPage() {
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="bg-[#f1f6fc] text-[#64748b]">
                     <tr>
-                      {["Name", "Role", "Department", "Course", "Status", "Action"].map((heading) => (
-                        <th key={heading} className="px-4 py-3">
-                          {heading}
-                        </th>
-                      ))}
+                      <TableHeaderCell label="Name" className="px-4 py-3" />
+                      <TableHeaderCell label="Role" className="px-4 py-3" />
+                      <TableHeaderCell label="Department" className="px-4 py-3" />
+                      <TableHeaderCell label="Course" className="px-4 py-3" />
+                      <TableHeaderFilter
+                        label="Status"
+                        value={statusFilter === "all" ? "" : statusFilter}
+                        onChange={(v) => setStatusFilter((v || "all") as "all" | ProfileStatus)}
+                        options={[
+                          { value: "active", label: "Active" },
+                          { value: "inactive", label: "Inactive" },
+                        ]}
+                        allLabel="All statuses"
+                        className="px-4 py-3"
+                      />
+                      <TableHeaderCell label="Action" className="px-4 py-3" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#e8edf5] text-slate-700">

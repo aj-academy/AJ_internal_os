@@ -17,7 +17,9 @@ alter table public.tasks add column if not exists attachment_urls jsonb not null
 -- Counselling sessions (admin schedules for students)
 create table if not exists public.counselling_sessions (
   id uuid primary key default gen_random_uuid(),
-  student_id uuid not null references public.profiles (id) on delete cascade,
+  student_id uuid references public.profiles (id) on delete set null,
+  student_display_name text,
+  student_email text,
   mentor_id uuid references public.profiles (id) on delete set null,
   scheduled_by uuid references public.profiles (id) on delete set null,
   purpose text not null,

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { CollapsibleFilterPanel, FilterField } from "@/components/ui/CollapsibleFilterPanel";
+import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
+import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/client-lead/LeadSummaryCard";
 import { LeadStatusBadge, ProposalStatusBadge } from "@/components/client-lead/LeadStatusBadge";
@@ -237,18 +238,6 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
   const [fltPriority, setFltPriority] = useState("");
   const [fltService, setFltService] = useState("");
   const [fltAssigned, setFltAssigned] = useState("");
-  const [fltFollowFrom, setFltFollowFrom] = useState("");
-  const [fltFollowTo, setFltFollowTo] = useState("");
-  const [appliedFilters, setAppliedFilters] = useState({
-    search: "",
-    status: "",
-    source: "",
-    priority: "",
-    service: "",
-    assigned: "",
-    followFrom: "",
-    followTo: "",
-  });
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -500,26 +489,33 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
 
   const filteredClients = useMemo(() => {
     let list = [...clients];
-    const query = appliedFilters.search.trim().toLowerCase();
+    const query = searchText.trim().toLowerCase();
     if (query) {
       list = list.filter((c) =>
-        `${displayLeadName(c)} ${c.company_name ?? ""} ${c.email ?? ""} ${c.phone ?? ""}`.toLowerCase().includes(
-          query,
-        ),
+        `${displayLeadName(c)} ${c.company_name ?? ""} ${c.email ?? ""} ${c.phone ?? ""}`.toLowerCase().includes(query),
       );
     }
-    if (appliedFilters.status) list = list.filter((c) => normalizeStatus(String(c.status)) === appliedFilters.status);
-    if (appliedFilters.source) list = list.filter((c) => (c.source || "") === appliedFilters.source);
-    if (appliedFilters.priority) list = list.filter((c) => (c.priority || "") === appliedFilters.priority);
-    if (appliedFilters.service)
-      list = list.filter((c) =>
-        servicesFromCsv(String(c.service_interest ?? "")).includes(appliedFilters.service),
-      );
-    if (appliedFilters.assigned) list = list.filter((c) => (c.assigned_to || "") === appliedFilters.assigned);
-    if (appliedFilters.followFrom) list = list.filter((c) => (c.follow_up_date || "") >= appliedFilters.followFrom);
-    if (appliedFilters.followTo) list = list.filter((c) => !c.follow_up_date || (c.follow_up_date || "") <= appliedFilters.followTo);
+    if (fltStatus) list = list.filter((c) => normalizeStatus(String(c.status)) === fltStatus);
+    if (fltSource) list = list.filter((c) => (c.source || "") === fltSource);
+    if (fltPriority) list = list.filter((c) => (c.priority || "") === fltPriority);
+    if (fltService)
+      list = list.filter((c) => servicesFromCsv(String(c.service_interest ?? "")).includes(fltService));
+    if (fltAssigned) list = list.filter((c) => (c.assigned_to || "") === fltAssigned);
     return list;
-  }, [appliedFilters, clients]);
+  }, [clients, fltAssigned, fltPriority, fltService, fltSource, fltStatus, searchText]);
+
+  const filtersActive = Boolean(
+    searchText.trim() || fltStatus || fltSource || fltPriority || fltService || fltAssigned,
+  );
+
+  const clearTableFilters = () => {
+    setSearchText("");
+    setFltStatus("");
+    setFltSource("");
+    setFltPriority("");
+    setFltService("");
+    setFltAssigned("");
+  };
 
   const clientMap = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
 
@@ -546,40 +542,6 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
   }, [filteredClients]);
 
   const followRowsScoped = followRows.filter((f) => clientMap[f.client_id]);
-
-  const applyFilters = () => {
-    setAppliedFilters({
-      search: searchText,
-      status: fltStatus,
-      source: fltSource,
-      priority: fltPriority,
-      service: fltService,
-      assigned: fltAssigned,
-      followFrom: fltFollowFrom,
-      followTo: fltFollowTo,
-    });
-  };
-
-  const resetFilters = () => {
-    setSearchText("");
-    setFltStatus("");
-    setFltSource("");
-    setFltPriority("");
-    setFltService("");
-    setFltAssigned("");
-    setFltFollowFrom("");
-    setFltFollowTo("");
-    setAppliedFilters({
-      search: "",
-      status: "",
-      source: "",
-      priority: "",
-      service: "",
-      assigned: "",
-      followFrom: "",
-      followTo: "",
-    });
-  };
 
   function rowToForm(lead: CrmClientRow): CrmLeadFormValue {
     const interests = servicesFromCsv(String(lead.service_interest ?? ""));
@@ -1124,59 +1086,66 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
         </>
       )}
 
-      {["all-leads", "pipeline", "converted", "proposal"].includes(activeTab) && (
-        <FiltersBar
-          searchText={searchText}
-          setSearchText={setSearchText}
-          fltStatus={fltStatus}
-          setFltStatus={setFltStatus}
-          fltSource={fltSource}
-          setFltSource={setFltSource}
-          fltPriority={fltPriority}
-          setFltPriority={setFltPriority}
-          fltService={fltService}
-          setFltService={setFltService}
-          fltAssigned={fltAssigned}
-          setFltAssigned={setFltAssigned}
-          fltFollowFrom={fltFollowFrom}
-          setFltFollowFrom={setFltFollowFrom}
-          fltFollowTo={fltFollowTo}
-          setFltFollowTo={setFltFollowTo}
-          isAdmin={isAdmin}
-          employeeOptions={employeesForSelect}
-          onApply={applyFilters}
-          onReset={resetFilters}
-        />
-      )}
+      {activeTab === "all-leads" ? (
+        <div className="space-y-3">
+          <TableSearchBar
+            value={searchText}
+            onChange={setSearchText}
+            placeholder="Search name, email, phone, company…"
+            showClear={filtersActive}
+            onClear={clearTableFilters}
+            hint={`Showing ${filteredClients.length} of ${clients.length} lead(s)`}
+          />
+          <AllLeadsTable
+            loading={loading}
+            leads={filteredClients}
+            employeeNameMap={employeeNameMap}
+            isAdmin={isAdmin}
+            currentUserId={currentUserId}
+            fltSource={fltSource}
+            setFltSource={setFltSource}
+            fltService={fltService}
+            setFltService={setFltService}
+            fltStatus={fltStatus}
+            setFltStatus={setFltStatus}
+            fltPriority={fltPriority}
+            setFltPriority={setFltPriority}
+            fltAssigned={fltAssigned}
+            setFltAssigned={setFltAssigned}
+            employeeOptions={employeesForSelect}
+            onProfile={setProfileLead}
+            onEdit={(leadRecord) => {
+              setSuccess(null);
+              setError(null);
+              setEditId(leadRecord.id);
+              setForm(rowToForm(leadRecord));
+              setPanelOpen(true);
+            }}
+            onDelete={(id: string) => void handleDeleteLead(id)}
+            onAddFollow={(leadRecord: CrmClientRow) => {
+              setFollowModalFor(leadRecord);
+              setFollowDraft({
+                date: leadRecord.follow_up_date || todayISO(),
+                time: String(leadRecord.follow_up_time || ""),
+                type: String(leadRecord.follow_up_type || "Call"),
+                notes: "",
+              });
+            }}
+            onConvert={(leadRecord) => void convertLead(leadRecord)}
+          />
+        </div>
+      ) : null}
 
-      {activeTab === "all-leads" && (
-        <AllLeadsTable
-          loading={loading}
-          leads={filteredClients}
-          employeeNameMap={employeeNameMap}
-          isAdmin={isAdmin}
-          currentUserId={currentUserId}
-          onProfile={setProfileLead}
-          onEdit={(leadRecord) => {
-            setSuccess(null);
-            setError(null);
-            setEditId(leadRecord.id);
-            setForm(rowToForm(leadRecord));
-            setPanelOpen(true);
-          }}
-          onDelete={(id: string) => void handleDeleteLead(id)}
-          onAddFollow={(leadRecord: CrmClientRow) => {
-            setFollowModalFor(leadRecord);
-            setFollowDraft({
-              date: leadRecord.follow_up_date || todayISO(),
-              time: String(leadRecord.follow_up_time || ""),
-              type: String(leadRecord.follow_up_type || "Call"),
-              notes: "",
-            });
-          }}
-          onConvert={(leadRecord) => void convertLead(leadRecord)}
+      {["pipeline", "converted", "proposal"].includes(activeTab) ? (
+        <TableSearchBar
+          value={searchText}
+          onChange={setSearchText}
+          placeholder="Search name, email, phone, company…"
+          showClear={filtersActive}
+          onClear={clearTableFilters}
+          hint={`Showing ${filteredClients.length} of ${clients.length} lead(s)`}
         />
-      )}
+      ) : null}
 
       {activeTab === "follow-ups" && (
         <>
@@ -1315,150 +1284,6 @@ function BarBlock({
         ))}
       </div>
     </div>
-  );
-}
-
-function FiltersBar(props: {
-  searchText: string;
-  setSearchText: (s: string) => void;
-  fltStatus: string;
-  setFltStatus: (s: string) => void;
-  fltSource: string;
-  setFltSource: (s: string) => void;
-  fltPriority: string;
-  setFltPriority: (s: string) => void;
-  fltService: string;
-  setFltService: (s: string) => void;
-  fltAssigned: string;
-  setFltAssigned: (s: string) => void;
-  fltFollowFrom: string;
-  setFltFollowFrom: (s: string) => void;
-  fltFollowTo: string;
-  setFltFollowTo: (s: string) => void;
-  isAdmin: boolean;
-  employeeOptions: { id: string; label: string }[];
-  onApply: () => void;
-  onReset: () => void;
-}) {
-  const {
-    searchText,
-    setSearchText,
-    fltStatus,
-    setFltStatus,
-    fltSource,
-    setFltSource,
-    fltPriority,
-    setFltPriority,
-    fltService,
-    setFltService,
-    fltAssigned,
-    setFltAssigned,
-    fltFollowFrom,
-    setFltFollowFrom,
-    fltFollowTo,
-    setFltFollowTo,
-    isAdmin,
-    employeeOptions,
-    onApply,
-    onReset,
-  } = props;
-
-  const selectClass =
-    "h-10 w-full rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227]";
-
-  return (
-    <CollapsibleFilterPanel>
-      <div className="responsive-filter-grid">
-        <Input
-          placeholder="Search name, email, phone, company…"
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          className="col-span-2 h-10 border-[#e8dcc8] lg:col-span-2"
-        />
-        <FilterField label="Status">
-          <select className={selectClass} value={fltStatus} onChange={(e) => setFltStatus(e.target.value)} aria-label="Status">
-            <option value="">All statuses</option>
-          {CRM_LEAD_STATUSES.map((sOpt) => (
-            <option key={sOpt} value={sOpt}>
-              {sOpt}
-            </option>
-          ))}
-          </select>
-        </FilterField>
-        <FilterField label="Source">
-          <select className={selectClass} value={fltSource} onChange={(e) => setFltSource(e.target.value)} aria-label="Source">
-            <option value="">All sources</option>
-          {CRM_SOURCES.map((sOpt) => (
-            <option key={sOpt} value={sOpt}>
-              {sOpt}
-            </option>
-          ))}
-          </select>
-        </FilterField>
-        <FilterField label="Priority">
-          <select className={selectClass} value={fltPriority} onChange={(e) => setFltPriority(e.target.value)} aria-label="Priority">
-            <option value="">All priorities</option>
-          {CRM_PRIORITIES.map((pOpt) => (
-            <option key={pOpt} value={pOpt}>
-              {pOpt}
-            </option>
-          ))}
-          </select>
-        </FilterField>
-        <FilterField label="Service">
-          <select className={selectClass} value={fltService} onChange={(e) => setFltService(e.target.value)} aria-label="Service">
-            <option value="">All services</option>
-          {CRM_SERVICES.map((svc) => (
-            <option key={svc} value={svc}>
-              {svc}
-            </option>
-          ))}
-          </select>
-        </FilterField>
-        <FilterField label="Assigned">
-          <select
-            className={selectClass}
-            value={fltAssigned}
-            onChange={(e) => setFltAssigned(e.target.value)}
-            disabled={!isAdmin}
-            aria-label="Assigned employee"
-          >
-            <option value="">All assignees</option>
-          {employeeOptions.map((empOpt) => (
-            <option key={empOpt.id} value={empOpt.id}>
-              {empOpt.label}
-            </option>
-          ))}
-          </select>
-        </FilterField>
-        <FilterField label="Follow-up from">
-          <Input
-            type="date"
-            value={fltFollowFrom}
-            onChange={(e) => setFltFollowFrom(e.target.value)}
-            aria-label="Follow-up from"
-            className="h-10 border-[#e8dcc8]"
-          />
-        </FilterField>
-        <FilterField label="Follow-up to">
-          <Input
-            type="date"
-            value={fltFollowTo}
-            onChange={(e) => setFltFollowTo(e.target.value)}
-            aria-label="Follow-up to"
-            className="h-10 border-[#e8dcc8]"
-          />
-        </FilterField>
-        <div className="col-span-2 flex gap-2 lg:col-span-1">
-          <Button type="button" className="h-11 flex-1 rounded-xl bg-[#c9a227] text-white hover:bg-[#b8921f] sm:h-9" onClick={onApply}>
-            Apply filters
-          </Button>
-          <Button type="button" variant="outline" className="h-11 flex-1 rounded-xl border-[#c9d8eb] sm:h-9" onClick={onReset}>
-            Reset
-          </Button>
-        </div>
-      </div>
-    </CollapsibleFilterPanel>
   );
 }
 
@@ -1606,6 +1431,17 @@ function AllLeadsTable({
   employeeNameMap,
   isAdmin,
   currentUserId,
+  fltSource,
+  setFltSource,
+  fltService,
+  setFltService,
+  fltStatus,
+  setFltStatus,
+  fltPriority,
+  setFltPriority,
+  fltAssigned,
+  setFltAssigned,
+  employeeOptions,
   onProfile,
   onEdit,
   onDelete,
@@ -1617,6 +1453,17 @@ function AllLeadsTable({
   employeeNameMap: Record<string, string>;
   isAdmin: boolean;
   currentUserId: string;
+  fltSource: string;
+  setFltSource: (s: string) => void;
+  fltService: string;
+  setFltService: (s: string) => void;
+  fltStatus: string;
+  setFltStatus: (s: string) => void;
+  fltPriority: string;
+  setFltPriority: (s: string) => void;
+  fltAssigned: string;
+  setFltAssigned: (s: string) => void;
+  employeeOptions: { id: string; label: string }[];
   onProfile: (l: CrmClientRow) => void;
   onEdit: (l: CrmClientRow) => void;
   onDelete: (id: string) => void;
@@ -1629,28 +1476,58 @@ function AllLeadsTable({
       <table className="w-full min-w-[1400px] text-sm">
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
-            {[
-              "Lead",
-              "Company",
-              "Phone",
-              "WhatsApp",
-              "Call",
-              "WhatsApp msg",
-              "Last contacted",
-              "Email",
-              "Source",
-              "Services",
-              "Status",
-              "Priority",
-              "Budget",
-              "Assigned",
-              "Follow-up",
-              "Actions",
-            ].map((h) => (
-              <th key={h} className="sticky top-0 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap">
-                {h}
-              </th>
-            ))}
+            <TableHeaderCell label="Lead" className="px-4 py-3" />
+            <TableHeaderCell label="Company" className="px-4 py-3" />
+            <TableHeaderCell label="Phone" className="px-4 py-3" />
+            <TableHeaderCell label="WhatsApp" className="px-4 py-3" />
+            <TableHeaderCell label="Call" className="px-4 py-3" />
+            <TableHeaderCell label="WhatsApp msg" className="px-4 py-3" />
+            <TableHeaderCell label="Last contacted" className="px-4 py-3" />
+            <TableHeaderCell label="Email" className="px-4 py-3" />
+            <TableHeaderFilter
+              label="Source"
+              value={fltSource}
+              onChange={setFltSource}
+              options={CRM_SOURCES.map((s) => ({ value: s, label: s }))}
+              allLabel="All sources"
+              className="px-4 py-3"
+            />
+            <TableHeaderFilter
+              label="Services"
+              value={fltService}
+              onChange={setFltService}
+              options={CRM_SERVICES.map((s) => ({ value: s, label: s }))}
+              allLabel="All services"
+              className="px-4 py-3"
+            />
+            <TableHeaderFilter
+              label="Status"
+              value={fltStatus}
+              onChange={setFltStatus}
+              options={CRM_LEAD_STATUSES.map((s) => ({ value: s, label: s }))}
+              allLabel="All statuses"
+              className="px-4 py-3"
+            />
+            <TableHeaderFilter
+              label="Priority"
+              value={fltPriority}
+              onChange={setFltPriority}
+              options={CRM_PRIORITIES.map((p) => ({ value: p, label: p }))}
+              allLabel="All priorities"
+              className="px-4 py-3"
+            />
+            <TableHeaderCell label="Budget" className="px-4 py-3" />
+            <TableHeaderFilter
+              label="Assigned"
+              value={fltAssigned}
+              onChange={setFltAssigned}
+              options={employeeOptions.map((e) => ({ value: e.id, label: e.label }))}
+              allLabel="All assignees"
+              disabled={!isAdmin}
+              className="px-4 py-3"
+            />
+            <TableHeaderCell label="Follow-up" className="px-4 py-3" />
+            <TableHeaderCell label="Actions" className="px-4 py-3" />
           </tr>
         </thead>
         <tbody className="divide-y divide-[#e8edf5] text-[#334155]">

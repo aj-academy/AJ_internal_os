@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   bulkDeleteAttendanceRecords,
   deleteAttendanceRecord,
 } from "@/app/admin/attendance/actions";
 import { AttendanceSelfieThumb } from "@/components/attendance/AttendanceSelfieThumb";
+import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { MOOD_EMOJI, MOOD_LABEL } from "@/lib/moodDisplay";
 
 export type AdminAttendanceLogRow = {
@@ -39,8 +40,29 @@ function Badge({ value }: { value: string }) {
   return <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${color}`}>{value}</span>;
 }
 
-export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow[] }) {
+export function AdminAttendanceLogsTable({
+  rows,
+  departments = [],
+}: {
+  rows: AdminAttendanceLogRow[];
+  departments?: string[];
+}) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab = searchParams.get("tab") ?? "logs";
+
+  const setQueryParam = (key: string, value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", tab);
+    if (value) params.set(key, value);
+    else params.delete(key);
+    router.replace(`/admin/attendance?${params.toString()}`);
+  };
+
+  const dateFilter = searchParams.get("date") ?? "";
+  const departmentFilter = searchParams.get("department") ?? "";
+  const statusFilter = searchParams.get("status") ?? "";
+  const locationFilter = searchParams.get("location") ?? "";
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -113,26 +135,56 @@ export function AdminAttendanceLogsTable({ rows }: { rows: AdminAttendanceLogRow
                   aria-label="Select all attendance logs"
                 />
               </th>
-              {[
-                "Employee Name",
-                "Email",
-                "Department",
-                "Date",
-                "Selfie",
-                "Mood",
-                "Check In Time",
-                "Check Out Time",
-                "Total Hours",
-                "Status",
-                "Location Type",
-                "Check In Location",
-                "Check Out Location",
-                "Action",
-              ].map((h) => (
-                <th key={h} className="px-5 py-3">
-                  {h}
-                </th>
-              ))}
+              <TableHeaderCell label="Employee Name" className="px-5 py-3" />
+              <TableHeaderCell label="Email" className="px-5 py-3" />
+              <TableHeaderFilter
+                label="Department"
+                value={departmentFilter}
+                onChange={(v) => setQueryParam("department", v)}
+                options={departments.map((d) => ({ value: d, label: d }))}
+                allLabel="All departments"
+                className="px-5 py-3"
+              />
+              <TableHeaderFilter
+                label="Date"
+                type="date"
+                value={dateFilter}
+                onChange={(v) => setQueryParam("date", v)}
+                className="px-5 py-3"
+              />
+              <TableHeaderCell label="Selfie" className="px-5 py-3" />
+              <TableHeaderCell label="Mood" className="px-5 py-3" />
+              <TableHeaderCell label="Check In Time" className="px-5 py-3" />
+              <TableHeaderCell label="Check Out Time" className="px-5 py-3" />
+              <TableHeaderCell label="Total Hours" className="px-5 py-3" />
+              <TableHeaderFilter
+                label="Status"
+                value={statusFilter}
+                onChange={(v) => setQueryParam("status", v)}
+                options={[
+                  { value: "present", label: "Present" },
+                  { value: "completed", label: "Completed" },
+                  { value: "late", label: "Late" },
+                  { value: "absent", label: "Absent" },
+                ]}
+                allLabel="All statuses"
+                className="px-5 py-3"
+              />
+              <TableHeaderFilter
+                label="Location Type"
+                value={locationFilter}
+                onChange={(v) => setQueryParam("location", v)}
+                options={[
+                  { value: "Remote", label: "Remote" },
+                  { value: "Work From Home", label: "Work From Home" },
+                  { value: "Office", label: "Office" },
+                ]}
+                allLabel="All locations"
+                className="px-5 py-3"
+              />
+              <TableHeaderCell label="Check In Location" className="px-5 py-3" />
+              <TableHeaderCell label="Check Out Location" className="px-5 py-3" />
+              <TableHeaderCell label="Action" className="px-5 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-[#e8edf5] text-slate-700">

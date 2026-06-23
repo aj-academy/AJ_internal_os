@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TableHeaderCell, TableHeaderFilter, type TableHeaderFilterOption } from "@/components/ui/TableHeaderFilter";
+import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { normalizeStatus } from "@/components/client-lead/crmHelpers";
 import { TX_SELECT } from "@/components/finance/financeHelpers";
 import { PROJECT_SELECT, normalizeProjectStatus } from "@/components/project-master/projectHelpers";
@@ -345,27 +347,38 @@ export function ReportsWorkbench() {
   const [fltDept, setFltDept] = useState("");
   const [fltRole, setFltRole] = useState("");
   const [fltEmpStatus, setFltEmpStatus] = useState("");
+  const [empSearch, setEmpSearch] = useState("");
   const [fltAttFrom, setFltAttFrom] = useState(() => new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10));
   const [fltAttTo, setFltAttTo] = useState(todayISO);
   const [fltAttEmp, setFltAttEmp] = useState("");
+  const [attSearch, setAttSearch] = useState("");
   const [fltClientSource, setFltClientSource] = useState("");
   const [fltClientStatus, setFltClientStatus] = useState("");
+  const [clientSearch, setClientSearch] = useState("");
   const [fltProjMgr, setFltProjMgr] = useState("");
   const [fltProjStatus, setFltProjStatus] = useState("");
+  const [projectSearch, setProjectSearch] = useState("");
   const [fltTaskEmp, setFltTaskEmp] = useState("");
   const [fltTaskStatus, setFltTaskStatus] = useState("");
   const [fltTaskProject, setFltTaskProject] = useState("");
+  const [taskSearch, setTaskSearch] = useState("");
 
   const filteredProfiles = useMemo(() => {
+    const q = empSearch.trim().toLowerCase();
     return profiles.filter((p) => {
+      if (q) {
+        const hay = `${p.full_name ?? ""} ${p.email ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       if (fltDept && (p.department || "") !== fltDept) return false;
       if (fltRole && (p.role || "") !== fltRole) return false;
       if (fltEmpStatus && (p.status || "active") !== fltEmpStatus) return false;
       return true;
     });
-  }, [profiles, fltDept, fltEmpStatus, fltRole]);
+  }, [empSearch, profiles, fltDept, fltEmpStatus, fltRole]);
 
   const filteredAttendance = useMemo(() => {
+    const q = attSearch.trim().toLowerCase();
     return attendance.filter((a) => {
       const d = String(a.attendance_date).slice(0, 10);
       if (fltAttFrom && d < fltAttFrom) return false;
@@ -375,34 +388,63 @@ export function ReportsWorkbench() {
         const dep = profiles.find((p) => p.id === a.employee_id)?.department || "";
         if (dep !== fltDept) return false;
       }
+      if (q && a.employee_id) {
+        const name = employeeNameMap[a.employee_id] ?? "";
+        if (!name.toLowerCase().includes(q)) return false;
+      }
       return true;
     });
-  }, [attendance, fltAttEmp, fltAttFrom, fltAttTo, fltDept, profiles]);
+  }, [attSearch, attendance, employeeNameMap, fltAttEmp, fltAttFrom, fltAttTo, fltDept, profiles]);
 
   const filteredClients = useMemo(() => {
+    const q = clientSearch.trim().toLowerCase();
     return clients.filter((c) => {
-      if (fltClientSource && !(c.source || "").toLowerCase().includes(fltClientSource.toLowerCase())) return false;
+      if (q) {
+        const hay = `${c.name ?? ""} ${c.company_name ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (fltClientSource && (c.source || "") !== fltClientSource) return false;
       if (fltClientStatus && normalizeStatus(String(c.status)) !== normalizeStatus(fltClientStatus)) return false;
       return true;
     });
-  }, [clients, fltClientSource, fltClientStatus]);
+  }, [clientSearch, clients, fltClientSource, fltClientStatus]);
 
   const filteredProjects = useMemo(() => {
+    const q = projectSearch.trim().toLowerCase();
     return projects.filter((p) => {
+      if (q && !String(p.project_name || "").toLowerCase().includes(q)) return false;
       if (fltProjMgr && String(p.project_manager || "") !== fltProjMgr) return false;
       if (fltProjStatus && normalizeProjectStatus(String(p.status)) !== fltProjStatus) return false;
       return true;
     });
-  }, [fltProjMgr, fltProjStatus, projects]);
+  }, [fltProjMgr, fltProjStatus, projectSearch, projects]);
 
   const filteredTasks = useMemo(() => {
+    const q = taskSearch.trim().toLowerCase();
     return tasks.filter((t) => {
+      if (q && !String(t.id || "").toLowerCase().includes(q)) return false;
       if (fltTaskEmp && t.assigned_to !== fltTaskEmp) return false;
       if (fltTaskStatus && t.status !== fltTaskStatus) return false;
       if (fltTaskProject && String(t.project_id || "") !== fltTaskProject) return false;
       return true;
     });
-  }, [fltTaskEmp, fltTaskProject, fltTaskStatus, tasks]);
+  }, [fltTaskEmp, fltTaskProject, fltTaskStatus, taskSearch, tasks]);
+
+  const clientSourceOptions = useMemo(
+    () =>
+      Array.from(new Set(clients.map((c) => c.source).filter(Boolean) as string[]))
+        .sort()
+        .map((s) => ({ value: s, label: s })),
+    [clients],
+  );
+
+  const clientStatusOptions = useMemo(
+    () =>
+      Array.from(new Set(clients.map((c) => normalizeStatus(String(c.status)))))
+        .sort()
+        .map((s) => ({ value: s, label: s })),
+    [clients],
+  );
 
   const exportRows = useMemo<ExportRow[]>(() => {
     const tab = activeTab === "export" ? "overview" : activeTab;
@@ -780,31 +822,58 @@ export function ReportsWorkbench() {
             <StatCard title="Inactive" value={inactiveEmployees.length} loading={loading} />
             <StatCard title="Departments" value={distinctDepts.length} loading={loading} />
           </div>
-          <FilterBar>
-            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltDept} onChange={(e) => setFltDept(e.target.value)}>
-              <option value="">Department</option>
-              {distinctDepts.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltRole} onChange={(e) => setFltRole(e.target.value)}>
-              <option value="">Role</option>
-              {["super_admin", "admin", "student", "freelancer", "mentor"].map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltEmpStatus} onChange={(e) => setFltEmpStatus(e.target.value)}>
-              <option value="">Status</option>
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-            </select>
-          </FilterBar>
+          <TableSearchBar
+            value={empSearch}
+            onChange={setEmpSearch}
+            placeholder="Search employee name or email…"
+            showClear={Boolean(empSearch.trim() || fltDept || fltRole || fltEmpStatus)}
+            onClear={() => {
+              setEmpSearch("");
+              setFltDept("");
+              setFltRole("");
+              setFltEmpStatus("");
+            }}
+            hint={`Showing ${filteredProfiles.length} of ${profiles.length} employee(s)`}
+          />
           <ScrollTable
-            columns={["Employee", "Role", "Department", "Attendance %", "Tasks", "Done", "Projects", "Rating"]}
+            columns={[
+              "Employee",
+              {
+                label: "Role",
+                filter: {
+                  value: fltRole,
+                  onChange: setFltRole,
+                  options: ["super_admin", "admin", "student", "freelancer", "mentor"].map((r) => ({ value: r, label: r })),
+                  allLabel: "All roles",
+                },
+              },
+              {
+                label: "Department",
+                filter: {
+                  value: fltDept,
+                  onChange: setFltDept,
+                  options: distinctDepts.map((d) => ({ value: d, label: d })),
+                  allLabel: "All departments",
+                },
+              },
+              "Attendance %",
+              "Tasks",
+              "Done",
+              "Projects",
+              {
+                label: "Status",
+                filter: {
+                  value: fltEmpStatus,
+                  onChange: setFltEmpStatus,
+                  options: [
+                    { value: "active", label: "active" },
+                    { value: "inactive", label: "inactive" },
+                  ],
+                  allLabel: "All statuses",
+                },
+              },
+              "Rating",
+            ]}
             rows={filteredProfiles}
             loading={loading}
             renderRow={(p) => {
@@ -821,6 +890,7 @@ export function ReportsWorkbench() {
                   <td className="px-3 py-2">{tc.total}</td>
                   <td className="px-3 py-2">{tc.done}</td>
                   <td className="px-3 py-2">{pc}</td>
+                  <td className="px-3 py-2">{p.status || "active"}</td>
                   <td className="px-3 py-2">{rating}</td>
                 </tr>
               );
@@ -851,28 +921,50 @@ export function ReportsWorkbench() {
             <StatCard title="Late / flagged" value={attendanceToday.late} loading={loading} />
             <StatCard title="Avg attendance %" value={`${attendanceRateOverall}%`} loading={loading} subtitle="In loaded window" />
           </div>
-          <FilterBar>
-            <Input type="date" className="h-9 border-[#e8dcc8]" value={fltAttFrom} onChange={(e) => setFltAttFrom(e.target.value)} />
-            <Input type="date" className="h-9 border-[#e8dcc8]" value={fltAttTo} onChange={(e) => setFltAttTo(e.target.value)} />
-            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltAttEmp} onChange={(e) => setFltAttEmp(e.target.value)}>
-              <option value="">Employee</option>
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.full_name || p.email}
-                </option>
-              ))}
-            </select>
-            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltDept} onChange={(e) => setFltDept(e.target.value)}>
-              <option value="">Department</option>
-              {distinctDepts.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </FilterBar>
+          <TableSearchBar
+            value={attSearch}
+            onChange={setAttSearch}
+            placeholder="Search employee name…"
+            showClear={Boolean(attSearch.trim() || fltAttFrom || fltAttTo || fltAttEmp || fltDept)}
+            onClear={() => {
+              setAttSearch("");
+              setFltAttFrom("");
+              setFltAttTo("");
+              setFltAttEmp("");
+              setFltDept("");
+            }}
+            hint={`Showing ${filteredAttendance.length} of ${attendance.length} record(s)`}
+          />
           <ScrollTable
-            columns={["Employee", "Date", "Check-in", "Check-out", "Hours", "Status", "Location"]}
+            columns={[
+              {
+                label: "Employee",
+                filter: {
+                  value: fltAttEmp,
+                  onChange: setFltAttEmp,
+                  options: profiles.map((p) => ({ value: p.id, label: p.full_name || p.email || p.id })),
+                  allLabel: "All employees",
+                },
+              },
+              {
+                label: "Date",
+                filter: { value: fltAttFrom, onChange: setFltAttFrom, type: "date" },
+              },
+              "Check-in",
+              "Check-out",
+              "Hours",
+              "Status",
+              {
+                label: "Department",
+                filter: {
+                  value: fltDept,
+                  onChange: setFltDept,
+                  options: distinctDepts.map((d) => ({ value: d, label: d })),
+                  allLabel: "All departments",
+                },
+              },
+              "Location",
+            ]}
             rows={filteredAttendance}
             loading={loading}
             renderRow={(a) => (
@@ -883,6 +975,9 @@ export function ReportsWorkbench() {
                 <td className="px-3 py-2 text-xs">{a.check_out_time ? new Date(a.check_out_time).toLocaleString() : "—"}</td>
                 <td className="px-3 py-2">{minutesToHoursLabel(a.total_working_minutes)}</td>
                 <td className="px-3 py-2">{a.status || "—"}</td>
+                <td className="px-3 py-2">
+                  {a.employee_id ? profiles.find((p) => p.id === a.employee_id)?.department || "—" : "—"}
+                </td>
                 <td className="max-w-[180px] truncate px-3 py-2 text-xs">{a.check_in_address || "—"}</td>
               </tr>
             )}
@@ -898,10 +993,18 @@ export function ReportsWorkbench() {
             <StatCard title="Lost" value={clientStats.lost} loading={loading} />
             <StatCard title="Conversion rate %" value={`${clientStats.rate}%`} loading={loading} subtitle="Converted / all" />
           </div>
-          <FilterBar>
-            <Input className="h-9 border-[#e8dcc8]" placeholder="Lead source" value={fltClientSource} onChange={(e) => setFltClientSource(e.target.value)} />
-            <Input className="h-9 border-[#e8dcc8]" placeholder="Status (exact)" value={fltClientStatus} onChange={(e) => setFltClientStatus(e.target.value)} />
-          </FilterBar>
+          <TableSearchBar
+            value={clientSearch}
+            onChange={setClientSearch}
+            placeholder="Search name or company…"
+            showClear={Boolean(clientSearch.trim() || fltClientSource || fltClientStatus)}
+            onClear={() => {
+              setClientSearch("");
+              setFltClientSource("");
+              setFltClientStatus("");
+            }}
+            hint={`Showing ${filteredClients.length} of ${clients.length} client(s)`}
+          />
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
               <p className="text-sm font-semibold text-[#0f172a]">Lead source report</p>
@@ -954,7 +1057,31 @@ export function ReportsWorkbench() {
             </div>
           </div>
           <ScrollTable
-            columns={["Name", "Company", "Status", "Source", "Service", "Proposal", "Budget"]}
+            columns={[
+              "Name",
+              "Company",
+              {
+                label: "Status",
+                filter: {
+                  value: fltClientStatus,
+                  onChange: setFltClientStatus,
+                  options: clientStatusOptions,
+                  allLabel: "All statuses",
+                },
+              },
+              {
+                label: "Source",
+                filter: {
+                  value: fltClientSource,
+                  onChange: setFltClientSource,
+                  options: clientSourceOptions,
+                  allLabel: "All sources",
+                },
+              },
+              "Service",
+              "Proposal",
+              "Budget",
+            ]}
             rows={filteredClients}
             loading={loading}
             renderRow={(c) => (
@@ -980,26 +1107,48 @@ export function ReportsWorkbench() {
             <StatCard title="Delayed" value={projectStats.delayed} loading={loading} />
             <StatCard title="Avg completion %" value={`${projectStats.avgProgress}%`} loading={loading} />
           </div>
-          <FilterBar>
-            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltProjMgr} onChange={(e) => setFltProjMgr(e.target.value)}>
-              <option value="">Project manager</option>
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.full_name || p.email}
-                </option>
-              ))}
-            </select>
-            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltProjStatus} onChange={(e) => setFltProjStatus(e.target.value)}>
-              <option value="">Status</option>
-              {["Planning", "Active", "On Hold", "In Review", "Completed", "Cancelled", "Delayed"].map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </FilterBar>
+          <TableSearchBar
+            value={projectSearch}
+            onChange={setProjectSearch}
+            placeholder="Search project name…"
+            showClear={Boolean(projectSearch.trim() || fltProjMgr || fltProjStatus)}
+            onClear={() => {
+              setProjectSearch("");
+              setFltProjMgr("");
+              setFltProjStatus("");
+            }}
+            hint={`Showing ${filteredProjects.length} of ${projects.length} project(s)`}
+          />
           <ScrollTable
-            columns={["Project", "Client", "Manager", "Budget", "Pending", "Progress", "Status", "Deadline"]}
+            columns={[
+              "Project",
+              "Client",
+              {
+                label: "Manager",
+                filter: {
+                  value: fltProjMgr,
+                  onChange: setFltProjMgr,
+                  options: profiles.map((p) => ({ value: p.id, label: p.full_name || p.email || p.id })),
+                  allLabel: "All managers",
+                },
+              },
+              "Budget",
+              "Pending",
+              "Progress",
+              {
+                label: "Status",
+                filter: {
+                  value: fltProjStatus,
+                  onChange: setFltProjStatus,
+                  options: ["Planning", "Active", "On Hold", "In Review", "Completed", "Cancelled", "Delayed"].map((s) => ({
+                    value: s,
+                    label: s,
+                  })),
+                  allLabel: "All statuses",
+                },
+              },
+              "Deadline",
+            ]}
             rows={filteredProjects}
             loading={loading}
             renderRow={(p) => (
@@ -1026,34 +1175,52 @@ export function ReportsWorkbench() {
             <StatCard title="Pending" value={taskStats.pending} loading={loading} />
             <StatCard title="Delayed" value={taskStats.delayed} loading={loading} />
           </div>
-          <FilterBar>
-            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltTaskEmp} onChange={(e) => setFltTaskEmp(e.target.value)}>
-              <option value="">Employee</option>
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.full_name || p.email}
-                </option>
-              ))}
-            </select>
-            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltTaskStatus} onChange={(e) => setFltTaskStatus(e.target.value)}>
-              <option value="">Status</option>
-              {["Pending", "In Progress", "Completed"].map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltTaskProject} onChange={(e) => setFltTaskProject(e.target.value)}>
-              <option value="">Project</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.project_name}
-                </option>
-              ))}
-            </select>
-          </FilterBar>
+          <TableSearchBar
+            value={taskSearch}
+            onChange={setTaskSearch}
+            placeholder="Search task ID…"
+            showClear={Boolean(taskSearch.trim() || fltTaskEmp || fltTaskStatus || fltTaskProject)}
+            onClear={() => {
+              setTaskSearch("");
+              setFltTaskEmp("");
+              setFltTaskStatus("");
+              setFltTaskProject("");
+            }}
+            hint={`Showing ${filteredTasks.length} of ${tasks.length} task(s)`}
+          />
           <ScrollTable
-            columns={["Task ID", "Assignee", "Project", "Priority", "Status", "Due"]}
+            columns={[
+              "Task ID",
+              {
+                label: "Assignee",
+                filter: {
+                  value: fltTaskEmp,
+                  onChange: setFltTaskEmp,
+                  options: profiles.map((p) => ({ value: p.id, label: p.full_name || p.email || p.id })),
+                  allLabel: "All employees",
+                },
+              },
+              {
+                label: "Project",
+                filter: {
+                  value: fltTaskProject,
+                  onChange: setFltTaskProject,
+                  options: projects.map((p) => ({ value: p.id, label: p.project_name })),
+                  allLabel: "All projects",
+                },
+              },
+              "Priority",
+              {
+                label: "Status",
+                filter: {
+                  value: fltTaskStatus,
+                  onChange: setFltTaskStatus,
+                  options: ["Pending", "In Progress", "Completed"].map((s) => ({ value: s, label: s })),
+                  allLabel: "All statuses",
+                },
+              },
+              "Due",
+            ]}
             rows={filteredTasks}
             loading={loading}
             renderRow={(t) => (
@@ -1204,9 +1371,19 @@ export function ReportsWorkbench() {
   );
 }
 
-function FilterBar({ children }: { children: ReactNode }) {
-  return <div className="flex flex-wrap gap-2 rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-3">{children}</div>;
-}
+type ScrollTableColumn =
+  | string
+  | {
+      label: string;
+      filter?: {
+        value: string;
+        onChange: (value: string) => void;
+        options?: TableHeaderFilterOption[];
+        allLabel?: string;
+        disabled?: boolean;
+        type?: "select" | "date";
+      };
+    };
 
 function ScrollTable<T>({
   columns,
@@ -1214,7 +1391,7 @@ function ScrollTable<T>({
   loading,
   renderRow,
 }: {
-  columns: string[];
+  columns: ScrollTableColumn[];
   rows: T[];
   loading: boolean;
   renderRow: (row: T) => ReactNode;
@@ -1224,11 +1401,26 @@ function ScrollTable<T>({
       <table className="w-full min-w-[720px] text-sm">
         <thead className="sticky top-0 bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
           <tr>
-            {columns.map((c) => (
-              <th key={c} className="px-3 py-2 text-left font-semibold">
-                {c}
-              </th>
-            ))}
+            {columns.map((col) => {
+              if (typeof col === "string") {
+                return <TableHeaderCell key={col} label={col} />;
+              }
+              if (col.filter) {
+                return (
+                  <TableHeaderFilter
+                    key={col.label}
+                    label={col.label}
+                    value={col.filter.value}
+                    onChange={col.filter.onChange}
+                    options={col.filter.options}
+                    allLabel={col.filter.allLabel}
+                    disabled={col.filter.disabled}
+                    type={col.filter.type}
+                  />
+                );
+              }
+              return <TableHeaderCell key={col.label} label={col.label} />;
+            })}
           </tr>
         </thead>
         <tbody>

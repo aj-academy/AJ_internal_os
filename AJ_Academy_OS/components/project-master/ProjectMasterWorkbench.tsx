@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
+import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/client-lead/LeadSummaryCard";
 import { PROJECT_TAB_IDS, TAB_LABELS } from "@/components/project-master/projectConfig";
@@ -134,7 +136,6 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
   const [fltClient, setFltClient] = useState("");
   const [fltDeadline, setFltDeadline] = useState("");
   const [search, setSearch] = useState("");
-  const [applied, setApplied] = useState({ status: "", priority: "", manager: "", client: "", deadline: "", search: "" });
 
   const clientMap = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
   const employeeOpts = useMemo(
@@ -226,15 +227,26 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
 
   const filtered = useMemo(() => {
     let list = [...projects];
-    const q = applied.search.trim().toLowerCase();
+    const q = search.trim().toLowerCase();
     if (q) list = list.filter((p) => String(p.project_name || "").toLowerCase().includes(q));
-    if (applied.status) list = list.filter((p) => normalizeProjectStatus(String(p.status)) === applied.status);
-    if (applied.priority) list = list.filter((p) => (p.priority || "") === applied.priority);
-    if (applied.manager) list = list.filter((p) => (p.project_manager || "") === applied.manager);
-    if (applied.client) list = list.filter((p) => (p.client_id || "") === applied.client);
-    if (applied.deadline) list = list.filter((p) => (p.deadline || "").slice(0, 10) === applied.deadline);
+    if (fltStatus) list = list.filter((p) => normalizeProjectStatus(String(p.status)) === fltStatus);
+    if (fltPriority) list = list.filter((p) => (p.priority || "") === fltPriority);
+    if (fltManager) list = list.filter((p) => (p.project_manager || "") === fltManager);
+    if (fltClient) list = list.filter((p) => (p.client_id || "") === fltClient);
+    if (fltDeadline) list = list.filter((p) => (p.deadline || "").slice(0, 10) === fltDeadline);
     return list;
-  }, [applied, projects]);
+  }, [fltClient, fltDeadline, fltManager, fltPriority, fltStatus, projects, search]);
+
+  const filtersActive = Boolean(search.trim() || fltStatus || fltPriority || fltManager || fltClient || fltDeadline);
+
+  const clearTableFilters = () => {
+    setSearch("");
+    setFltStatus("");
+    setFltPriority("");
+    setFltManager("");
+    setFltClient("");
+    setFltDeadline("");
+  };
 
   const today = todayISO();
   const activeList = filtered.filter((p) => normalizeProjectStatus(String(p.status)) === "Active");
@@ -522,60 +534,34 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
 
       {["all", "active", "completed", "delayed"].includes(activeTab) && showFullTabs ? (
         <div className="space-y-3">
-          <article className="rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-4">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-              <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltStatus} onChange={(e) => setFltStatus(e.target.value)}>
-                <option value="">Status</option>
-                {["Planning", "Active", "On Hold", "In Review", "Completed", "Cancelled", "Delayed"].map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltPriority} onChange={(e) => setFltPriority(e.target.value)}>
-                <option value="">Priority</option>
-                {["Low", "Medium", "High", "Urgent"].map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltManager} onChange={(e) => setFltManager(e.target.value)}>
-                <option value="">Manager</option>
-                {employeeOpts.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.label}
-                  </option>
-                ))}
-              </select>
-              <select className="h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm" value={fltClient} onChange={(e) => setFltClient(e.target.value)}>
-                <option value="">Client</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {displayClientName(c)}
-                  </option>
-                ))}
-              </select>
-              <Input type="date" className="h-9 border-[#e8dcc8]" value={fltDeadline} onChange={(e) => setFltDeadline(e.target.value)} />
-              <Input placeholder="Search name" className="h-9 border-[#e8dcc8]" value={search} onChange={(e) => setSearch(e.target.value)} />
-              <div className="flex gap-2 xl:col-span-6">
-                <Button type="button" variant="outline" className="rounded-full" onClick={() => setApplied({ status: fltStatus, priority: fltPriority, manager: fltManager, client: fltClient, deadline: fltDeadline, search: search.trim() })}>
-                  Apply filters
-                </Button>
-                <Button type="button" variant="outline" className="rounded-full" onClick={() => { setFltStatus(""); setFltPriority(""); setFltManager(""); setFltClient(""); setFltDeadline(""); setSearch(""); setApplied({ status: "", priority: "", manager: "", client: "", deadline: "", search: "" }); }}>
-                  Reset
-                </Button>
-              </div>
-            </div>
-          </article>
+          <TableSearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="Search project name…"
+            showClear={filtersActive}
+            onClear={clearTableFilters}
+            hint={`Showing ${activeTab === "active" ? activeList.length : activeTab === "completed" ? completedList.length : activeTab === "delayed" ? delayedList.length : filtered.length} project(s)`}
+          />
           <ProjectsDataTable
             rows={activeTab === "active" ? activeList : activeTab === "completed" ? completedList : activeTab === "delayed" ? delayedList : filtered}
             loading={loading}
             clientMap={clientMap}
+            clients={clients}
             employeeNameMap={employeeNameMap}
+            employeeOpts={employeeOpts}
             teamMembers={teamMembers}
             isAdmin={isAdmin}
             canEdit={canEditProjectFields}
+            fltStatus={fltStatus}
+            setFltStatus={setFltStatus}
+            fltPriority={fltPriority}
+            setFltPriority={setFltPriority}
+            fltManager={fltManager}
+            setFltManager={setFltManager}
+            fltClient={fltClient}
+            setFltClient={setFltClient}
+            fltDeadline={fltDeadline}
+            setFltDeadline={setFltDeadline}
             onView={setViewProject}
             onEdit={openEdit}
             onDelete={(id) => void deleteProject(id)}
@@ -725,10 +711,22 @@ function ProjectsDataTable({
   rows,
   loading,
   clientMap,
+  clients,
   employeeNameMap,
+  employeeOpts,
   teamMembers,
   isAdmin,
   canEdit,
+  fltStatus,
+  setFltStatus,
+  fltPriority,
+  setFltPriority,
+  fltManager,
+  setFltManager,
+  fltClient,
+  setFltClient,
+  fltDeadline,
+  setFltDeadline,
   onView,
   onEdit,
   onDelete,
@@ -736,10 +734,22 @@ function ProjectsDataTable({
   rows: ProjectRowLoose[];
   loading: boolean;
   clientMap: Record<string, ClientOption>;
+  clients: ClientOption[];
   employeeNameMap: Record<string, string>;
+  employeeOpts: { id: string; label: string }[];
   teamMembers: TeamMemberRow[];
   isAdmin: boolean;
   canEdit: boolean;
+  fltStatus: string;
+  setFltStatus: (s: string) => void;
+  fltPriority: string;
+  setFltPriority: (s: string) => void;
+  fltManager: string;
+  setFltManager: (s: string) => void;
+  fltClient: string;
+  setFltClient: (s: string) => void;
+  fltDeadline: string;
+  setFltDeadline: (s: string) => void;
   onView: (p: ProjectRowLoose) => void;
   onEdit: (p: ProjectRowLoose) => void;
   onDelete: (id: string) => void;
@@ -750,18 +760,61 @@ function ProjectsDataTable({
       <table className="w-full min-w-[1100px] text-sm">
         <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
           <tr>
-            {["Code", "Project", "Client", "Manager", "Team", "Budget", "Progress", "Status", "Deadline", "Actions"].map((h) => (
-              <th key={h} className="px-4 py-3 text-left font-semibold whitespace-nowrap">
-                {h}
-              </th>
-            ))}
+            <TableHeaderCell label="Code" className="px-4 py-3" />
+            <TableHeaderCell label="Project" className="px-4 py-3" />
+            <TableHeaderFilter
+              label="Client"
+              value={fltClient}
+              onChange={setFltClient}
+              options={clients.map((c) => ({ value: c.id, label: displayClientName(c) }))}
+              allLabel="All clients"
+              className="px-4 py-3"
+            />
+            <TableHeaderFilter
+              label="Manager"
+              value={fltManager}
+              onChange={setFltManager}
+              options={employeeOpts.map((e) => ({ value: e.id, label: e.label }))}
+              allLabel="All managers"
+              className="px-4 py-3"
+            />
+            <TableHeaderCell label="Team" className="px-4 py-3" />
+            <TableHeaderCell label="Budget" className="px-4 py-3" />
+            <TableHeaderCell label="Progress" className="px-4 py-3" />
+            <TableHeaderFilter
+              label="Status"
+              value={fltStatus}
+              onChange={setFltStatus}
+              options={["Planning", "Active", "On Hold", "In Review", "Completed", "Cancelled", "Delayed"].map((s) => ({
+                value: s,
+                label: s,
+              }))}
+              allLabel="All statuses"
+              className="px-4 py-3"
+            />
+            <TableHeaderFilter
+              label="Priority"
+              value={fltPriority}
+              onChange={setFltPriority}
+              options={["Low", "Medium", "High", "Urgent"].map((s) => ({ value: s, label: s }))}
+              allLabel="All priorities"
+              className="px-4 py-3"
+            />
+            <TableHeaderFilter
+              label="Deadline"
+              type="date"
+              value={fltDeadline}
+              onChange={setFltDeadline}
+              className="px-4 py-3"
+            />
+            <TableHeaderCell label="Actions" className="px-4 py-3" />
           </tr>
         </thead>
         <tbody>
           {loading
             ? Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  <td colSpan={10} className="px-4 py-3">
+                  <td colSpan={11} className="px-4 py-3">
                     <div className="h-5 animate-pulse rounded bg-slate-100" />
                   </td>
                 </tr>
@@ -785,6 +838,7 @@ function ProjectsDataTable({
                     <td className="px-4 py-3">{p.budget != null ? `₹${Number(p.budget).toLocaleString()}` : "—"}</td>
                     <td className="px-4 py-3">{p.progress ?? 0}%</td>
                     <td className="px-4 py-3">{normalizeProjectStatus(String(p.status))}</td>
+                    <td className="px-4 py-3">{p.priority || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{dl || "—"}</td>
                     <td className="space-x-2 whitespace-nowrap px-4 py-3 text-xs">
                       <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onView(p)}>
@@ -806,7 +860,7 @@ function ProjectsDataTable({
               })}
           {!loading && !rows.length ? (
             <tr>
-              <td colSpan={10} className="px-6 py-10 text-center text-[#64748b]">
+              <td colSpan={11} className="px-6 py-10 text-center text-[#64748b]">
                 No projects match filters.
               </td>
             </tr>

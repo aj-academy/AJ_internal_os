@@ -117,14 +117,22 @@ alter table public.clients drop constraint if exists clients_status_check;
 
 alter table public.clients add column if not exists client_code text;
 alter table public.clients add column if not exists lead_name text;
+alter table public.clients add column if not exists company_name text;
+alter table public.clients add column if not exists email text;
+alter table public.clients add column if not exists phone text;
 alter table public.clients add column if not exists whatsapp text;
 alter table public.clients add column if not exists city text;
 alter table public.clients add column if not exists industry text;
+alter table public.clients add column if not exists source text;
 alter table public.clients add column if not exists service_interest text;
+alter table public.clients add column if not exists requirement text;
+alter table public.clients add column if not exists budget numeric(12, 2);
 alter table public.clients add column if not exists expected_start_date date;
 alter table public.clients add column if not exists priority text default 'Warm';
 alter table public.clients add column if not exists lead_score integer default 0;
+alter table public.clients add column if not exists assigned_to uuid references public.profiles(id);
 alter table public.clients add column if not exists assigned_by uuid references public.profiles (id);
+alter table public.clients add column if not exists follow_up_date date;
 alter table public.clients add column if not exists follow_up_time time;
 alter table public.clients add column if not exists follow_up_type text;
 alter table public.clients add column if not exists last_contacted_at timestamptz;
@@ -136,6 +144,8 @@ alter table public.clients add column if not exists quotation_link text;
 alter table public.clients add column if not exists agreement_link text;
 alter table public.clients add column if not exists converted_at timestamptz;
 alter table public.clients add column if not exists lost_reason text;
+alter table public.clients add column if not exists notes text;
+alter table public.clients add column if not exists created_at timestamptz not null default now();
 
 -- Keep lead_name/name aligned where only one legacy column existed
 

@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { CollapsibleFilterPanel, FilterField } from "@/components/ui/CollapsibleFilterPanel";
+import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/client-lead/LeadSummaryCard";
 import { TaskForm, type TaskFormValue } from "@/components/task/TaskForm";
@@ -115,13 +115,12 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const [assignedFilter, setAssignedFilter] = useState("");
   const [dueDateFilter, setDueDateFilter] = useState("");
   const [searchText, setSearchText] = useState("");
-  const [applied, setApplied] = useState({
-    status: "",
-    priority: "",
-    assigned: "",
-    dueDate: "",
-    search: "",
-  });
+  const [searchDebounced, setSearchDebounced] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchDebounced(searchText.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchText]);
 
   const progressDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   /** Assignee id when the edit panel was opened; used to detect reassignment for email. */
@@ -304,11 +303,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
 
       if (mentorManagesTeam) query = query.eq("assigned_by", userId);
       else if (!seesAllTasks) query = query.eq("assigned_to", userId);
-      if (applied.status) query = query.eq("status", applied.status);
-      if (applied.priority) query = query.eq("priority", applied.priority);
-      if (applied.assigned) query = query.eq("assigned_to", applied.assigned);
-      if (applied.dueDate) query = query.eq("due_date", applied.dueDate);
-      if (applied.search) query = query.ilike("title", `%${applied.search}%`);
+      if (statusFilter) query = query.eq("status", statusFilter);
+      if (priorityFilter) query = query.eq("priority", priorityFilter);
+      if (assignedFilter) query = query.eq("assigned_to", assignedFilter);
+      if (dueDateFilter) query = query.eq("due_date", dueDateFilter);
+      if (searchDebounced) query = query.ilike("title", `%${searchDebounced}%`);
 
       query = query.order("due_date", { ascending: true, nullsFirst: false });
 
@@ -369,13 +368,13 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       setRows(mapped);
     },
     [
-      applied.assigned,
-      applied.dueDate,
-      applied.priority,
-      applied.search,
-      applied.status,
+      assignedFilter,
+      dueDateFilter,
       mentorManagesTeam,
+      priorityFilter,
+      searchDebounced,
       seesAllTasks,
+      statusFilter,
       supabase,
     ],
   );
@@ -532,23 +531,16 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     return rows.filter((task) => task.due_date === today).length;
   }, [rows]);
 
-  const applyFilters = () => {
-    setApplied({
-      status: statusFilter,
-      priority: priorityFilter,
-      assigned: assignedFilter,
-      dueDate: dueDateFilter,
-      search: searchText.trim(),
-    });
-  };
+  const filtersActive = Boolean(
+    searchText.trim() || statusFilter || priorityFilter || assignedFilter || dueDateFilter,
+  );
 
-  const resetFilters = () => {
+  const clearTableFilters = () => {
+    setSearchText("");
     setStatusFilter("");
     setPriorityFilter("");
     setAssignedFilter("");
     setDueDateFilter("");
-    setSearchText("");
-    setApplied({ status: "", priority: "", assigned: "", dueDate: "", search: "" });
   };
 
   const notifyAssigneeInApp = useCallback(
@@ -880,87 +872,14 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         </div>
       </div>
 
-      <CollapsibleFilterPanel title="Filter tasks">
-        <div className="responsive-filter-grid">
-          <FilterField label="Status">
-            <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as TaskStatus | "")}
-            disabled={tasksTableMissing}
-              className="h-10 w-full rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227] disabled:bg-[#eff3f8]"
-            >
-              <option value="">All statuses</option>
-              <option value="Pending">Pending</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Completed">Completed</option>
-            </select>
-          </FilterField>
-          <FilterField label="Priority">
-            <select
-            value={priorityFilter}
-            onChange={(event) => setPriorityFilter(event.target.value as TaskPriority | "")}
-            disabled={tasksTableMissing}
-              className="h-10 w-full rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227] disabled:bg-[#eff3f8]"
-            >
-              <option value="">All priorities</option>
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-            </select>
-          </FilterField>
-          <FilterField label="Assigned to">
-            <select
-            value={assignedFilter}
-            onChange={(event) => setAssignedFilter(event.target.value)}
-            disabled={(!seesAllTasks && !mentorManagesTeam) || tasksTableMissing}
-              className="h-10 w-full rounded-xl border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227] disabled:bg-[#eff3f8]"
-            >
-              <option value="">All employees</option>
-              {employeeOptions.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.label}
-                </option>
-              ))}
-            </select>
-          </FilterField>
-          <FilterField label="Due date">
-            <Input
-              type="date"
-              value={dueDateFilter}
-              onChange={(event) => setDueDateFilter(event.target.value)}
-              disabled={tasksTableMissing}
-              aria-label="Due date"
-              className="h-10 border-[#e8dcc8] bg-white disabled:bg-[#eff3f8]"
-            />
-          </FilterField>
-          <FilterField label="Search">
-            <Input
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
-              placeholder="Search task title…"
-              disabled={tasksTableMissing}
-              className="h-10 border-[#e8dcc8] bg-white disabled:bg-[#eff3f8]"
-            />
-          </FilterField>
-          <div className="col-span-2 flex gap-2 lg:col-span-1">
-            <Button
-              onClick={applyFilters}
-              disabled={tasksTableMissing}
-              className="h-11 flex-1 rounded-xl bg-[#c9a227] text-white hover:bg-[#b8921f] disabled:opacity-50 sm:h-9"
-            >
-              Apply Filters
-            </Button>
-            <Button
-              onClick={resetFilters}
-              variant="outline"
-              disabled={tasksTableMissing}
-              className="h-11 flex-1 rounded-xl border-[#c9d8eb] bg-white text-[#475569] hover:bg-[#f8fafc] disabled:opacity-50 sm:h-9"
-            >
-              Reset
-            </Button>
-          </div>
-        </div>
-      </CollapsibleFilterPanel>
+      <TableSearchBar
+        value={searchText}
+        onChange={setSearchText}
+        placeholder="Search task title…"
+        showClear={filtersActive}
+        onClear={clearTableFilters}
+        hint={`Showing ${rows.length} task(s)`}
+      />
 
       <div className="responsive-table-wrap">
         <TaskTable
@@ -969,6 +888,17 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           tableMissing={tasksTableMissing}
           employeeNameMap={employeeNameMap}
           canManageTasks={canManageTasks}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+          priorityFilter={priorityFilter}
+          setPriorityFilter={setPriorityFilter}
+          assignedFilter={assignedFilter}
+          setAssignedFilter={setAssignedFilter}
+          dueDateFilter={dueDateFilter}
+          setDueDateFilter={setDueDateFilter}
+          employeeOptions={employeeOptions}
+          assigneeFilterDisabled={(!seesAllTasks && !mentorManagesTeam) || tasksTableMissing}
+          filtersDisabled={tasksTableMissing}
           onView={(task) => setViewTask(task)}
           onEdit={(task) => void openEdit(task)}
           onDelete={(taskId) => void handleDeleteTask(taskId)}

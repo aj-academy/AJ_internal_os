@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   bulkDeletePermissionRequests,
   deletePermissionRequest,
   handlePermissionAction,
 } from "@/app/admin/attendance/actions";
+import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 export type AdminPermissionTableRow = {
   id: string;
   employeeName: string;
@@ -34,8 +35,28 @@ function Badge({ value }: { value: string }) {
   return <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${color}`}>{value}</span>;
 }
 
-export function AdminPermissionRequestsTable({ rows }: { rows: AdminPermissionTableRow[] }) {
+export function AdminPermissionRequestsTable({
+  rows,
+  departments = [],
+}: {
+  rows: AdminPermissionTableRow[];
+  departments?: string[];
+}) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab = searchParams.get("tab") ?? "permission";
+
+  const setQueryParam = (key: string, value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", tab);
+    if (value) params.set(key, value);
+    else params.delete(key);
+    router.replace(`/admin/attendance?${params.toString()}`);
+  };
+
+  const dateFilter = searchParams.get("date") ?? "";
+  const departmentFilter = searchParams.get("department") ?? "";
+  const statusFilter = searchParams.get("status") ?? "";
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -109,24 +130,42 @@ export function AdminPermissionRequestsTable({ rows }: { rows: AdminPermissionTa
                   aria-label="Select all permission requests"
                 />
               </th>
-              {[
-                "Employee Name",
-                "Department",
-                "Permission Date",
-                "From Time",
-                "To Time",
-                "Total Hours",
-                "Permission Type",
-                "Reason",
-                "Description",
-                "Status",
-                "Requested On",
-                "Action",
-              ].map((h) => (
-                <th key={h} className="px-5 py-3">
-                  {h}
-                </th>
-              ))}
+              <TableHeaderCell label="Employee Name" className="px-5 py-3" />
+              <TableHeaderFilter
+                label="Department"
+                value={departmentFilter}
+                onChange={(v) => setQueryParam("department", v)}
+                options={departments.map((d) => ({ value: d, label: d }))}
+                allLabel="All departments"
+                className="px-5 py-3"
+              />
+              <TableHeaderFilter
+                label="Permission Date"
+                type="date"
+                value={dateFilter}
+                onChange={(v) => setQueryParam("date", v)}
+                className="px-5 py-3"
+              />
+              <TableHeaderCell label="From Time" className="px-5 py-3" />
+              <TableHeaderCell label="To Time" className="px-5 py-3" />
+              <TableHeaderCell label="Total Hours" className="px-5 py-3" />
+              <TableHeaderCell label="Permission Type" className="px-5 py-3" />
+              <TableHeaderCell label="Reason" className="px-5 py-3" />
+              <TableHeaderCell label="Description" className="px-5 py-3" />
+              <TableHeaderFilter
+                label="Status"
+                value={statusFilter}
+                onChange={(v) => setQueryParam("status", v)}
+                options={[
+                  { value: "pending", label: "Pending" },
+                  { value: "approved", label: "Approved" },
+                  { value: "rejected", label: "Rejected" },
+                ]}
+                allLabel="All statuses"
+                className="px-5 py-3"
+              />
+              <TableHeaderCell label="Requested On" className="px-5 py-3" />
+              <TableHeaderCell label="Action" className="px-5 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-[#e8edf5] text-slate-700">

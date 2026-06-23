@@ -30,6 +30,7 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 10d) mentor_department_tasks.sql (mentor sees students in same department)
 10d2) freelancer_department_tasks.sql (freelancer assign tasks — same department students)
 10f) aj_academy_platform_expansion.sql (course, mentor assign, task attachments, counselling, notifications)
+10f2) counselling_student_contact_schema.sql (optional student email + display name on counselling_sessions)
 10g) employee_module_schema.sql (permission columns + leave_requests for employee panel)
 10h) employee_daily_mood_schema.sql (optional — mood survey on employee login)
 10i) employee_lead_management_schema.sql (employee Lead Management — adds assigned_to on clients if missing)
@@ -40,7 +41,8 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 DO NOT run rls-policies.sql — it is legacy Birthmark Brahma (employee/manager) and breaks AJ Academy login.
 
 Skip legacy BB-only scripts unless you need CRM/finance:
-  client_lead_schema.sql, finance_schema.sql, employee_daily_mood_schema.sql, etc.
+  client_lead_schema.sql, client_master_schema.sql, client_crm_columns_patch.sql (if 42703 column missing),
+  finance_schema.sql, employee_daily_mood_schema.sql, etc.
 
 After SQL: create users in Authentication, then insert profiles rows (see SUPABASE_SETUP_GUIDE.md).
 
