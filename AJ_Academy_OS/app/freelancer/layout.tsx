@@ -5,7 +5,6 @@ import { requireRole } from "@/lib/auth/requireRole";
 const freelancerSidebarItems = [
   { label: "Dashboard", href: "/freelancer/dashboard" },
   { label: "My Attendance", href: "/freelancer/attendance" },
-  { label: "My Tasks", href: "/freelancer/my-tasks" },
   { label: "Assign Tasks", href: "/freelancer/assign-tasks" },
   { label: "My Profile", href: "/freelancer/profile" },
 ];
