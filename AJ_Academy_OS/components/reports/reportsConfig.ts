@@ -6,7 +6,8 @@ export type ReportsTabId =
   | "projects"
   | "tasks"
   | "finance"
-  | "performance";
+  | "performance"
+  | "export";
 
 export const REPORTS_TAB_ORDER: ReportsTabId[] = [
   "overview",
@@ -17,6 +18,7 @@ export const REPORTS_TAB_ORDER: ReportsTabId[] = [
   "tasks",
   "finance",
   "performance",
+  "export",
 ];
 
 export const REPORTS_TAB_LABELS: Record<ReportsTabId, string> = {
@@ -28,4 +30,5 @@ export const REPORTS_TAB_LABELS: Record<ReportsTabId, string> = {
   tasks: "Task Reports",
   finance: "Finance Reports",
   performance: "Performance Analytics",
+  export: "Export Center",
 };

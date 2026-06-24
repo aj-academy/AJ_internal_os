@@ -12,7 +12,13 @@ import { TX_SELECT } from "@/components/finance/financeHelpers";
 import { PROJECT_SELECT, normalizeProjectStatus } from "@/components/project-master/projectHelpers";
 import { REPORTS_TAB_LABELS, REPORTS_TAB_ORDER, type ReportsTabId } from "@/components/reports/reportsConfig";
 import { formatInr, friendlyReportsError, isMissingTable, minutesToHoursLabel, monthKey, todayISO } from "@/components/reports/reportsHelpers";
-import { exportRowsAsCsv, exportRowsAsExcel, exportRowsAsPdf, type ExportRow } from "@/components/reports/reportsExport";
+import { exportMultiSheetExcel, exportRowsAsCsv, exportRowsAsExcel, exportRowsAsPdf } from "@/components/reports/reportsExport";
+import {
+  buildReportExportRows,
+  EXPORT_DATA_TABS,
+  type ReportDataTab,
+  type ReportExportContext,
+} from "@/components/reports/reportsExportRows";
 import type { FinanceTransactionRow } from "@/types/finance";
 import type { ProjectRow } from "@/types/project";
 
@@ -92,7 +98,7 @@ export function ReportsWorkbench() {
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [exportBusy, setExportBusy] = useState<"pdf" | "excel" | "csv" | null>(null);
+  const [exportBusy, setExportBusy] = useState<string | null>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
 
   const [profiles, setProfiles] = useState<ProfileLite[]>([]);
@@ -583,196 +589,131 @@ export function ReportsWorkbench() {
     return Math.round(Math.min(100, t + a));
   }, [attendanceRateOverall, taskStats]);
 
-  const exportRows = useMemo<ExportRow[]>(() => {
-    const tab = activeTab;
-    if (tab === "employees") {
-      return filteredProfiles.map((p) => {
-        const tc = perEmployeeTaskCounts[p.id] || { total: 0, done: 0 };
-        const rating = tc.total ? Math.round((tc.done / tc.total) * 100) : "";
-        return {
-          employee: p.full_name || p.email || p.id.slice(0, 8),
-          role: p.role || "—",
-          department: p.department || "—",
-          status: p.status || "active",
-          attendance_rate_pct: perEmployeeAttendanceRate[p.id] ?? 0,
-          tasks_total: tc.total,
-          tasks_completed: tc.done,
-          projects_count: perEmployeeProjects[p.id]?.size ?? 0,
-          rating_pct: rating,
-        };
-      });
-    }
-    if (tab === "attendance") {
-      return filteredAttendance.map((a) => ({
-        employee: a.employee_id ? employeeNameMap[a.employee_id] || "—" : "—",
-        attendance_date: String(a.attendance_date).slice(0, 10),
-        check_in: a.check_in_time ? new Date(a.check_in_time).toLocaleString() : "—",
-        check_out: a.check_out_time ? new Date(a.check_out_time).toLocaleString() : "—",
-        working_hours: minutesToHoursLabel(a.total_working_minutes),
-        status: a.status || "—",
-        location: a.check_in_address || "—",
-      }));
-    }
-    if (tab === "clients") {
-      return filteredClients.map((c) => ({
-        name: c.name,
-        company: c.company_name || "—",
-        status: normalizeStatus(String(c.status)),
-        source: c.source || "—",
-        service: c.service_interest || "—",
-        proposal: c.proposal_status || "—",
-        budget: c.budget ?? "",
-      }));
-    }
-    if (tab === "projects") {
-      return filteredProjects.map((p) => ({
-        project: p.project_name,
-        client: p.client_id ? clients.find((c) => c.id === p.client_id)?.company_name || clients.find((c) => c.id === p.client_id)?.name || "—" : "—",
-        manager: p.project_manager ? employeeNameMap[p.project_manager] || "—" : "—",
-        budget: p.budget ?? "",
-        pending_amount: p.pending_amount ?? 0,
-        progress_pct: p.progress ?? 0,
-        status: normalizeProjectStatus(String(p.status)),
-        deadline: p.deadline ? String(p.deadline).slice(0, 10) : "—",
-      }));
-    }
-    if (tab === "tasks") {
-      return filteredTasks.map((t) => ({
-        task_id: t.id,
-        assignee: employeeNameMap[t.assigned_to] || t.assigned_to,
-        project: t.project_id ? projects.find((p) => p.id === t.project_id)?.project_name || "—" : "—",
-        priority: t.priority,
-        status: t.status,
-        due_date: t.due_date || "—",
-      }));
-    }
-    if (tab === "finance") {
-      return financeTx.map((t) => ({
-        transaction_date: t.transaction_date,
-        type: t.transaction_type,
-        category: t.category || "—",
-        amount: t.amount,
-        project: t.project_id ? projects.find((p) => p.id === t.project_id)?.project_name || t.project_id : "—",
-        client: t.client_id ? clients.find((c) => c.id === t.client_id)?.company_name || clients.find((c) => c.id === t.client_id)?.name || t.client_id : "—",
-        description: t.description || "—",
-      }));
-    }
-    if (tab === "performance") {
-      const performerRows = topPerformers.map(({ p, score, tc }) => ({
-        report_section: "top_performer",
-        employee: p.full_name || p.email || p.id,
-        department: p.department || "—",
-        task_completion_pct: score,
-        tasks_total: tc.total,
-        tasks_completed: tc.done,
-      }));
-      const deptRows = distinctDepts.map((d) => {
-        const emps = profiles.filter((p) => p.department === d);
-        let tot = 0;
-        let done = 0;
-        emps.forEach((p) => {
-          const x = perEmployeeTaskCounts[p.id];
-          if (x) {
-            tot += x.total;
-            done += x.done;
-          }
-        });
-        return {
-          report_section: "department_efficiency",
-          department: d,
-          employees: emps.length,
-          task_completion_pct: tot ? Math.round((done / tot) * 100) : 0,
-          tasks_total: tot,
-          tasks_completed: done,
-        };
-      });
-      return [
-        {
-          report_section: "summary",
-          productivity_score: productivityScore,
-          task_completion_pct: taskStats.total ? Math.round((taskStats.completed / taskStats.total) * 1000) / 10 : 0,
-          revenue_growth_mom_pct: financeStats.growth,
-          attendance_rate_pct: attendanceRateOverall,
-          best_revenue_project: bestRevenueProject ? `${bestRevenueProject.name} (${formatInr(bestRevenueProject.amt)})` : "—",
-          best_revenue_client: bestRevenueClient ? `${bestRevenueClient.name} (${formatInr(bestRevenueClient.amt)})` : "—",
-        },
-        ...performerRows,
-        ...deptRows,
-      ];
-    }
+  const exportContext = useMemo<ReportExportContext>(
+    () => ({
+      profiles,
+      clients,
+      projects,
+      tasks,
+      attendance,
+      financeTx,
+      filteredProfiles,
+      filteredClients,
+      filteredProjects,
+      filteredTasks,
+      filteredAttendance,
+      employeeNameMap,
+      perEmployeeTaskCounts,
+      perEmployeeAttendanceRate,
+      perEmployeeProjects,
+      distinctDepts,
+      activeEmployeesCount: activeEmployees.length,
+      taskStats,
+      financeStats,
+      attendanceRateOverall,
+      productivityScore,
+      topPerformers,
+      bestRevenueProject,
+      bestRevenueClient,
+    }),
+    [
+      activeEmployees.length,
+      attendance,
+      attendanceRateOverall,
+      bestRevenueClient,
+      bestRevenueProject,
+      clients,
+      distinctDepts,
+      employeeNameMap,
+      filteredAttendance,
+      filteredClients,
+      filteredProfiles,
+      filteredProjects,
+      filteredTasks,
+      financeStats,
+      financeTx,
+      perEmployeeAttendanceRate,
+      perEmployeeProjects,
+      perEmployeeTaskCounts,
+      productivityScore,
+      profiles,
+      projects,
+      taskStats,
+      tasks,
+      topPerformers,
+    ],
+  );
 
-    return [
-      {
-        total_employees: profiles.length,
-        active_employees: activeEmployees.length,
-        total_clients: clients.length,
-        total_projects: projects.length,
-        total_tasks: taskStats.total,
-        completed_tasks: taskStats.completed,
-        attendance_rate_pct: attendanceRateOverall,
-        monthly_revenue: financeStats.revThis,
-        monthly_expense: financeStats.expThis,
-      },
-    ];
-  }, [
-    activeEmployees.length,
-    activeTab,
-    attendanceRateOverall,
-    bestRevenueClient,
-    bestRevenueProject,
-    clients,
-    distinctDepts,
-    employeeNameMap,
-    filteredAttendance,
-    filteredClients,
-    filteredProfiles,
-    filteredProjects,
-    filteredTasks,
-    financeStats.expThis,
-    financeStats.growth,
-    financeStats.revThis,
-    financeTx,
-    perEmployeeAttendanceRate,
-    perEmployeeProjects,
-    perEmployeeTaskCounts,
-    productivityScore,
-    profiles,
-    projects,
-    taskStats.completed,
-    taskStats.total,
-    topPerformers,
-  ]);
+  const filteredExportRows = useMemo(() => {
+    if (activeTab === "export") return [];
+    return buildReportExportRows(activeTab, "filtered", exportContext);
+  }, [activeTab, exportContext]);
 
-  const exportLabel = REPORTS_TAB_LABELS[activeTab];
+  const allExportRowsByTab = useMemo(() => {
+    const map = {} as Record<ReportDataTab, ReturnType<typeof buildReportExportRows>>;
+    for (const tab of EXPORT_DATA_TABS) {
+      map[tab] = buildReportExportRows(tab, "all", exportContext);
+    }
+    return map;
+  }, [exportContext]);
+
+  const exportLabel = activeTab === "export" ? "Export Center" : REPORTS_TAB_LABELS[activeTab];
 
   const runExport = useCallback(
-    async (format: "pdf" | "excel" | "csv") => {
-      if (!exportRows.length) {
-        setExportMessage("No data available for current report filters.");
+    async (format: "pdf" | "excel" | "csv", tab: ReportDataTab, scope: "filtered" | "all") => {
+      const rows = buildReportExportRows(tab, scope, exportContext);
+      if (!rows.length) {
+        setExportMessage("No data available for this report.");
         return;
       }
-      setExportBusy(format);
+      const busyKey = `${format}:${tab}:${scope}`;
+      setExportBusy(busyKey);
       setExportMessage(null);
       const stamp = new Date().toISOString().slice(0, 10);
-      const slug = activeTab.replace(/_/g, "-");
-      const base = `aj-academy-${slug}-report-${stamp}`;
+      const slug = tab.replace(/_/g, "-");
+      const scopeSlug = scope === "all" ? "full" : "filtered";
+      const base = `aj-academy-${slug}-${scopeSlug}-${stamp}`;
+      const title = `AJ Academy — ${REPORTS_TAB_LABELS[tab]}${scope === "all" ? " (full data)" : ""}`;
       try {
         if (format === "csv") {
-          exportRowsAsCsv(`${base}.csv`, exportRows);
+          exportRowsAsCsv(`${base}.csv`, rows);
         } else if (format === "excel") {
-          await exportRowsAsExcel(`${base}.xlsx`, exportRows);
+          await exportRowsAsExcel(`${base}.xlsx`, rows);
         } else {
-          await exportRowsAsPdf(`AJ Academy — ${exportLabel}`, `${base}.pdf`, exportRows);
+          await exportRowsAsPdf(title, `${base}.pdf`, rows);
         }
-        setExportMessage(`Exported ${exportRows.length} row(s) as ${format.toUpperCase()}.`);
+        setExportMessage(`Exported ${rows.length} row(s) — ${REPORTS_TAB_LABELS[tab]} (${scope === "all" ? "all data" : "filtered"}).`);
       } catch (e) {
         setExportMessage(friendlyReportsError(e));
       } finally {
         setExportBusy(null);
       }
     },
-    [activeTab, exportLabel, exportRows],
+    [exportContext],
   );
+
+  const runExportAllWorkbook = useCallback(async () => {
+    setExportBusy("workbook:excel");
+    setExportMessage(null);
+    const stamp = new Date().toISOString().slice(0, 10);
+    try {
+      const sheets = EXPORT_DATA_TABS.map((tab) => ({
+        name: REPORTS_TAB_LABELS[tab].replace(/ reports?/i, "").slice(0, 31),
+        rows: allExportRowsByTab[tab],
+      })).filter((s) => s.rows.length > 0);
+      if (!sheets.length) {
+        setExportMessage("No report data available to export.");
+        return;
+      }
+      await exportMultiSheetExcel(`aj-academy-all-reports-${stamp}.xlsx`, sheets);
+      const total = sheets.reduce((n, s) => n + s.rows.length, 0);
+      setExportMessage(`Downloaded workbook with ${sheets.length} sheet(s), ${total} total row(s).`);
+    } catch (e) {
+      setExportMessage(friendlyReportsError(e));
+    } finally {
+      setExportBusy(null);
+    }
+  }, [allExportRowsByTab]);
 
   return (
     <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
@@ -807,14 +748,16 @@ export function ReportsWorkbench() {
         </div>
       </div>
 
-      <ReportExportBar
-        tabLabel={exportLabel}
-        rowCount={exportRows.length}
-        busy={exportBusy}
-        message={exportMessage}
-        disabled={loading}
-        onExport={(format) => void runExport(format)}
-      />
+      {activeTab !== "export" ? (
+        <ReportExportBar
+          tabLabel={exportLabel}
+          rowCount={filteredExportRows.length}
+          busy={exportBusy}
+          message={exportMessage}
+          disabled={loading}
+          onExport={(format) => void runExport(format, activeTab as ReportDataTab, "filtered")}
+        />
+      ) : null}
 
       {activeTab === "overview" ? (
         <div className="space-y-6">
@@ -1407,7 +1350,118 @@ export function ReportsWorkbench() {
           </div>
         </div>
       ) : null}
+
+      {activeTab === "export" ? (
+        <ExportCenterPanel
+          rowsByTab={allExportRowsByTab}
+          busy={exportBusy}
+          message={exportMessage}
+          disabled={loading}
+          onExport={(format, tab) => void runExport(format, tab, "all")}
+          onExportWorkbook={() => void runExportAllWorkbook()}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function ExportCenterPanel({
+  rowsByTab,
+  busy,
+  message,
+  disabled,
+  onExport,
+  onExportWorkbook,
+}: {
+  rowsByTab: Record<ReportDataTab, ReturnType<typeof buildReportExportRows>>;
+  busy: string | null;
+  message: string | null;
+  disabled: boolean;
+  onExport: (format: "pdf" | "excel" | "csv", tab: ReportDataTab) => void;
+  onExportWorkbook: () => void;
+}) {
+  const pillClass = "h-8 min-w-[3.5rem] rounded-full border-[#c9d4e6] px-3 text-xs font-semibold";
+  const isBusy = (format: string, tab: ReportDataTab) => busy === `${format}:${tab}:all`;
+  const workbookBusy = busy === "workbook:excel";
+
+  return (
+    <div className="space-y-4 rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-[#0f172a]">Export Center</h3>
+          <p className="mt-1 text-sm text-[#64748b]">
+            Download <strong>complete datasets</strong> — all rows, ignoring search and column filters on other tabs.
+          </p>
+        </div>
+        <Button
+          type="button"
+          className="h-9 rounded-full bg-[#c9a227] px-4 text-sm font-semibold text-white hover:bg-[#b8921f]"
+          disabled={disabled || busy !== null}
+          onClick={onExportWorkbook}
+        >
+          {workbookBusy ? "Preparing…" : "Download all (Excel workbook)"}
+        </Button>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-[#dbe6f3] bg-white">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
+            <tr>
+              <th className="px-4 py-3 text-left">Report</th>
+              <th className="px-4 py-3 text-left">Rows</th>
+              <th className="px-4 py-3 text-right">PDF</th>
+              <th className="px-4 py-3 text-right">Excel</th>
+              <th className="px-4 py-3 text-right">CSV</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#eef2ff]">
+            {EXPORT_DATA_TABS.map((tab) => {
+              const count = rowsByTab[tab].length;
+              return (
+                <tr key={tab}>
+                  <td className="px-4 py-3 font-medium text-[#0f172a]">{REPORTS_TAB_LABELS[tab]}</td>
+                  <td className="px-4 py-3 text-[#64748b]">{count}</td>
+                  <td className="px-4 py-3 text-right">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={pillClass}
+                      disabled={disabled || busy !== null || !count}
+                      onClick={() => onExport("pdf", tab)}
+                    >
+                      {isBusy("pdf", tab) ? "…" : "PDF"}
+                    </Button>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={pillClass}
+                      disabled={disabled || busy !== null || !count}
+                      onClick={() => onExport("excel", tab)}
+                    >
+                      {isBusy("excel", tab) ? "…" : "Excel"}
+                    </Button>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Button
+                      type="button"
+                      className={`${pillClass} border-[#c9a227] bg-[#c9a227] text-white hover:bg-[#b8921f]`}
+                      disabled={disabled || busy !== null || !count}
+                      onClick={() => onExport("csv", tab)}
+                    >
+                      {isBusy("csv", tab) ? "…" : "CSV"}
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {message ? <p className="text-xs text-emerald-700">{message}</p> : null}
+    </div>
   );
 }
 
@@ -1421,12 +1475,13 @@ function ReportExportBar({
 }: {
   tabLabel: string;
   rowCount: number;
-  busy: "pdf" | "excel" | "csv" | null;
+  busy: string | null;
   message: string | null;
   disabled: boolean;
   onExport: (format: "pdf" | "excel" | "csv") => void;
 }) {
   const pillClass = "h-9 min-w-[4.5rem] rounded-full border-[#c9d4e6] px-4 text-sm font-semibold";
+  const busyFormat = busy?.startsWith("pdf:") ? "pdf" : busy?.startsWith("excel:") ? "excel" : busy?.startsWith("csv:") ? "csv" : null;
 
   return (
     <div className="space-y-2 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] px-4 py-3">
@@ -1436,14 +1491,14 @@ function ReportExportBar({
             Export <span className="font-semibold text-[#0f172a]">{tabLabel}</span> with filters applied. PDF downloads as a{" "}
             <span className="font-semibold text-[#0f172a]">.pdf</span> file.
           </p>
-          <p className="mt-0.5 text-xs text-[#94a3b8]">{rowCount} row(s) ready to export</p>
+          <p className="mt-0.5 text-xs text-[#94a3b8]">{rowCount} filtered row(s) · use Export Center for full datasets</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" className={pillClass} disabled={disabled || busy !== null || !rowCount} onClick={() => onExport("pdf")}>
-            {busy === "pdf" ? "PDF…" : "PDF"}
+            {busyFormat === "pdf" ? "PDF…" : "PDF"}
           </Button>
           <Button type="button" variant="outline" className={pillClass} disabled={disabled || busy !== null || !rowCount} onClick={() => onExport("excel")}>
-            {busy === "excel" ? "Excel…" : "Excel"}
+            {busyFormat === "excel" ? "Excel…" : "Excel"}
           </Button>
           <Button
             type="button"
@@ -1451,7 +1506,7 @@ function ReportExportBar({
             disabled={disabled || busy !== null || !rowCount}
             onClick={() => onExport("csv")}
           >
-            {busy === "csv" ? "CSV…" : "CSV"}
+            {busyFormat === "csv" ? "CSV…" : "CSV"}
           </Button>
         </div>
       </div>

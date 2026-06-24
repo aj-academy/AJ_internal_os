@@ -35,6 +35,23 @@ export async function exportRowsAsExcel(filename: string, rows: ExportRow[]) {
   XLSX.writeFile(wb, filename);
 }
 
+export async function exportMultiSheetExcel(
+  filename: string,
+  sheets: { name: string; rows: ExportRow[] }[],
+) {
+  const XLSX = await import("xlsx");
+  const wb = XLSX.utils.book_new();
+  let added = 0;
+  for (const { name, rows } of sheets) {
+    if (!rows.length) continue;
+    const safeName = name.replace(/[\\/?*[\]]/g, "").slice(0, 31);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), safeName || `Sheet${added + 1}`);
+    added += 1;
+  }
+  if (!added) return;
+  XLSX.writeFile(wb, filename);
+}
+
 export async function exportRowsAsPdf(title: string, filename: string, rows: ExportRow[]) {
   if (!rows.length) return;
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
