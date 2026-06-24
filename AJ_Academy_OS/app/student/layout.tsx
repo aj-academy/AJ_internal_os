@@ -1,4 +1,5 @@
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
+import { PolicyAcceptanceGate } from "@/components/policies/PolicyAcceptanceGate";
 import { StudentExperienceLayer } from "@/components/student/StudentExperienceLayer";
 import { requireRole } from "@/lib/auth/requireRole";
 
@@ -6,6 +7,11 @@ const studentSidebarItems = [
   { label: "Dashboard", href: "/student/dashboard" },
   { label: "My Attendance", href: "/student/attendance" },
   { label: "My Tasks", href: "/student/my-tasks" },
+  { label: "My Counselling", href: "/student/counselling" },
+  { label: "My Permission", href: "/student/permission" },
+  { label: "My Leave", href: "/student/leave" },
+  { label: "Company Policies", href: "/student/policies" },
+  { label: "My Profile", href: "/student/profile" },
 ];
 
 export default async function StudentLayout({
@@ -21,6 +27,7 @@ export default async function StudentLayout({
       userEmail={userEmail}
       notificationFallbackHref="/student/my-tasks"
     >
+      <PolicyAcceptanceGate />
       <StudentExperienceLayer />
       {children}
     </DashboardLayout>

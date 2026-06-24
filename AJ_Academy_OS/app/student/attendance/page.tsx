@@ -1,5 +1,5 @@
-import { StudentAttendancePage } from "@/components/attendance/StudentAttendancePage";
+import { MemberAttendancePage } from "@/components/attendance/MemberAttendancePage";
 
-export default function StudentAttendanceRoute() {
-  return <StudentAttendancePage />;
+export default function StudentAttendancePage() {
+  return <MemberAttendancePage memberLabel="Student" />;
 }

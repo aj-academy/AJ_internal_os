@@ -22,7 +22,7 @@ export async function submitPermissionRequest(
   _prev: PermissionFormState,
   formData: FormData,
 ): Promise<PermissionFormState> {
-  const { profile } = await requireRole(["employee"]);
+  const { profile } = await requireRole(["employee", "student"]);
   const supabase = await createClient();
 
   const permissionDate = String(formData.get("permission_date") ?? "").trim();
@@ -74,6 +74,7 @@ export async function submitPermissionRequest(
   }
 
   revalidatePath("/employee/permission");
+  revalidatePath("/student/permission");
   revalidatePath("/admin/attendance");
 
   return { status: "success", message: "Permission request submitted successfully." };

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireEmployeeApiSession } from "@/lib/auth/requireEmployeeApi";
+import { requirePortalMemberApiSession } from "@/lib/auth/requirePortalMemberApi";
 
 export async function GET() {
-  const { response, user } = await requireEmployeeApiSession();
+  const { response, user } = await requirePortalMemberApiSession(["employee", "student"]);
   if (response || !user) return response!;
 
   const admin = createAdminClient();

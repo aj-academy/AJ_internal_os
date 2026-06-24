@@ -49,3 +49,7 @@ After SQL: create users in Authentication, then insert profiles rows (see SUPABA
 
 Optional email notifications:
   Set RESEND_API_KEY (+ TASK_EMAIL_FROM) in AJ_Academy_OS env to send counselling schedule emails.
+
+Student portal (/student/*):
+  Same SQL as employee panel for attendance, permission, leave, policies, profile.
+  Also run aj_academy_platform_expansion.sql + counselling_sessions_patch.sql for course/mentor + counselling history.

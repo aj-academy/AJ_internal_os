@@ -6,7 +6,11 @@ import { ArrowRight, ClipboardList } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { TaskRecord } from "@/types/task";
 
-export function EmployeeTaskPreview() {
+type EmployeeTaskPreviewProps = {
+  tasksHref?: string;
+};
+
+export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks" }: EmployeeTaskPreviewProps) {
   const supabase = useMemo(() => createClient(), []);
   const [rows, setRows] = useState<TaskRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,7 +65,7 @@ export function EmployeeTaskPreview() {
           <p className="mt-1 text-sm text-[#64748b]">Same list as My Tasks — includes anything admins assign to your account.</p>
         </div>
         <Link
-          href="/employee/my-tasks"
+          href={tasksHref}
           className="inline-flex h-9 items-center gap-1 rounded-full bg-[#2563eb] px-4 text-sm font-medium text-white hover:bg-[#1d4ed8]"
         >
           Open My Tasks

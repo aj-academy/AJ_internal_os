@@ -32,7 +32,13 @@ type LeaveRequestRow = {
   created_at: string;
 };
 
-export async function EmployeeMyLeaveContent({ showBackLink = false }: { showBackLink?: boolean }) {
+export async function EmployeeMyLeaveContent({
+  showBackLink = false,
+  dashboardHref = "/employee/dashboard",
+}: {
+  showBackLink?: boolean;
+  dashboardHref?: string;
+}) {
   const { user } = await getUserProfile();
   const supabase = await createClient();
   const uid = user?.id;
@@ -97,7 +103,7 @@ export async function EmployeeMyLeaveContent({ showBackLink = false }: { showBac
         </div>
         {showBackLink ? (
           <Link
-            href={{ pathname: "/employee/dashboard" }}
+            href={{ pathname: dashboardHref }}
             className="inline-flex items-center gap-2 rounded-full border border-[#d4deea] bg-white px-4 py-2 text-sm font-medium text-[#334155] hover:bg-[#f8fbff]"
           >
             <ArrowLeft className="h-4 w-4" />

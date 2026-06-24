@@ -103,4 +103,15 @@ Desktop/AJ_Academy/
 └── .git/
 ```
 
+### Student portal (same modules as employee)
+
+Students use `/student/*` with the same attendance (GPS + work summary), permission, leave, policies, and profile flows as employees. Also requires:
+
+- **`aj_academy_platform_expansion.sql`** — `profiles.course`, `assigned_mentor_id`, counselling
+- **`counselling_sessions_patch.sql`** — My Counselling page + dashboard notifications
+- **`employee_module_schema.sql`** — permission + leave tables (shared RLS via `employee_id = auth.uid()`)
+- **`company_policies_schema.sql`** (+ optional category patch) — policy gate on student layout
+
+Set `course` / `department` / `assigned_mentor_id` on the student’s `profiles` row for the dashboard course & batch card.
+
 If a leftover **`BB-internal-OS`** folder remains, close Cursor and any `npm run dev`, then delete that folder in File Explorer (it is an old duplicate).
