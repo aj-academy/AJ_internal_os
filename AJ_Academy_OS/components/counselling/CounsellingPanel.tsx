@@ -34,7 +34,24 @@ const SESSION_SELECT =
   "id,student_id,student_display_name,student_email,mentor_id,purpose,mode,session_at,duration_minutes,meeting_link,venue,notes,status";
 
 function isMissingContactColumns(msg: string) {
-  return /student_display_name|student_email|schema cache/i.test(msg);
+  const m = msg.toLowerCase();
+  return (
+    m.includes("student_display_name") ||
+    m.includes("student_email") ||
+    (m.includes("schema cache") && m.includes("counselling"))
+  );
+}
+
+function isMissingCounsellingTable(msg: string) {
+  const m = msg.toLowerCase();
+  if (isMissingContactColumns(msg)) return false;
+  if (m.includes("column") && m.includes("does not exist")) return false;
+  return (
+    m.includes("pgrst205") ||
+    m.includes("could not find the table") ||
+    (m.includes("counselling_sessions") && m.includes("does not exist")) ||
+    (m.includes("relation") && m.includes("does not exist"))
+  );
 }
 
 export function CounsellingPanel({ mode }: CounsellingPanelProps) {
@@ -74,15 +91,17 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
       .limit(100);
 
     if (qErr) {
-      if (/relation|does not exist/i.test(qErr.message)) {
-        setSchemaMissing(true);
+      if (isMissingContactColumns(qErr.message)) {
+        setContactColumnsMissing(true);
+        setSchemaMissing(false);
+        setError("Run counselling_sessions_patch.sql in Supabase, then refresh.");
         setRows([]);
         setLoading(false);
         return;
       }
-      if (isMissingContactColumns(qErr.message)) {
-        setContactColumnsMissing(true);
-        setError("Run counselling_student_contact_schema.sql in Supabase, then refresh.");
+      if (isMissingCounsellingTable(qErr.message)) {
+        setSchemaMissing(true);
+        setContactColumnsMissing(false);
         setRows([]);
         setLoading(false);
         return;
@@ -206,7 +225,7 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
       });
       if (insErr) {
         if (isMissingContactColumns(insErr.message)) {
-          throw new Error("Run counselling_student_contact_schema.sql in Supabase, then try again.");
+          throw new Error("Run counselling_sessions_patch.sql in Supabase, then try again.");
         }
         throw insErr;
       }
@@ -299,12 +318,14 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
 
       {schemaMissing ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          Run <strong>aj_academy_platform_expansion.sql</strong> in Supabase.
+          Counselling table not found. Run <strong>counselling_sessions_patch.sql</strong> (or{" "}
+          <strong>aj_academy_platform_expansion.sql</strong>) in Supabase SQL Editor, then hard-refresh this page.
         </p>
       ) : null}
       {contactColumnsMissing ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          Run <strong>counselling_student_contact_schema.sql</strong> in Supabase.
+          Counselling table is missing contact columns. Run <strong>counselling_sessions_patch.sql</strong> in Supabase,
+          then hard-refresh.
         </p>
       ) : null}
 

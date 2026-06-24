@@ -45,7 +45,8 @@ Run files from **`AJ_Academy_SB`** in order (`DATABASE_SETUP_ORDER.txt`):
 6. `task_notifications_columns.sql`  
 7. `in_app_notifications.sql`  
 8. **`profiles_rls_fix.sql`** (required — fixes login redirect loop)  
-8d. **`counselling_student_contact_schema.sql`** (optional student email on counselling sessions — run after `aj_academy_platform_expansion.sql`)
+8d. **`counselling_sessions_patch.sql`** (re-run if Counselling page shows schema warning — adds/fixes `counselling_sessions` + columns)
+8e. **`counselling_student_contact_schema.sql`** (legacy — columns are in patch + expansion)
 
 Do **not** run `rls-policies.sql` (legacy Birthmark Brahma; blocks AJ Academy profiles).
 
