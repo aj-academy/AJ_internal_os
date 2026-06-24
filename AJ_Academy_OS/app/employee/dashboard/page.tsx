@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AppLogo } from "@/components/branding/AppLogo";
-import { CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, Shield } from "lucide-react";
+import { CalendarClock, CalendarDays, ClipboardList, Shield } from "lucide-react";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { createClient } from "@/lib/supabase/server";
 import { EmployeeTaskPreview } from "@/components/employee/EmployeeTaskPreview";
@@ -76,14 +76,8 @@ export default async function EmployeeDashboardPage() {
       icon: CalendarClock,
     },
     {
-      title: "My Permission",
-      description: "Request short leave from office; track approval status.",
-      href: "/employee/permission",
-      icon: ClipboardCheck,
-    },
-    {
-      title: "My Leave",
-      description: "Leave requests and status.",
+      title: "Leave & Permission",
+      description: "Submit permission requests and view leave history.",
       href: "/employee/leave",
       icon: CalendarDays,
     },
@@ -121,7 +115,7 @@ export default async function EmployeeDashboardPage() {
             href={{ pathname: "/employee/leave" }}
             className="inline-flex h-10 items-center justify-center rounded-full border border-[#d4deea] bg-white px-5 text-sm font-medium text-[#334155] hover:bg-[#f8fbff]"
           >
-            My leave
+            Leave & permission
           </Link>
           <Link
             href={{ pathname: "/employee/my-tasks" }}

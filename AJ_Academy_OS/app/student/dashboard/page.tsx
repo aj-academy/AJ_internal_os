@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AppLogo } from "@/components/branding/AppLogo";
-import { CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, GraduationCap, MessageCircle, Shield, User } from "lucide-react";
+import { CalendarClock, CalendarDays, ClipboardList, GraduationCap, MessageCircle, Shield, User } from "lucide-react";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { createClient } from "@/lib/supabase/server";
 import { EmployeeTaskPreview } from "@/components/employee/EmployeeTaskPreview";
@@ -105,14 +105,8 @@ export default async function StudentDashboardPage() {
       icon: CalendarClock,
     },
     {
-      title: "My Permission",
-      description: "Request short permission; track approval status.",
-      href: "/student/permission",
-      icon: ClipboardCheck,
-    },
-    {
-      title: "My Leave",
-      description: "Leave requests and status.",
+      title: "Leave & Permission",
+      description: "Submit permission requests and view leave history.",
       href: "/student/leave",
       icon: CalendarDays,
     },
@@ -161,7 +155,7 @@ export default async function StudentDashboardPage() {
             href="/student/leave"
             className="inline-flex h-10 items-center justify-center rounded-full border border-[#d4deea] bg-white px-5 text-sm font-medium text-[#334155] hover:bg-[#f8fbff]"
           >
-            My leave
+            Leave & permission
           </Link>
           <Link
             href="/student/my-tasks"

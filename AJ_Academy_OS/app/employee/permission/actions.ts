@@ -73,7 +73,9 @@ export async function submitPermissionRequest(
     return { status: "error", message: error.message };
   }
 
+  revalidatePath("/employee/leave");
   revalidatePath("/employee/permission");
+  revalidatePath("/student/leave");
   revalidatePath("/student/permission");
   revalidatePath("/admin/attendance");
 

@@ -34,9 +34,11 @@ type LeaveRequestRow = {
 
 export async function EmployeeMyLeaveContent({
   showBackLink = false,
+  embedded = false,
   dashboardHref = "/employee/dashboard",
 }: {
   showBackLink?: boolean;
+  embedded?: boolean;
   dashboardHref?: string;
 }) {
   const { user } = await getUserProfile();
@@ -97,11 +99,11 @@ export async function EmployeeMyLeaveContent({
             <CalendarDays className="h-5 w-5" />
           </span>
           <div>
-            <h1 className="text-lg font-semibold text-[#0f172a]">My leave</h1>
+            <h2 className="text-lg font-semibold text-[#0f172a]">{embedded ? "Leave requests" : "My leave"}</h2>
             <p className="text-sm text-[#64748b]">Your leave requests from the company system.</p>
           </div>
         </div>
-        {showBackLink ? (
+        {showBackLink && !embedded ? (
           <Link
             href={{ pathname: dashboardHref }}
             className="inline-flex items-center gap-2 rounded-full border border-[#d4deea] bg-white px-4 py-2 text-sm font-medium text-[#334155] hover:bg-[#f8fbff]"
