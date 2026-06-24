@@ -115,7 +115,7 @@ export default async function FreelancerDashboardPage() {
         </article>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Link
           href="/freelancer/attendance"
           className="flex items-start gap-3 rounded-2xl border border-[#e8dcc8] bg-white p-5 transition hover:border-[#c9a227]"
@@ -124,16 +124,6 @@ export default async function FreelancerDashboardPage() {
           <div>
             <h2 className="font-semibold text-[#3d3428]">My Attendance</h2>
             <p className="mt-1 text-sm text-[#6b5d4d]">Selfie check-in, check-in/out GPS, work summary.</p>
-          </div>
-        </Link>
-        <Link
-          href="/freelancer/my-tasks"
-          className="flex items-start gap-3 rounded-2xl border border-[#e8dcc8] bg-white p-5 transition hover:border-[#c9a227]"
-        >
-          <ClipboardList className="mt-0.5 h-6 w-6 text-[#c9a227]" />
-          <div>
-            <h2 className="font-semibold text-[#3d3428]">My Tasks</h2>
-            <p className="mt-1 text-sm text-[#6b5d4d]">Track and update tasks assigned to your account.</p>
           </div>
         </Link>
         <Link
