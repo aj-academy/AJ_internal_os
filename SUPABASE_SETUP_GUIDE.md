@@ -121,7 +121,7 @@ Task popups + mood survey use the same tables/modules as employee (`in_app_notif
 
 ### Mentor portal
 
-Mentors use `/mentor/*` for attendance, **My Tasks** (assignee — tasks from admin), **Assign Tasks** (assigner — department students), counselling, and a dashboard **student roster** (department batch + primary mentor flag).  
+Mentors use `/mentor/*` for attendance, **Assign Tasks** (department students), counselling, **My Profile**, and a dashboard **student roster** (department batch + primary mentor flag). Task notification popups still open `/mentor/my-tasks` when admins assign work.  
 Requires `aj_academy_platform_expansion.sql`, `mentor_department_tasks.sql`, and optional `employee_daily_mood_schema.sql` for mood popup.
 
 If a leftover **`BB-internal-OS`** folder remains, close Cursor and any `npm run dev`, then delete that folder in File Explorer (it is an old duplicate).

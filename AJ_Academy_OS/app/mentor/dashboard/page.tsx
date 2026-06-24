@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarClock, ClipboardList, ListChecks, MessageCircle } from "lucide-react";
+import { CalendarClock, ClipboardList, MessageCircle, UserCircle } from "lucide-react";
 import { MentorStudentRoster } from "@/components/mentor/MentorStudentRoster";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { createClient } from "@/lib/supabase/server";
@@ -91,16 +91,6 @@ export default async function MentorDashboardPage() {
           </div>
         </Link>
         <Link
-          href="/mentor/my-tasks"
-          className="flex items-start gap-3 rounded-2xl border border-[#e8dcc8] bg-white p-5 transition hover:border-[#c9a227]"
-        >
-          <ListChecks className="mt-0.5 h-6 w-6 text-[#c9a227]" />
-          <div>
-            <h2 className="font-semibold text-[#3d3428]">My Tasks</h2>
-            <p className="mt-1 text-sm text-[#6b5d4d]">Tasks assigned to you — update progress and complete.</p>
-          </div>
-        </Link>
-        <Link
           href="/mentor/assign-tasks"
           className="flex items-start gap-3 rounded-2xl border border-[#e8dcc8] bg-white p-5 transition hover:border-[#c9a227]"
         >
@@ -118,6 +108,16 @@ export default async function MentorDashboardPage() {
           <div>
             <h2 className="font-semibold text-[#3d3428]">Counselling</h2>
             <p className="mt-1 text-sm text-[#6b5d4d]">View scheduled counselling sessions.</p>
+          </div>
+        </Link>
+        <Link
+          href="/mentor/profile"
+          className="flex items-start gap-3 rounded-2xl border border-[#e8dcc8] bg-white p-5 transition hover:border-[#c9a227]"
+        >
+          <UserCircle className="mt-0.5 h-6 w-6 text-[#c9a227]" />
+          <div>
+            <h2 className="font-semibold text-[#3d3428]">My Profile</h2>
+            <p className="mt-1 text-sm text-[#6b5d4d]">Update your profile details and documents.</p>
           </div>
         </Link>
       </div>
