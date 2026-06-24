@@ -23,7 +23,13 @@ function escapeHtml(value: string) {
 
 export async function POST(request: Request) {
   const apiKey = process.env.RESEND_API_KEY?.trim();
-  if (!apiKey) return NextResponse.json({ ok: true, skipped: true, reason: "RESEND_API_KEY not set" });
+  if (!apiKey) {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason: "RESEND_API_KEY not set",
+    });
+  }
 
   let body: Body;
   try {

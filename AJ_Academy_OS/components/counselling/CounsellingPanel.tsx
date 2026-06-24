@@ -263,26 +263,49 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
       }
 
       const emailToSend = emailToStore || profileEmail || "";
+      let emailNote = "";
       if (emailToSend) {
-        await fetch("/api/notifications/counselling-scheduled", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            studentEmail: emailToSend,
-            studentName: profileName,
-            purpose: form.purpose.trim(),
-            mode: form.mode,
-            sessionAtIso: new Date(form.session_at).toISOString(),
-            durationMinutes: parseInt(form.duration_minutes, 10) || 30,
-            meetingLink: form.mode === "online" ? form.meeting_link.trim() : "",
-            venue: form.mode === "offline" ? form.venue.trim() : "",
-          }),
-        }).catch(() => {});
+        try {
+          const mailRes = await fetch("/api/notifications/counselling-scheduled", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              studentEmail: emailToSend,
+              studentName: profileName,
+              purpose: form.purpose.trim(),
+              mode: form.mode,
+              sessionAtIso: new Date(form.session_at).toISOString(),
+              durationMinutes: parseInt(form.duration_minutes, 10) || 30,
+              meetingLink: form.mode === "online" ? form.meeting_link.trim() : "",
+              venue: form.mode === "offline" ? form.venue.trim() : "",
+            }),
+          });
+          const mailPayload = (await mailRes.json().catch(() => ({}))) as {
+            ok?: boolean;
+            skipped?: boolean;
+            reason?: string;
+            error?: string;
+          };
+          if (!mailRes.ok) {
+            emailNote = `Email not sent: ${mailPayload.error || mailRes.statusText || "server error"}.`;
+          } else if (mailPayload.skipped) {
+            emailNote =
+              mailPayload.reason === "RESEND_API_KEY not set"
+                ? "Email not sent: set RESEND_API_KEY and TASK_EMAIL_FROM in Vercel (or .env.local), then redeploy."
+                : `Email not sent: ${mailPayload.reason || "skipped"}.`;
+          } else if (mailPayload.ok) {
+            emailNote = `Email sent to ${emailToSend}.`;
+          } else {
+            emailNote = `Email could not be confirmed for ${emailToSend}.`;
+          }
+        } catch {
+          emailNote = "Email not sent: could not reach the mail API.";
+        }
       }
 
       const parts = ["Counselling session scheduled."];
       if (studentId) parts.push("Student dashboard notification sent.");
-      if (emailToSend) parts.push(`Email sent to ${emailToSend}.`);
+      if (emailNote) parts.push(emailNote);
       else if (!studentId) parts.push("Add a student email to send the meeting link by mail.");
 
       setSuccess(parts.join(" "));
