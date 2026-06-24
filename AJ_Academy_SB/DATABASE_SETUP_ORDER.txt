@@ -53,3 +53,8 @@ Optional email notifications:
 Student portal (/student/*):
   Same SQL as employee panel for attendance, permission, leave, policies, profile.
   Also run aj_academy_platform_expansion.sql + counselling_sessions_patch.sql for course/mentor + counselling history.
+
+Freelancer portal (/freelancer/*):
+  Uses task_schema.sql + freelancer_department_tasks.sql for assigner flow.
+  My Tasks (tasks assigned to freelancer) + popup notifications use in_app_notifications.sql.
+  Mood popup requires optional employee_daily_mood_schema.sql.

@@ -114,4 +114,9 @@ Students use `/student/*` with the same attendance (GPS + work summary), permiss
 
 Set `course` / `department` / `assigned_mentor_id` on the student’s `profiles` row for the dashboard course & batch card.
 
+### Freelancer portal
+
+Freelancers now use `/freelancer/*` routes for attendance, **My Tasks** (tasks assigned to freelancer), **Assign Tasks** (department student assignment), and **My Profile**.  
+Task popups + mood survey use the same tables/modules as employee (`in_app_notifications`, optional `employee_daily_mood_checkins`).
+
 If a leftover **`BB-internal-OS`** folder remains, close Cursor and any `npm run dev`, then delete that folder in File Explorer (it is an old duplicate).

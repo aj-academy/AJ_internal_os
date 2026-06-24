@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarClock, ClipboardList } from "lucide-react";
+import { CalendarClock, ClipboardList, UserCircle } from "lucide-react";
 import { AttendanceLocationBlock } from "@/components/attendance/AttendanceLocationBlock";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { createClient } from "@/lib/supabase/server";
@@ -25,9 +25,10 @@ export default async function FreelancerDashboardPage() {
   } | null = null;
 
   let assignedByMe = 0;
+  let assignedToMe = 0;
 
   if (uid) {
-    const [attRes, assignedRes] = await Promise.all([
+    const [attRes, assignedRes, myTasksRes] = await Promise.all([
       supabase
         .from("attendance_records")
         .select(
@@ -37,9 +38,11 @@ export default async function FreelancerDashboardPage() {
         .eq("attendance_date", today)
         .maybeSingle(),
       supabase.from("tasks").select("id", { count: "exact", head: true }).eq("assigned_by", uid),
+      supabase.from("tasks").select("id", { count: "exact", head: true }).eq("assigned_to", uid),
     ]);
     todayAttendance = attRes.data ?? null;
     assignedByMe = assignedRes.count ?? 0;
+    assignedToMe = myTasksRes.count ?? 0;
   }
 
   const firstName = (profile?.full_name ?? "Freelancer").split(" ")[0];
@@ -103,12 +106,16 @@ export default async function FreelancerDashboardPage() {
 
       <div className="stat-cards-grid">
         <article className="rounded-2xl border border-[#e8dcc8] bg-white p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-[#a68b2e]">Tasks assigned to me</p>
+          <p className="mt-2 text-3xl font-semibold text-[#3d3428]">{assignedToMe}</p>
+        </article>
+        <article className="rounded-2xl border border-[#e8dcc8] bg-white p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-[#a68b2e]">Tasks I assigned</p>
           <p className="mt-2 text-3xl font-semibold text-[#3d3428]">{assignedByMe}</p>
         </article>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Link
           href="/freelancer/attendance"
           className="flex items-start gap-3 rounded-2xl border border-[#e8dcc8] bg-white p-5 transition hover:border-[#c9a227]"
@@ -117,6 +124,16 @@ export default async function FreelancerDashboardPage() {
           <div>
             <h2 className="font-semibold text-[#3d3428]">My Attendance</h2>
             <p className="mt-1 text-sm text-[#6b5d4d]">Selfie check-in, check-in/out GPS, work summary.</p>
+          </div>
+        </Link>
+        <Link
+          href="/freelancer/my-tasks"
+          className="flex items-start gap-3 rounded-2xl border border-[#e8dcc8] bg-white p-5 transition hover:border-[#c9a227]"
+        >
+          <ClipboardList className="mt-0.5 h-6 w-6 text-[#c9a227]" />
+          <div>
+            <h2 className="font-semibold text-[#3d3428]">My Tasks</h2>
+            <p className="mt-1 text-sm text-[#6b5d4d]">Track and update tasks assigned to your account.</p>
           </div>
         </Link>
         <Link
@@ -129,6 +146,16 @@ export default async function FreelancerDashboardPage() {
             <p className="mt-1 text-sm text-[#6b5d4d]">
               Assign work to students in {department || "your department"}.
             </p>
+          </div>
+        </Link>
+        <Link
+          href="/freelancer/profile"
+          className="flex items-start gap-3 rounded-2xl border border-[#e8dcc8] bg-white p-5 transition hover:border-[#c9a227]"
+        >
+          <UserCircle className="mt-0.5 h-6 w-6 text-[#c9a227]" />
+          <div>
+            <h2 className="font-semibold text-[#3d3428]">My Profile</h2>
+            <p className="mt-1 text-sm text-[#6b5d4d]">Update your profile details and documents.</p>
           </div>
         </Link>
       </div>

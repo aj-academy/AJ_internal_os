@@ -1,10 +1,13 @@
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
+import { FreelancerExperienceLayer } from "@/components/freelancer/FreelancerExperienceLayer";
 import { requireRole } from "@/lib/auth/requireRole";
 
 const freelancerSidebarItems = [
   { label: "Dashboard", href: "/freelancer/dashboard" },
   { label: "My Attendance", href: "/freelancer/attendance" },
+  { label: "My Tasks", href: "/freelancer/my-tasks" },
   { label: "Assign Tasks", href: "/freelancer/assign-tasks" },
+  { label: "My Profile", href: "/freelancer/profile" },
 ];
 
 export default async function FreelancerLayout({
@@ -18,8 +21,9 @@ export default async function FreelancerLayout({
       sidebarItems={freelancerSidebarItems}
       userName={profile.full_name ?? "Freelancer"}
       userEmail={userEmail}
-      notificationFallbackHref="/freelancer/attendance"
+      notificationFallbackHref="/freelancer/my-tasks"
     >
+      <FreelancerExperienceLayer />
       {children}
     </DashboardLayout>
   );

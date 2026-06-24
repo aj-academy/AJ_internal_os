@@ -32,8 +32,8 @@ function markShown(id: string) {
   sessionStorage.setItem(SHOWN_KEY, JSON.stringify(Array.from(set).slice(-50)));
 }
 
-/** Popup when a new task is assigned to the signed-in employee (bell updates via realtime too). */
-export function TaskAssignmentPopup() {
+/** Popup when a new task is assigned to the signed-in user (bell updates via realtime too). */
+export function TaskAssignmentPopup({ fallbackTaskHref = "/employee/my-tasks" }: { fallbackTaskHref?: string }) {
   const supabase = createClient();
   const [popup, setPopup] = useState<TaskNotif | null>(null);
   const userIdRef = useRef<string | null>(null);
@@ -131,7 +131,7 @@ export function TaskAssignmentPopup() {
 
   if (!popup) return null;
 
-  const href = (popup.link_path || "/employee/my-tasks").trim() || "/employee/my-tasks";
+  const href = (popup.link_path || fallbackTaskHref).trim() || fallbackTaskHref;
 
   return (
     <div className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm" role="alertdialog" aria-labelledby="task-popup-title">
