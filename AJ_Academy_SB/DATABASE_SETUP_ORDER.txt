@@ -58,3 +58,8 @@ Freelancer portal (/freelancer/*):
   Uses task_schema.sql + freelancer_department_tasks.sql for assigner flow.
   My Tasks (tasks assigned to freelancer) + popup notifications use in_app_notifications.sql.
   Mood popup requires optional employee_daily_mood_schema.sql.
+
+Mentor portal (/mentor/*):
+  attendance_module.sql + mentor_department_tasks.sql + aj_academy_platform_expansion.sql.
+  My Tasks (assignee) + Assign Tasks (assigner) + student roster on dashboard.
+  Mood popup optional via employee_daily_mood_schema.sql.
