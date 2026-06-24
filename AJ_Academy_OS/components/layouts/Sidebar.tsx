@@ -13,7 +13,6 @@ import {
   ClipboardList,
   FileText,
   FolderKanban,
-  GraduationCap,
   Handshake,
   LayoutGrid,
   ListChecks,
@@ -23,6 +22,7 @@ import {
   UsersRound,
   Wallet,
 } from "lucide-react";
+import { AppLogo } from "@/components/branding/AppLogo";
 import { cn } from "@/lib/utils";
 
 export interface SidebarItem {
@@ -114,14 +114,14 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
       <div className="flex items-center justify-between gap-2 px-4 py-5">
         {!collapsed ? (
           <div className="flex min-w-0 items-center gap-2">
-            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/20 text-white">
-              <GraduationCap className="h-5 w-5" />
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/95 p-0.5 shadow-sm">
+              <AppLogo size={32} className="h-8 w-8" priority />
             </span>
             <p className="truncate text-base font-semibold text-white">AJ Academy</p>
           </div>
         ) : (
-          <span className="mx-auto inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 text-white">
-            <GraduationCap className="h-5 w-5" />
+          <span className="mx-auto inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-white/95 p-0.5 shadow-sm">
+            <AppLogo size={32} className="h-8 w-8" priority />
           </span>
         )}
         {onToggleCollapse ? (

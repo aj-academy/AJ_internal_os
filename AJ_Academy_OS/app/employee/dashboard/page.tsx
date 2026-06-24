@@ -1,5 +1,5 @@
 import Link from "next/link";
-import Image from "next/image";
+import { AppLogo } from "@/components/branding/AppLogo";
 import { CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, Shield } from "lucide-react";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { createClient } from "@/lib/supabase/server";
@@ -108,14 +108,7 @@ export default async function EmployeeDashboardPage() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748b]">Workspace</p>
           <h2 className="mt-1 flex items-center gap-3 text-3xl font-semibold text-[#0f172a]">
-            <Image
-              src="/icons/icon-192x192.png"
-              alt="AJ Academy"
-              width={40}
-              height={40}
-              className="h-10 w-10 shrink-0 rounded-xl border border-[#dbe6f3] bg-white object-cover shadow-sm"
-              priority
-            />
+            <AppLogo size={40} className="h-10 w-10 rounded-xl border border-[#dbe6f3] bg-white shadow-sm" priority />
             Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, {firstName}
           </h2>
           <p className="mt-1 text-sm text-[#64748b]">

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
+import { AppLogo } from "@/components/branding/AppLogo";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { normalizeLoginProfile, type LoginProfileRow } from "@/lib/auth/profileSelect";
@@ -335,15 +335,8 @@ export function LoginForm({ initialError, resetSuccess = false, initialEmail = "
   return (
     <Card className="w-full max-w-md rounded-2xl border-[#e8dcc8] shadow-sm">
       <CardHeader className="space-y-2">
-        <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-[#e8dcc8] bg-[#fffdf8]">
-          <Image
-            src="/icons/icon-192x192.png"
-            alt="AJ Academy"
-            width={56}
-            height={56}
-            className="h-full w-full object-contain"
-            priority
-          />
+        <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-[#e8dcc8] bg-[#fffdf8] p-1">
+          <AppLogo size={52} className="h-full w-full" priority />
         </div>
         <CardTitle className="text-2xl text-[#3d3428]">AJ Academy</CardTitle>
         <p className="text-sm text-[#6b5d4d]">Sign in to your dashboard</p>

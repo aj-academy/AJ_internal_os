@@ -1,6 +1,6 @@
 /* AJ Academy — PWA service worker (static assets only) */
-const CACHE_VERSION = "aj-academy-v4-icons";
-const ICON_QUERY = "?v=2";
+const CACHE_VERSION = "aj-academy-v5-icons";
+const ICON_QUERY = "?v=3";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 

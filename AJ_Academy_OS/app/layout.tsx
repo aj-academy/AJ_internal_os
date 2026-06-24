@@ -31,6 +31,11 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
+        url: `/favicon.ico?v=${PWA_ICON_VERSION}`,
+        sizes: "32x32",
+        type: "image/x-icon",
+      },
+      {
         url: `/icons/icon-192x192.png?v=${PWA_ICON_VERSION}`,
         sizes: "192x192",
         type: "image/png",
@@ -41,6 +46,7 @@ export const metadata: Metadata = {
         type: "image/png",
       },
     ],
+    shortcut: [`/favicon.ico?v=${PWA_ICON_VERSION}`],
     apple: [
       {
         url: `/apple-touch-icon.png?v=${PWA_ICON_VERSION}`,

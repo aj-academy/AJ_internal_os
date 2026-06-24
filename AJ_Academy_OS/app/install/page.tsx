@@ -28,7 +28,7 @@ export default function InstallPage() {
               Tap <strong>⋮</strong> (top right) → <strong>Add to Home screen</strong> → <strong>Add</strong>
             </li>
             <li>
-              Check your <strong>home screen</strong> for the BB icon (swipe left/right on home pages).
+              Check your <strong>home screen</strong> for the AJ Academy icon (swipe left/right on home pages).
             </li>
             <li>
               Do <strong>not</strong> tap Install again if it keeps saying &quot;Installing…&quot;

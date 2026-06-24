@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 import { InAppNotificationsBell } from "@/components/layouts/InAppNotificationsBell";
 import { NotificationSoundControl } from "@/components/layouts/NotificationSoundControl";
+import { AppLogo } from "@/components/branding/AppLogo";
 
 interface TopbarProps {
   fullName: string;
@@ -41,12 +42,19 @@ export const Topbar = memo(function Topbar({
           {mobileMenuTrigger ? <div className="shrink-0 pt-0.5 lg:hidden">{mobileMenuTrigger}</div> : null}
 
           <div className="min-w-0 flex-1 pt-0.5">
-            <p className="text-sm font-semibold text-[#3d3428]">AJ Academy</p>
-            <p className="truncate text-xs text-[#6b5d4d] sm:max-w-none">
-              <span className="font-medium text-[#3d3428]">{fullName}</span>
-              <span className="text-[#a68b2e]/60"> · </span>
-              <span className="break-all sm:break-normal">{email}</span>
-            </p>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#e8dcc8] bg-white p-0.5 shadow-sm">
+                <AppLogo size={32} className="h-8 w-8" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[#3d3428]">AJ Academy</p>
+                <p className="truncate text-xs text-[#6b5d4d] sm:max-w-none">
+                  <span className="font-medium text-[#3d3428]">{fullName}</span>
+                  <span className="text-[#a68b2e]/60"> · </span>
+                  <span className="break-all sm:break-normal">{email}</span>
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
