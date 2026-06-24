@@ -12,6 +12,8 @@ interface TaskTableProps {
   employeeNameMap: Record<string, string>;
   /** Admin or manager: full task management UI */
   canManageTasks: boolean;
+  /** Assignee-only portals: show who assigned the task instead of assignee picker column */
+  assigneeColumn?: "assigned-to" | "assigned-by";
   statusFilter: TaskStatus | "";
   setStatusFilter: (value: TaskStatus | "") => void;
   priorityFilter: TaskPriority | "";
@@ -54,6 +56,7 @@ export function TaskTable({
   tableMissing = false,
   employeeNameMap,
   canManageTasks,
+  assigneeColumn = "assigned-to",
   statusFilter,
   setStatusFilter,
   priorityFilter,
@@ -74,23 +77,31 @@ export function TaskTable({
 }: TaskTableProps) {
   const today = todayDateKey();
   const disabled = tableMissing || filtersDisabled;
+  const showAssignedTo = assigneeColumn === "assigned-to";
+  const showAssignedBy = assigneeColumn === "assigned-by";
+  const columnCount = showAssignedTo || showAssignedBy ? 8 : 7;
 
   return (
     <article className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1160px] text-sm">
+        <table className={`w-full text-sm ${showAssignedTo || showAssignedBy ? "min-w-[1160px]" : "min-w-[980px]"}`}>
           <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
             <tr>
               <TableHeaderCell label="Task Title" className="px-4 py-3 text-center" />
-              <TableHeaderFilter
-                label="Assigned To"
-                value={assignedFilter}
-                onChange={setAssignedFilter}
-                options={employeeOptions.map((e) => ({ value: e.id, label: e.label }))}
-                allLabel="All employees"
-                disabled={disabled || assigneeFilterDisabled}
-                className="px-4 py-3"
-              />
+              {showAssignedTo ? (
+                <TableHeaderFilter
+                  label="Assigned To"
+                  value={assignedFilter}
+                  onChange={setAssignedFilter}
+                  options={employeeOptions.map((e) => ({ value: e.id, label: e.label }))}
+                  allLabel="All employees"
+                  disabled={disabled || assigneeFilterDisabled}
+                  className="px-4 py-3"
+                />
+              ) : null}
+              {showAssignedBy ? (
+                <TableHeaderCell label="Assigned By" className="px-4 py-3 text-center" />
+              ) : null}
               <TableHeaderFilter
                 label="Priority"
                 value={priorityFilter}
@@ -134,7 +145,7 @@ export function TaskTable({
             {loading
               ? Array.from({ length: 5 }).map((_, index) => (
                   <tr key={`skeleton-${index}`}>
-                    <td colSpan={8} className="px-4 py-3">
+                    <td colSpan={columnCount} className="px-4 py-3">
                       <div className="h-6 animate-pulse rounded-md bg-[#e8edf5]" />
                     </td>
                   </tr>
@@ -152,11 +163,16 @@ export function TaskTable({
                       ].join(" ")}
                     >
                       <td className="px-4 py-3.5 align-middle font-medium text-[#0f172a]">{task.title}</td>
-                      <td className="px-4 py-3.5 align-middle">
-                        {(task.assigned_to && employeeNameMap[task.assigned_to]) ||
-                          task.assignee_name ||
-                          "Unknown"}
-                      </td>
+                      {showAssignedTo ? (
+                        <td className="px-4 py-3.5 align-middle">
+                          {(task.assigned_to && employeeNameMap[task.assigned_to]) ||
+                            task.assignee_name ||
+                            "Unknown"}
+                        </td>
+                      ) : null}
+                      {showAssignedBy ? (
+                        <td className="px-4 py-3.5 align-middle">{task.assigner_display_name || "—"}</td>
+                      ) : null}
                       <td className="px-4 py-3.5 align-middle">
                         <Badge className={priorityClassMap[task.priority]}>{task.priority}</Badge>
                       </td>
@@ -251,7 +267,7 @@ export function TaskTable({
                 })}
             {!loading && !tasks.length ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-[#64748b]">
+                <td colSpan={columnCount} className="px-4 py-8 text-center text-[#64748b]">
                   {tableMissing
                     ? "Tasks will appear here after the database script is applied and you refresh."
                     : "No tasks found for current filters."}

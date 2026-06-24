@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, CalendarDays } from "lucide-react";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { createClient } from "@/lib/supabase/server";
-import { formatDateIST, formatDateTimeIST } from "@/lib/datetime";
+import { formatDateIST } from "@/lib/datetime";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -11,14 +11,6 @@ function todayISO() {
 function formatDateOnly(iso: string | null | undefined) {
   if (!iso) return "—";
   return formatDateIST(iso);
-}
-
-function normalizeLeaveStatus(raw: string | null | undefined) {
-  const v = (raw || "").toLowerCase();
-  if (v.includes("pend")) return "pending";
-  if (v.includes("approv")) return "approved";
-  if (v.includes("reject")) return "rejected";
-  return v || "other";
 }
 
 type LeaveRequestRow = {
@@ -48,20 +40,13 @@ export async function EmployeeMyLeaveContent({
   const yearBoundary = `${new Date().getFullYear()}-01-01T00:00:00.000Z`;
 
   let leavePending = 0;
-  let leaveHistory: LeaveRequestRow[] = [];
   let leaveYtdApproved = 0;
   let leaveYtdRejected = 0;
   let upcomingApproved: LeaveRequestRow[] = [];
 
   if (uid) {
-    const [leaveRes, leaveListRes, apprYtdRes, rejYtdRes] = await Promise.all([
+    const [leaveRes, apprYtdRes, rejYtdRes, upcomingRes] = await Promise.all([
       supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("employee_id", uid).ilike("status", "pending"),
-      supabase
-        .from("leave_requests")
-        .select("id,leave_type,from_date,to_date,total_days,status,reason,created_at")
-        .eq("employee_id", uid)
-        .order("created_at", { ascending: false })
-        .limit(40),
       supabase
         .from("leave_requests")
         .select("id", { count: "exact", head: true })
@@ -74,20 +59,24 @@ export async function EmployeeMyLeaveContent({
         .eq("employee_id", uid)
         .gte("created_at", yearBoundary)
         .ilike("status", "%reject%"),
+      supabase
+        .from("leave_requests")
+        .select("id,leave_type,from_date,to_date,total_days,status,reason,created_at")
+        .eq("employee_id", uid)
+        .ilike("status", "%approved%")
+        .order("from_date", { ascending: true })
+        .limit(20),
     ]);
 
     leavePending = leaveRes.count ?? 0;
-    leaveHistory = (leaveListRes.data ?? []) as LeaveRequestRow[];
     leaveYtdApproved = apprYtdRes.count ?? 0;
     leaveYtdRejected = rejYtdRes.count ?? 0;
 
-    upcomingApproved = leaveHistory
+    upcomingApproved = ((upcomingRes.data ?? []) as LeaveRequestRow[])
       .filter((row) => {
-        if (normalizeLeaveStatus(row.status) !== "approved") return false;
         const end = row.to_date || row.from_date;
         return end ? end >= today : false;
       })
-      .sort((a, b) => (a.from_date || "").localeCompare(b.from_date || ""))
       .slice(0, 3);
   }
 
@@ -142,63 +131,6 @@ export async function EmployeeMyLeaveContent({
           </p>
         </div>
       ) : null}
-
-      <div className="mt-4">
-        <p className="mb-2 text-sm font-semibold text-[#0f172a]">Requests</p>
-        <div className="overflow-x-auto rounded-xl border border-[#e8edf5]">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
-              <tr>
-                <th className="px-3 py-2">Type</th>
-                <th className="px-3 py-2">From</th>
-                <th className="px-3 py-2">To</th>
-                <th className="px-3 py-2">Days</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Submitted</th>
-                <th className="px-3 py-2">Reason</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#eef2ff] text-[#334155]">
-              {leaveHistory.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-[#64748b]">
-                    No leave requests yet.
-                  </td>
-                </tr>
-              ) : (
-                leaveHistory.map((row) => {
-                  const s = normalizeLeaveStatus(row.status);
-                  const badge =
-                    s === "approved"
-                      ? "bg-emerald-100 text-emerald-800"
-                      : s === "rejected"
-                        ? "bg-rose-100 text-rose-800"
-                        : "bg-amber-100 text-amber-900";
-                  const reason = row.reason?.trim() || "—";
-                  const reasonShort = reason.length > 48 ? `${reason.slice(0, 48)}…` : reason;
-                  return (
-                    <tr key={row.id}>
-                      <td className="px-3 py-2 font-medium text-[#0f172a]">{row.leave_type || "—"}</td>
-                      <td className="px-3 py-2">{formatDateOnly(row.from_date)}</td>
-                      <td className="px-3 py-2">{formatDateOnly(row.to_date)}</td>
-                      <td className="px-3 py-2">{row.total_days ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${badge}`}>
-                          {row.status || "Pending"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-[#64748b]">{formatDateTimeIST(row.created_at)}</td>
-                      <td className="max-w-[200px] truncate px-3 py-2 text-[#64748b]" title={reason !== "—" ? row.reason ?? undefined : undefined}>
-                        {reasonShort}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }

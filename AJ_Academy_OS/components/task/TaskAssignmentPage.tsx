@@ -79,6 +79,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const searchParams = useSearchParams();
   const isAdmin = role === "admin";
   const isEmployee = role === "employee";
+  const isStudent = role === "student";
   const isMentor = role === "mentor";
   const isFreelancer = role === "freelancer";
   const resolvedVariant: TaskAssignmentVariant =
@@ -556,7 +557,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   );
 
   const openCreate = async () => {
-    if (tasksTableMissing) return;
+    if (tasksTableMissing || isStudent) return;
     setError(null);
     setSuccess(null);
     assigneeBeforeEditRef.current = null;
@@ -603,7 +604,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   };
 
   const handleSaveTask = async () => {
-    if (tasksTableMissing) return;
+    if (tasksTableMissing || isStudent) return;
     if (isEmployee) {
       if (editId) {
         setError("Use the task list to update status and progress. Ask an admin to change title, dates, or assignee.");
@@ -818,12 +819,12 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     <section className={`space-y-6 rounded-[24px] border bg-white p-4 sm:p-6 lg:p-8 ${isEmployee ? "border-[#d4deea] shadow-[0_20px_40px_rgba(30,64,175,0.08)]" : "border-[#e8dcc8] shadow-[0_20px_40px_rgba(30,64,175,0.08)]"}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-3xl font-semibold text-[#0f172a]">Task Assignment</h2>
+          <h2 className="text-3xl font-semibold text-[#0f172a]">{isStudent ? "My Tasks" : "Task Assignment"}</h2>
           <p className="mt-1 text-sm text-[#64748b]">
-            {isEmployee
+            {isStudent
+              ? "Work assigned to you by admins, mentors, or freelancers. Update progress and mark tasks complete — you cannot assign tasks to others."
+              : isEmployee
               ? "Admins assign work to your user account; it appears here. You can also assign tasks to yourself or teammates in your department or shared projects."
-              : role === "student"
-              ? "Tasks assigned to you appear here. Update status and mark work complete."
               : departmentAssigner
                 ? `Assign work to students in your department (${selfProfile?.department ?? "set department in User Master"}). Only matching students appear in the assignee list.`
                 : "Assign, track and manage tasks for students, freelancers, and mentors"}
@@ -888,6 +889,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           tableMissing={tasksTableMissing}
           employeeNameMap={employeeNameMap}
           canManageTasks={canManageTasks}
+          assigneeColumn={isStudent ? "assigned-by" : "assigned-to"}
           statusFilter={statusFilter}
           setStatusFilter={setStatusFilter}
           priorityFilter={priorityFilter}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, ClipboardCheck } from "lucide-react";
+import { ArrowLeft, ClipboardCheck } from "lucide-react";
 import { requireRole } from "@/lib/auth/requireRole";
 import { createClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/types/profile";
@@ -44,7 +44,7 @@ export async function MemberLeavePermissionContent({
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#64748b]">Requests</p>
           <h2 className="mt-1 text-3xl font-semibold text-[#0f172a]">Leave &amp; Permission</h2>
           <p className="mt-1 text-sm text-[#64748b]">
-            Submit permission requests and view leave history in one place.
+            Submit permission requests and view leave summary in one place.
           </p>
         </div>
         <Link

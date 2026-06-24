@@ -8,9 +8,10 @@ import type { TaskRecord } from "@/types/task";
 
 type EmployeeTaskPreviewProps = {
   tasksHref?: string;
+  receiveOnly?: boolean;
 };
 
-export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks" }: EmployeeTaskPreviewProps) {
+export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveOnly = false }: EmployeeTaskPreviewProps) {
   const supabase = useMemo(() => createClient(), []);
   const [rows, setRows] = useState<TaskRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,7 +63,11 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks" }: Employ
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">My tasks</p>
           <h3 className="mt-1 text-lg font-semibold text-[#0f172a]">Recent work</h3>
-          <p className="mt-1 text-sm text-[#64748b]">Same list as My Tasks — includes anything admins assign to your account.</p>
+          <p className="mt-1 text-sm text-[#64748b]">
+            {receiveOnly
+              ? "Tasks assigned to you by admins, mentors, or freelancers."
+              : "Same list as My Tasks — includes anything admins assign to your account."}
+          </p>
         </div>
         <Link
           href={tasksHref}
@@ -81,7 +86,11 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks" }: Employ
             <ClipboardList className="mt-0.5 h-5 w-5 shrink-0 text-[#94a3b8]" />
             <div>
               <p className="font-medium text-[#334155]">No tasks yet</p>
-              <p className="mt-1">When an admin assigns you work, it will show here and on My Tasks. You can also add your own tasks from My Tasks.</p>
+              <p className="mt-1">
+                {receiveOnly
+                  ? "When someone assigns you work, it will show here and on My Tasks."
+                  : "When an admin assigns you work, it will show here and on My Tasks. You can also add your own tasks from My Tasks."}
+              </p>
             </div>
           </div>
         ) : (

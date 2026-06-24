@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import {
   BarChart3,
   BriefcaseBusiness,
+  CalendarDays,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -16,8 +17,10 @@ import {
   Handshake,
   LayoutGrid,
   ListChecks,
+  MessageCircle,
   Settings,
   ShieldCheck,
+  User,
   UserCheck,
   UsersRound,
   Wallet,
@@ -71,17 +74,21 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
   const searchParams = useSearchParams();
   const activeTab = searchParams.get("tab") ?? "overview";
   const getIcon = (label: string) => {
-    if (label.includes("Attendance")) return UserCheck;
-    if (label.includes("User") || label.includes("Employee")) return UsersRound;
-    if (label.includes("Client")) return BriefcaseBusiness;
-    if (label.includes("Project")) return FolderKanban;
-    if (label.includes("Task")) return ListChecks;
-    if (label.includes("Finance")) return Wallet;
-    if (label.includes("Freelance")) return Handshake;
-    if (label.includes("Policies")) return ShieldCheck;
-    if (label.includes("Reports")) return BarChart3;
-    if (label.includes("Settings")) return Settings;
-    if (label.includes("Dashboard")) return LayoutGrid;
+    const l = label.toLowerCase();
+    if (l.includes("attendance")) return UserCheck;
+    if (l.includes("counselling")) return MessageCircle;
+    if (l.includes("leave") || l.includes("permission")) return CalendarDays;
+    if (l.includes("profile")) return User;
+    if (l.includes("user") || l.includes("employee")) return UsersRound;
+    if (l.includes("client") || l.includes("lead")) return BriefcaseBusiness;
+    if (l.includes("project")) return FolderKanban;
+    if (l.includes("task")) return ListChecks;
+    if (l.includes("finance")) return Wallet;
+    if (l.includes("freelance")) return Handshake;
+    if (l.includes("policies")) return ShieldCheck;
+    if (l.includes("reports")) return BarChart3;
+    if (l.includes("settings")) return Settings;
+    if (l.includes("dashboard")) return LayoutGrid;
     return FileText;
   };
 

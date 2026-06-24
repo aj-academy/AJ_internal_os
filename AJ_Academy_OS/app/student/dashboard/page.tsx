@@ -112,7 +112,7 @@ export default async function StudentDashboardPage() {
     },
     {
       title: "My Tasks",
-      description: "View and complete work assigned by mentors and admins.",
+      description: "View and complete work assigned to you by mentors and admins.",
       href: "/student/my-tasks",
       icon: ClipboardList,
     },
@@ -248,7 +248,7 @@ export default async function StudentDashboardPage() {
         </div>
       </div>
 
-      <EmployeeTaskPreview tasksHref="/student/my-tasks" />
+      <EmployeeTaskPreview tasksHref="/student/my-tasks" receiveOnly />
     </section>
   );
 }
