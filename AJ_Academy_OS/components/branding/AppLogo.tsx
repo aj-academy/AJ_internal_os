@@ -1,6 +1,8 @@
 import Image from "next/image";
-import { PWA_ICON_VERSION } from "@/lib/pwa/branding";
 import { cn } from "@/lib/utils";
+
+/** UI logo path — no query string (Next.js Image optimizer rejects `?v=` on local files). */
+const APP_LOGO_SRC = "/icons/icon-192x192.png";
 
 type AppLogoProps = {
   size?: number;
@@ -8,11 +10,11 @@ type AppLogoProps = {
   priority?: boolean;
 };
 
-/** AJ Academy mark — used in sidebar, topbar, login, and dashboard (not BB / legacy PWA assets). */
+/** AJ Academy mark — sidebar, topbar, login, and dashboard. */
 export function AppLogo({ size = 36, className = "", priority = false }: AppLogoProps) {
   return (
     <Image
-      src={`/icons/icon-192x192.png?v=${PWA_ICON_VERSION}`}
+      src={APP_LOGO_SRC}
       alt="AJ Academy"
       width={size}
       height={size}

@@ -335,8 +335,8 @@ export function LoginForm({ initialError, resetSuccess = false, initialEmail = "
   return (
     <Card className="w-full max-w-md rounded-2xl border-[#e8dcc8] shadow-sm">
       <CardHeader className="space-y-2">
-        <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-[#e8dcc8] bg-[#fffdf8] p-1">
-          <AppLogo size={52} className="h-full w-full" priority />
+        <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-[#e8dcc8] bg-[#fffdf8]">
+          <AppLogo size={56} className="h-full w-full" priority />
         </div>
         <CardTitle className="text-2xl text-[#3d3428]">AJ Academy</CardTitle>
         <p className="text-sm text-[#6b5d4d]">Sign in to your dashboard</p>
