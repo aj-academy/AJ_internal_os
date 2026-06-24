@@ -25,8 +25,18 @@ type TableHeaderFilterProps = {
   type?: "select" | "date";
 };
 
-const headerBase =
-  "whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide";
+const headerTypography = "text-xs font-semibold uppercase tracking-wide";
+
+const headerBase = ["whitespace-nowrap px-4 py-3 text-left", headerTypography].join(" ");
+
+function headerTriggerClass(active: boolean, disabled: boolean) {
+  return [
+    "inline-flex items-center gap-1 border-0 bg-transparent p-0 outline-none transition-colors",
+    headerTypography,
+    active ? "text-[#2563eb]" : "text-[#64748b]",
+    disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:text-[#334155]",
+  ].join(" ");
+}
 
 export function TableHeaderFilter({
   label,
@@ -54,11 +64,7 @@ export function TableHeaderFilter({
             if (typeof el.showPicker === "function") el.showPicker();
             else el.click();
           }}
-          className={[
-            "inline-flex items-center gap-1 outline-none transition-colors",
-            active ? "text-[#2563eb]" : "text-[#64748b]",
-            disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:text-[#334155]",
-          ].join(" ")}
+          className={headerTriggerClass(active, disabled)}
         >
           {label}
           <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-80" />
@@ -83,11 +89,7 @@ export function TableHeaderFilter({
         <DropdownMenuTrigger
           disabled={disabled}
           aria-label={`Filter by ${label}`}
-          className={[
-            "inline-flex items-center gap-1 outline-none transition-colors",
-            active ? "text-[#2563eb]" : "text-[#64748b]",
-            disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:text-[#334155]",
-          ].join(" ")}
+          className={headerTriggerClass(active, disabled)}
         >
           {label}
           <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-80" />
