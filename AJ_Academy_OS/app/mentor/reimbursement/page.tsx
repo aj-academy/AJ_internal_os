@@ -1,5 +1,5 @@
-import { FinanceWorkbench } from "@/components/finance/FinanceWorkbench";
+import { MemberReimbursementWorkbench } from "@/components/reimbursement/MemberReimbursementWorkbench";
 
 export default function MentorReimbursementPage() {
-  return <FinanceWorkbench variant="employee" title="Reimbursement" />;
+  return <MemberReimbursementWorkbench />;
 }

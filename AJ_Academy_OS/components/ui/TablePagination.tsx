@@ -8,6 +8,9 @@ type TablePaginationProps = {
   totalItems: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  onPageSizeChange?: (size: number) => void;
+  pageSizeOptions?: number[];
+  alwaysShow?: boolean;
   className?: string;
 };
 
@@ -17,9 +20,12 @@ export function TablePagination({
   totalItems,
   pageSize,
   onPageChange,
+  onPageSizeChange,
+  pageSizeOptions = [10, 25, 50],
+  alwaysShow = false,
   className = "",
 }: TablePaginationProps) {
-  if (totalItems <= pageSize) return null;
+  if (!alwaysShow && totalItems <= pageSize) return null;
 
   const start = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, totalItems);
@@ -29,7 +35,23 @@ export function TablePagination({
       <p>
         Showing {start}–{end} of {totalItems}
       </p>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {onPageSizeChange ? (
+          <label className="flex items-center gap-1 text-xs">
+            Rows
+            <select
+              className="h-8 rounded-lg border border-[#dbe6f3] bg-white px-2 text-xs"
+              value={pageSize}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+            >
+              {pageSizeOptions.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <Button
           type="button"
           variant="outline"
@@ -40,8 +62,8 @@ export function TablePagination({
         >
           Previous
         </Button>
-        <span className="min-w-[4.5rem] text-center text-xs font-medium text-[#334155]">
-          Page {page} / {totalPages}
+        <span className="min-w-[5rem] text-center text-xs font-medium text-[#334155]">
+          Page {page} of {Math.max(1, totalPages)}
         </span>
         <Button
           type="button"

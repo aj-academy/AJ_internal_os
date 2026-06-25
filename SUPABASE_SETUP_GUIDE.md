@@ -124,10 +124,12 @@ Task popups use `in_app_notifications` (fallback `/freelancer/my-tasks`).
 Mentors use `/mentor/*` for attendance (selfie), **Assign Tasks**, counselling, **Reimbursement**, **My Profile**, and dashboard **student roster**.  
 Requires `aj_academy_platform_expansion.sql`, `mentor_department_tasks.sql`.
 
-### Reimbursement (employee / mentor / freelancer)
+### Reimbursement (admin + employee / mentor / freelancer)
 
-Run **`finance_schema.sql`**, then **`portal_expense_claims_rls.sql`**.  
-Portal routes: `/employee/reimbursement`, `/mentor/reimbursement`, `/freelancer/reimbursement`.
+Run **`finance_schema.sql`**, then **`reimbursement_schema_patch.sql`**, then **`portal_expense_claims_rls.sql`**.
+
+- **Admin:** sidebar **Reimbursements** (`/admin/reimbursements`) — Overview, All Claims, Pending, Special Approvals, Reimbursed, Policy Settings, Reports.
+- **Members:** sidebar **Reimbursement** — tabs: Overview, Submit Claim, My Claims, Import Bills, Policy & Limits (BB OS layout).
 
 ### Task completion files
 

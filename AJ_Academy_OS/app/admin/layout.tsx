@@ -11,6 +11,7 @@ const adminSidebarItems = [
   { label: "Task Assignment", href: "/admin/task-assignment" },
   { label: "Freelance Management", href: "/admin/freelancers" },
   { label: "Finance & Expenses", href: "/admin/finance" },
+  { label: "Reimbursements", href: "/admin/reimbursements" },
   { label: "Company Policies", href: "/admin/policies" },
   { label: "Portfolio", href: "/admin/portfolio" },
   { label: "Reports", href: "/admin/reports" },
