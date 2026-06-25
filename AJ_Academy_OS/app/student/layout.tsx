@@ -7,6 +7,7 @@ const studentSidebarItems = [
   { label: "Dashboard", href: "/student/dashboard" },
   { label: "My Attendance", href: "/student/attendance" },
   { label: "My Tasks", href: "/student/my-tasks" },
+  { label: "My Portfolio", href: "/student/portfolio" },
   { label: "My Counselling", href: "/student/counselling" },
   { label: "Leave & Permission", href: "/student/leave" },
   { label: "Company Policies", href: "/student/policies" },

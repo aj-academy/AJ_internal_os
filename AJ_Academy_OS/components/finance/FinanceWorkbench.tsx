@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { TablePagination } from "@/components/ui/TablePagination";
+import { usePagination } from "@/lib/usePagination";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Input } from "@/components/ui/input";
@@ -53,10 +55,11 @@ function visibleTabsForVariant(v: FinanceVariant): FinanceTabId[] {
   return [...FINANCE_TAB_ORDER];
 }
 
-export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
+export function FinanceWorkbench({ variant, title = "Finance & Expense Management" }: { variant: FinanceVariant; title?: string }) {
   const supabase = useMemo(() => createClient(), []);
   const isPrivileged = variant === "admin" || variant === "accounts";
   const isManager = variant === "manager";
+  const isMemberPortal = variant === "employee";
   const visibleTabs = useMemo(() => visibleTabsForVariant(variant), [variant]);
 
   const [activeTab, setActiveTab] = useState<FinanceTabId>(() => visibleTabs[0] ?? "overview");
@@ -524,12 +527,31 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
       .sort((a, b) => b.amt - a.amt);
   }, [clientMap, incomeRows]);
 
+  const visibleClaims = useMemo(() => {
+    if (isPrivileged || isManager) return claims;
+    if (isMemberPortal && userId) return claims.filter((c) => c.employee_id === userId);
+    return claims;
+  }, [claims, isManager, isMemberPortal, isPrivileged, userId]);
+
+  const {
+    paginatedItems: paginatedClaims,
+    page: claimsPage,
+    setPage: setClaimsPage,
+    totalPages: claimsTotalPages,
+    totalItems: claimsTotalItems,
+    pageSize: claimsPageSize,
+  } = usePagination(visibleClaims, 10);
+
   return (
     <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-3xl font-semibold text-[#0f172a]">Finance &amp; Expense Management</h2>
-          <p className="mt-1 text-sm text-[#64748b]">Manage company revenue, expenses, project payments and financial tracking.</p>
+          <h2 className="text-3xl font-semibold text-[#0f172a]">{title}</h2>
+          <p className="mt-1 text-sm text-[#64748b]">
+            {isMemberPortal
+              ? "Submit reimbursement claims and track approval status."
+              : "Manage company revenue, expenses, project payments and financial tracking."}
+          </p>
         </div>
         <Button variant="outline" className="h-9 rounded-full border-[#e8dcc8]" disabled={loading || schemaMissing} onClick={() => void reload()}>
           Refresh
@@ -696,7 +718,7 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
 
       {activeTab === "claims" ? (
         <div className="space-y-3">
-          {(isPrivileged || variant === "employee") ? (
+          {(isPrivileged || isMemberPortal) ? (
             <div className="flex justify-end">
               <Button className="h-9 rounded-full bg-[#c9a227] px-4 text-white" onClick={() => setPanel("claim")} disabled={schemaMissing}>
                 + New claim
@@ -707,7 +729,10 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
             <table className="w-full min-w-[900px] text-sm">
               <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
                 <tr>
-                  {["Code", "Employee", "Type", "Amount", "Date", "Status", "Actions"].map((h) => (
+                  {(isMemberPortal
+                    ? ["Code", "Type", "Amount", "Date", "Status", "Actions"]
+                    : ["Code", "Employee", "Type", "Amount", "Date", "Status", "Actions"]
+                  ).map((h) => (
                     <th key={h} className="px-3 py-2 text-left">
                       {h}
                     </th>
@@ -718,15 +743,17 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                 {loading
                   ? Array.from({ length: 4 }).map((_, i) => (
                       <tr key={i}>
-                        <td colSpan={7} className="px-3 py-3">
+                        <td colSpan={isMemberPortal ? 6 : 7} className="px-3 py-3">
                           <div className="h-4 animate-pulse rounded bg-slate-100" />
                         </td>
                       </tr>
                     ))
-                  : claims.map((c) => (
+                  : paginatedClaims.map((c) => (
                       <tr key={c.id} className="border-t border-[#eef2ff]">
                         <td className="px-3 py-2 font-mono text-xs">{c.claim_code}</td>
-                        <td className="px-3 py-2">{employeeMap[c.employee_id] || c.employee_id.slice(0, 8)}</td>
+                        {!isMemberPortal ? (
+                          <td className="px-3 py-2">{employeeMap[c.employee_id] || c.employee_id.slice(0, 8)}</td>
+                        ) : null}
                         <td className="px-3 py-2">{c.expense_type}</td>
                         <td className="px-3 py-2 font-semibold">{formatInr(Number(c.amount))}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{String(c.expense_date).slice(0, 10)}</td>
@@ -752,9 +779,9 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
                         </td>
                       </tr>
                     ))}
-                {!loading && !claims.length ? (
+                {!loading && !visibleClaims.length ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-[#64748b]">
+                    <td colSpan={isMemberPortal ? 6 : 7} className="px-6 py-8 text-center text-[#64748b]">
                       No claims yet.
                     </td>
                   </tr>
@@ -762,6 +789,13 @@ export function FinanceWorkbench({ variant }: { variant: FinanceVariant }) {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            page={claimsPage}
+            totalPages={claimsTotalPages}
+            totalItems={claimsTotalItems}
+            pageSize={claimsPageSize}
+            onPageChange={setClaimsPage}
+          />
         </div>
       ) : null}
 
@@ -1294,6 +1328,8 @@ function FinanceTableSection<T>({
   columns: string[];
   renderRow: (row: T) => ReactNode;
 }) {
+  const { paginatedItems, page, setPage, totalPages, totalItems, pageSize } = usePagination(rows, 10);
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1322,7 +1358,7 @@ function FinanceTableSection<T>({
                     </td>
                   </tr>
                 ))
-              : rows.map(renderRow)}
+              : paginatedItems.map(renderRow)}
             {!loading && !rows.length ? (
               <tr>
                 <td colSpan={columns.length} className="px-6 py-8 text-center text-[#64748b]">
@@ -1333,6 +1369,7 @@ function FinanceTableSection<T>({
           </tbody>
         </table>
       </div>
+      <TablePagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} />
     </div>
   );
 }

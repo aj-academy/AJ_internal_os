@@ -1,7 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Camera } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { AttendanceSelfieThumb } from "@/components/attendance/AttendanceSelfieThumb";
+import { TablePagination } from "@/components/ui/TablePagination";
+import { usePagination } from "@/lib/usePagination";
 import type { Profile } from "@/types/profile";
 
 type LocationPoint = { latitude: number; longitude: number };
@@ -18,6 +22,7 @@ interface AttendanceRecord {
   check_out_longitude: number | null;
   check_in_address: string | null;
   check_out_address: string | null;
+  check_in_selfie_url?: string | null;
   location_type: string | null;
   status: string | null;
   total_working_minutes: number | null;
@@ -34,6 +39,7 @@ interface AttendanceWritePayload {
   check_out_longitude: number | null;
   check_in_address: string | null;
   check_out_address: string | null;
+  check_in_selfie_url?: string | null;
   location_type: string | null;
   status: string | null;
   total_working_minutes: number | null;
@@ -147,7 +153,7 @@ async function getLatestTodayRecord(
   const { data, error } = await supabase
     .from("attendance_records")
     .select(
-      "id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,check_in_address,check_out_address,location_type,status,total_working_minutes",
+      "id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,check_in_address,check_out_address,check_in_selfie_url,location_type,status,total_working_minutes",
     )
     .eq("employee_id", currentEmployeeId)
     .eq("attendance_date", today)
@@ -162,8 +168,16 @@ async function getLatestTodayRecord(
   return data?.[0] ?? null;
 }
 
-export function MemberAttendancePage({ memberLabel = "Employee" }: { memberLabel?: string }) {
+export function MemberAttendancePage({
+  memberLabel = "Employee",
+  requireSelfie = true,
+}: {
+  memberLabel?: string;
+  requireSelfie?: boolean;
+}) {
   const supabase = useMemo(() => createClient(), []);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [userEmail, setUserEmail] = useState<string>("");
   const [employeeId, setEmployeeId] = useState<string | null>(null);
@@ -176,6 +190,64 @@ export function MemberAttendancePage({ memberLabel = "Employee" }: { memberLabel
   const [busy, setBusy] = useState<"idle" | "checkin" | "checkout" | "loading">("loading");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [liveNow, setLiveNow] = useState(new Date());
+  const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+
+  const stopCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setCameraReady(false);
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    if (!requireSelfie) return;
+    stopCamera();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraReady(true);
+    } catch {
+      setMessage({ type: "error", text: "Camera access is required for selfie check-in." });
+    }
+  }, [requireSelfie, stopCamera]);
+
+  const captureSelfieBlob = async (): Promise<Blob> => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) {
+      throw new Error("Camera not ready. Allow camera access and try again.");
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not capture image.");
+    ctx.drawImage(video, 0, 0);
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("Could not create selfie image."))),
+        "image/jpeg",
+        0.85,
+      );
+    });
+  };
+
+  const uploadSelfie = async (uid: string, blob: Blob): Promise<string> => {
+    const path = `${uid}/${getTodayLocalDate()}-checkin.jpg`;
+    const { error } = await supabase.storage.from("attendance-selfies").upload(path, blob, {
+      upsert: true,
+      contentType: "image/jpeg",
+    });
+    if (error) throw error;
+    const { data } = supabase.storage.from("attendance-selfies").getPublicUrl(path);
+    return data.publicUrl;
+  };
 
   const loadAttendanceData = useCallback(
     async (currentEmployeeId: string) => {
@@ -184,11 +256,11 @@ export function MemberAttendancePage({ memberLabel = "Employee" }: { memberLabel
         supabase
           .from("attendance_records")
           .select(
-            "id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,check_in_address,check_out_address,location_type,status,total_working_minutes",
+            "id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,check_in_address,check_out_address,check_in_selfie_url,location_type,status,total_working_minutes",
           )
           .eq("employee_id", currentEmployeeId)
           .order("attendance_date", { ascending: false })
-          .limit(10)
+          .limit(50)
           .returns<AttendanceRecord[]>(),
       ]);
 
@@ -250,6 +322,7 @@ export function MemberAttendancePage({ memberLabel = "Employee" }: { memberLabel
         ]);
 
         setProfile(profileData ?? null);
+        if (requireSelfie) await startCamera();
       } catch (error) {
         const text = toReadableAttendanceError(error);
         setMessage({ type: "error", text });
@@ -259,7 +332,8 @@ export function MemberAttendancePage({ memberLabel = "Employee" }: { memberLabel
     };
 
     void bootstrap();
-  }, [loadAttendanceData, supabase, todayKey]);
+    return () => stopCamera();
+  }, [loadAttendanceData, requireSelfie, startCamera, stopCamera, supabase, todayKey]);
 
   useEffect(() => {
     const interval = setInterval(() => setLiveNow(new Date()), 1000);
@@ -292,6 +366,40 @@ export function MemberAttendancePage({ memberLabel = "Employee" }: { memberLabel
     return memberLabel;
   }, [profile?.full_name, profile?.email, userEmail, memberLabel]);
 
+  const {
+    paginatedItems: paginatedHistory,
+    page: historyPage,
+    setPage: setHistoryPage,
+    totalPages: historyTotalPages,
+    totalItems: historyTotalItems,
+    pageSize: historyPageSize,
+  } = usePagination(history, 10);
+
+  const historyHeadings = requireSelfie
+    ? [
+        "Date",
+        "Selfie",
+        "Check In",
+        "Check Out",
+        "Time Gap",
+        "Status",
+        "Location Type",
+        "Check In Location",
+        "Check Out Location",
+        "Work Summary Status",
+      ]
+    : [
+        "Date",
+        "Check In",
+        "Check Out",
+        "Time Gap",
+        "Status",
+        "Location Type",
+        "Check In Location",
+        "Check Out Location",
+        "Work Summary Status",
+      ];
+
   const handleCheckIn = async () => {
     if (!employeeId) return;
     setMessage(null);
@@ -309,6 +417,14 @@ export function MemberAttendancePage({ memberLabel = "Employee" }: { memberLabel
       const address = await resolveAddress(location);
       const nowIso = new Date().toISOString();
       const today = getTodayLocalDate();
+
+      let selfieUrl: string | null = null;
+      if (requireSelfie) {
+        const selfieBlob = await captureSelfieBlob();
+        const previewUrl = URL.createObjectURL(selfieBlob);
+        setSelfiePreview(previewUrl);
+        selfieUrl = await uploadSelfie(employeeId, selfieBlob);
+      }
 
       const payload: AttendanceWritePayload = {
         employee_id: employeeId,
@@ -335,6 +451,7 @@ export function MemberAttendancePage({ memberLabel = "Employee" }: { memberLabel
             check_in_latitude: location.latitude,
             check_in_longitude: location.longitude,
             check_in_address: address,
+            check_in_selfie_url: selfieUrl,
             status: "present",
             location_type: "Remote",
           })
@@ -342,14 +459,20 @@ export function MemberAttendancePage({ memberLabel = "Employee" }: { memberLabel
           .eq("employee_id", employeeId);
         error = updateResult.error;
       } else {
-        const insertResult = await supabase.from("attendance_records").insert(payload);
+        const insertResult = await supabase.from("attendance_records").insert({
+          ...payload,
+          check_in_selfie_url: selfieUrl,
+        });
         error = insertResult.error;
       }
 
       if (error) throw error;
 
       await loadAttendanceData(employeeId);
-      setMessage({ type: "success", text: "Check in successful." });
+      setMessage({
+        type: "success",
+        text: requireSelfie ? "Check-in recorded with selfie and location." : "Check in successful.",
+      });
     } catch (error) {
       const text = toReadableAttendanceError(error);
       setMessage({ type: "error", text });
@@ -432,8 +555,38 @@ export function MemberAttendancePage({ memberLabel = "Employee" }: { memberLabel
     <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <div>
         <h2 className="text-3xl font-semibold text-slate-900">My Attendance</h2>
-        <p className="mt-1 text-sm text-slate-600">Check in, check out, submit work summary and track attendance history.</p>
+        <p className="mt-1 text-sm text-slate-600">
+          Check in{requireSelfie ? " with a live selfie" : ""}, check out, submit work summary and track attendance history.
+        </p>
       </div>
+
+      {requireSelfie ? (
+        <article className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-5">
+          <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-slate-900">
+            <Camera className="h-5 w-5 text-[#2563eb]" />
+            Selfie check-in
+          </h3>
+          <div className="flex flex-col gap-4 lg:flex-row">
+            <div className="relative aspect-[4/3] w-full max-w-sm overflow-hidden rounded-xl border border-[#dbe6f3] bg-black">
+              <video ref={videoRef} className="h-full w-full scale-x-[-1] object-cover" playsInline muted />
+              {!cameraReady ? (
+                <p className="absolute inset-0 flex items-center justify-center text-sm text-white/80">Starting camera…</p>
+              ) : null}
+            </div>
+            {selfiePreview || todayRecord?.check_in_selfie_url ? (
+              <div className="text-sm text-slate-600">
+                <p className="font-medium text-slate-900">Last check-in photo</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={selfiePreview ?? todayRecord?.check_in_selfie_url ?? ""}
+                  alt="Check-in selfie"
+                  className="mt-2 max-h-48 rounded-lg border border-[#dbe6f3]"
+                />
+              </div>
+            ) : null}
+          </div>
+        </article>
+      ) : null}
 
       {message ? (
         <div
@@ -472,7 +625,7 @@ export function MemberAttendancePage({ memberLabel = "Employee" }: { memberLabel
             onClick={handleCheckIn}
             className="rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#98b5ef] hover:bg-[#1d4ed8]"
           >
-            {busy === "checkin" ? "Checking In..." : "Check In"}
+            {busy === "checkin" ? "Checking In..." : requireSelfie ? "Check In with Selfie" : "Check In"}
           </button>
           <button
             type="button"
@@ -525,34 +678,27 @@ export function MemberAttendancePage({ memberLabel = "Employee" }: { memberLabel
       ) : null}
 
       <article className="rounded-2xl border border-[#dbe6f3] bg-white p-5">
-        <h3 className="mb-3 text-lg font-semibold text-slate-900">Attendance History (Last 10)</h3>
+        <h3 className="mb-3 text-lg font-semibold text-slate-900">Attendance History</h3>
         <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="bg-[#f1f6fc] text-[#64748b]">
               <tr>
-                {[
-                  "Date",
-                  "Check In",
-                  "Check Out",
-                  "Time Gap",
-                  "Status",
-                  "Location Type",
-                  "Check In Location",
-                  "Check Out Location",
-                  "Work Summary Status",
-                ].map(
-                  (heading) => (
-                    <th key={heading} className="px-4 py-3">
-                      {heading}
-                    </th>
-                  ),
-                )}
+                {historyHeadings.map((heading) => (
+                  <th key={heading} className="px-4 py-3">
+                    {heading}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e8edf5] text-slate-700">
-              {history.map((record) => (
+              {paginatedHistory.map((record) => (
                 <tr key={record.id}>
                   <td className="px-4 py-3">{formatDate(record.attendance_date)}</td>
+                  {requireSelfie ? (
+                    <td className="px-4 py-3">
+                      <AttendanceSelfieThumb url={record.check_in_selfie_url} alt={`Selfie ${record.attendance_date}`} />
+                    </td>
+                  ) : null}
                   <td className="px-4 py-3">{formatTime(record.check_in_time)}</td>
                   <td className="px-4 py-3">{formatTime(record.check_out_time)}</td>
                   <td className="px-4 py-3">{formatHours(record.total_working_minutes)}</td>
@@ -575,7 +721,7 @@ export function MemberAttendancePage({ memberLabel = "Employee" }: { memberLabel
               ))}
               {!history.length && busy !== "loading" ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={historyHeadings.length} className="px-4 py-8 text-center text-slate-500">
                     No attendance records found.
                   </td>
                 </tr>
@@ -583,6 +729,13 @@ export function MemberAttendancePage({ memberLabel = "Employee" }: { memberLabel
             </tbody>
           </table>
         </div>
+        <TablePagination
+          page={historyPage}
+          totalPages={historyTotalPages}
+          totalItems={historyTotalItems}
+          pageSize={historyPageSize}
+          onPageChange={setHistoryPage}
+        />
       </article>
     </section>
   );

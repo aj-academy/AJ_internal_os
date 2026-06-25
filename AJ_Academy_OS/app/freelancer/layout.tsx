@@ -6,6 +6,7 @@ const freelancerSidebarItems = [
   { label: "Dashboard", href: "/freelancer/dashboard" },
   { label: "My Attendance", href: "/freelancer/attendance" },
   { label: "Assign Tasks", href: "/freelancer/assign-tasks" },
+  { label: "Reimbursement", href: "/freelancer/reimbursement" },
   { label: "My Profile", href: "/freelancer/profile" },
 ];
 

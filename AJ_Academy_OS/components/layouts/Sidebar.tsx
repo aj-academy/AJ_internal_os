@@ -14,6 +14,7 @@ import {
   ClipboardList,
   FileText,
   FolderKanban,
+  FolderOpen,
   Handshake,
   LayoutGrid,
   ListChecks,
@@ -81,9 +82,10 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
     if (l.includes("profile")) return User;
     if (l.includes("user") || l.includes("employee")) return UsersRound;
     if (l.includes("client") || l.includes("lead")) return BriefcaseBusiness;
+    if (l.includes("portfolio")) return FolderOpen;
     if (l.includes("project")) return FolderKanban;
     if (l.includes("task")) return ListChecks;
-    if (l.includes("finance")) return Wallet;
+    if (l.includes("reimbursement") || l.includes("finance")) return Wallet;
     if (l.includes("freelance")) return Handshake;
     if (l.includes("policies")) return ShieldCheck;
     if (l.includes("reports")) return BarChart3;

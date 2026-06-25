@@ -2,7 +2,9 @@
 
 import { useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { TablePagination } from "@/components/ui/TablePagination";
 import { useDebouncedRouterRefresh } from "@/hooks/useDebouncedRouterRefresh";
+import { usePagination } from "@/lib/usePagination";
 import { formatDateIST, formatDateTimeIST, formatPermissionTime } from "@/lib/datetime";
 
 export type PermissionRequestRow = {
@@ -59,6 +61,8 @@ export function PermissionRequestsTable({
     };
   }, [employeeId, scheduleRefresh]);
 
+  const { paginatedItems, page, setPage, totalPages, totalItems, pageSize } = usePagination(rows, 10);
+
   return (
     <section className="rounded-2xl border border-[#d4deea] bg-white p-4">
       <p className="mb-2 text-xs text-[#64748b]">Times shown in India (IST). Status updates automatically.</p>
@@ -84,7 +88,7 @@ export function PermissionRequestsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-[#e8edf5] text-slate-700">
-            {rows.map((row) => (
+            {paginatedItems.map((row) => (
               <tr key={row.id}>
                 <td className="px-3 py-3">{formatDateIST(row.permission_date)}</td>
                 <td className="px-3 py-3">{formatPermissionTime(row.from_time)}</td>
@@ -113,6 +117,7 @@ export function PermissionRequestsTable({
           </tbody>
         </table>
       </div>
+      <TablePagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} />
     </section>
   );
 }

@@ -7,6 +7,7 @@ const mentorSidebarItems = [
   { label: "My Attendance", href: "/mentor/attendance" },
   { label: "Assign Tasks", href: "/mentor/assign-tasks" },
   { label: "Counselling", href: "/mentor/counselling" },
+  { label: "Reimbursement", href: "/mentor/reimbursement" },
   { label: "My Profile", href: "/mentor/profile" },
 ];
 

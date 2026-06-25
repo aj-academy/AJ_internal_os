@@ -12,6 +12,7 @@ const adminSidebarItems = [
   { label: "Freelance Management", href: "/admin/freelancers" },
   { label: "Finance & Expenses", href: "/admin/finance" },
   { label: "Company Policies", href: "/admin/policies" },
+  { label: "Portfolio", href: "/admin/portfolio" },
   { label: "Reports", href: "/admin/reports" },
   { label: "Settings", href: "/admin/settings" },
 ];

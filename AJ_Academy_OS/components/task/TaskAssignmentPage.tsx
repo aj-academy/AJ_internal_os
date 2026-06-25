@@ -10,6 +10,9 @@ import { LeadSummaryCard } from "@/components/client-lead/LeadSummaryCard";
 import { TaskForm, type TaskFormValue } from "@/components/task/TaskForm";
 import { TaskTable } from "@/components/task/TaskTable";
 import { TaskCompleteDialog } from "@/components/task/TaskCompleteDialog";
+import { TaskAttachmentUpload } from "@/components/task/TaskAttachmentUpload";
+import { TablePagination } from "@/components/ui/TablePagination";
+import { usePagination } from "@/lib/usePagination";
 import { assignerDisplayFromProfile } from "@/lib/profileDisplayName";
 import { parseTaskAttachments, uploadTaskAttachments, type TaskAttachment } from "@/lib/taskAttachments";
 import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
@@ -55,7 +58,9 @@ function isMissingTasksTableMessage(message: string) {
     (m.includes("relation") && m.includes("tasks") && m.includes("does not exist")) ||
     (m.includes("schema cache") && m.includes("tasks")) ||
     (m.includes("pgrst205") && m.includes("tasks")) ||
-    (m.includes("column") && m.includes("tasks") && (m.includes("assigned_by") || m.includes("completion_summary")))
+    (m.includes("column") &&
+      m.includes("tasks") &&
+      (m.includes("assigned_by") || m.includes("completion_summary") || m.includes("completion_attachment_urls")))
   );
 }
 
@@ -300,7 +305,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       let query = supabase
         .from("tasks")
         .select(
-          "id,title,description,assigned_to,assignee_name,assignee_email,assigned_by,completion_summary,priority,status,start_date,due_date,progress,project_id,attachment_urls,created_at,updated_at",
+          "id,title,description,assigned_to,assignee_name,assignee_email,assigned_by,completion_summary,completion_attachment_urls,priority,status,start_date,due_date,progress,project_id,attachment_urls,created_at,updated_at",
         );
 
       if (mentorManagesTeam) query = query.eq("assigned_by", userId);
@@ -333,6 +338,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         assignee_email?: string | null;
         assigned_by?: string | null;
         completion_summary?: string | null;
+        completion_attachment_urls?: unknown;
         priority: TaskPriority;
         status: TaskStatus;
         start_date: string | null;
@@ -362,6 +368,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       const mapped: TaskRecord[] = rawRows.map((row) => ({
         ...row,
         attachment_urls: parseTaskAttachments(row.attachment_urls),
+        completion_attachment_urls: parseTaskAttachments(row.completion_attachment_urls),
         assigner_display_name: row.assigned_by
           ? assignerDisplayFromProfile(assignerMap[row.assigned_by] ?? null) ?? null
           : null,
@@ -532,6 +539,15 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     const today = todayDateKey();
     return rows.filter((task) => task.due_date === today).length;
   }, [rows]);
+
+  const {
+    paginatedItems: paginatedRows,
+    page: taskPage,
+    setPage: setTaskPage,
+    totalPages: taskTotalPages,
+    totalItems: taskTotalItems,
+    pageSize: taskPageSize,
+  } = usePagination(rows, 10);
 
   const filtersActive = Boolean(
     searchText.trim() || statusFilter || priorityFilter || assignedFilter || dueDateFilter,
@@ -784,17 +800,28 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     }, 450);
   };
 
-  const handleCompleteTaskSubmit = async (summary: string) => {
+  const handleCompleteTaskSubmit = async (summary: string, completionFiles: File[]) => {
     if (!completeTask || !currentUserId) return;
     setCompleteSubmitting(true);
     setError(null);
     try {
+      let completionAttachments: TaskAttachment[] = [];
+      if (completionFiles.length) {
+        completionAttachments = await uploadTaskAttachments(
+          supabase,
+          currentUserId,
+          completeTask.id,
+          completionFiles,
+        );
+      }
+
       const { error: updateError } = await supabase
         .from("tasks")
         .update({
           status: "Completed",
           progress: 100,
           completion_summary: summary.trim(),
+          completion_attachment_urls: completionAttachments,
         })
         .eq("id", completeTask.id)
         .eq("assigned_to", currentUserId);
@@ -807,7 +834,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       if (rpcError) console.warn("create_task_completed_notification:", rpcError.message);
 
       setCompleteTask(null);
-      setSuccess("Task completed. Your summary was saved; your assigner gets an in-app notification.");
+      setSuccess("Task completed. Summary and files were sent to your assigner.");
       await reload();
     } catch (e) {
       setError(toReadableTaskError(e));
@@ -884,12 +911,12 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         placeholder="Search task title…"
         showClear={filtersActive}
         onClear={clearTableFilters}
-        hint={`Showing ${rows.length} task(s)`}
+        hint={`Showing ${paginatedRows.length} of ${rows.length} task(s)`}
       />
 
       <div className="responsive-table-wrap">
         <TaskTable
-          tasks={rows}
+          tasks={paginatedRows}
           loading={loading}
           tableMissing={tasksTableMissing}
           employeeNameMap={employeeNameMap}
@@ -914,6 +941,13 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           onRequestCompleteTask={!canManageTasks ? (task) => setCompleteTask(task) : undefined}
         />
       </div>
+      <TablePagination
+        page={taskPage}
+        totalPages={taskTotalPages}
+        totalItems={taskTotalItems}
+        pageSize={taskPageSize}
+        onPageChange={setTaskPage}
+      />
 
       <TaskCompleteDialog
         task={completeTask}
@@ -968,28 +1002,13 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                 onSubmit={() => void handleSaveTask()}
               />
               {canManageTasks ? (
-                <div className="mt-4 space-y-2 rounded-xl border border-[#e8dcc8] bg-[#fffdf8] p-3">
-                  <p className="text-sm font-medium text-[#3d3428]">Attachments (optional)</p>
-                  <p className="text-xs text-[#6b5d4d]">
-                    PDF, Word, Excel, images, video — max 25 MB each. Students can download from task view.
-                  </p>
-                  <input
-                    type="file"
-                    multiple
-                    className="block w-full text-xs"
-                    onChange={(e) => setPendingAttachmentFiles(Array.from(e.target.files ?? []))}
+                <div className="mt-4">
+                  <TaskAttachmentUpload
+                    files={pendingAttachmentFiles}
+                    onFilesChange={setPendingAttachmentFiles}
+                    existing={existingAttachments}
+                    disabled={submitting}
                   />
-                  {existingAttachments.length ? (
-                    <ul className="text-xs text-[#6b5d4d]">
-                      {existingAttachments.map((a) => (
-                        <li key={a.url}>
-                          <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-[#a68b2e] underline">
-                            {a.name}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -1061,6 +1080,26 @@ function TaskViewPanel({
               </div>
             ) : null}
           </dl>
+          {task.completion_attachment_urls?.length ? (
+            <div>
+              <p className="text-xs font-semibold uppercase text-[#94a3b8]">Completion files</p>
+              <ul className="mt-2 space-y-1">
+                {task.completion_attachment_urls.map((a) => (
+                  <li key={a.url}>
+                    <a
+                      href={a.url}
+                      download={a.name}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium text-emerald-700 underline"
+                    >
+                      Download {a.name}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {task.attachment_urls?.length ? (
             <div>
               <p className="text-xs font-semibold uppercase text-[#94a3b8]">Attachments</p>

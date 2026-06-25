@@ -12,6 +12,7 @@ export interface TaskRecord {
   assigned_by?: string | null;
   /** Submitted by assignee when marking completed (requires task_notifications_columns.sql). */
   completion_summary?: string | null;
+  completion_attachment_urls?: { name: string; url: string; mime: string; size: number }[];
   /** Resolved label for UI: "Admin" for admin roles, else full name / email. */
   assigner_display_name?: string | null;
   priority: TaskPriority;

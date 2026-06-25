@@ -116,12 +116,27 @@ Set `course` / `department` / `assigned_mentor_id` on the student’s `profiles`
 
 ### Freelancer portal
 
-Freelancers now use `/freelancer/*` routes for attendance, **My Tasks** (tasks assigned to freelancer), **Assign Tasks** (department student assignment), and **My Profile**.  
-Task popups + mood survey use the same tables/modules as employee (`in_app_notifications`, optional `employee_daily_mood_checkins`).
+Freelancers now use `/freelancer/*` routes for attendance (selfie check-in), **Assign Tasks**, **Reimbursement**, and **My Profile**.  
+Task popups use `in_app_notifications` (fallback `/freelancer/my-tasks`).
 
 ### Mentor portal
 
-Mentors use `/mentor/*` for attendance, **Assign Tasks** (department students), counselling, **My Profile**, and a dashboard **student roster** (department batch + primary mentor flag). Task notification popups still open `/mentor/my-tasks` when admins assign work.  
-Requires `aj_academy_platform_expansion.sql`, `mentor_department_tasks.sql`, and optional `employee_daily_mood_schema.sql` for mood popup.
+Mentors use `/mentor/*` for attendance (selfie), **Assign Tasks**, counselling, **Reimbursement**, **My Profile**, and dashboard **student roster**.  
+Requires `aj_academy_platform_expansion.sql`, `mentor_department_tasks.sql`.
+
+### Reimbursement (employee / mentor / freelancer)
+
+Run **`finance_schema.sql`**, then **`portal_expense_claims_rls.sql`**.  
+Portal routes: `/employee/reimbursement`, `/mentor/reimbursement`, `/freelancer/reimbursement`.
+
+### Task completion files
+
+Run **`task_completion_attachments.sql`** so students can upload files when marking tasks complete; assigners see them in task view + get `create_task_completed_notification`.
+
+### Portfolio (admin + student)
+
+Run **`portfolio_schema.sql`**. Admin: **Portfolio** in sidebar — upload HTML/PDF template, set active. Students: **My Portfolio** — fill `{{placeholders}}`, download HTML or Save as PDF (includes AJ Academy credits).
+
+10f4) portal_expense_claims_rls.sql (reimbursement for employee / mentor / freelancer — after finance_schema.sql)
 
 If a leftover **`BB-internal-OS`** folder remains, close Cursor and any `npm run dev`, then delete that folder in File Explorer (it is an old duplicate).

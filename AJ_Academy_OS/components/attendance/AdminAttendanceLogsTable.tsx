@@ -8,6 +8,8 @@ import {
 } from "@/app/admin/attendance/actions";
 import { AttendanceSelfieThumb } from "@/components/attendance/AttendanceSelfieThumb";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
+import { TablePagination } from "@/components/ui/TablePagination";
+import { usePagination } from "@/lib/usePagination";
 import { MOOD_EMOJI, MOOD_LABEL } from "@/lib/moodDisplay";
 
 export type AdminAttendanceLogRow = {
@@ -68,6 +70,7 @@ export function AdminAttendanceLogsTable({
   const [error, setError] = useState<string | null>(null);
   const allIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const allSelected = rows.length > 0 && selected.size === rows.length;
+  const { paginatedItems, page, setPage, totalPages, totalItems, pageSize } = usePagination(rows, 15);
 
   const toggleAll = () => {
     setSelected(allSelected ? new Set() : new Set(allIds));
@@ -188,7 +191,7 @@ export function AdminAttendanceLogsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-[#e8edf5] text-slate-700">
-            {rows.map((row) => {
+            {paginatedItems.map((row) => {
               const moodKey = row.mood?.toLowerCase() ?? "";
               return (
                 <tr key={row.id}>
@@ -255,6 +258,7 @@ export function AdminAttendanceLogsTable({
           </tbody>
         </table>
       </div>
+      <TablePagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} />
     </section>
   );
 }
