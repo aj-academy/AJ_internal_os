@@ -185,6 +185,19 @@ export function MemberReimbursementWorkbench() {
     };
   };
 
+  const ensureClaimForUpload = async (): Promise<string> => {
+    if (!userId) throw new Error("Please sign in again.");
+    if (activeClaimId) return activeClaimId;
+
+    const payload = buildPayload(true);
+    const { data, error: err } = await supabase.from("expense_claims").insert(payload).select("id").single();
+    if (err) throw err;
+    const nextId = String(data.id);
+    setActiveClaimId(nextId);
+    setSuccess("Draft created. Uploading bills now.");
+    return nextId;
+  };
+
   const saveDraft = async () => {
     if (!userId) return;
     setSubmitting(true);
@@ -426,11 +439,16 @@ export function MemberReimbursementWorkbench() {
             </div>
           </article>
           <ReimbursementBillUpload
-            disabled={!activeClaimId}
+            disabled={schemaMissing || submitting || !userId}
             maxMb={effectivePolicy.max_file_size_mb}
             onUpload={async (files) => {
-              if (!activeClaimId) return;
-              await uploadBillsToClaim(activeClaimId, files);
+              try {
+                setError(null);
+                const claimId = await ensureClaimForUpload();
+                await uploadBillsToClaim(claimId, files);
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Could not upload bills.");
+              }
             }}
           />
         </div>
