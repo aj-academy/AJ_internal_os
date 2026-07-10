@@ -739,11 +739,16 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
     }
     const now = new Date().toISOString();
     patchClientLocal(lead.id, { email_sent: true, email_sent_at: now, last_contacted_at: now });
-    window.location.href = `mailto:${email}`;
-    const { error: updateError } = await supabase
-      .from("clients")
-      .update({ email_sent: true, email_sent_at: now, last_contacted_at: now })
-      .eq("id", lead.id);
+    let updateError = (
+      await supabase
+        .from("clients")
+        .update({ email_sent: true, email_sent_at: now, last_contacted_at: now })
+        .eq("id", lead.id)
+    ).error;
+    if (updateError) {
+      const fallback = await supabase.from("clients").update({ last_contacted_at: now }).eq("id", lead.id);
+      updateError = fallback.error;
+    }
     if (updateError) {
       setError(updateError.message);
       await reload();
@@ -1805,9 +1810,9 @@ function AllLeadsTable({
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
             <TableHeaderCell label="Student Name" className="px-4 py-3" />
-            <TableHeaderCell label="Mobile Number" className="px-4 py-3" />
-            <TableHeaderCell label="WhatsApp Number" className="px-4 py-3" />
-            <TableHeaderCell label="Email" className="px-4 py-3" />
+            <TableHeaderCell label="Mobile Number" className="px-4 py-3 text-center" />
+            <TableHeaderCell label="WhatsApp Number" className="px-4 py-3 text-center" />
+            <TableHeaderCell label="Email" className="px-4 py-3 text-center" />
             <TableHeaderCell label="Degree" className="px-4 py-3" />
             <TableHeaderCell label="College/Company" className="px-4 py-3" />
             <TableHeaderCell label="Year of Passing" className="px-4 py-3" />
@@ -1912,7 +1917,7 @@ function AllLeadsTable({
                     ].join(" ")}
                   >
                     <td className="px-4 py-3 font-semibold text-slate-900 whitespace-nowrap">{displayLeadName(lead) || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">
+                    <td className="whitespace-nowrap px-4 py-3 text-center">
                       <StudentOutreachButtons
                         mode="phone"
                         phone={lead.phone}
@@ -1920,7 +1925,7 @@ function AllLeadsTable({
                         onPhoneClick={contactable ? () => void onPhoneClick(lead) : undefined}
                       />
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">
+                    <td className="whitespace-nowrap px-4 py-3 text-center">
                       <StudentOutreachButtons
                         mode="whatsapp"
                         phone={lead.phone}
@@ -1929,7 +1934,7 @@ function AllLeadsTable({
                         onWhatsAppClick={contactable ? () => void onWhatsAppClick(lead) : undefined}
                       />
                     </td>
-                    <td className="max-w-[220px] px-4 py-3">
+                    <td className="px-4 py-3 text-center">
                       <StudentOutreachButtons
                         mode="email"
                         email={lead.email}
