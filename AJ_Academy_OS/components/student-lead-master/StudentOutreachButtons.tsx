@@ -87,14 +87,9 @@ export function StudentOutreachButtons({
     if (enabled) {
       return (
         <Centered>
-          <a
-            href={`mailto:${emailValue}`}
-            title={`Email ${emailValue}`}
-            onClick={() => onEmailClick?.()}
-            className={outreachClass(Boolean(emailSent), true)}
-          >
+          <button type="button" title={`Email ${emailValue}`} onClick={onEmailClick} className={outreachClass(Boolean(emailSent), true)}>
             <Mail className={iconClass} />
-          </a>
+          </button>
         </Centered>
       );
     }

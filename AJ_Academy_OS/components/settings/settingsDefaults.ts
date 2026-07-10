@@ -41,6 +41,12 @@ export const SETTINGS_DEFAULTS: Record<string, Record<string, unknown>> = {
       "Sharing program details as discussed. Please let us know if you have any questions.",
       "Reminder: please confirm your preferred batch timing so we can reserve your seat.",
     ],
+    emailTemplates: [
+      "Hi {name},\n\nThank you for your interest in AJ Academy. Sharing the program details for your review.",
+      "Hi {name},\n\nFollowing up on your enquiry. Please let us know a convenient time for a quick call.",
+      "Hi {name},\n\nAs discussed, here are the next steps for your admission process.",
+      "Hi {name},\n\nJust a reminder to confirm your preferred batch timing.",
+    ],
   },
   project: {
     statuses: ["Planning", "Active", "On Hold", "In Review", "Completed", "Cancelled", "Delayed"],

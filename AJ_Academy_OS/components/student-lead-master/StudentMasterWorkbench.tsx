@@ -37,8 +37,12 @@ import { fetchInterestedPrograms, persistInterestedPrograms } from "@/lib/studen
 import { StudentOutreachButtons } from "@/components/student-lead-master/StudentOutreachButtons";
 import { whatsAppHref } from "@/components/employee/leads/employeeLeadConfig";
 import { WhatsAppComposeModal } from "@/components/shared/WhatsAppComposeModal";
+import { EmailComposeModal } from "@/components/shared/EmailComposeModal";
 import { LeadActivityModal } from "@/components/shared/LeadActivityModal";
 import {
+  fetchEmailTemplates,
+  formatEmailActivityNotes,
+  MAX_EMAIL_MESSAGE_LENGTH,
   fetchWhatsAppTemplates,
   formatWhatsAppActivityNotes,
   MAX_WHATSAPP_MESSAGE_LENGTH,
@@ -311,6 +315,7 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
   const [fltSource, setFltSource] = useState("");
   const [fltPriority, setFltPriority] = useState("");
   const [fltProgram, setFltProgram] = useState("");
+  const [fltDegree, setFltDegree] = useState("");
   const [fltAssigned, setFltAssigned] = useState("");
   const [fltStage, setFltStage] = useState("");
   const [fltPaymentStatus, setFltPaymentStatus] = useState("");
@@ -320,6 +325,9 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
   const [whatsAppTemplates, setWhatsAppTemplates] = useState<string[]>([]);
   const [whatsAppComposeLead, setWhatsAppComposeLead] = useState<CrmClientRow | null>(null);
   const [whatsAppSubmitting, setWhatsAppSubmitting] = useState(false);
+  const [emailTemplates, setEmailTemplates] = useState<string[]>([]);
+  const [emailComposeLead, setEmailComposeLead] = useState<CrmClientRow | null>(null);
+  const [emailSubmitting, setEmailSubmitting] = useState(false);
   const [activityModalLead, setActivityModalLead] = useState<CrmClientRow | null>(null);
   const [activityModalRows, setActivityModalRows] = useState<ActivityRow[]>([]);
   const [activityModalLoading, setActivityModalLoading] = useState(false);
@@ -487,6 +495,8 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
       setInterestedPrograms(programs);
       const templates = await fetchWhatsAppTemplates(supabase);
       setWhatsAppTemplates(templates);
+      const emailTpls = await fetchEmailTemplates(supabase);
+      setEmailTemplates(emailTpls);
       await Promise.all([loadOverviewCounts(), loadClientsDataset()]);
     } catch (e) {
       setError(friendlyError(e));
@@ -601,6 +611,7 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
         return program === fltProgram || servicesFromCsv(program).includes(fltProgram);
       });
     }
+    if (fltDegree) list = list.filter((c) => (c.degree || "") === fltDegree);
     if (fltAssigned) list = list.filter((c) => (c.assigned_to || "") === fltAssigned);
     if (fltStage) list = list.filter((c) => (c.lead_stage || "") === fltStage);
     if (fltPaymentStatus) list = list.filter((c) => (c.payment_status || "") === fltPaymentStatus);
@@ -609,6 +620,7 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
   }, [
     clients,
     fltAdmissionStatus,
+    fltDegree,
     fltAssigned,
     fltPaymentStatus,
     fltPriority,
@@ -625,6 +637,7 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
       fltSource ||
       fltPriority ||
       fltProgram ||
+      fltDegree ||
       fltAssigned ||
       fltStage ||
       fltPaymentStatus ||
@@ -637,6 +650,7 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
     setFltSource("");
     setFltPriority("");
     setFltProgram("");
+    setFltDegree("");
     setFltAssigned("");
     setFltStage("");
     setFltPaymentStatus("");
@@ -644,6 +658,14 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
   };
 
   const clientMap = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
+  const degreeOptions = useMemo(() => {
+    const set = new Set<string>();
+    clients.forEach((c) => {
+      const d = String(c.degree || "").trim();
+      if (d) set.add(d);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [clients]);
 
   const overviewCharts = useMemo(() => {
     const src: Record<string, number> = {};
@@ -799,15 +821,41 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
     setActivityModalLoading(false);
   };
 
-  const handleEmailClick = async (lead: CrmClientRow) => {
+  const openEmailCompose = (lead: CrmClientRow) => {
     if (!canContactLead(lead)) return;
     const email = lead.email?.trim();
     if (!email) {
       setError("No email address on this student.");
       return;
     }
+    setEmailComposeLead(lead);
+  };
+
+  const handleEmailSend = async (message: string) => {
+    if (!emailComposeLead || !currentUserId) return;
+    const email = emailComposeLead.email?.trim();
+    if (!email) {
+      setError("No email address on this student.");
+      return;
+    }
+    const trimmed = message.trim();
+    if (!trimmed) {
+      setError("Enter a message before opening Email.");
+      return;
+    }
+    if (trimmed.length > MAX_EMAIL_MESSAGE_LENGTH) {
+      setError(`Message is too long (max ${MAX_EMAIL_MESSAGE_LENGTH} characters).`);
+      return;
+    }
+
+    setEmailSubmitting(true);
+    setError(null);
+    const lead = emailComposeLead;
     const now = new Date().toISOString();
+    const activityNotes = formatEmailActivityNotes(trimmed);
+    const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(`AJ Academy follow-up for ${displayLeadName(lead)}`)}&body=${encodeURIComponent(trimmed)}`;
     patchClientLocal(lead.id, { email_sent: true, email_sent_at: now, last_contacted_at: now });
+    window.location.href = mailto;
     let updateError = (
       await supabase
         .from("clients")
@@ -820,6 +868,7 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
     }
     if (updateError) {
       setError(updateError.message);
+      setEmailSubmitting(false);
       await reload();
       return;
     }
@@ -827,14 +876,23 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
       id: `local-${Date.now()}`,
       client_id: lead.id,
       activity_type: "Email",
-      notes: `Opened email to ${email}`,
+      notes: activityNotes,
       old_value: null,
       new_value: null,
       created_at: now,
       created_by: currentUserId,
     };
     setActivityRows((prev) => [activity, ...prev]);
-    await insertActivityClient(supabase, lead.id, "Email", `Opened email to ${email}`, currentUserId);
+    try {
+      await insertActivityClient(supabase, lead.id, "Email", activityNotes, currentUserId);
+    } catch (e) {
+      setError(friendlyError(e));
+      setEmailSubmitting(false);
+      return;
+    }
+    setEmailComposeLead(null);
+    setSuccess("Email opened and message saved to activity history.");
+    setEmailSubmitting(false);
   };
 
   function rowToForm(lead: CrmClientRow): StudentLeadFormValue {
@@ -1465,6 +1523,9 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
             setFltSource={setFltSource}
             fltProgram={fltProgram}
             setFltProgram={setFltProgram}
+            fltDegree={fltDegree}
+            setFltDegree={setFltDegree}
+            degreeOptions={degreeOptions}
             fltStatus={fltStatus}
             setFltStatus={setFltStatus}
             fltPriority={fltPriority}
@@ -1482,7 +1543,7 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
             canContactLead={canContactLead}
             onPhoneClick={(lead) => void handlePhoneClick(lead)}
             onWhatsAppClick={(lead) => openWhatsAppCompose(lead)}
-            onEmailClick={(lead) => void handleEmailClick(lead)}
+            onEmailClick={(lead) => openEmailCompose(lead)}
             onOpenActivity={(lead) => void openActivityForLead(lead)}
             onProfile={setProfileLead}
             onEdit={(leadRecord) => {
@@ -1630,6 +1691,20 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
             if (!whatsAppSubmitting) setWhatsAppComposeLead(null);
           }}
           onSend={(message) => void handleWhatsAppSend(message)}
+        />
+      ) : null}
+
+      {emailComposeLead ? (
+        <EmailComposeModal
+          open={Boolean(emailComposeLead)}
+          leadName={displayLeadName(emailComposeLead)}
+          email={String(emailComposeLead.email || "")}
+          templates={emailTemplates}
+          submitting={emailSubmitting}
+          onClose={() => {
+            if (!emailSubmitting) setEmailComposeLead(null);
+          }}
+          onSend={(message) => void handleEmailSend(message)}
         />
       ) : null}
 
@@ -1839,6 +1914,9 @@ function AllLeadsTable({
   setFltSource,
   fltProgram,
   setFltProgram,
+  fltDegree,
+  setFltDegree,
+  degreeOptions,
   fltStatus,
   setFltStatus,
   fltPriority,
@@ -1873,6 +1951,9 @@ function AllLeadsTable({
   setFltSource: (s: string) => void;
   fltProgram: string;
   setFltProgram: (s: string) => void;
+  fltDegree: string;
+  setFltDegree: (s: string) => void;
+  degreeOptions: string[];
   fltStatus: string;
   setFltStatus: (s: string) => void;
   fltPriority: string;
@@ -1908,8 +1989,15 @@ function AllLeadsTable({
             <TableHeaderCell label="Mobile Number" className="px-4 py-3 text-center" />
             <TableHeaderCell label="WhatsApp Number" className="px-4 py-3 text-center" />
             <TableHeaderCell label="Email" className="px-4 py-3 text-center" />
-            <TableHeaderCell label="Degree" className="px-4 py-3" />
-            <TableHeaderCell label="College/Company" className="px-4 py-3" />
+            <TableHeaderFilter
+              label="Degree"
+              value={fltDegree}
+              onChange={setFltDegree}
+              options={degreeOptions.map((d) => ({ value: d, label: d }))}
+              allLabel="All degrees"
+              className="px-4 py-3"
+            />
+            <TableHeaderCell label="College" className="px-4 py-3" />
             <TableHeaderCell label="Year of Passing" className="px-4 py-3" />
             <TableHeaderCell label="Employment Status" className="px-4 py-3" />
             <TableHeaderCell label="Current Salary" className="px-4 py-3" />
