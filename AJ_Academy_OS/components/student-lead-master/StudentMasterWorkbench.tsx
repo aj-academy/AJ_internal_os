@@ -36,6 +36,13 @@ import { formatDateTimeIST } from "@/lib/datetime";
 import { fetchInterestedPrograms, persistInterestedPrograms } from "@/lib/studentPrograms";
 import { StudentOutreachButtons } from "@/components/student-lead-master/StudentOutreachButtons";
 import { whatsAppHref } from "@/components/employee/leads/employeeLeadConfig";
+import { WhatsAppComposeModal } from "@/components/shared/WhatsAppComposeModal";
+import { LeadActivityModal } from "@/components/shared/LeadActivityModal";
+import {
+  fetchWhatsAppTemplates,
+  formatWhatsAppActivityNotes,
+  MAX_WHATSAPP_MESSAGE_LENGTH,
+} from "@/lib/whatsappOutreach";
 
 type AppRole = "admin" | "employee";
 
@@ -310,6 +317,12 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
   const [fltAdmissionStatus, setFltAdmissionStatus] = useState("");
 
   const [interestedPrograms, setInterestedPrograms] = useState<string[]>([]);
+  const [whatsAppTemplates, setWhatsAppTemplates] = useState<string[]>([]);
+  const [whatsAppComposeLead, setWhatsAppComposeLead] = useState<CrmClientRow | null>(null);
+  const [whatsAppSubmitting, setWhatsAppSubmitting] = useState(false);
+  const [activityModalLead, setActivityModalLead] = useState<CrmClientRow | null>(null);
+  const [activityModalRows, setActivityModalRows] = useState<ActivityRow[]>([]);
+  const [activityModalLoading, setActivityModalLoading] = useState(false);
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -472,6 +485,8 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
     try {
       const programs = await fetchInterestedPrograms(supabase);
       setInterestedPrograms(programs);
+      const templates = await fetchWhatsAppTemplates(supabase);
+      setWhatsAppTemplates(templates);
       await Promise.all([loadOverviewCounts(), loadClientsDataset()]);
     } catch (e) {
       setError(friendlyError(e));
@@ -697,37 +712,91 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
     await insertActivityClient(supabase, lead.id, "Phone Call", `Called ${phone}`, currentUserId);
   };
 
-  const handleWhatsAppClick = async (lead: CrmClientRow) => {
+  const openWhatsAppCompose = (lead: CrmClientRow) => {
     if (!canContactLead(lead)) return;
-    const wa = whatsAppHref(lead.whatsapp || lead.phone);
+    if (!whatsAppHref(lead.whatsapp || lead.phone)) {
+      setError("No WhatsApp number on this student.");
+      return;
+    }
+    setWhatsAppComposeLead(lead);
+  };
+
+  const handleWhatsAppSend = async (message: string) => {
+    if (!whatsAppComposeLead || !currentUserId) return;
+    const trimmed = message.trim();
+    if (!trimmed) {
+      setError("Enter a message before opening WhatsApp.");
+      return;
+    }
+    if (trimmed.length > MAX_WHATSAPP_MESSAGE_LENGTH) {
+      setError(`Message is too long (max ${MAX_WHATSAPP_MESSAGE_LENGTH} characters).`);
+      return;
+    }
+
+    const lead = whatsAppComposeLead;
+    const wa = whatsAppHref(lead.whatsapp || lead.phone, trimmed);
     if (!wa) {
       setError("No WhatsApp number on this student.");
       return;
     }
+
+    setWhatsAppSubmitting(true);
+    setError(null);
     const now = new Date().toISOString();
+    const activityNotes = formatWhatsAppActivityNotes(trimmed);
+
     patchClientLocal(lead.id, { whatsapp_sent: true, whatsapp_sent_at: now, last_contacted_at: now });
     window.open(wa, "_blank", "noopener,noreferrer");
+
     const { error: updateError } = await supabase
       .from("clients")
       .update({ whatsapp_sent: true, whatsapp_sent_at: now, last_contacted_at: now })
       .eq("id", lead.id);
+
     if (updateError) {
       setError(updateError.message);
+      setWhatsAppSubmitting(false);
       await reload();
       return;
     }
+
     const activity: ActivityRow = {
       id: `local-${Date.now()}`,
       client_id: lead.id,
       activity_type: "WhatsApp Message",
-      notes: "Opened WhatsApp chat for this student",
+      notes: activityNotes,
       old_value: null,
       new_value: null,
       created_at: now,
       created_by: currentUserId,
     };
     setActivityRows((prev) => [activity, ...prev]);
-    await insertActivityClient(supabase, lead.id, "WhatsApp Message", "Opened WhatsApp chat for this student", currentUserId);
+    try {
+      await insertActivityClient(supabase, lead.id, "WhatsApp Message", activityNotes, currentUserId);
+    } catch (e) {
+      setError(friendlyError(e));
+      setWhatsAppSubmitting(false);
+      return;
+    }
+
+    setWhatsAppComposeLead(null);
+    setSuccess("WhatsApp opened and message saved to activity history.");
+    setWhatsAppSubmitting(false);
+  };
+
+  const openActivityForLead = async (lead: CrmClientRow) => {
+    setActivityModalLead(lead);
+    setActivityModalLoading(true);
+    setActivityModalRows([]);
+    const { data, error: actError } = await supabase
+      .from("lead_activities")
+      .select("id,client_id,activity_type,notes,old_value,new_value,created_at,created_by")
+      .eq("client_id", lead.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (actError) setError(actError.message);
+    else setActivityModalRows((data ?? []) as ActivityRow[]);
+    setActivityModalLoading(false);
   };
 
   const handleEmailClick = async (lead: CrmClientRow) => {
@@ -1412,8 +1481,9 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
             employeeOptions={employeesForSelect}
             canContactLead={canContactLead}
             onPhoneClick={(lead) => void handlePhoneClick(lead)}
-            onWhatsAppClick={(lead) => void handleWhatsAppClick(lead)}
+            onWhatsAppClick={(lead) => openWhatsAppCompose(lead)}
             onEmailClick={(lead) => void handleEmailClick(lead)}
+            onOpenActivity={(lead) => void openActivityForLead(lead)}
             onProfile={setProfileLead}
             onEdit={(leadRecord) => {
               setSuccess(null);
@@ -1548,6 +1618,29 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
       {followModalFor ? (
         <QuickFollowModal draft={followDraft} setDraft={setFollowDraft} submitting={submitting} target={followModalFor} onClose={() => setFollowModalFor(null)} onSave={() => void saveFollowQuick()} />
       ) : null}
+
+      {whatsAppComposeLead ? (
+        <WhatsAppComposeModal
+          open={Boolean(whatsAppComposeLead)}
+          leadName={displayLeadName(whatsAppComposeLead)}
+          phone={String(whatsAppComposeLead.whatsapp || whatsAppComposeLead.phone || "")}
+          templates={whatsAppTemplates}
+          submitting={whatsAppSubmitting}
+          onClose={() => {
+            if (!whatsAppSubmitting) setWhatsAppComposeLead(null);
+          }}
+          onSend={(message) => void handleWhatsAppSend(message)}
+        />
+      ) : null}
+
+      <LeadActivityModal
+        open={Boolean(activityModalLead)}
+        title={activityModalLead ? `Activity — ${displayLeadName(activityModalLead)}` : "Activity"}
+        loading={activityModalLoading}
+        activities={activityModalRows}
+        employeeNameMap={employeeNameMap}
+        onClose={() => setActivityModalLead(null)}
+      />
     </section>
   );
 }
@@ -1763,6 +1856,7 @@ function AllLeadsTable({
   onPhoneClick,
   onWhatsAppClick,
   onEmailClick,
+  onOpenActivity,
   onProfile,
   onEdit,
   onDelete,
@@ -1796,6 +1890,7 @@ function AllLeadsTable({
   onPhoneClick: (l: CrmClientRow) => void;
   onWhatsAppClick: (l: CrmClientRow) => void;
   onEmailClick: (l: CrmClientRow) => void;
+  onOpenActivity: (l: CrmClientRow) => void;
   onProfile: (l: CrmClientRow) => void;
   onEdit: (l: CrmClientRow) => void;
   onDelete: (id: string) => void;
@@ -1979,6 +2074,9 @@ function AllLeadsTable({
                       )}
                       <button type="button" className="font-semibold text-teal-700 hover:underline" onClick={() => onAddFollow(lead)}>
                         Follow-up
+                      </button>
+                      <button type="button" className="font-semibold text-violet-700 hover:underline" onClick={() => onOpenActivity(lead)}>
+                        Activity
                       </button>
                       {isAdmin && !isClosedLeadStatus(String(lead.status)) && (
                         <button type="button" className="font-semibold text-emerald-700 hover:underline" onClick={() => onConvert(lead)}>
@@ -2280,12 +2378,12 @@ function ActivityTable({
                 const by = ar.created_by ? employeeNameMap[ar.created_by] || ar.created_by.slice(0, 8) : "—";
                 return (
                   <tr key={ar.id} className="border-t border-[#f1f5f9]">
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{new Date(ar.created_at).toLocaleString()}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{formatDateTimeIST(String(ar.created_at))}</td>
                     <td className="px-4 py-3 font-semibold text-slate-900">
                       {clientMap[ar.client_id] ? displayLeadName(clientMap[ar.client_id]) || "—" : "Unknown lead"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-800">{ar.activity_type || "—"}</td>
-                    <td className="max-w-md px-4 py-3 text-xs text-slate-600">{detail || "—"}</td>
+                    <td className="max-w-md px-4 py-3 text-xs text-slate-600 whitespace-pre-wrap">{detail || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-700">{by}</td>
                   </tr>
                 );

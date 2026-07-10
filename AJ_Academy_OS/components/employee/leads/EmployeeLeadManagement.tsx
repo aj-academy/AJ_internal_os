@@ -34,6 +34,13 @@ import {
   EmployeeLeadFormPanel,
   type EmployeeLeadFormValue,
 } from "@/components/employee/leads/EmployeeLeadFormPanel";
+import { WhatsAppComposeModal } from "@/components/shared/WhatsAppComposeModal";
+import { LeadActivityModal } from "@/components/shared/LeadActivityModal";
+import {
+  fetchWhatsAppTemplates,
+  formatWhatsAppActivityNotes,
+  MAX_WHATSAPP_MESSAGE_LENGTH,
+} from "@/lib/whatsappOutreach";
 
 const emptyLeadForm = (): EmployeeLeadFormValue => ({
   lead_name: "",
@@ -94,6 +101,10 @@ export function EmployeeLeadManagement() {
   const [activityLead, setActivityLead] = useState<EmployeeLeadRow | null>(null);
   const [activities, setActivities] = useState<LeadActivityRow[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
+
+  const [whatsAppTemplates, setWhatsAppTemplates] = useState<string[]>([]);
+  const [whatsAppComposeLead, setWhatsAppComposeLead] = useState<EmployeeLeadRow | null>(null);
+  const [whatsAppSubmitting, setWhatsAppSubmitting] = useState(false);
 
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [newColName, setNewColName] = useState("");
@@ -162,6 +173,10 @@ export function EmployeeLeadManagement() {
   useEffect(() => {
     void loadCustomColumns();
   }, [loadCustomColumns]);
+
+  useEffect(() => {
+    void fetchWhatsAppTemplates(supabase).then(setWhatsAppTemplates);
+  }, [supabase]);
 
   const sourceOptions = useMemo(() => {
     const fromData = new Set<string>();
@@ -252,25 +267,57 @@ export function EmployeeLeadManagement() {
     void logActivity(row.id, "Phone Call", "Employee clicked phone call for this lead");
   };
 
-  const handleWhatsAppClick = async (row: EmployeeLeadRow) => {
-    const wa = whatsAppHref(row.whatsapp || row.phone);
+  const openWhatsAppCompose = (row: EmployeeLeadRow) => {
+    if (!whatsAppHref(row.whatsapp || row.phone)) {
+      setError("No WhatsApp number on this lead.");
+      return;
+    }
+    setWhatsAppComposeLead(row);
+  };
+
+  const handleWhatsAppSend = async (message: string) => {
+    if (!whatsAppComposeLead || !userId) return;
+    const trimmed = message.trim();
+    if (!trimmed) {
+      setError("Enter a message before opening WhatsApp.");
+      return;
+    }
+    if (trimmed.length > MAX_WHATSAPP_MESSAGE_LENGTH) {
+      setError(`Message is too long (max ${MAX_WHATSAPP_MESSAGE_LENGTH} characters).`);
+      return;
+    }
+
+    const row = whatsAppComposeLead;
+    const wa = whatsAppHref(row.whatsapp || row.phone, trimmed);
     if (!wa) {
       setError("No WhatsApp number on this lead.");
       return;
     }
+
+    setWhatsAppSubmitting(true);
+    setError(null);
     const now = new Date().toISOString();
+    const activityNotes = formatWhatsAppActivityNotes(trimmed);
+
     patchLeadLocal(row.id, { whatsapp_sent: true, whatsapp_sent_at: now, last_contacted_at: now });
     window.open(wa, "_blank", "noopener,noreferrer");
+
     const { error: updateError } = await supabase
       .from("clients")
       .update({ whatsapp_sent: true, whatsapp_sent_at: now, last_contacted_at: now })
       .eq("id", row.id);
+
     if (updateError) {
       setError(updateError.message);
+      setWhatsAppSubmitting(false);
       void loadLeads();
       return;
     }
-    void logActivity(row.id, "WhatsApp Message", "Employee clicked WhatsApp message for this lead");
+
+    await logActivity(row.id, "WhatsApp Message", activityNotes);
+    setWhatsAppComposeLead(null);
+    setSuccess("WhatsApp opened and message saved to activity history.");
+    setWhatsAppSubmitting(false);
   };
 
   const handleStatusChange = async (row: EmployeeLeadRow, status: string) => {
@@ -303,7 +350,7 @@ export function EmployeeLeadManagement() {
     setActivities([]);
     const { data, error: actError } = await supabase
       .from("lead_activities")
-      .select("id,client_id,activity_type,notes,old_value,new_value,created_at")
+      .select("id,client_id,activity_type,notes,old_value,new_value,created_at,created_by")
       .eq("client_id", row.id)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -706,7 +753,7 @@ export function EmployeeLeadManagement() {
                         type="button"
                         title="Click to WhatsApp"
                         disabled={!digitsOnly(row.whatsapp || row.phone)}
-                        onClick={() => void handleWhatsAppClick(row)}
+                        onClick={() => openWhatsAppCompose(row)}
                         className={[
                           "inline-flex h-9 w-9 items-center justify-center rounded-full border transition",
                           row.whatsapp_sent
@@ -779,42 +826,27 @@ export function EmployeeLeadManagement() {
         </table>
       </div>
 
-      {activityLead ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded-2xl border border-[#d4deea] bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-[#eef2f7] px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold text-[#0f172a]">Activity — {displayLeadName(activityLead)}</p>
-                <p className="text-xs text-[#64748b]">From lead_activities</p>
-              </div>
-              <button type="button" onClick={() => setActivityLead(null)} className="rounded-full p-1 hover:bg-[#f1f5f9]" aria-label="Close">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="max-h-[60vh] overflow-y-auto px-4 py-3">
-              {activityLoading ? (
-                <p className="py-6 text-center text-sm text-[#64748b]">Loading…</p>
-              ) : !activities.length ? (
-                <p className="py-6 text-center text-sm text-[#64748b]">No activity yet.</p>
-              ) : (
-                <ul className="space-y-3">
-                  {activities.map((a) => (
-                    <li key={a.id} className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
-                      <p className="text-sm font-medium text-[#0f172a]">{a.activity_type}</p>
-                      {a.notes ? <p className="mt-0.5 text-xs text-[#64748b]">{a.notes}</p> : null}
-                      {a.old_value || a.new_value ? (
-                        <p className="mt-0.5 text-xs text-[#64748b]">
-                          {a.old_value} → {a.new_value}
-                        </p>
-                      ) : null}
-                      <p className="mt-1 text-[11px] text-[#94a3b8]">{formatDateTimeIST(a.created_at)}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
+      <LeadActivityModal
+        open={Boolean(activityLead)}
+        title={activityLead ? `Activity — ${displayLeadName(activityLead)}` : "Activity"}
+        loading={activityLoading}
+        activities={activities}
+        employeeNameMap={userId ? { [userId]: "You" } : {}}
+        onClose={() => setActivityLead(null)}
+      />
+
+      {whatsAppComposeLead ? (
+        <WhatsAppComposeModal
+          open={Boolean(whatsAppComposeLead)}
+          leadName={displayLeadName(whatsAppComposeLead)}
+          phone={String(whatsAppComposeLead.whatsapp || whatsAppComposeLead.phone || "")}
+          templates={whatsAppTemplates}
+          submitting={whatsAppSubmitting}
+          onClose={() => {
+            if (!whatsAppSubmitting) setWhatsAppComposeLead(null);
+          }}
+          onSend={(message) => void handleWhatsAppSend(message)}
+        />
       ) : null}
 
       {columnsOpen ? (

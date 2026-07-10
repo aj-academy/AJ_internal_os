@@ -35,6 +35,12 @@ export const SETTINGS_DEFAULTS: Record<string, Record<string, unknown>> = {
       "Business Analytics",
       "Other",
     ],
+    whatsAppTemplates: [
+      "Hi {name}, this is from AJ Academy. Thank you for your interest in our programs!",
+      "Following up on your course enquiry. When would be a good time to speak?",
+      "Sharing program details as discussed. Please let us know if you have any questions.",
+      "Reminder: please confirm your preferred batch timing so we can reserve your seat.",
+    ],
   },
   project: {
     statuses: ["Planning", "Active", "On Hold", "In Review", "Completed", "Cancelled", "Delayed"],

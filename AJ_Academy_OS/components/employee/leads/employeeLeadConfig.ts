@@ -90,6 +90,7 @@ export type LeadActivityRow = {
   old_value: string | null;
   new_value: string | null;
   created_at: string;
+  created_by?: string | null;
 };
 
 export function displayLeadName(row: EmployeeLeadRow) {
@@ -100,10 +101,13 @@ export function digitsOnly(phone: string | null | undefined) {
   return (phone ?? "").replace(/\D/g, "");
 }
 
-export function whatsAppHref(phone: string | null | undefined) {
+export function whatsAppHref(phone: string | null | undefined, message?: string | null) {
   const digits = digitsOnly(phone);
   if (!digits) return null;
-  return `https://wa.me/${digits}`;
+  const base = `https://wa.me/${digits}`;
+  const text = message?.trim();
+  if (!text) return base;
+  return `${base}?text=${encodeURIComponent(text)}`;
 }
 
 export function slugColumnKey(name: string) {
