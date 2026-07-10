@@ -1,5 +1,5 @@
 -- BB Internal OS — Finance & Expense Management
--- Run AFTER: schema.sql, client_lead_schema.sql (clients), project_master_schema.sql (projects + RLS helpers).
+-- Run AFTER: schema.sql, student_lead_master_schema.sql (clients), project_master_schema.sql (projects + RLS helpers).
 -- Path: AJ_Academy_SB/finance_schema.sql
 --
 -- Tables: finance_categories, finance_transactions, expense_claims, project_payments, finance_activities

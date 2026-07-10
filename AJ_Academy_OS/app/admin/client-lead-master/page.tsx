@@ -1,5 +1,6 @@
-import { ClientLeadMasterPage } from "@/components/client-lead/ClientLeadMasterPage";
+import { redirect } from "next/navigation";
 
-export default function AdminClientLeadMasterRoute() {
-  return <ClientLeadMasterPage role="admin" />;
+/** Legacy Client / Lead Master URL → Student Master */
+export default function LegacyClientLeadMasterRedirect() {
+  redirect("/admin/student-master");
 }

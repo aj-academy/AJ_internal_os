@@ -1,4 +1,4 @@
-import { normalizeStatus } from "@/components/client-lead/crmHelpers";
+import { normalizeStatus } from "@/components/student-lead-master/studentMasterHelpers";
 import { normalizeProjectStatus } from "@/components/project-master/projectHelpers";
 import type { ReportsTabId } from "@/components/reports/reportsConfig";
 import { formatInr, minutesToHoursLabel } from "@/components/reports/reportsHelpers";

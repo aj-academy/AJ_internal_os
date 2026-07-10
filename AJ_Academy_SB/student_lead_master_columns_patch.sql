@@ -1,4 +1,4 @@
--- Quick patch: run if client_lead_schema.sql / client_master_schema.sql failed with
+-- Quick patch: run if student_lead_master_schema.sql / student_lead_master_aux_schema.sql failed with
 -- ERROR 42703 column "follow_up_date" (or source, assigned_to, etc.) does not exist.
 -- Safe when public.clients already exists from project_master_schema.sql (minimal stub).
 

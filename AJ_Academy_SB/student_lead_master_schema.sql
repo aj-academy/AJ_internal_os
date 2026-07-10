@@ -1,10 +1,10 @@
--- Client / Lead Master — FOUNDATION
+-- Student Lead Master — FOUNDATION
 
--- Defines public.clients as the unified lead + mini-CRM header row (Birthmark Brahma workflows).
+-- Defines public.clients as the Student Master lead store (legacy table name kept for FKs).
 
 --
 
--- Ordering: Keep running client_master_schema.sql AFTER this script for:
+-- Ordering: Keep running student_lead_master_aux_schema.sql AFTER this script for:
 
 --   lead_followups, lead_activities, client_documents, and any legacy upgrades.
 

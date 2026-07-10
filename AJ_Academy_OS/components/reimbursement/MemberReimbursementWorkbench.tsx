@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { LeadSummaryCard } from "@/components/client-lead/LeadSummaryCard";
+import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { PAYMENT_METHODS } from "@/components/finance/financeConfig";
 import {

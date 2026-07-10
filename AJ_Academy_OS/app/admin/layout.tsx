@@ -6,7 +6,7 @@ const adminSidebarItems = [
   { label: "Attendance System", href: "/admin/attendance" },
   { label: "Counselling", href: "/admin/counselling" },
   { label: "User Master", href: "/admin/employee-master" },
-  { label: "Client / Lead Master", href: "/admin/client-lead-master" },
+  { label: "Student Master", href: "/admin/student-master" },
   { label: "Project Master", href: "/admin/project-master" },
   { label: "Task Assignment", href: "/admin/task-assignment" },
   { label: "Freelance Management", href: "/admin/freelancers" },

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Input } from "@/components/ui/input";
-import { LeadSummaryCard } from "@/components/client-lead/LeadSummaryCard";
+import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { PROJECT_TAB_IDS, TAB_LABELS } from "@/components/project-master/projectConfig";
 import { ProjectFormPanel, type ProjectFormValue } from "@/components/project-master/ProjectFormPanel";
 import {

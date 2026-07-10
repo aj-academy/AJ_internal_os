@@ -139,6 +139,12 @@ Run **`task_completion_attachments.sql`** so students can upload files when mark
 
 Run **`portfolio_schema.sql`**. Admin: **Portfolio** in sidebar — upload HTML/PDF template, set active. Students: **My Portfolio** — fill `{{placeholders}}`, download HTML or Save as PDF (includes AJ Academy credits).
 
+### Student Master (admin)
+
+Run **`student_lead_master_schema.sql`**, then **`student_lead_master_aux_schema.sql`** (follow-ups/activities), then **`student_master_columns_patch.sql`**, then **`student_lead_master_rls_fix.sql`**.  
+Admin sidebar **Student Master** (`/admin/student-master`) — All Students table with counselling/admission fields and header filters (program, source, stage, status, priority, counsellor, payment, admission).  
+Legacy URL `/admin/client-lead-master` redirects to `/admin/student-master`. Table name remains `public.clients` (FKs from projects/finance).
+
 10f4) portal_expense_claims_rls.sql (reimbursement for employee / mentor / freelancer — after finance_schema.sql)
 
 If a leftover **`BB-internal-OS`** folder remains, close Cursor and any `npm run dev`, then delete that folder in File Explorer (it is an old duplicate).

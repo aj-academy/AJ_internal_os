@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Input } from "@/components/ui/input";
-import { LeadSummaryCard } from "@/components/client-lead/LeadSummaryCard";
-import { LeadStatusBadge, ProposalStatusBadge } from "@/components/client-lead/LeadStatusBadge";
+import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
+import { LeadStatusBadge, ProposalStatusBadge } from "@/components/student-lead-master/LeadStatusBadge";
 import {
+  ADMISSION_STATUSES,
   CRM_FOLLOW_UP_TYPES_UI,
   CRM_LEAD_STATUSES,
   CRM_PRIORITIES,
@@ -16,17 +17,21 @@ import {
   CRM_SERVICES,
   CRM_SOURCES,
   CRM_TAB_IDS,
+  INTERESTED_PROGRAMS,
+  LEAD_STAGES,
+  PAYMENT_STATUSES,
   type CrmProposalStatus,
   type CrmTabId,
-} from "@/components/client-lead/crmConfig";
-import { CrmLeadFormPanel, type CrmLeadFormValue } from "@/components/client-lead/CrmLeadFormPanel";
+} from "@/components/student-lead-master/studentMasterConfig";
+import { StudentLeadFormPanel, type StudentLeadFormValue } from "@/components/student-lead-master/StudentLeadFormPanel";
 import {
-  CRM_CLIENT_SELECT,
+  STUDENT_LEAD_SELECT,
   type CrmClientRow,
   displayLeadName,
+  formatMoney,
   friendlyError,
   normalizeStatus,
-} from "@/components/client-lead/crmHelpers";
+} from "@/components/student-lead-master/studentMasterHelpers";
 import { formatDateTimeIST } from "@/lib/datetime";
 
 type AppRole = "admin" | "employee";
@@ -96,28 +101,52 @@ function isIsoDate(d: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(d);
 }
 
-function emptyForm(assignedFallback: string, admin: boolean): CrmLeadFormValue {
+function emptyForm(assignedFallback: string, admin: boolean): StudentLeadFormValue {
   return {
     lead_name: "",
-    company_name: "",
     phone: "",
     whatsapp: "",
     email: "",
     city: "",
-    industry: "",
-    source: CRM_SOURCES[0],
-    service_interests: new Set<string>(),
-    requirement: "",
+    current_profile: "",
+    degree: "",
+    college_company: "",
+    year_of_passing: "",
+    employment_status: "",
+    current_salary: "",
+    interested_program: "",
+    career_goal: "",
+    preferred_job_role: "",
+    target_salary: "",
+    current_skill_level: "",
+    main_career_problem: "",
+    joining_timeline: "",
     budget: "",
-    expected_start_date: "",
-    notes: "",
-    status: "New Lead",
-    priority: "Warm",
-    lead_score: "0",
+    payment_plan: "",
+    parent_approval_required: "",
+    decision_maker: "",
+    preferred_batch: "",
+    laptop_availability: "",
+    source: CRM_SOURCES[0],
     assigned_to: admin ? "" : assignedFallback,
+    lead_stage: "",
+    status: "New",
+    priority: "Warm",
+    primary_objection: "",
     follow_up_date: "",
     follow_up_time: "",
     follow_up_type: "",
+    fee_quoted: "",
+    final_fee: "",
+    payment_status: "",
+    admission_status: "",
+    notes: "",
+    company_name: "",
+    industry: "",
+    requirement: "",
+    expected_start_date: "",
+    lead_score: "0",
+    service_interests: new Set<string>(),
     proposal_status: "Not Sent",
     proposal_amount: "",
     proposal_sent_date: "",
@@ -207,6 +236,30 @@ function pickEmployeePayload(base: Record<string, unknown>) {
     "quotation_link",
     "agreement_link",
     "service_interest",
+    "interested_program",
+    "current_profile",
+    "degree",
+    "college_company",
+    "year_of_passing",
+    "employment_status",
+    "current_salary",
+    "career_goal",
+    "preferred_job_role",
+    "target_salary",
+    "current_skill_level",
+    "main_career_problem",
+    "joining_timeline",
+    "payment_plan",
+    "parent_approval_required",
+    "decision_maker",
+    "preferred_batch",
+    "laptop_availability",
+    "lead_stage",
+    "primary_objection",
+    "fee_quoted",
+    "final_fee",
+    "payment_status",
+    "admission_status",
   ];
   const out: Record<string, unknown> = {};
   keys.forEach((key) => {
@@ -215,7 +268,19 @@ function pickEmployeePayload(base: Record<string, unknown>) {
   return out;
 }
 
-export function CrmWorkbench({ role }: { role: AppRole }) {
+function isClosedLeadStatus(status: string | null | undefined) {
+  const s = normalizeStatus(String(status ?? ""));
+  return ["Admitted", "Converted", "Lost", "Not Interested"].includes(s);
+}
+
+function numOrNull(raw: string) {
+  const t = raw.trim();
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function StudentMasterWorkbench({ role }: { role: AppRole }) {
   const supabase = useMemo(() => createClient(), []);
   const isAdmin = role === "admin";
 
@@ -236,12 +301,15 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
   const [fltStatus, setFltStatus] = useState("");
   const [fltSource, setFltSource] = useState("");
   const [fltPriority, setFltPriority] = useState("");
-  const [fltService, setFltService] = useState("");
+  const [fltProgram, setFltProgram] = useState("");
   const [fltAssigned, setFltAssigned] = useState("");
+  const [fltStage, setFltStage] = useState("");
+  const [fltPaymentStatus, setFltPaymentStatus] = useState("");
+  const [fltAdmissionStatus, setFltAdmissionStatus] = useState("");
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState<CrmLeadFormValue>(() => emptyForm("", true));
+  const [form, setForm] = useState<StudentLeadFormValue>(() => emptyForm("", true));
 
   const [profileLead, setProfileLead] = useState<CrmClientRow | null>(null);
   const [followModalFor, setFollowModalFor] = useState<CrmClientRow | null>(null);
@@ -294,7 +362,7 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
   );
 
   const buildClientsBaseQuery = useCallback(() => {
-    let q = supabase.from("clients").select(CRM_CLIENT_SELECT).order("updated_at", { ascending: false }).limit(800);
+    let q = supabase.from("clients").select(STUDENT_LEAD_SELECT).order("updated_at", { ascending: false }).limit(800);
     if (!isAdmin) {
       q = q.eq("assigned_to", currentUserId);
     }
@@ -318,19 +386,23 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
     const [
       totalRes,
       newRes,
+      newLegacyRes,
       contactedRes,
       interestedRes,
-      proposalRes,
+      feeDiscussedRes,
       convertedRes,
+      admittedRes,
       lostRes,
       todayRes,
     ] = await Promise.all([
       counted(),
+      counted("New"),
       counted("New Lead"),
       counted("Contacted"),
       counted("Interested"),
-      counted("Proposal Sent"),
+      counted("Fee Discussed"),
       counted("Converted"),
+      counted("Admitted"),
       counted("Lost"),
       (async () => {
         const td = todayISO();
@@ -343,10 +415,12 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
     const errs = [
       totalRes.error,
       newRes.error,
+      newLegacyRes.error,
       contactedRes.error,
       interestedRes.error,
-      proposalRes.error,
+      feeDiscussedRes.error,
       convertedRes.error,
+      admittedRes.error,
       lostRes.error,
       todayRes.error,
     ].find(Boolean);
@@ -358,7 +432,7 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
       .select("id", { count: "exact", head: true })
       .not("follow_up_date", "is", null)
       .lt("follow_up_date", todayStr)
-      .not("status", "in", "(Converted,Lost,Not Interested)");
+      .not("status", "in", "(Converted,Admitted,Lost,Not Interested)");
     if (!isAdmin && currentUserId) overdueQ = overdueQ.eq("assigned_to", currentUserId);
     const overdueRes = await overdueQ;
 
@@ -368,18 +442,18 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
         .from("clients")
         .select("budget")
         .not("budget", "is", null)
-        .not("status", "in", "(Converted,Lost,Not Interested)");
+        .not("status", "in", "(Converted,Admitted,Lost,Not Interested)");
       revenueSum =
         rv.data?.reduce((acc, row: { budget?: number | string | null }) => acc + Number(row.budget ?? 0), 0) ?? 0;
     }
 
     setOverview({
       total: totalRes.count ?? 0,
-      newLeads: newRes.count ?? 0,
+      newLeads: (newRes.count ?? 0) + (newLegacyRes.count ?? 0),
       contacted: contactedRes.count ?? 0,
       interested: interestedRes.count ?? 0,
-      proposalSent: proposalRes.count ?? 0,
-      converted: convertedRes.count ?? 0,
+      proposalSent: feeDiscussedRes.count ?? 0,
+      converted: (convertedRes.count ?? 0) + (admittedRes.count ?? 0),
       lost: lostRes.count ?? 0,
       followToday: todayRes.count ?? 0,
       overdue: overdueRes.count ?? 0,
@@ -492,20 +566,48 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
     const query = searchText.trim().toLowerCase();
     if (query) {
       list = list.filter((c) =>
-        `${displayLeadName(c)} ${c.company_name ?? ""} ${c.email ?? ""} ${c.phone ?? ""}`.toLowerCase().includes(query),
+        `${displayLeadName(c)} ${c.college_company ?? ""} ${c.company_name ?? ""} ${c.email ?? ""} ${c.phone ?? ""} ${c.whatsapp ?? ""} ${c.city ?? ""}`
+          .toLowerCase()
+          .includes(query),
       );
     }
     if (fltStatus) list = list.filter((c) => normalizeStatus(String(c.status)) === fltStatus);
     if (fltSource) list = list.filter((c) => (c.source || "") === fltSource);
     if (fltPriority) list = list.filter((c) => (c.priority || "") === fltPriority);
-    if (fltService)
-      list = list.filter((c) => servicesFromCsv(String(c.service_interest ?? "")).includes(fltService));
+    if (fltProgram) {
+      list = list.filter((c) => {
+        const program = String(c.interested_program || c.service_interest || "");
+        return program === fltProgram || servicesFromCsv(program).includes(fltProgram);
+      });
+    }
     if (fltAssigned) list = list.filter((c) => (c.assigned_to || "") === fltAssigned);
+    if (fltStage) list = list.filter((c) => (c.lead_stage || "") === fltStage);
+    if (fltPaymentStatus) list = list.filter((c) => (c.payment_status || "") === fltPaymentStatus);
+    if (fltAdmissionStatus) list = list.filter((c) => (c.admission_status || "") === fltAdmissionStatus);
     return list;
-  }, [clients, fltAssigned, fltPriority, fltService, fltSource, fltStatus, searchText]);
+  }, [
+    clients,
+    fltAdmissionStatus,
+    fltAssigned,
+    fltPaymentStatus,
+    fltPriority,
+    fltProgram,
+    fltSource,
+    fltStage,
+    fltStatus,
+    searchText,
+  ]);
 
   const filtersActive = Boolean(
-    searchText.trim() || fltStatus || fltSource || fltPriority || fltService || fltAssigned,
+    searchText.trim() ||
+      fltStatus ||
+      fltSource ||
+      fltPriority ||
+      fltProgram ||
+      fltAssigned ||
+      fltStage ||
+      fltPaymentStatus ||
+      fltAdmissionStatus,
   );
 
   const clearTableFilters = () => {
@@ -513,8 +615,11 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
     setFltStatus("");
     setFltSource("");
     setFltPriority("");
-    setFltService("");
+    setFltProgram("");
     setFltAssigned("");
+    setFltStage("");
+    setFltPaymentStatus("");
+    setFltAdmissionStatus("");
   };
 
   const clientMap = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
@@ -543,29 +648,53 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
 
   const followRowsScoped = followRows.filter((f) => clientMap[f.client_id]);
 
-  function rowToForm(lead: CrmClientRow): CrmLeadFormValue {
+  function rowToForm(lead: CrmClientRow): StudentLeadFormValue {
     const interests = servicesFromCsv(String(lead.service_interest ?? ""));
     return {
       lead_name: displayLeadName(lead) || String(lead.name ?? ""),
-      company_name: lead.company_name ?? "",
       phone: lead.phone ?? "",
       whatsapp: lead.whatsapp ?? "",
       email: lead.email ?? "",
       city: lead.city ?? "",
-      industry: lead.industry ?? "",
-      source: (lead.source as string) || CRM_SOURCES[0],
-      service_interests: new Set(interests),
-      requirement: lead.requirement ?? "",
+      current_profile: lead.current_profile ?? "",
+      degree: lead.degree ?? "",
+      college_company: lead.college_company ?? lead.company_name ?? "",
+      year_of_passing: lead.year_of_passing ?? "",
+      employment_status: lead.employment_status ?? "",
+      current_salary: lead.current_salary != null ? String(lead.current_salary) : "",
+      interested_program: lead.interested_program ?? interests[0] ?? "",
+      career_goal: lead.career_goal ?? "",
+      preferred_job_role: lead.preferred_job_role ?? "",
+      target_salary: lead.target_salary != null ? String(lead.target_salary) : "",
+      current_skill_level: lead.current_skill_level ?? "",
+      main_career_problem: lead.main_career_problem ?? lead.requirement ?? "",
+      joining_timeline: lead.joining_timeline ?? "",
       budget: lead.budget != null ? String(lead.budget) : "",
-      expected_start_date: lead.expected_start_date ?? "",
-      notes: lead.notes ?? "",
+      payment_plan: lead.payment_plan ?? "",
+      parent_approval_required: lead.parent_approval_required ?? "",
+      decision_maker: lead.decision_maker ?? "",
+      preferred_batch: lead.preferred_batch ?? "",
+      laptop_availability: lead.laptop_availability ?? "",
+      source: (lead.source as string) || CRM_SOURCES[0],
+      assigned_to: lead.assigned_to ?? "",
+      lead_stage: lead.lead_stage ?? "",
       status: normalizeStatus(String(lead.status)),
       priority: lead.priority ?? "Warm",
-      lead_score: lead.lead_score != null ? String(lead.lead_score) : "0",
-      assigned_to: lead.assigned_to ?? "",
+      primary_objection: lead.primary_objection ?? "",
       follow_up_date: lead.follow_up_date ?? "",
       follow_up_time: (lead.follow_up_time as string) ?? "",
       follow_up_type: lead.follow_up_type ?? "",
+      fee_quoted: lead.fee_quoted != null ? String(lead.fee_quoted) : lead.proposal_amount != null ? String(lead.proposal_amount) : "",
+      final_fee: lead.final_fee != null ? String(lead.final_fee) : "",
+      payment_status: lead.payment_status ?? "",
+      admission_status: lead.admission_status ?? "",
+      notes: lead.notes ?? "",
+      company_name: lead.company_name ?? "",
+      industry: lead.industry ?? "",
+      requirement: lead.requirement ?? "",
+      expected_start_date: lead.expected_start_date ?? "",
+      lead_score: lead.lead_score != null ? String(lead.lead_score) : "0",
+      service_interests: new Set(interests),
       proposal_status: (lead.proposal_status as CrmProposalStatus) ?? "Not Sent",
       proposal_amount: lead.proposal_amount != null ? String(lead.proposal_amount) : "",
       proposal_sent_date: lead.proposal_sent_date ?? "",
@@ -575,39 +704,66 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
     };
   }
 
-  function buildPayload(v: CrmLeadFormValue, opts: { full: boolean }) {
+  function buildPayload(v: StudentLeadFormValue, opts: { full: boolean }) {
     const nm = v.lead_name.trim();
+    const program = v.interested_program.trim() || null;
     const base: Record<string, unknown> = {
       lead_name: nm,
       name: nm,
-      company_name: v.company_name.trim() || null,
+      company_name: v.college_company.trim() || v.company_name.trim() || null,
       phone: v.phone.trim() || null,
       whatsapp: v.whatsapp.trim() || null,
       email: v.email.trim() || null,
       city: v.city.trim() || null,
       industry: v.industry.trim() || null,
       source: v.source.trim() || null,
-      service_interest: csvServices(v.service_interests) || null,
-      requirement: v.requirement.trim() || null,
-      budget: v.budget.trim() === "" ? null : Number(v.budget),
+      service_interest: program || csvServices(v.service_interests) || null,
+      interested_program: program,
+      requirement: v.main_career_problem.trim() || v.requirement.trim() || null,
+      budget: numOrNull(v.budget),
       expected_start_date: v.expected_start_date || null,
       notes: v.notes.trim() || null,
       follow_up_date: v.follow_up_date || null,
       follow_up_time: v.follow_up_time || null,
       follow_up_type: v.follow_up_type || null,
       proposal_status: v.proposal_status || "Not Sent",
-      proposal_amount: v.proposal_amount.trim() === "" ? null : Number(v.proposal_amount),
+      proposal_amount: numOrNull(v.proposal_amount) ?? numOrNull(v.fee_quoted),
       proposal_sent_date: v.proposal_sent_date || null,
       proposal_link: v.proposal_link.trim() || null,
       quotation_link: v.quotation_link.trim() || null,
       agreement_link: v.agreement_link.trim() || null,
+      current_profile: v.current_profile.trim() || null,
+      degree: v.degree.trim() || null,
+      college_company: v.college_company.trim() || null,
+      year_of_passing: v.year_of_passing.trim() || null,
+      employment_status: v.employment_status.trim() || null,
+      current_salary: numOrNull(v.current_salary),
+      career_goal: v.career_goal.trim() || null,
+      preferred_job_role: v.preferred_job_role.trim() || null,
+      target_salary: numOrNull(v.target_salary),
+      current_skill_level: v.current_skill_level.trim() || null,
+      main_career_problem: v.main_career_problem.trim() || null,
+      joining_timeline: v.joining_timeline.trim() || null,
+      payment_plan: v.payment_plan.trim() || null,
+      parent_approval_required: v.parent_approval_required.trim() || null,
+      decision_maker: v.decision_maker.trim() || null,
+      preferred_batch: v.preferred_batch.trim() || null,
+      laptop_availability: v.laptop_availability.trim() || null,
+      lead_stage: v.lead_stage.trim() || null,
+      primary_objection: v.primary_objection.trim() || null,
+      fee_quoted: numOrNull(v.fee_quoted),
+      final_fee: numOrNull(v.final_fee),
+      payment_status: v.payment_status.trim() || null,
+      admission_status: v.admission_status.trim() || null,
     };
 
-    if (!opts.full)
+    if (!opts.full) {
+      // Non-admin: never allow ownership / admission status changes via this path
       return {
         ...base,
-        assigned_to: isAdmin ? (v.assigned_to || null) : currentUserId,
+        assigned_to: currentUserId,
       };
+    }
 
     const scoreRaw = Number(v.lead_score);
     return {
@@ -765,14 +921,18 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
   const convertLead = async (leadRow: CrmClientRow) => {
     if (!isAdmin) return;
     const year = new Date().getFullYear();
-    const { count } = await supabase.from("clients").select("id", { count: "exact", head: true }).eq("status", "Converted");
+    const { count } = await supabase
+      .from("clients")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["Converted", "Admitted"]);
 
     const nextCode =
-      leadRow.client_code?.trim() || `BB-${year}-${String((count ?? 0) + 1).padStart(4, "0")}`;
+      leadRow.client_code?.trim() || `AJ-${year}-${String((count ?? 0) + 1).padStart(4, "0")}`;
     const { error: updateError } = await supabase
       .from("clients")
       .update({
-        status: "Converted",
+        status: "Admitted",
+        admission_status: "Admitted",
         converted_at: new Date().toISOString(),
         client_code: nextCode,
       })
@@ -785,15 +945,15 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
       await insertActivityClient(
         supabase,
         leadRow.id,
-        "Converted to Client",
-        `Assigned client code ${nextCode}`,
+        "Student Admitted",
+        `Assigned student code ${nextCode}`,
         currentUserId,
       );
     } catch (e) {
       logDevSupabase("convertLead.activity", e);
-      setError(`Converted, but timeline log failed: ${friendlyError(e)}`);
+      setError(`Admitted, but timeline log failed: ${friendlyError(e)}`);
     }
-    setSuccess("Converted.");
+    setSuccess("Student admitted.");
     await reload();
   };
 
@@ -1000,10 +1160,10 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
 
   const tabLabels: Record<CrmTabId, string> = {
     overview: "Overview",
-    "all-leads": "All Leads",
+    "all-leads": "All Students",
     "follow-ups": "Follow-ups",
     pipeline: "Pipeline",
-    converted: "Converted Clients",
+    converted: "Admitted Students",
     proposal: "Proposal Tracker",
     timeline: "Activity Timeline",
     reports: "Reports",
@@ -1014,8 +1174,8 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
     <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-3xl font-semibold text-[#0f172a]">Client / Lead Master</h2>
-          <p className="mt-1 text-sm text-[#64748b]">Manage leads, clients, follow-ups, proposals and deal pipeline.</p>
+          <h2 className="text-3xl font-semibold text-[#0f172a]">Student Master</h2>
+          <p className="mt-1 text-sm text-[#64748b]">Manage student leads, counselling follow-ups, fees and admissions.</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -1028,7 +1188,7 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
           </Button>
           {isAdmin ? (
             <Button data-requires-online onClick={openCreate} className="h-9 rounded-full bg-[#c9a227] px-5 text-white hover:bg-[#b8921f]">
-              + Add Lead
+              + Add Student
             </Button>
           ) : null}
         </div>
@@ -1063,8 +1223,8 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
             <LeadSummaryCard title="New Leads" value={overview.newLeads} loading={loading} />
             <LeadSummaryCard title="Contacted" value={overview.contacted} loading={loading} />
             <LeadSummaryCard title="Interested" value={overview.interested} loading={loading} />
-            <LeadSummaryCard title="Proposal Sent" value={overview.proposalSent} loading={loading} />
-            <LeadSummaryCard title="Converted Clients" value={overview.converted} loading={loading} />
+            <LeadSummaryCard title="Fee Discussed" value={overview.proposalSent} loading={loading} />
+            <LeadSummaryCard title="Admitted Students" value={overview.converted} loading={loading} />
             <LeadSummaryCard title="Lost" value={overview.lost} loading={loading} />
             <LeadSummaryCard title="Follow-ups Today" value={overview.followToday} loading={loading} />
             <LeadSummaryCard title="Overdue Follow-ups" value={overview.overdue} loading={loading} accent="rose" />
@@ -1091,10 +1251,10 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
           <TableSearchBar
             value={searchText}
             onChange={setSearchText}
-            placeholder="Search name, email, phone, company…"
+            placeholder="Search name, email, phone, city…"
             showClear={filtersActive}
             onClear={clearTableFilters}
-            hint={`Showing ${filteredClients.length} of ${clients.length} lead(s)`}
+            hint={`Showing ${filteredClients.length} of ${clients.length} student(s)`}
           />
           <AllLeadsTable
             loading={loading}
@@ -1104,14 +1264,20 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
             currentUserId={currentUserId}
             fltSource={fltSource}
             setFltSource={setFltSource}
-            fltService={fltService}
-            setFltService={setFltService}
+            fltProgram={fltProgram}
+            setFltProgram={setFltProgram}
             fltStatus={fltStatus}
             setFltStatus={setFltStatus}
             fltPriority={fltPriority}
             setFltPriority={setFltPriority}
             fltAssigned={fltAssigned}
             setFltAssigned={setFltAssigned}
+            fltStage={fltStage}
+            setFltStage={setFltStage}
+            fltPaymentStatus={fltPaymentStatus}
+            setFltPaymentStatus={setFltPaymentStatus}
+            fltAdmissionStatus={fltAdmissionStatus}
+            setFltAdmissionStatus={setFltAdmissionStatus}
             employeeOptions={employeesForSelect}
             onProfile={setProfileLead}
             onEdit={(leadRecord) => {
@@ -1175,7 +1341,15 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
       )}
 
       {activeTab === "converted" && (
-        <ConvertedTable leads={filteredClients.filter((leadEntry) => normalizeStatus(String(leadEntry.status)) === "Converted")} employeeNameMap={employeeNameMap} isAdmin={isAdmin} onProfile={setProfileLead} />
+        <ConvertedTable
+          leads={filteredClients.filter((leadEntry) => {
+            const st = normalizeStatus(String(leadEntry.status));
+            return st === "Converted" || st === "Admitted";
+          })}
+          employeeNameMap={employeeNameMap}
+          isAdmin={isAdmin}
+          onProfile={setProfileLead}
+        />
       )}
 
       {activeTab === "proposal" && (
@@ -1216,8 +1390,8 @@ export function CrmWorkbench({ role }: { role: AppRole }) {
         <>
           <button type="button" aria-label="Close" className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px]" onClick={() => setPanelOpen(false)} />
           <div className="fixed inset-0 z-50 lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[540px] lg:max-w-[100vw]">
-            <CrmLeadFormPanel
-              title={editId ? (isAdmin ? "Edit lead" : "Update lead") : "Add lead"}
+            <StudentLeadFormPanel
+              title={editId ? (isAdmin ? "Edit student" : "Update student") : "Add student"}
               open={panelOpen}
               value={form}
               employees={employeesForSelect}
@@ -1433,14 +1607,20 @@ function AllLeadsTable({
   currentUserId,
   fltSource,
   setFltSource,
-  fltService,
-  setFltService,
+  fltProgram,
+  setFltProgram,
   fltStatus,
   setFltStatus,
   fltPriority,
   setFltPriority,
   fltAssigned,
   setFltAssigned,
+  fltStage,
+  setFltStage,
+  fltPaymentStatus,
+  setFltPaymentStatus,
+  fltAdmissionStatus,
+  setFltAdmissionStatus,
   employeeOptions,
   onProfile,
   onEdit,
@@ -1455,14 +1635,20 @@ function AllLeadsTable({
   currentUserId: string;
   fltSource: string;
   setFltSource: (s: string) => void;
-  fltService: string;
-  setFltService: (s: string) => void;
+  fltProgram: string;
+  setFltProgram: (s: string) => void;
   fltStatus: string;
   setFltStatus: (s: string) => void;
   fltPriority: string;
   setFltPriority: (s: string) => void;
   fltAssigned: string;
   setFltAssigned: (s: string) => void;
+  fltStage: string;
+  setFltStage: (s: string) => void;
+  fltPaymentStatus: string;
+  setFltPaymentStatus: (s: string) => void;
+  fltAdmissionStatus: string;
+  setFltAdmissionStatus: (s: string) => void;
   employeeOptions: { id: string; label: string }[];
   onProfile: (l: CrmClientRow) => void;
   onEdit: (l: CrmClientRow) => void;
@@ -1471,21 +1657,45 @@ function AllLeadsTable({
   onConvert: (l: CrmClientRow) => void;
 }) {
   const today = todayISO();
+  const colCount = 36;
   return (
     <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
-      <table className="w-full min-w-[1400px] text-sm">
+      <table className="w-full min-w-[3200px] text-sm">
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
-            <TableHeaderCell label="Lead" className="px-4 py-3" />
-            <TableHeaderCell label="Company" className="px-4 py-3" />
-            <TableHeaderCell label="Phone" className="px-4 py-3" />
-            <TableHeaderCell label="WhatsApp" className="px-4 py-3" />
-            <TableHeaderCell label="Call" className="px-4 py-3" />
-            <TableHeaderCell label="WhatsApp msg" className="px-4 py-3" />
-            <TableHeaderCell label="Last contacted" className="px-4 py-3" />
+            <TableHeaderCell label="Student Name" className="px-4 py-3" />
+            <TableHeaderCell label="Mobile Number" className="px-4 py-3" />
+            <TableHeaderCell label="WhatsApp Number" className="px-4 py-3" />
             <TableHeaderCell label="Email" className="px-4 py-3" />
+            <TableHeaderCell label="City" className="px-4 py-3" />
+            <TableHeaderCell label="Current Profile" className="px-4 py-3" />
+            <TableHeaderCell label="Degree" className="px-4 py-3" />
+            <TableHeaderCell label="College/Company" className="px-4 py-3" />
+            <TableHeaderCell label="Year of Passing" className="px-4 py-3" />
+            <TableHeaderCell label="Employment Status" className="px-4 py-3" />
+            <TableHeaderCell label="Current Salary" className="px-4 py-3" />
             <TableHeaderFilter
-              label="Source"
+              label="Interested Program"
+              value={fltProgram}
+              onChange={setFltProgram}
+              options={INTERESTED_PROGRAMS.map((s) => ({ value: s, label: s }))}
+              allLabel="All programs"
+              className="px-4 py-3"
+            />
+            <TableHeaderCell label="Career Goal" className="px-4 py-3" />
+            <TableHeaderCell label="Preferred Job Role" className="px-4 py-3" />
+            <TableHeaderCell label="Target Salary" className="px-4 py-3" />
+            <TableHeaderCell label="Current Skill Level" className="px-4 py-3" />
+            <TableHeaderCell label="Main Career Problem" className="px-4 py-3" />
+            <TableHeaderCell label="Joining Timeline" className="px-4 py-3" />
+            <TableHeaderCell label="Program Budget" className="px-4 py-3" />
+            <TableHeaderCell label="Full Payment or Instalment" className="px-4 py-3" />
+            <TableHeaderCell label="Parent Approval Required" className="px-4 py-3" />
+            <TableHeaderCell label="Decision Maker" className="px-4 py-3" />
+            <TableHeaderCell label="Preferred Batch" className="px-4 py-3" />
+            <TableHeaderCell label="Laptop Availability" className="px-4 py-3" />
+            <TableHeaderFilter
+              label="Lead Source"
               value={fltSource}
               onChange={setFltSource}
               options={CRM_SOURCES.map((s) => ({ value: s, label: s }))}
@@ -1493,15 +1703,24 @@ function AllLeadsTable({
               className="px-4 py-3"
             />
             <TableHeaderFilter
-              label="Services"
-              value={fltService}
-              onChange={setFltService}
-              options={CRM_SERVICES.map((s) => ({ value: s, label: s }))}
-              allLabel="All services"
+              label="Assigned Counsellor"
+              value={fltAssigned}
+              onChange={setFltAssigned}
+              options={employeeOptions.map((e) => ({ value: e.id, label: e.label }))}
+              allLabel="All counsellors"
+              disabled={!isAdmin}
               className="px-4 py-3"
             />
             <TableHeaderFilter
-              label="Status"
+              label="Lead Stage"
+              value={fltStage}
+              onChange={setFltStage}
+              options={LEAD_STAGES.map((s) => ({ value: s, label: s }))}
+              allLabel="All stages"
+              className="px-4 py-3"
+            />
+            <TableHeaderFilter
+              label="Lead Status"
               value={fltStatus}
               onChange={setFltStatus}
               options={CRM_LEAD_STATUSES.map((s) => ({ value: s, label: s }))}
@@ -1516,17 +1735,26 @@ function AllLeadsTable({
               allLabel="All priorities"
               className="px-4 py-3"
             />
-            <TableHeaderCell label="Budget" className="px-4 py-3" />
+            <TableHeaderCell label="Primary Objection" className="px-4 py-3" />
+            <TableHeaderCell label="Next Follow-up Date" className="px-4 py-3" />
+            <TableHeaderCell label="Fee Quoted" className="px-4 py-3" />
+            <TableHeaderCell label="Final Fee" className="px-4 py-3" />
             <TableHeaderFilter
-              label="Assigned"
-              value={fltAssigned}
-              onChange={setFltAssigned}
-              options={employeeOptions.map((e) => ({ value: e.id, label: e.label }))}
-              allLabel="All assignees"
-              disabled={!isAdmin}
+              label="Payment Status"
+              value={fltPaymentStatus}
+              onChange={setFltPaymentStatus}
+              options={PAYMENT_STATUSES.map((s) => ({ value: s, label: s }))}
+              allLabel="All payment statuses"
               className="px-4 py-3"
             />
-            <TableHeaderCell label="Follow-up" className="px-4 py-3" />
+            <TableHeaderFilter
+              label="Admission Status"
+              value={fltAdmissionStatus}
+              onChange={setFltAdmissionStatus}
+              options={ADMISSION_STATUSES.map((s) => ({ value: s, label: s }))}
+              allLabel="All admission statuses"
+              className="px-4 py-3"
+            />
             <TableHeaderCell label="Actions" className="px-4 py-3" />
           </tr>
         </thead>
@@ -1534,15 +1762,16 @@ function AllLeadsTable({
           {loading
             ? [...Array.from({ length: 6 }).keys()].map((skeletonIdx) => (
                 <tr key={skeletonIdx}>
-                  <td colSpan={16} className="px-4 py-3">
+                  <td colSpan={colCount} className="px-4 py-3">
                     <div className="h-5 animate-pulse rounded bg-slate-100" />
                   </td>
                 </tr>
               ))
             : leads.map((lead) => {
                 const fu = lead.follow_up_date ? String(lead.follow_up_date) : null;
-                const overdue = !!(fu && fu < today && !["Converted", "Lost", "Not Interested"].includes(String(lead.status || "")));
+                const overdue = !!(fu && fu < today && !isClosedLeadStatus(String(lead.status || "")));
                 const hot = lead.priority === "Hot";
+                const program = lead.interested_program || lead.service_interest || "—";
                 return (
                   <tr
                     key={lead.id}
@@ -1552,29 +1781,43 @@ function AllLeadsTable({
                       fu === today ? "shadow-[inset_3px_0_0_#c9a227]" : "",
                     ].join(" ")}
                   >
-                    <td className="px-4 py-3 font-semibold text-slate-900">{displayLeadName(lead)}</td>
-                    <td className="max-w-[180px] truncate px-4 py-3">{lead.company_name || "—"}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-900 whitespace-nowrap">{displayLeadName(lead) || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{lead.phone || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{lead.whatsapp || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <EmployeeOutreachBadge done={Boolean(lead.phone_called)} label="Phone call" />
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <EmployeeOutreachBadge done={Boolean(lead.whatsapp_sent)} label="WhatsApp" />
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-[#64748b]">
-                      {lead.last_contacted_at ? formatDateTimeIST(String(lead.last_contacted_at)) : "—"}
-                    </td>
-                    <td className="max-w-[200px] truncate px-4 py-3">{lead.email || "—"}</td>
-                    <td className="whitespace-nowrap">{lead.source || "—"}</td>
-                    <td className="max-w-[200px] truncate text-xs">{String(lead.service_interest || "—")}</td>
-                    <td>
+                    <td className="max-w-[180px] truncate px-4 py-3">{lead.email || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.city || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.current_profile || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.degree || "—"}</td>
+                    <td className="max-w-[160px] truncate px-4 py-3">{lead.college_company || lead.company_name || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.year_of_passing || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.employment_status || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{formatMoney(lead.current_salary)}</td>
+                    <td className="max-w-[160px] truncate px-4 py-3">{String(program)}</td>
+                    <td className="max-w-[160px] truncate px-4 py-3">{lead.career_goal || "—"}</td>
+                    <td className="max-w-[140px] truncate px-4 py-3">{lead.preferred_job_role || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{formatMoney(lead.target_salary)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.current_skill_level || "—"}</td>
+                    <td className="max-w-[180px] truncate px-4 py-3">{lead.main_career_problem || lead.requirement || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.joining_timeline || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{formatMoney(lead.budget)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.payment_plan || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.parent_approval_required || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.decision_maker || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.preferred_batch || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.laptop_availability || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.source || "—"}</td>
+                    <td className="max-w-[140px] truncate px-4 py-3">{lead.assigned_to ? employeeNameMap[lead.assigned_to] : "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.lead_stage || "—"}</td>
+                    <td className="px-4 py-3">
                       <LeadStatusBadge status={String(lead.status)} />
                     </td>
-                    <td className="whitespace-nowrap font-medium capitalize">{lead.priority || "—"}</td>
-                    <td>{lead.budget != null ? `₹${Number(lead.budget).toLocaleString()}` : "—"}</td>
-                    <td className="max-w-[120px] truncate">{lead.assigned_to ? employeeNameMap[lead.assigned_to] : "—"}</td>
-                    <td className="whitespace-nowrap text-xs">{fu || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium capitalize">{lead.priority || "—"}</td>
+                    <td className="max-w-[160px] truncate px-4 py-3">{lead.primary_objection || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs">{fu || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{formatMoney(lead.fee_quoted ?? lead.proposal_amount)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{formatMoney(lead.final_fee)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.payment_status || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{lead.admission_status || "—"}</td>
                     <td className="flex flex-wrap gap-3 px-4 py-3 text-xs whitespace-nowrap">
                       <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onProfile(lead)}>
                         View
@@ -1592,9 +1835,9 @@ function AllLeadsTable({
                       <button type="button" className="font-semibold text-teal-700 hover:underline" onClick={() => onAddFollow(lead)}>
                         Follow-up
                       </button>
-                      {isAdmin && normalizeStatus(String(lead.status)) !== "Converted" && (
+                      {isAdmin && !isClosedLeadStatus(String(lead.status)) && (
                         <button type="button" className="font-semibold text-emerald-700 hover:underline" onClick={() => onConvert(lead)}>
-                          Convert
+                          Admit
                         </button>
                       )}
                     </td>
@@ -1603,8 +1846,8 @@ function AllLeadsTable({
               })}
           {!loading && leads.length === 0 ? (
             <tr>
-              <td colSpan={13} className="px-6 py-10 text-center text-slate-500">
-                No leads match these filters yet.
+              <td colSpan={colCount} className="px-6 py-10 text-center text-slate-500">
+                No students match these filters yet.
               </td>
             </tr>
           ) : null}
@@ -2376,3 +2619,5 @@ function Dt({ label, value }: { label: string; value?: string | null }) {
     </>
   );
 }
+
+

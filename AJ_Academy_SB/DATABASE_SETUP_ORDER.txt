@@ -42,8 +42,11 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 
 DO NOT run rls-policies.sql — it is legacy Birthmark Brahma (employee/manager) and breaks AJ Academy login.
 
-Skip legacy BB-only scripts unless you need CRM/finance:
-  client_lead_schema.sql, client_master_schema.sql, client_crm_columns_patch.sql (if 42703 column missing),
+Skip legacy BB-only scripts unless you need CRM/finance / Student Master:
+  student_lead_master_schema.sql, student_lead_master_aux_schema.sql,
+  student_lead_master_columns_patch.sql (if 42703 column missing),
+  student_master_columns_patch.sql (Student Master counselling fields — after student_lead_master_schema.sql),
+  student_lead_master_rls_fix.sql (RLS hardening — after schema + employee_lead_management_schema.sql),
   finance_schema.sql, employee_daily_mood_schema.sql, etc.
 
 After SQL: create users in Authentication, then insert profiles rows (see SUPABASE_SETUP_GUIDE.md).

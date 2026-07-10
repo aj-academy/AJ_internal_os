@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { LeadSummaryCard } from "@/components/client-lead/LeadSummaryCard";
+import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { REIMBURSEMENT_TAB_LABELS, REIMBURSEMENT_TAB_ORDER } from "@/components/reimbursement/reimbursementConfig";

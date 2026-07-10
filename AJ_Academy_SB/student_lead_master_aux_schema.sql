@@ -1,14 +1,14 @@
--- BB Internal OS — CRM satellite tables + legacy upgrades
+-- Student Lead Master — satellite tables + legacy upgrades (follow-ups, activities, documents)
 
 --
 
 -- This is NOT a second "clients" database: the single source of truth is public.clients
 
--- (see client_lead_schema.sql for the full column model).
+-- (see student_lead_master_schema.sql for the full column model).
 
 --
 
--- Run AFTER client_lead_schema.sql.
+-- Run AFTER student_lead_master_schema.sql.
 
 --
 
@@ -24,7 +24,7 @@
 
 --   5) clients RLS for manager read + employee update (idempotent — same as modern client_lead_schema;
 
---      kept so a project that only ever ran an old narrow client_lead_schema.sql still gets these
+--      kept so a project that only ever ran an old narrow student_lead_master_schema.sql still gets these
 
 --      policies when this file is applied).
 

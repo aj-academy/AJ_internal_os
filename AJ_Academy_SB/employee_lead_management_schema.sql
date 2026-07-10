@@ -1,5 +1,5 @@
 ﻿-- Employee Lead Management — extends public.clients (same source as Client Master).
--- Safe to run after project_master_schema.sql (minimal clients stub) OR full client_lead_schema.sql.
+-- Safe to run after project_master_schema.sql (minimal clients stub) OR full student_lead_master_schema.sql.
 -- Adds CRM columns, lead_custom_columns, lead_activities, and employee RLS.
 
 -- Core CRM columns (minimal clients stub from project_master_schema lacks these)

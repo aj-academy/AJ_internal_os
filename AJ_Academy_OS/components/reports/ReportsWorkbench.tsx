@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TableHeaderCell, TableHeaderFilter, type TableHeaderFilterOption } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
-import { normalizeStatus } from "@/components/client-lead/crmHelpers";
+import { normalizeStatus } from "@/components/student-lead-master/studentMasterHelpers";
 import { TX_SELECT } from "@/components/finance/financeHelpers";
 import { PROJECT_SELECT, normalizeProjectStatus } from "@/components/project-master/projectHelpers";
 import { REPORTS_TAB_LABELS, REPORTS_TAB_ORDER, type ReportsTabId } from "@/components/reports/reportsConfig";

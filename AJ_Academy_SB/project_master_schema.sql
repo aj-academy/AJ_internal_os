@@ -4,7 +4,7 @@
 --
 -- Creates: clients (minimal stub if missing), projects, project_activities, project_team_members
 -- Adds: tasks.project_id + trigger to sync task counts / progress on projects
--- Optional later: client_lead_schema.sql upgrades clients for full CRM (not required for tasks).
+-- Optional later: student_lead_master_schema.sql upgrades clients for full CRM (not required for tasks).
 -- RLS: admin full; manager read/update projects they manage or are on; employee read team projects;
 --       accounts read all projects (financial visibility); task visibility extended for project team.
 -- RLS helpers (SECURITY DEFINER) avoid recursion between projects, project_team_members, and policies
@@ -13,7 +13,7 @@
 create extension if not exists pgcrypto;
 
 -- ------------------------------
--- clients (minimal — AJ Academy does not require client_lead_schema.sql first)
+-- clients (minimal — AJ Academy does not require student_lead_master_schema.sql first)
 -- ------------------------------
 
 create table if not exists public.clients (

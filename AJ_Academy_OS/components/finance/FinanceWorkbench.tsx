@@ -9,7 +9,7 @@ import { usePagination } from "@/lib/usePagination";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Input } from "@/components/ui/input";
-import { LeadSummaryCard } from "@/components/client-lead/LeadSummaryCard";
+import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import {
   EXPENSE_CATEGORIES,
   FINANCE_TAB_LABELS,
