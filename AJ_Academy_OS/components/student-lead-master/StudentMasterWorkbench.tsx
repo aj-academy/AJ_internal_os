@@ -840,7 +840,7 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
     }
     const trimmed = message.trim();
     if (!trimmed) {
-      setError("Enter a message before opening Email.");
+      setError("Enter a message before sending email.");
       return;
     }
     if (trimmed.length > MAX_EMAIL_MESSAGE_LENGTH) {
@@ -853,9 +853,27 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
     const lead = emailComposeLead;
     const now = new Date().toISOString();
     const activityNotes = formatEmailActivityNotes(trimmed);
-    const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(`AJ Academy follow-up for ${displayLeadName(lead)}`)}&body=${encodeURIComponent(trimmed)}`;
+    const subject = `AJ Academy follow-up for ${displayLeadName(lead)}`;
+
+    try {
+      const mailRes = await fetch("/api/outreach/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: email, subject, body: trimmed }),
+      });
+      const mailPayload = (await mailRes.json().catch(() => ({}))) as { error?: string };
+      if (!mailRes.ok) {
+        setError(mailPayload.error || "Could not send email.");
+        setEmailSubmitting(false);
+        return;
+      }
+    } catch {
+      setError("Could not reach the email server.");
+      setEmailSubmitting(false);
+      return;
+    }
+
     patchClientLocal(lead.id, { email_sent: true, email_sent_at: now, last_contacted_at: now });
-    window.location.href = mailto;
     let updateError = (
       await supabase
         .from("clients")
@@ -891,7 +909,7 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
       return;
     }
     setEmailComposeLead(null);
-    setSuccess("Email opened and message saved to activity history.");
+    setSuccess("Email sent from ajacademy.co.in@gmail.com and saved to activity history.");
     setEmailSubmitting(false);
   };
 

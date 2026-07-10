@@ -21,9 +21,14 @@ SUPABASE_SERVICE_ROLE_KEY=eyJ...
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 RESEND_API_KEY=re_...
 TASK_EMAIL_FROM="AJ Academy <onboarding@resend.dev>"
+GMAIL_OUTREACH_USER=ajacademy.co.in@gmail.com
+GMAIL_OUTREACH_APP_PASSWORD=your-gmail-app-password
+OUTREACH_EMAIL_FROM="AJ Academy <ajacademy.co.in@gmail.com>"
 ```
 
 `RESEND_API_KEY` is optional, but required if you want counselling schedule emails to be sent to students.
+
+`GMAIL_OUTREACH_APP_PASSWORD` is required for Student Master outreach emails (sent from `ajacademy.co.in@gmail.com`). Create an [App Password](https://myaccount.google.com/apppasswords) on that Google account (2-Step Verification must be on).
 
 ---
 

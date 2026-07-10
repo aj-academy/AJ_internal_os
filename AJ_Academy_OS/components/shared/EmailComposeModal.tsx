@@ -89,7 +89,8 @@ export function EmailComposeModal({
           </label>
 
           <p className="rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 text-xs text-sky-800">
-            Message is saved to activity history when you open your email app.
+            Sends from <strong>ajacademy.co.in@gmail.com</strong> to the student&apos;s email above.
+            Message is saved to activity history after it is sent.
           </p>
         </div>
 
@@ -103,7 +104,7 @@ export function EmailComposeModal({
             disabled={submitting || !message.trim()}
             onClick={() => void onSend(message.trim())}
           >
-            {submitting ? "Opening…" : "Open in Email"}
+            {submitting ? "Sending…" : "Send email"}
           </Button>
         </div>
       </div>

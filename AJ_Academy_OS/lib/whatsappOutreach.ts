@@ -34,7 +34,7 @@ export function applyEmailTemplate(template: string, leadName: string) {
 }
 
 export function formatEmailActivityNotes(message: string) {
-  return `Email composed:\n${message.trim()}`;
+  return `Email sent from ajacademy.co.in@gmail.com:\n${message.trim()}`;
 }
 
 export function parseWhatsAppTemplatesFromCrm(value: unknown): string[] {

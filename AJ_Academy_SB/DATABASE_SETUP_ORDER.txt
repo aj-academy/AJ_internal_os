@@ -53,6 +53,7 @@ After SQL: create users in Authentication, then insert profiles rows (see SUPABA
 
 Optional email notifications:
   Set RESEND_API_KEY (+ TASK_EMAIL_FROM) in AJ_Academy_OS env to send counselling schedule emails.
+  Set GMAIL_OUTREACH_USER (+ GMAIL_OUTREACH_APP_PASSWORD) for Student Master outreach from ajacademy.co.in@gmail.com.
 
 Student portal (/student/*):
   Same SQL as employee panel for attendance, permission, leave, policies, profile.
