@@ -3,15 +3,23 @@ import {
   getSupabaseProjectRef,
   writeAuthSessionCookies,
 } from "@/lib/supabase/write-auth-cookies";
-import { mirrorSupabaseCookiesFromHeader } from "@/lib/supabase/mirror-browser-cookies";
+import { createClientWithAccessToken } from "@/lib/supabase/access-token-client";
 import {
   PROFILE_SESSION_COOKIE,
   type ProfileSessionPayload,
 } from "@/lib/auth/profile-session-cookie";
 import { applySupabaseCookieOptions } from "@/lib/supabase/cookies";
+import { loadAuthorizedProfile, enforceRateLimit } from "@/lib/security";
+import { logSecurityEvent } from "@/lib/security/auditLog";
 
-/** Saves browser login session + profile hint into cookies for server layouts. */
+/** Saves verified login session + server-verified profile hint into httpOnly cookies. */
 export async function POST(request: NextRequest) {
+  const limited = enforceRateLimit(request, "auth:set-session", {
+    limit: 30,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
+
   let body: unknown;
   try {
     body = await request.json();
@@ -20,58 +28,71 @@ export async function POST(request: NextRequest) {
   }
 
   const record = body as Record<string, unknown>;
-  const browserCookies =
-    typeof record.browserCookies === "string" ? record.browserCookies : "";
   const session =
     record.session && typeof record.session === "object"
       ? (record.session as Record<string, unknown>)
       : null;
-  const profile =
-    record.profile && typeof record.profile === "object"
-      ? (record.profile as ProfileSessionPayload)
-      : null;
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
-  const projectRef = getSupabaseProjectRef(supabaseUrl);
+  const accessToken =
+    typeof session?.access_token === "string" ? session.access_token.trim() : "";
+  const refreshToken =
+    typeof session?.refresh_token === "string" ? session.refresh_token.trim() : "";
 
-  if (!projectRef) {
-    return NextResponse.json({ error: "Invalid NEXT_PUBLIC_SUPABASE_URL." }, { status: 500 });
+  if (!accessToken || !refreshToken) {
+    logSecurityEvent("set_session_rejected", { reason: "missing_tokens" });
+    return NextResponse.json({ error: "Valid session tokens are required." }, { status: 400 });
   }
 
-  const hasBrowserAuthCookie = /sb-[a-z0-9]+-auth-token/i.test(browserCookies);
-
-  if (!session?.access_token && !session?.refresh_token && !hasBrowserAuthCookie) {
-    return NextResponse.json({ error: "Missing session data." }, { status: 400 });
-  }
-
-  const response = NextResponse.json({ ok: true });
-  const cookieOptions = applySupabaseCookieOptions({ maxAge: 400 * 24 * 60 * 60 });
-
-  if (session?.access_token && session?.refresh_token) {
-    writeAuthSessionCookies(response, projectRef, session);
-  } else if (hasBrowserAuthCookie) {
-    mirrorSupabaseCookiesFromHeader(response, browserCookies);
+  let verifiedUserId = "";
+  let verifiedEmail = "";
+  try {
+    const tokenClient = createClientWithAccessToken(accessToken);
+    const { data: userData, error: userError } = await tokenClient.auth.getUser(accessToken);
+    if (userError || !userData.user) {
+      logSecurityEvent("set_session_rejected", { reason: "invalid_token" });
+      return NextResponse.json({ error: "Invalid session token." }, { status: 401 });
+    }
+    verifiedUserId = userData.user.id;
+    verifiedEmail = (userData.user.email ?? "").trim().toLowerCase();
+  } catch {
+    logSecurityEvent("set_session_rejected", { reason: "token_verify_failed" });
+    return NextResponse.json({ error: "Could not verify session." }, { status: 401 });
   }
 
   const sessionUser =
     session?.user && typeof session.user === "object"
       ? (session.user as { id?: string; email?: string })
       : null;
-  const authUserId = typeof sessionUser?.id === "string" ? sessionUser.id : "";
-  const authEmail =
-    typeof sessionUser?.email === "string" ? sessionUser.email.trim().toLowerCase() : "";
+  const bodyUserId = typeof sessionUser?.id === "string" ? sessionUser.id : "";
+  if (bodyUserId && bodyUserId !== verifiedUserId) {
+    logSecurityEvent("set_session_rejected", { reason: "user_id_mismatch" });
+    return NextResponse.json({ error: "Session user mismatch." }, { status: 400 });
+  }
 
-  if (profile?.role && profile?.email && authUserId) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
+  const projectRef = getSupabaseProjectRef(supabaseUrl);
+  if (!projectRef) {
+    return NextResponse.json({ error: "Invalid NEXT_PUBLIC_SUPABASE_URL." }, { status: 500 });
+  }
+
+  const response = NextResponse.json({ ok: true });
+  const cookieOptions = applySupabaseCookieOptions({ maxAge: 400 * 24 * 60 * 60 });
+
+  writeAuthSessionCookies(response, projectRef, session!);
+
+  const profile = await loadAuthorizedProfile({ id: verifiedUserId, email: verifiedEmail });
+  if (profile?.role && profile.email) {
     const payload: ProfileSessionPayload = {
-      id: authUserId,
-      role: String(profile.role).trim().toLowerCase() as ProfileSessionPayload["role"],
-      email: String(profile.email).trim().toLowerCase(),
+      id: verifiedUserId,
+      role: profile.role,
+      email: profile.email,
       full_name: profile.full_name ?? null,
     };
-    if (!payload.email && authEmail) {
-      payload.email = authEmail;
-    }
-    response.cookies.set(PROFILE_SESSION_COOKIE, JSON.stringify(payload), cookieOptions);
+    response.cookies.set(PROFILE_SESSION_COOKIE, JSON.stringify(payload), {
+      ...cookieOptions,
+      httpOnly: true,
+    });
+    logSecurityEvent("set_session_ok", { userId: verifiedUserId, role: profile.role });
   }
 
   return response;

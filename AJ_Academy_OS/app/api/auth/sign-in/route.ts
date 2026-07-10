@@ -4,6 +4,9 @@ import { validateLoginProfile, type LoginRoleOption } from "@/lib/auth/validateL
 import { getRoleRedirectPath } from "@/lib/auth/roleRedirect";
 import { applySupabaseCookieOptions } from "@/lib/supabase/cookies";
 import { createClientFromRequest } from "@/lib/supabase/route-handler";
+import { enforceRateLimit } from "@/lib/security";
+import { logSecurityEvent } from "@/lib/security/auditLog";
+import { isValidEmail } from "@/lib/security/validate";
 
 const LOGIN_ROLES = new Set<LoginRoleOption>(["admin", "student", "freelancer", "mentor"]);
 
@@ -20,6 +23,12 @@ function copyAuthCookies(from: NextResponse, to: NextResponse) {
 }
 
 export async function POST(request: NextRequest) {
+  const limited = enforceRateLimit(request, "auth:sign-in", {
+    limit: 15,
+    windowMs: 15 * 60_000,
+  });
+  if (limited) return limited;
+
   const wantsJson =
     request.headers.get("accept")?.includes("application/json") ||
     request.headers.get("x-login-mode") === "json";
@@ -41,6 +50,10 @@ export async function POST(request: NextRequest) {
 
   if (!email || !password) {
     return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
+  }
+
+  if (!isValidEmail(email)) {
+    return NextResponse.json({ error: "Invalid email address." }, { status: 400 });
   }
 
   if (!LOGIN_ROLES.has(selectedRole)) {
@@ -80,6 +93,7 @@ export async function POST(request: NextRequest) {
 
   if (signInError || !signInData.user) {
     const authMessage = signInError?.message ?? "";
+    logSecurityEvent("sign_in_failed", { email });
     const lower = authMessage.toLowerCase();
     const friendly = lower.includes("fetch failed")
       ? "App cannot reach Supabase. Check .env.local URL and restart npm run dev."
@@ -103,8 +117,11 @@ export async function POST(request: NextRequest) {
   const validation = validateLoginProfile(profile, selectedRole);
   if (!validation.ok) {
     await supabase.auth.signOut();
+    logSecurityEvent("sign_in_role_denied", { email, role: selectedRole });
     return NextResponse.json({ error: validation.error }, { status: 403 });
   }
+
+  logSecurityEvent("sign_in_ok", { email, role: validation.role });
 
   const redirectTo = getRoleRedirectPath(validation.role);
   const redirectUrl = new URL(redirectTo, request.url);

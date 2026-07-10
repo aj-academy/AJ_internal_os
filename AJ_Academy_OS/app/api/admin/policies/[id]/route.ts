@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminApiSession } from "@/lib/auth/requireAdminApi";
+import { requireAdminApiSession } from "@/lib/security";
 
 interface RouteParams {
   params: Promise<{ id: string }>;

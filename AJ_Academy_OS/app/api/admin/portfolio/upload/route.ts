@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminApiSession } from "@/lib/auth/requireAdminApi";
+import { requireAdminApiSession } from "@/lib/security";
 import { DEFAULT_PORTFOLIO_PLACEHOLDERS, PORTFOLIO_MAX_FILE_BYTES } from "@/lib/portfolio";
 
 export async function POST(request: Request) {
@@ -24,6 +24,14 @@ export async function POST(request: Request) {
 
   if (!isHtml && !isPdf) {
     return NextResponse.json({ error: "Only .html, .htm, or .pdf files are allowed." }, { status: 400 });
+  }
+
+  const mime = (file.type || "").toLowerCase();
+  if (isPdf && mime && !mime.includes("pdf")) {
+    return NextResponse.json({ error: "File content does not match PDF type." }, { status: 400 });
+  }
+  if (isHtml && mime && !mime.includes("html") && mime !== "text/plain") {
+    return NextResponse.json({ error: "File content does not match HTML type." }, { status: 400 });
   }
 
   const admin = createAdminClient();

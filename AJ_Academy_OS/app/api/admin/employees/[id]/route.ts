@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { removeUserAccount } from "@/lib/admin/removeUserAccount";
-import { requireAdminApiSession } from "@/lib/auth/requireAdminApi";
+import { requireAdminApiSession } from "@/lib/security";
+import { assertSuperAdminActor } from "@/lib/security/auth/requireSuperAdmin";
+import { logSecurityEvent } from "@/lib/security/auditLog";
 import type { UserRole } from "@/types/profile";
 
 const ROLES = new Set(["super_admin", "admin", "employee", "student", "freelancer", "mentor"]);
@@ -12,7 +14,7 @@ interface RouteParams {
 }
 
 export async function PATCH(request: Request, { params }: RouteParams) {
-  const { response, user } = await requireAdminApiSession();
+  const { response, user, profile: actor } = await requireAdminApiSession();
   if (response || !user) return response!;
 
   const { id } = await params;
@@ -52,6 +54,12 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   if (!STATUSES.has(status)) {
     return NextResponse.json({ error: "Invalid status." }, { status: 400 });
+  }
+
+  const superAdminCheck = assertSuperAdminActor(actor, role);
+  if (!superAdminCheck.ok) {
+    logSecurityEvent("admin_update_denied", { actorId: user.id, targetId: id, targetRole: role });
+    return NextResponse.json({ error: superAdminCheck.error }, { status: 403 });
   }
 
   const admin = createAdminClient();

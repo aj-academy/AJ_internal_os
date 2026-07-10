@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminApiSession } from "@/lib/auth/requireAdminApi";
+import { requireAdminApiSession } from "@/lib/security";
+import { assertSuperAdminActor } from "@/lib/security/auth/requireSuperAdmin";
+import { logSecurityEvent } from "@/lib/security/auditLog";
 
 const ROLES = new Set(["super_admin", "admin", "employee", "student", "freelancer", "mentor"]);
 const STATUSES = new Set(["active", "inactive"]);
@@ -18,7 +20,7 @@ function friendlySupabaseError(message: string) {
 
 export async function POST(request: Request) {
   try {
-    const { response, user } = await requireAdminApiSession();
+    const { response, user, profile: actor } = await requireAdminApiSession();
     if (response || !user) return response!;
 
     let body: unknown;
@@ -54,6 +56,12 @@ export async function POST(request: Request) {
 
     if (!STATUSES.has(status)) {
       return NextResponse.json({ error: "Invalid status." }, { status: 400 });
+    }
+
+    const superAdminCheck = assertSuperAdminActor(actor, role);
+    if (!superAdminCheck.ok) {
+      logSecurityEvent("admin_create_denied", { actorId: user.id, targetRole: role });
+      return NextResponse.json({ error: superAdminCheck.error }, { status: 403 });
     }
 
     if (password.length < 8) {

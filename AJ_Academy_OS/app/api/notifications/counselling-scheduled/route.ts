@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
+import { requireStaffApiSession, enforceRateLimit } from "@/lib/security";
 
 type Body = {
   studentEmail?: string;
@@ -22,6 +23,15 @@ function escapeHtml(value: string) {
 }
 
 export async function POST(request: Request) {
+  const limited = enforceRateLimit(request, "email:counselling", {
+    limit: 20,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
+
+  const { response } = await requireStaffApiSession();
+  if (response) return response;
+
   const apiKey = process.env.RESEND_API_KEY?.trim();
   if (!apiKey) {
     return NextResponse.json({

@@ -23,6 +23,7 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 8) profiles_rls_fix.sql   *** REQUIRED for login (RLS + get_my_profile RPC) ***
 8b) add_role_and_sync_profiles.sql  *** after Auth users exist — fills role column + links Auth → profiles ***
 8c) add_employee_role.sql  *** run if User Master fails with profiles_role_check for employee role ***
+8d) profiles_rls_tighten.sql  *** recommended — restrict profile reads to self/admin/scoped roles ***
 9) project_master_schema.sql (projects + tasks.project_id; includes minimal clients stub)
 10) company_policies_schema.sql (optional)
 10b) company_policies_category.sql (employee + freelancer policy tabs)
@@ -54,6 +55,10 @@ After SQL: create users in Authentication, then insert profiles rows (see SUPABA
 Optional email notifications:
   Set RESEND_API_KEY (+ TASK_EMAIL_FROM) in AJ_Academy_OS env to send counselling schedule emails.
   Set GMAIL_OUTREACH_USER (+ GMAIL_OUTREACH_APP_PASSWORD) for Student Master outreach from ajacademy.co.in@gmail.com.
+
+Security harness log: security/harness/SECURITY_HARNESS_LOG.txt
+Recommended: profiles_rls_tighten.sql, storage_rls_tighten.sql
+If admin sees 0 data after tighten: run security_rls_access_fix.sql (restores admin RLS on profiles, clients, tasks, projects, finance, attendance, Student Master aux tables)
 
 Student portal (/student/*):
   Same SQL as employee panel for attendance, permission, leave, policies, profile.

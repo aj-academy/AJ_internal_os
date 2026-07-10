@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { checkRateLimit, enforceRateLimit } from "@/lib/security";
+import { logSecurityEvent } from "@/lib/security/auditLog";
+import { isValidEmail } from "@/lib/security/validate";
 
 const ROLES = new Set(["super_admin", "admin", "employee", "student", "freelancer", "mentor"]);
 
 export async function POST(request: Request) {
+  const limited = enforceRateLimit(request, "auth:first-login", {
+    limit: 10,
+    windowMs: 15 * 60_000,
+  });
+  if (limited) return limited;
+
   let body: unknown;
   try {
     body = await request.json();
@@ -21,6 +30,18 @@ export async function POST(request: Request) {
       { error: "email, role, and password are required." },
       { status: 400 },
     );
+  }
+
+  if (!isValidEmail(email)) {
+    return NextResponse.json({ error: "Invalid email address." }, { status: 400 });
+  }
+
+  const emailLimited = checkRateLimit(`auth:first-login:email:${email}`, {
+    limit: 5,
+    windowMs: 15 * 60_000,
+  });
+  if (!emailLimited.ok) {
+    return NextResponse.json({ error: "Too many attempts for this email." }, { status: 429 });
   }
 
   if (!ROLES.has(role)) {
@@ -43,11 +64,13 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (profileError || !profile) {
-    return NextResponse.json({ error: "Profile not found." }, { status: 404 });
+    logSecurityEvent("first_login_failed", { email, reason: "profile_not_found" });
+    return NextResponse.json({ error: "Could not initialize account." }, { status: 400 });
   }
 
   if ((profile.role ?? "").toLowerCase() !== role) {
-    return NextResponse.json({ error: "Selected role does not match account role." }, { status: 403 });
+    logSecurityEvent("first_login_failed", { email, reason: "role_mismatch" });
+    return NextResponse.json({ error: "Could not initialize account." }, { status: 400 });
   }
 
   if ((profile.status ?? "active").toLowerCase() !== "active") {
@@ -56,7 +79,7 @@ export async function POST(request: Request) {
 
   const { data: authLookup, error: authLookupError } = await admin.auth.admin.getUserById(profile.id);
   if (authLookupError || !authLookup.user) {
-    return NextResponse.json({ error: "Auth user not found for this profile." }, { status: 404 });
+    return NextResponse.json({ error: "Could not initialize account." }, { status: 400 });
   }
 
   if (authLookup.user.last_sign_in_at) {
@@ -69,13 +92,13 @@ export async function POST(request: Request) {
   });
 
   if (updateError) {
+    logSecurityEvent("first_login_failed", { email, reason: updateError.message });
     return NextResponse.json(
       { error: updateError.message ?? "Could not initialize password." },
       { status: 400 },
     );
   }
 
-  // Keep profile row normalized to match login identity used by the employee.
   await admin
     .from("profiles")
     .update({
@@ -85,5 +108,6 @@ export async function POST(request: Request) {
     })
     .eq("id", profile.id);
 
+  logSecurityEvent("first_login_ok", { userId: profile.id, email });
   return NextResponse.json({ ok: true });
 }

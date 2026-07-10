@@ -67,6 +67,7 @@ language sql
 stable
 security definer
 set search_path = public
+set row_security = off
 as $$
   select coalesce(
     (lower(btrim(coalesce(public.get_user_role(), ''))) in ('admin', 'super_admin')),

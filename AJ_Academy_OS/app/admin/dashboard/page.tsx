@@ -33,6 +33,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchOrEmpty, formatBatchAccessWarning, type SupabaseQueryError } from "@/lib/supabase/clientQuery";
 import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 import { AttendanceSelfieThumb } from "@/components/attendance/AttendanceSelfieThumb";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -170,29 +171,62 @@ export default function AdminDashboardPage() {
         setUserName((me?.full_name as string | null) || (me?.email as string | null) || "Admin");
       }
 
-      const safe = async <T,>(query: PromiseLike<{ data: T | null; error: { message: string } | null }>, fallback: T): Promise<T> => {
-        const res = await query;
-        if (res.error) return fallback;
-        return (res.data as T) ?? fallback;
-      };
+      const queryErrors: SupabaseQueryError[] = [];
 
       const [pr, at, cl, pj, tk, tx, tm, ec] = await Promise.all([
-        safe(supabase.from("profiles").select("id,full_name,email,department,role,status,created_at").limit(3000).returns<Profile[]>(), []),
-        safe(
+        fetchOrEmpty(
+          "profiles",
+          supabase.from("profiles").select("id,full_name,email,department,role,status,created_at").limit(3000).returns<Profile[]>(),
+          queryErrors,
+          [],
+        ),
+        fetchOrEmpty(
+          "attendance_records",
           supabase
             .from("attendance_records")
             .select("id,employee_id,attendance_date,status,check_in_time,check_in_selfie_url,total_working_minutes,created_at")
             .gte("attendance_date", isoDate(new Date(Date.now() - 120 * 86400000)))
             .limit(12000)
             .returns<Attendance[]>(),
+          queryErrors,
           [],
         ),
-        safe(supabase.from("clients").select("id,name,company_name,status,follow_up_date,created_at,updated_at").limit(10000).returns<Client[]>(), []),
-        safe(supabase.from("projects").select("id,project_name,client_id,deadline,status,progress,pending_amount,created_at,updated_at").limit(6000).returns<Project[]>(), []),
-        safe(supabase.from("tasks").select("id,assigned_to,status,due_date,project_id,created_at,updated_at").limit(15000).returns<Task[]>(), []),
-        safe(supabase.from("finance_transactions").select("id,transaction_type,amount,transaction_date,payment_status,created_at").limit(12000).returns<Tx[]>(), []),
-        safe(supabase.from("project_team_members").select("project_id,profile_id").limit(12000).returns<Team[]>(), []),
-        safe(supabase.from("expense_claims").select("approval_status").limit(5000).returns<Claim[]>(), []),
+        fetchOrEmpty(
+          "clients",
+          supabase.from("clients").select("id,name,company_name,status,follow_up_date,created_at,updated_at").limit(10000).returns<Client[]>(),
+          queryErrors,
+          [],
+        ),
+        fetchOrEmpty(
+          "projects",
+          supabase.from("projects").select("id,project_name,client_id,deadline,status,progress,pending_amount,created_at,updated_at").limit(6000).returns<Project[]>(),
+          queryErrors,
+          [],
+        ),
+        fetchOrEmpty(
+          "tasks",
+          supabase.from("tasks").select("id,assigned_to,status,due_date,project_id,created_at,updated_at").limit(15000).returns<Task[]>(),
+          queryErrors,
+          [],
+        ),
+        fetchOrEmpty(
+          "finance_transactions",
+          supabase.from("finance_transactions").select("id,transaction_type,amount,transaction_date,payment_status,created_at").limit(12000).returns<Tx[]>(),
+          queryErrors,
+          [],
+        ),
+        fetchOrEmpty(
+          "project_team_members",
+          supabase.from("project_team_members").select("project_id,profile_id").limit(12000).returns<Team[]>(),
+          queryErrors,
+          [],
+        ),
+        fetchOrEmpty(
+          "expense_claims",
+          supabase.from("expense_claims").select("approval_status").limit(5000).returns<Claim[]>(),
+          queryErrors,
+          [],
+        ),
       ]);
 
       const w = typeof window !== "undefined";
@@ -240,6 +274,8 @@ export default function AdminDashboardPage() {
       setPermissions(pm);
       setWfh(wf);
 
+      const accessWarning = formatBatchAccessWarning(queryErrors);
+      if (accessWarning) setError(accessWarning);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load dashboard data.");
     } finally {

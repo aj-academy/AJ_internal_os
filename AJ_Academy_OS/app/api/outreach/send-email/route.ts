@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireStaffApiSession } from "@/lib/auth/requireStaffApi";
+import { requireStaffApiSession, enforceRateLimit } from "@/lib/security";
 import { sendOutreachEmail } from "@/lib/email/outreachEmail";
 import { MAX_EMAIL_MESSAGE_LENGTH } from "@/lib/whatsappOutreach";
+import { isValidEmail } from "@/lib/security/validate";
 
 type Body = {
   to?: string;
@@ -10,6 +11,12 @@ type Body = {
 };
 
 export async function POST(request: Request) {
+  const limited = enforceRateLimit(request, "email:outreach", {
+    limit: 30,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
+
   const { response } = await requireStaffApiSession();
   if (response) return response;
 
@@ -21,13 +28,13 @@ export async function POST(request: Request) {
   }
 
   const to = (payload.to ?? "").trim().toLowerCase();
-  if (!to.includes("@")) {
+  if (!isValidEmail(to)) {
     return NextResponse.json({ error: "Valid recipient email is required." }, { status: 400 });
   }
 
   const subject = (payload.subject ?? "").trim();
-  if (!subject) {
-    return NextResponse.json({ error: "Subject is required." }, { status: 400 });
+  if (!subject || subject.length > 200) {
+    return NextResponse.json({ error: "Subject is required (max 200 characters)." }, { status: 400 });
   }
 
   const text = (payload.body ?? "").trim();

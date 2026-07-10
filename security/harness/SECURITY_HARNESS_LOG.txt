@@ -1,0 +1,242 @@
+AJ ACADEMY — SECURITY HARNESS WORK LOG
+======================================
+Last updated: 2026-07-10
+Location: security/harness/SECURITY_HARNESS_LOG.txt
+App code:  AJ_Academy_OS/lib/security/
+SQL:       AJ_Academy_SB/ (see section 4)
+
+This file records BEFORE vs AFTER for all security hardening done on the project.
+
+
+================================================================================
+1. ROLE / SESSION AUTHORIZATION (CRITICAL)
+================================================================================
+
+BEFORE:
+  - getUserProfile() trusted aj_profile cookie for role (cookie was not httpOnly).
+  - Any logged-in user could set cookie role to "admin" in browser DevTools.
+  - requireAdminApiSession / requireStaffApiSession used cookie-trusted role.
+  - set-session accepted client-supplied profile.role from request body.
+  - set-session did not verify JWT before writing cookies.
+
+AFTER:
+  - loadAuthorizedProfile() always reads role from public.profiles via DB.
+  - verifySessionRole() uses supabase.auth.getUser() + DB role check.
+  - getUserProfile() uses loadAuthorizedProfile() only (no cookie role trust).
+  - set-session verifies access_token via getUser() before any cookie write.
+  - set-session requires access_token + refresh_token (no unverified mirror path).
+  - aj_profile cookie is httpOnly and set only after token verification.
+  - requirePortalMemberApiSession now uses verifySessionRole (DB role).
+
+Files:
+  lib/security/auth/loadAuthorizedProfile.ts
+  lib/security/auth/verifySessionRole.ts
+  lib/security/auth/requireAdminApi.ts
+  lib/security/auth/requireStaffApi.ts
+  lib/auth/getUserProfile.ts (updated)
+  app/api/auth/set-session/route.ts (updated)
+
+Import from: @/lib/security
+
+
+================================================================================
+2. OPEN API ENDPOINTS LOCKED DOWN
+================================================================================
+
+BEFORE:
+  - POST /api/notifications/counselling-scheduled — no auth (open email relay).
+  - POST /api/auth/load-profile — unauthenticated userId + service-role fallback.
+  - GET  /api/health/supabase — public config disclosure.
+  - GET  /api/health/supabase-admin — public; called Auth listUsers.
+
+AFTER:
+  - counselling-scheduled — requireStaffApiSession (admin/super_admin/employee).
+  - load-profile — requires valid session OR accessToken only (no bare userId).
+  - health/supabase + health/supabase-admin — admin-only always.
+  - auth/callback — safeRelativePath blocks open redirects (//evil.com).
+
+Files:
+  app/api/notifications/counselling-scheduled/route.ts
+  app/api/auth/load-profile/route.ts
+  app/api/health/supabase/route.ts
+  app/api/health/supabase-admin/route.ts
+
+
+================================================================================
+3. RATE LIMITING
+================================================================================
+
+BEFORE:
+  - No app-level rate limits on login, password bootstrap, or email APIs.
+
+AFTER:
+  - IP-based in-memory rate limits via lib/security/rateLimit.ts
+  - Returns HTTP 429 with Retry-After when exceeded.
+
+Limits applied:
+  auth:sign-in           15 / 15 min
+  auth:first-login       10 / 15 min
+  auth:needs-first-login 20 / 15 min
+  auth:set-session       30 / 1 min
+  auth:load-profile      30 / 1 min
+  email:outreach         30 / 1 min
+  email:counselling      20 / 1 min
+
+Files:
+  lib/security/rateLimit.ts
+
+
+================================================================================
+4. DATABASE RLS (SUPABASE — RUN IN SQL EDITOR)
+================================================================================
+
+BEFORE:
+  - profiles_rls_fix.sql allowed ANY authenticated user to SELECT all profiles
+    (policy: using (true)).
+
+AFTER:
+  - profiles_rls_tighten.sql replaces broad read with scoped policies:
+      * Self read (id = auth.uid())
+      * Admin read all (is_admin())
+      * Mentor read students in department / assigned
+      * Student read assigned mentor
+      * Employee read their manager (employee_details)
+
+ACTION REQUIRED:
+  Run AJ_Academy_SB/profiles_rls_tighten.sql in Supabase (after profiles_rls_fix.sql).
+
+Related CRM hardening (if Student Master in use):
+  student_lead_master_rls_fix.sql
+  system_settings_rls_fix.sql
+
+
+================================================================================
+5. HTTP SECURITY HEADERS
+================================================================================
+
+BEFORE:
+  - next.config.ts had PWA cache headers only (no CSP, X-Frame-Options, etc.).
+
+AFTER:
+  - securityHeaders in lib/security/headers.ts
+  - Applied to all routes via next.config.ts:
+      X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
+      Permissions-Policy, Content-Security-Policy
+
+Files:
+  lib/security/headers.ts
+  next.config.ts
+
+
+================================================================================
+6. EMAIL OUTREACH (STUDENT MASTER)
+================================================================================
+
+BEFORE:
+  - mailto: link opened counsellor's personal mail app (unknown sender).
+  - window.location.href navigated away from CRM page.
+
+AFTER:
+  - POST /api/outreach/send-email sends via Gmail SMTP (ajacademy.co.in@gmail.com).
+  - Staff auth required; email format + subject length validated.
+  - Rate limited; activity history saved after successful send.
+
+Env required:
+  GMAIL_OUTREACH_USER=ajacademy.co.in@gmail.com
+  GMAIL_OUTREACH_APP_PASSWORD=<google-app-password>
+  OUTREACH_EMAIL_FROM="AJ Academy <ajacademy.co.in@gmail.com>"
+
+Files:
+  lib/email/outreachEmail.ts
+  app/api/outreach/send-email/route.ts
+  components/shared/EmailComposeModal.tsx
+  components/student-lead-master/StudentMasterWorkbench.tsx
+
+
+================================================================================
+7. FOLDER LAYOUT (SECURITY HARNESS)
+================================================================================
+
+AJ_Academy_OS/lib/security/
+  index.ts                 Barrel export (@/lib/security)
+  rateLimit.ts               Rate limiting
+  headers.ts                 HTTP security headers (+ HSTS in production)
+  validate.ts                Email, UUID, string validation
+  safeRedirect.ts            Open-redirect protection
+  auditLog.ts                Structured security event logging
+  policies.ts                Policy category by role
+  auth/
+    loadAuthorizedProfile.ts
+    verifySessionRole.ts
+    requireAdminApi.ts
+    requireStaffApi.ts
+    requireSuperAdmin.ts
+    index.ts
+
+security/harness/
+  SECURITY_HARNESS_LOG.txt   This file
+
+
+================================================================================
+10. COMPREHENSIVE AUDIT PASS (2026-07-10)
+================================================================================
+
+IDOR / PRIVILEGE ESCALATION
+BEFORE: Admin could create/promote users to super_admin.
+AFTER:  assertSuperAdminActor() blocks non-super_admin from super_admin role
+        (app/api/admin/employees/route.ts, [id]/route.ts).
+
+BEFORE: Employee policy APIs returned all policies; accept allowed any policy UUID.
+AFTER:  Filtered by policy_category (employee/student → employee policies).
+        Accept validates UUIDs exist in allowed category for caller.
+
+INPUT VALIDATION
+  - lib/security/validate.ts — isValidEmail, isValidUuid, trimString, stringArray
+  - Applied to sign-in, first-login, needs-first-login, outreach email, policy accept
+  - Portfolio upload: extension + MIME type cross-check
+
+ABUSE / RATE LIMITING
+  - Per-email limits on first-login and needs-first-login
+  - Auth events logged via logSecurityEvent() (sign-in, set-session, first-login)
+
+SECRETS
+  - SUPABASE_SERVICE_ROLE_KEY, GMAIL_OUTREACH_APP_PASSWORD, RESEND_API_KEY: server-only
+  - NEXT_PUBLIC_* limited to Supabase URL, anon key, site URL (expected)
+
+STORAGE RLS (SQL — run in Supabase)
+  - AJ_Academy_SB/storage_rls_tighten.sql
+  - Owner-folder read/upload for task-attachments, reimbursement-bills, attendance-selfies
+
+PASSWORD / SESSION (Supabase Auth — configure in dashboard)
+  - Password hashing: handled by Supabase Auth (bcrypt) — not in app code
+  - Enable email confirmation + secure password reset in Supabase → Authentication
+  - Session expiry: Supabase JWT expiry (default ~1 hour access, refresh token rotation)
+  - Password reset tokens: Supabase-managed expiry on magic links
+
+MONITORING
+  - Server logs: [security] JSON events (auth success/failure, privilege denials)
+  - Review Vercel/host logs for unusual 401/403/429 spikes
+
+
+================================================================================
+8. DEPLOYMENT CHECKLIST
+================================================================================
+
+[ ] Run profiles_rls_tighten.sql in Supabase
+[ ] Run storage_rls_tighten.sql in Supabase
+[ ] Set GMAIL_OUTREACH_APP_PASSWORD in Vercel / .env.local
+[ ] Supabase Auth: enable email confirmation + review session/JWT settings
+[ ] Redeploy AJ_Academy_OS
+[ ] Test login as admin, employee, student
+[ ] Test Student Master Send email
+[ ] Confirm /api/health/supabase returns 403 for non-admin
+
+
+================================================================================
+9. STILL OUT OF SCOPE / FUTURE HARDENING
+================================================================================
+
+  - Distributed rate limiting (Redis/Upstash) for multi-instance Vercel
+  - MFA for admin accounts
+  - Centralized audit log table (beyond console.info)
+  - Move more client Supabase reads behind API routes

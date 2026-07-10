@@ -50,6 +50,9 @@ Run files from **`AJ_Academy_SB`** in order (`DATABASE_SETUP_ORDER.txt`):
 6. `task_notifications_columns.sql`  
 7. `in_app_notifications.sql`  
 8. **`profiles_rls_fix.sql`** (required — fixes login redirect loop)  
+8c. **`profiles_rls_tighten.sql`** (recommended — limits who can read other users' profiles)  
+8f. **`security_rls_access_fix.sql`** (run if admin dashboard / Student Master show **0 records** after 8c — restores admin RLS on profiles, clients, tasks, projects, finance, attendance, Student Master aux tables)  
+Security harness log: security/harness/SECURITY_HARNESS_LOG.txt
 8d. **`counselling_sessions_patch.sql`** (re-run if Counselling page shows schema warning — adds/fixes `counselling_sessions` + columns)
 8e. **`counselling_student_contact_schema.sql`** (legacy — columns are in patch + expansion)
 
@@ -72,6 +75,16 @@ npm run dev
 ```
 
 Open `http://localhost:3000/login`.
+
+---
+
+## Admin dashboard or Student Master shows 0 records?
+
+Data is usually still in the database — Row Level Security (RLS) is blocking reads after `profiles_rls_tighten.sql` or `student_lead_master_rls_fix.sql`.
+
+1. Confirm your login user has `role = 'admin'` or `'super_admin'` in `public.profiles`.
+2. In Supabase **SQL Editor**, run **`AJ_Academy_SB/security_rls_access_fix.sql`** (safe to re-run).
+3. Refresh the app. The admin dashboard now shows a red banner if RLS still blocks a table.
 
 ---
 

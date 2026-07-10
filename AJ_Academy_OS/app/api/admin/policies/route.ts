@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminApiSession } from "@/lib/auth/requireAdminApi";
+import { requireAdminApiSession } from "@/lib/security";
 import type { PolicyCategory } from "@/types/company-policy";
 
 function isValidUrl(value: string) {

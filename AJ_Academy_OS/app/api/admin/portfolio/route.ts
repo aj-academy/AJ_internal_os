@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminApiSession } from "@/lib/auth/requireAdminApi";
+import { requireAdminApiSession } from "@/lib/security";
 import { parsePlaceholderFieldsJson } from "@/lib/portfolio";
 import type { PortfolioTemplate } from "@/types/portfolio";
 

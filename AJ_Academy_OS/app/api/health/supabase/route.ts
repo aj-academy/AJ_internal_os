@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdminApiSession } from "@/lib/security";
 import { getSupabasePublicEnv } from "@/lib/supabase/env";
 
 function projectRefFromJwt(token: string): string | null {
@@ -14,8 +15,11 @@ function projectRefFromJwt(token: string): string | null {
   }
 }
 
-/** Safe diagnostics — never returns secret key values. */
+/** Safe diagnostics — never returns secret key values. Admin-only. */
 export async function GET() {
+  const { response } = await requireAdminApiSession();
+  if (response) return response;
+
   const { url, anonKey, isConfigured } = getSupabasePublicEnv();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "";
 
