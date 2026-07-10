@@ -20,11 +20,14 @@ alter table public.clients add column if not exists phone_called boolean not nul
 alter table public.clients add column if not exists whatsapp_sent boolean not null default false;
 alter table public.clients add column if not exists phone_called_at timestamptz;
 alter table public.clients add column if not exists whatsapp_sent_at timestamptz;
+alter table public.clients add column if not exists email_sent boolean not null default false;
+alter table public.clients add column if not exists email_sent_at timestamptz;
 alter table public.clients add column if not exists custom_fields jsonb not null default '{}'::jsonb;
 
 create index if not exists clients_assigned_to_idx on public.clients (assigned_to);
 create index if not exists clients_phone_called_idx on public.clients (phone_called);
 create index if not exists clients_whatsapp_sent_idx on public.clients (whatsapp_sent);
+create index if not exists clients_email_sent_idx on public.clients (email_sent);
 
 -- Activity timeline (employee lead history)
 create table if not exists public.lead_activities (

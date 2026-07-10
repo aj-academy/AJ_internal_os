@@ -29,6 +29,8 @@ export type StudentLeadRow = Record<string, unknown> & {
   whatsapp_sent?: boolean | null;
   phone_called_at?: string | null;
   whatsapp_sent_at?: string | null;
+  email_sent?: boolean | null;
+  email_sent_at?: string | null;
   custom_fields?: Record<string, unknown> | null;
   notes?: string | null;
   proposal_status?: string | null;
@@ -99,6 +101,8 @@ export const STUDENT_LEAD_SELECT = [
   "whatsapp_sent",
   "phone_called_at",
   "whatsapp_sent_at",
+  "email_sent",
+  "email_sent_at",
   "custom_fields",
   "notes",
   "proposal_status",

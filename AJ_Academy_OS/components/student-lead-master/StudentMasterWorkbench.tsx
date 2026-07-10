@@ -17,8 +17,8 @@ import {
   CRM_SERVICES,
   CRM_SOURCES,
   CRM_TAB_IDS,
-  INTERESTED_PROGRAMS,
   LEAD_STAGES,
+  NEW_PROGRAM_OPTION,
   PAYMENT_STATUSES,
   type CrmProposalStatus,
   type CrmTabId,
@@ -33,6 +33,9 @@ import {
   normalizeStatus,
 } from "@/components/student-lead-master/studentMasterHelpers";
 import { formatDateTimeIST } from "@/lib/datetime";
+import { fetchInterestedPrograms, persistInterestedPrograms } from "@/lib/studentPrograms";
+import { StudentOutreachButtons } from "@/components/student-lead-master/StudentOutreachButtons";
+import { whatsAppHref } from "@/components/employee/leads/employeeLeadConfig";
 
 type AppRole = "admin" | "employee";
 
@@ -115,6 +118,7 @@ function emptyForm(assignedFallback: string, admin: boolean): StudentLeadFormVal
     employment_status: "",
     current_salary: "",
     interested_program: "",
+    new_program_name: "",
     career_goal: "",
     preferred_job_role: "",
     target_salary: "",
@@ -132,7 +136,6 @@ function emptyForm(assignedFallback: string, admin: boolean): StudentLeadFormVal
     lead_stage: "",
     status: "New",
     priority: "Warm",
-    primary_objection: "",
     follow_up_date: "",
     follow_up_time: "",
     follow_up_type: "",
@@ -255,7 +258,6 @@ function pickEmployeePayload(base: Record<string, unknown>) {
     "preferred_batch",
     "laptop_availability",
     "lead_stage",
-    "primary_objection",
     "fee_quoted",
     "final_fee",
     "payment_status",
@@ -306,6 +308,8 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
   const [fltStage, setFltStage] = useState("");
   const [fltPaymentStatus, setFltPaymentStatus] = useState("");
   const [fltAdmissionStatus, setFltAdmissionStatus] = useState("");
+
+  const [interestedPrograms, setInterestedPrograms] = useState<string[]>([]);
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -466,13 +470,15 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
     setError(null);
     setLoading(true);
     try {
+      const programs = await fetchInterestedPrograms(supabase);
+      setInterestedPrograms(programs);
       await Promise.all([loadOverviewCounts(), loadClientsDataset()]);
     } catch (e) {
       setError(friendlyError(e));
     } finally {
       setLoading(false);
     }
-  }, [currentUserId, loadClientsDataset, loadOverviewCounts]);
+  }, [currentUserId, loadClientsDataset, loadOverviewCounts, supabase]);
 
   /** Refresh clients + follow-ups + activities + overview without full-page loading spinner. */
   const silentRefreshCrm = useCallback(async () => {
@@ -648,6 +654,115 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
 
   const followRowsScoped = followRows.filter((f) => clientMap[f.client_id]);
 
+  const patchClientLocal = useCallback((id: string, patch: Partial<CrmClientRow>) => {
+    setClients((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+    setProfileLead((prev) => (prev?.id === id ? { ...prev, ...patch } : prev));
+  }, []);
+
+  const canContactLead = useCallback(
+    (lead: CrmClientRow) => isAdmin || lead.assigned_to === currentUserId,
+    [currentUserId, isAdmin],
+  );
+
+  const handlePhoneClick = async (lead: CrmClientRow) => {
+    if (!canContactLead(lead)) return;
+    const phone = lead.phone?.trim();
+    if (!phone) {
+      setError("No mobile number on this student.");
+      return;
+    }
+    const now = new Date().toISOString();
+    patchClientLocal(lead.id, { phone_called: true, phone_called_at: now, last_contacted_at: now });
+    window.location.href = `tel:${phone}`;
+    const { error: updateError } = await supabase
+      .from("clients")
+      .update({ phone_called: true, phone_called_at: now, last_contacted_at: now })
+      .eq("id", lead.id);
+    if (updateError) {
+      setError(updateError.message);
+      await reload();
+      return;
+    }
+    const activity: ActivityRow = {
+      id: `local-${Date.now()}`,
+      client_id: lead.id,
+      activity_type: "Phone Call",
+      notes: `Called ${phone}`,
+      old_value: null,
+      new_value: null,
+      created_at: now,
+      created_by: currentUserId,
+    };
+    setActivityRows((prev) => [activity, ...prev]);
+    await insertActivityClient(supabase, lead.id, "Phone Call", `Called ${phone}`, currentUserId);
+  };
+
+  const handleWhatsAppClick = async (lead: CrmClientRow) => {
+    if (!canContactLead(lead)) return;
+    const wa = whatsAppHref(lead.whatsapp || lead.phone);
+    if (!wa) {
+      setError("No WhatsApp number on this student.");
+      return;
+    }
+    const now = new Date().toISOString();
+    patchClientLocal(lead.id, { whatsapp_sent: true, whatsapp_sent_at: now, last_contacted_at: now });
+    window.open(wa, "_blank", "noopener,noreferrer");
+    const { error: updateError } = await supabase
+      .from("clients")
+      .update({ whatsapp_sent: true, whatsapp_sent_at: now, last_contacted_at: now })
+      .eq("id", lead.id);
+    if (updateError) {
+      setError(updateError.message);
+      await reload();
+      return;
+    }
+    const activity: ActivityRow = {
+      id: `local-${Date.now()}`,
+      client_id: lead.id,
+      activity_type: "WhatsApp Message",
+      notes: "Opened WhatsApp chat for this student",
+      old_value: null,
+      new_value: null,
+      created_at: now,
+      created_by: currentUserId,
+    };
+    setActivityRows((prev) => [activity, ...prev]);
+    await insertActivityClient(supabase, lead.id, "WhatsApp Message", "Opened WhatsApp chat for this student", currentUserId);
+  };
+
+  const handleEmailClick = async (lead: CrmClientRow) => {
+    if (!canContactLead(lead)) return;
+    const email = lead.email?.trim();
+    if (!email) {
+      setError("No email address on this student.");
+      return;
+    }
+    const now = new Date().toISOString();
+    patchClientLocal(lead.id, { email_sent: true, email_sent_at: now, last_contacted_at: now });
+    window.location.href = `mailto:${email}`;
+    const { error: updateError } = await supabase
+      .from("clients")
+      .update({ email_sent: true, email_sent_at: now, last_contacted_at: now })
+      .eq("id", lead.id);
+    if (updateError) {
+      setError(updateError.message);
+      await reload();
+      return;
+    }
+    const activity: ActivityRow = {
+      id: `local-${Date.now()}`,
+      client_id: lead.id,
+      activity_type: "Email",
+      notes: `Opened email to ${email}`,
+      old_value: null,
+      new_value: null,
+      created_at: now,
+      created_by: currentUserId,
+    };
+    setActivityRows((prev) => [activity, ...prev]);
+    await insertActivityClient(supabase, lead.id, "Email", `Opened email to ${email}`, currentUserId);
+  };
+
   function rowToForm(lead: CrmClientRow): StudentLeadFormValue {
     const interests = servicesFromCsv(String(lead.service_interest ?? ""));
     return {
@@ -663,6 +778,7 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
       employment_status: lead.employment_status ?? "",
       current_salary: lead.current_salary != null ? String(lead.current_salary) : "",
       interested_program: lead.interested_program ?? interests[0] ?? "",
+      new_program_name: "",
       career_goal: lead.career_goal ?? "",
       preferred_job_role: lead.preferred_job_role ?? "",
       target_salary: lead.target_salary != null ? String(lead.target_salary) : "",
@@ -680,7 +796,6 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
       lead_stage: lead.lead_stage ?? "",
       status: normalizeStatus(String(lead.status)),
       priority: lead.priority ?? "Warm",
-      primary_objection: lead.primary_objection ?? "",
       follow_up_date: lead.follow_up_date ?? "",
       follow_up_time: (lead.follow_up_time as string) ?? "",
       follow_up_type: lead.follow_up_type ?? "",
@@ -750,7 +865,6 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
       preferred_batch: v.preferred_batch.trim() || null,
       laptop_availability: v.laptop_availability.trim() || null,
       lead_stage: v.lead_stage.trim() || null,
-      primary_objection: v.primary_objection.trim() || null,
       fee_quoted: numOrNull(v.fee_quoted),
       final_fee: numOrNull(v.final_fee),
       payment_status: v.payment_status.trim() || null,
@@ -795,8 +909,19 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
     setError(null);
     setSuccess(null);
     try {
+      let saveForm = form;
+      if (form.interested_program === NEW_PROGRAM_OPTION) {
+        const programName = form.new_program_name.trim();
+        if (!programName) throw new Error("Enter a name for the new program.");
+        if (isAdmin) {
+          const updated = await persistInterestedPrograms([...interestedPrograms, programName]);
+          setInterestedPrograms(updated);
+        }
+        saveForm = { ...form, interested_program: programName, new_program_name: "" };
+      }
+
       if (!isAdmin && editId) {
-        const base = buildPayload(form, { full: false }) as Record<string, unknown>;
+        const base = buildPayload(saveForm, { full: false }) as Record<string, unknown>;
         const limited = pickEmployeePayload(base);
         const previous = clients.find((cRow) => cRow.id === editId);
         const up = await supabase.from("clients").update(limited).eq("id", editId).eq("assigned_to", currentUserId);
@@ -824,7 +949,7 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
         }
         setSuccess("Lead updated.");
       } else if (editId && isAdmin) {
-        const full = buildPayload(form, { full: true }) as Record<string, unknown>;
+        const full = buildPayload(saveForm, { full: true }) as Record<string, unknown>;
         const previous = clients.find((cRow) => cRow.id === editId);
         const up = await supabase.from("clients").update(full).eq("id", editId);
         if (up.error) throw up.error;
@@ -886,7 +1011,7 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
         const inserted = await supabase
           .from("clients")
           .insert({
-            ...(buildPayload(form, { full: true }) as Record<string, unknown>),
+            ...(buildPayload(saveForm, { full: true }) as Record<string, unknown>),
             assigned_by: currentUserId,
           })
           .select("id")
@@ -1278,7 +1403,12 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
             setFltPaymentStatus={setFltPaymentStatus}
             fltAdmissionStatus={fltAdmissionStatus}
             setFltAdmissionStatus={setFltAdmissionStatus}
+            programOptions={interestedPrograms}
             employeeOptions={employeesForSelect}
+            canContactLead={canContactLead}
+            onPhoneClick={(lead) => void handlePhoneClick(lead)}
+            onWhatsAppClick={(lead) => void handleWhatsAppClick(lead)}
+            onEmailClick={(lead) => void handleEmailClick(lead)}
             onProfile={setProfileLead}
             onEdit={(leadRecord) => {
               setSuccess(null);
@@ -1394,6 +1524,7 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
               title={editId ? (isAdmin ? "Edit student" : "Update student") : "Add student"}
               open={panelOpen}
               value={form}
+              programOptions={interestedPrograms}
               employees={employeesForSelect}
               canAssign={isAdmin}
               submitting={submitting}
@@ -1605,6 +1736,7 @@ function AllLeadsTable({
   employeeNameMap,
   isAdmin,
   currentUserId,
+  programOptions,
   fltSource,
   setFltSource,
   fltProgram,
@@ -1622,6 +1754,10 @@ function AllLeadsTable({
   fltAdmissionStatus,
   setFltAdmissionStatus,
   employeeOptions,
+  canContactLead,
+  onPhoneClick,
+  onWhatsAppClick,
+  onEmailClick,
   onProfile,
   onEdit,
   onDelete,
@@ -1633,6 +1769,7 @@ function AllLeadsTable({
   employeeNameMap: Record<string, string>;
   isAdmin: boolean;
   currentUserId: string;
+  programOptions: string[];
   fltSource: string;
   setFltSource: (s: string) => void;
   fltProgram: string;
@@ -1650,6 +1787,10 @@ function AllLeadsTable({
   fltAdmissionStatus: string;
   setFltAdmissionStatus: (s: string) => void;
   employeeOptions: { id: string; label: string }[];
+  canContactLead: (l: CrmClientRow) => boolean;
+  onPhoneClick: (l: CrmClientRow) => void;
+  onWhatsAppClick: (l: CrmClientRow) => void;
+  onEmailClick: (l: CrmClientRow) => void;
   onProfile: (l: CrmClientRow) => void;
   onEdit: (l: CrmClientRow) => void;
   onDelete: (id: string) => void;
@@ -1657,18 +1798,16 @@ function AllLeadsTable({
   onConvert: (l: CrmClientRow) => void;
 }) {
   const today = todayISO();
-  const colCount = 36;
+  const colCount = 24;
   return (
     <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
-      <table className="w-full min-w-[3200px] text-sm">
+      <table className="w-full min-w-[2200px] text-sm">
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
             <TableHeaderCell label="Student Name" className="px-4 py-3" />
             <TableHeaderCell label="Mobile Number" className="px-4 py-3" />
             <TableHeaderCell label="WhatsApp Number" className="px-4 py-3" />
             <TableHeaderCell label="Email" className="px-4 py-3" />
-            <TableHeaderCell label="City" className="px-4 py-3" />
-            <TableHeaderCell label="Current Profile" className="px-4 py-3" />
             <TableHeaderCell label="Degree" className="px-4 py-3" />
             <TableHeaderCell label="College/Company" className="px-4 py-3" />
             <TableHeaderCell label="Year of Passing" className="px-4 py-3" />
@@ -1678,22 +1817,13 @@ function AllLeadsTable({
               label="Interested Program"
               value={fltProgram}
               onChange={setFltProgram}
-              options={INTERESTED_PROGRAMS.map((s) => ({ value: s, label: s }))}
+              options={programOptions.map((s) => ({ value: s, label: s }))}
               allLabel="All programs"
               className="px-4 py-3"
             />
-            <TableHeaderCell label="Career Goal" className="px-4 py-3" />
-            <TableHeaderCell label="Preferred Job Role" className="px-4 py-3" />
-            <TableHeaderCell label="Target Salary" className="px-4 py-3" />
-            <TableHeaderCell label="Current Skill Level" className="px-4 py-3" />
-            <TableHeaderCell label="Main Career Problem" className="px-4 py-3" />
             <TableHeaderCell label="Joining Timeline" className="px-4 py-3" />
             <TableHeaderCell label="Program Budget" className="px-4 py-3" />
-            <TableHeaderCell label="Full Payment or Instalment" className="px-4 py-3" />
-            <TableHeaderCell label="Parent Approval Required" className="px-4 py-3" />
-            <TableHeaderCell label="Decision Maker" className="px-4 py-3" />
             <TableHeaderCell label="Preferred Batch" className="px-4 py-3" />
-            <TableHeaderCell label="Laptop Availability" className="px-4 py-3" />
             <TableHeaderFilter
               label="Lead Source"
               value={fltSource}
@@ -1735,7 +1865,6 @@ function AllLeadsTable({
               allLabel="All priorities"
               className="px-4 py-3"
             />
-            <TableHeaderCell label="Primary Objection" className="px-4 py-3" />
             <TableHeaderCell label="Next Follow-up Date" className="px-4 py-3" />
             <TableHeaderCell label="Fee Quoted" className="px-4 py-3" />
             <TableHeaderCell label="Final Fee" className="px-4 py-3" />
@@ -1772,6 +1901,7 @@ function AllLeadsTable({
                 const overdue = !!(fu && fu < today && !isClosedLeadStatus(String(lead.status || "")));
                 const hot = lead.priority === "Hot";
                 const program = lead.interested_program || lead.service_interest || "—";
+                const contactable = canContactLead(lead);
                 return (
                   <tr
                     key={lead.id}
@@ -1782,29 +1912,40 @@ function AllLeadsTable({
                     ].join(" ")}
                   >
                     <td className="px-4 py-3 font-semibold text-slate-900 whitespace-nowrap">{displayLeadName(lead) || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.phone || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.whatsapp || "—"}</td>
-                    <td className="max-w-[180px] truncate px-4 py-3">{lead.email || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.city || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.current_profile || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <StudentOutreachButtons
+                        mode="phone"
+                        phone={lead.phone}
+                        phoneCalled={lead.phone_called}
+                        onPhoneClick={contactable ? () => void onPhoneClick(lead) : undefined}
+                      />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <StudentOutreachButtons
+                        mode="whatsapp"
+                        phone={lead.phone}
+                        whatsapp={lead.whatsapp}
+                        whatsappSent={lead.whatsapp_sent}
+                        onWhatsAppClick={contactable ? () => void onWhatsAppClick(lead) : undefined}
+                      />
+                    </td>
+                    <td className="max-w-[220px] px-4 py-3">
+                      <StudentOutreachButtons
+                        mode="email"
+                        email={lead.email}
+                        emailSent={lead.email_sent}
+                        onEmailClick={contactable ? () => void onEmailClick(lead) : undefined}
+                      />
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3">{lead.degree || "—"}</td>
                     <td className="max-w-[160px] truncate px-4 py-3">{lead.college_company || lead.company_name || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{lead.year_of_passing || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{lead.employment_status || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{formatMoney(lead.current_salary)}</td>
                     <td className="max-w-[160px] truncate px-4 py-3">{String(program)}</td>
-                    <td className="max-w-[160px] truncate px-4 py-3">{lead.career_goal || "—"}</td>
-                    <td className="max-w-[140px] truncate px-4 py-3">{lead.preferred_job_role || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{formatMoney(lead.target_salary)}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.current_skill_level || "—"}</td>
-                    <td className="max-w-[180px] truncate px-4 py-3">{lead.main_career_problem || lead.requirement || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{lead.joining_timeline || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{formatMoney(lead.budget)}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.payment_plan || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.parent_approval_required || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.decision_maker || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{lead.preferred_batch || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.laptop_availability || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{lead.source || "—"}</td>
                     <td className="max-w-[140px] truncate px-4 py-3">{lead.assigned_to ? employeeNameMap[lead.assigned_to] : "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{lead.lead_stage || "—"}</td>
@@ -1812,7 +1953,6 @@ function AllLeadsTable({
                       <LeadStatusBadge status={String(lead.status)} />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 font-medium capitalize">{lead.priority || "—"}</td>
-                    <td className="max-w-[160px] truncate px-4 py-3">{lead.primary_objection || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs">{fu || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3">{formatMoney(lead.fee_quoted ?? lead.proposal_amount)}</td>
                     <td className="whitespace-nowrap px-4 py-3">{formatMoney(lead.final_fee)}</td>
@@ -2503,7 +2643,27 @@ function ProfileModal({
               <Dt label="Phone" value={lead.phone} />
               <Dt label="WhatsApp" value={lead.whatsapp} />
               <Dt label="Email" value={lead.email} />
+            </dl>
+          </section>
+
+          <section className="space-y-2">
+            <h4 className="text-xs font-semibold uppercase text-[#94a3b8]">Counselling details</h4>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[#475569]">
               <Dt label="City" value={lead.city} />
+              <Dt label="Current profile" value={lead.current_profile} />
+              <Dt label="Interested program" value={lead.interested_program || lead.service_interest} />
+              <Dt label="Career goal" value={lead.career_goal} />
+              <Dt label="Preferred job role" value={lead.preferred_job_role} />
+              <Dt label="Target salary" value={formatMoney(lead.target_salary)} />
+              <Dt label="Skill level" value={lead.current_skill_level} />
+              <Dt label="Main career problem" value={lead.main_career_problem || lead.requirement} />
+              <Dt label="Full payment / instalment" value={lead.payment_plan} />
+              <Dt label="Parent approval required" value={lead.parent_approval_required} />
+              <Dt label="Decision maker" value={lead.decision_maker} />
+              <Dt label="Laptop availability" value={lead.laptop_availability} />
+              <Dt label="Preferred batch" value={lead.preferred_batch} />
+              <Dt label="Joining timeline" value={lead.joining_timeline} />
+              <Dt label="Program budget" value={formatMoney(lead.budget)} />
             </dl>
           </section>
 
@@ -2517,6 +2677,10 @@ function ProfileModal({
               <Dt
                 label="WhatsApp"
                 value={lead.whatsapp_sent ? `Done${lead.whatsapp_sent_at ? ` · ${formatDateTimeIST(String(lead.whatsapp_sent_at))}` : ""}` : "Pending"}
+              />
+              <Dt
+                label="Email"
+                value={lead.email_sent ? `Done${lead.email_sent_at ? ` · ${formatDateTimeIST(String(lead.email_sent_at))}` : ""}` : "Pending"}
               />
               <Dt label="Last contacted" value={lead.last_contacted_at ? formatDateTimeIST(String(lead.last_contacted_at)) : null} />
             </dl>
@@ -2583,16 +2747,22 @@ function ProfileModal({
             {activities.length === 0 ? (
               <p className="text-xs text-[#64748b]">No activities yet.</p>
             ) : (
-              <ul className="max-h-40 space-y-2 overflow-y-auto text-xs">
+              <ul className="max-h-48 space-y-2 overflow-y-auto text-xs">
                 {activities.slice(0, 25).map((a) => (
                   <li key={a.id} className="rounded-lg border border-[#e8edf5] p-2">
-                    <span className="font-semibold text-[#334155]">{a.activity_type || "Activity"}</span>
-                    <span className="text-[#64748b]">
-                      {" "}
-                      · {new Date(a.created_at).toLocaleString()}
-                      {a.created_by ? ` · ${employeeMap[a.created_by] || ""}` : ""}
-                    </span>
-                    <p className="mt-1 text-[#475569]">{a.notes || ""}</p>
+                    <p className="font-semibold text-[#334155]">{a.activity_type || "Activity"}</p>
+                    <p className="text-[#64748b]">
+                      {formatDateTimeIST(String(a.created_at))}
+                      {a.created_by ? ` · ${employeeMap[a.created_by] || "Team member"}` : ""}
+                    </p>
+                    {a.notes ? <p className="mt-1 text-[#475569]">{a.notes}</p> : null}
+                    {a.old_value || a.new_value ? (
+                      <p className="mt-1 text-[#64748b]">
+                        {a.old_value ? `From: ${a.old_value}` : ""}
+                        {a.old_value && a.new_value ? " → " : ""}
+                        {a.new_value ? `To: ${a.new_value}` : ""}
+                      </p>
+                    ) : null}
                   </li>
                 ))}
               </ul>

@@ -26,6 +26,15 @@ export const SETTINGS_DEFAULTS: Record<string, Record<string, unknown>> = {
     followUpTypes: ["Call", "Email", "Meeting", "WhatsApp"],
     serviceCategories: ["Branding", "Website", "Marketing", "Consulting"],
     priorityTypes: ["Hot", "Warm", "Cold"],
+    interestedPrograms: [
+      "Full Stack Development",
+      "Data Science",
+      "Digital Marketing",
+      "UI/UX Design",
+      "Cloud / DevOps",
+      "Business Analytics",
+      "Other",
+    ],
   },
   project: {
     statuses: ["Planning", "Active", "On Hold", "In Review", "Completed", "Cancelled", "Delayed"],

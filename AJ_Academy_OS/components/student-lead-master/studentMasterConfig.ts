@@ -48,6 +48,9 @@ export const INTERESTED_PROGRAMS = [
   "Other",
 ] as const;
 
+/** Select value when admin adds a new global program from the form */
+export const NEW_PROGRAM_OPTION = "__new_program__";
+
 export const CURRENT_PROFILES = [
   "Student",
   "Fresher",
@@ -81,6 +84,8 @@ export const YES_NO_OPTIONS = ["Yes", "No"] as const;
 export const DECISION_MAKERS = ["Self", "Parent", "Spouse", "Guardian", "Other"] as const;
 
 export const PREFERRED_BATCHES = [
+  "Offline",
+  "Online",
   "Weekday Morning",
   "Weekday Evening",
   "Weekend",

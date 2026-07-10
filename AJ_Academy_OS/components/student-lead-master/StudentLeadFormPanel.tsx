@@ -12,7 +12,6 @@ import {
   CURRENT_PROFILES,
   DECISION_MAKERS,
   EMPLOYMENT_STATUSES,
-  INTERESTED_PROGRAMS,
   JOINING_TIMELINES,
   LAPTOP_AVAILABILITY,
   LEAD_STAGES,
@@ -22,6 +21,7 @@ import {
   SKILL_LEVELS,
   YES_NO_OPTIONS,
   type CrmProposalStatus,
+  NEW_PROGRAM_OPTION,
 } from "./studentMasterConfig";
 
 export interface StudentLeadFormValue {
@@ -37,6 +37,7 @@ export interface StudentLeadFormValue {
   employment_status: string;
   current_salary: string;
   interested_program: string;
+  new_program_name: string;
   career_goal: string;
   preferred_job_role: string;
   target_salary: string;
@@ -54,7 +55,6 @@ export interface StudentLeadFormValue {
   lead_stage: string;
   status: string;
   priority: string;
-  primary_objection: string;
   follow_up_date: string;
   follow_up_time: string;
   follow_up_type: string;
@@ -87,6 +87,7 @@ interface StudentLeadFormPanelProps {
   title: string;
   open: boolean;
   value: StudentLeadFormValue;
+  programOptions: string[];
   employees: EmployeeOption[];
   canAssign: boolean;
   submitting: boolean;
@@ -102,6 +103,7 @@ export function StudentLeadFormPanel({
   title,
   open,
   value,
+  programOptions,
   employees,
   canAssign,
   submitting,
@@ -190,14 +192,27 @@ export function StudentLeadFormPanel({
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#64748b]">Career interest</p>
           <div className="grid gap-3">
             <Field label="Interested program">
-              <select className={selectClass} value={value.interested_program} onChange={(e) => onChange({ ...value, interested_program: e.target.value })}>
+              <select
+                className={selectClass}
+                value={value.interested_program}
+                onChange={(e) => onChange({ ...value, interested_program: e.target.value, new_program_name: "" })}
+              >
                 <option value="">Select</option>
-                {INTERESTED_PROGRAMS.map((o) => (
+                {programOptions.map((o) => (
                   <option key={o} value={o}>
                     {o}
                   </option>
                 ))}
+                <option value={NEW_PROGRAM_OPTION}>+ Add new program</option>
               </select>
+              {value.interested_program === NEW_PROGRAM_OPTION ? (
+                <Input
+                  className="mt-2"
+                  placeholder="Enter new program name"
+                  value={value.new_program_name}
+                  onChange={(e) => onChange({ ...value, new_program_name: e.target.value })}
+                />
+              ) : null}
             </Field>
             <Field label="Career goal">
               <Input value={value.career_goal} onChange={(e) => onChange({ ...value, career_goal: e.target.value })} />
@@ -275,7 +290,7 @@ export function StudentLeadFormPanel({
                 ))}
               </select>
             </Field>
-            <Field label="Preferred batch">
+            <Field label="Preferred batch (mode / timing)">
               <select className={selectClass} value={value.preferred_batch} onChange={(e) => onChange({ ...value, preferred_batch: e.target.value })}>
                 <option value="">Select</option>
                 {PREFERRED_BATCHES.map((o) => (
@@ -352,9 +367,6 @@ export function StudentLeadFormPanel({
                   </option>
                 ))}
               </select>
-            </Field>
-            <Field label="Primary objection">
-              <Input value={value.primary_objection} onChange={(e) => onChange({ ...value, primary_objection: e.target.value })} />
             </Field>
             <Field label="Next follow-up date">
               <Input type="date" value={value.follow_up_date} onChange={(e) => onChange({ ...value, follow_up_date: e.target.value })} />

@@ -27,6 +27,9 @@ alter table public.clients add column if not exists final_fee numeric(12, 2);
 alter table public.clients add column if not exists payment_status text;
 alter table public.clients add column if not exists admission_status text;
 
+alter table public.clients add column if not exists email_sent boolean not null default false;
+alter table public.clients add column if not exists email_sent_at timestamptz;
+
 comment on column public.clients.interested_program is 'Student Master — program of interest';
 comment on column public.clients.lead_stage is 'Student Master — counselling/admission stage';
 comment on column public.clients.admission_status is 'Student Master — admission outcome';
