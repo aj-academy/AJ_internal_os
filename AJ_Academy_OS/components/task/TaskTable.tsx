@@ -14,6 +14,9 @@ interface TaskTableProps {
   canManageTasks: boolean;
   /** Assignee-only portals: show who assigned the task instead of assignee picker column */
   assigneeColumn?: "assigned-to" | "assigned-by";
+  showDepartment?: boolean;
+  /** Delegated tasks list: view-only (no status/progress edits). */
+  readOnlyList?: boolean;
   statusFilter: TaskStatus | "";
   setStatusFilter: (value: TaskStatus | "") => void;
   priorityFilter: TaskPriority | "";
@@ -57,6 +60,8 @@ export function TaskTable({
   employeeNameMap,
   canManageTasks,
   assigneeColumn = "assigned-to",
+  showDepartment = false,
+  readOnlyList = false,
   statusFilter,
   setStatusFilter,
   priorityFilter,
@@ -79,7 +84,7 @@ export function TaskTable({
   const disabled = tableMissing || filtersDisabled;
   const showAssignedTo = assigneeColumn === "assigned-to";
   const showAssignedBy = assigneeColumn === "assigned-by";
-  const columnCount = showAssignedTo || showAssignedBy ? 9 : 8;
+  const columnCount = 8 + (showAssignedTo || showAssignedBy ? 1 : 0) + (showDepartment ? 1 : 0);
 
   return (
     <article className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
@@ -102,6 +107,9 @@ export function TaskTable({
               ) : null}
               {showAssignedBy ? (
                 <TableHeaderCell label="Assigned By" className="px-4 py-3 text-center" />
+              ) : null}
+              {showDepartment ? (
+                <TableHeaderCell label="Department" className="px-4 py-3 text-center" />
               ) : null}
               <TableHeaderFilter
                 label="Priority"
@@ -187,6 +195,13 @@ export function TaskTable({
                       {showAssignedBy ? (
                         <td className="px-4 py-3.5 align-middle">{task.assigner_display_name || "—"}</td>
                       ) : null}
+                      {showDepartment ? (
+                        <td className="px-4 py-3.5 align-middle">
+                          {showAssignedBy
+                            ? task.assigner_department || "—"
+                            : task.assignee_department || "—"}
+                        </td>
+                      ) : null}
                       <td className="px-4 py-3.5 align-middle">
                         <Badge className={priorityClassMap[task.priority]}>{task.priority}</Badge>
                       </td>
@@ -200,7 +215,7 @@ export function TaskTable({
                         {task.due_date || "-"}
                       </td>
                       <td className="px-4 py-3.5 align-middle">
-                        {canManageTasks ? (
+                        {canManageTasks || readOnlyList ? (
                           <ProgressBar value={task.progress} />
                         ) : (
                           <div className="space-y-2">
@@ -230,7 +245,7 @@ export function TaskTable({
                           >
                             View Task
                           </button>
-                          {canManageTasks ? (
+                          {readOnlyList ? null : canManageTasks ? (
                             <>
                               <button
                                 type="button"

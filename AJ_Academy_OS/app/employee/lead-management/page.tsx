@@ -1,5 +1,6 @@
-import { EmployeeLeadManagement } from "@/components/employee/leads/EmployeeLeadManagement";
+import { redirect } from "next/navigation";
 
+/** Legacy route — lead work lives under Student Master for employees. */
 export default function EmployeeLeadManagementPage() {
-  return <EmployeeLeadManagement />;
+  redirect("/employee/student-master");
 }

@@ -305,6 +305,11 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const defaultReturnTo = role === "admin" ? "/admin/task-assignment" : "/employee/my-tasks";
   const returnTo = searchParams.get("returnTo") || defaultReturnTo;
   const isAdmin = role === "admin" || (role === "employee" && fullAccess);
+  const isEmployeePortal = role === "employee";
+  const visibleTabIds = useMemo(
+    () => (isEmployeePortal ? CRM_TAB_IDS.filter((id) => id !== "reports" && id !== "settings") : [...CRM_TAB_IDS]),
+    [isEmployeePortal],
+  );
 
   const [pickedLeadIds, setPickedLeadIds] = useState<Set<string>>(new Set());
 
@@ -654,6 +659,12 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   useEffect(() => {
     if (pickForTask) setActiveTab("all-leads");
   }, [pickForTask]);
+
+  useEffect(() => {
+    if (isEmployeePortal && (activeTab === "reports" || activeTab === "settings")) {
+      setActiveTab("overview");
+    }
+  }, [activeTab, isEmployeePortal]);
 
   const togglePickLead = (id: string) => {
     setPickedLeadIds((prev) => {
@@ -1546,7 +1557,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
 
       <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-2">
         <div className="flex min-w-max gap-2">
-          {CRM_TAB_IDS.map((tabId) => (
+          {visibleTabIds.map((tabId) => (
             <button
               key={tabId}
               type="button"

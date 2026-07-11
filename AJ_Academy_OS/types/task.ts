@@ -16,6 +16,8 @@ export interface TaskRecord {
   completion_attachment_urls?: { name: string; url: string; mime: string; size: number }[];
   /** Resolved label for UI: "Admin" for admin roles, else full name / email. */
   assigner_display_name?: string | null;
+  assigner_department?: string | null;
+  assignee_department?: string | null;
   priority: TaskPriority;
   status: TaskStatus;
   start_date: string | null;

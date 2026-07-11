@@ -30,6 +30,8 @@ type AppRole = "admin" | "employee" | "student" | "freelancer" | "mentor";
 /** assignee = tasks assigned to me; assigner = department-scoped task assignment (mentor / freelancer). */
 export type TaskAssignmentVariant = "assignee" | "assigner";
 
+type EmployeeTaskView = "assigned-to-me" | "assigned-by-me";
+
 interface TaskAssignmentPageProps {
   role: AppRole;
   variant?: TaskAssignmentVariant;
@@ -114,6 +116,9 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const canManageTasks = isAdmin || departmentAssigner;
   const mentorManagesTeam = departmentAssigner;
   const isPortalAssignee = isAssigneeView && (isStudent || isMentor || isFreelancer);
+  const [employeeTaskView, setEmployeeTaskView] = useState<EmployeeTaskView>("assigned-to-me");
+  const employeeDelegatedView = isEmployee && employeeTaskView === "assigned-by-me";
+  const filterTasksByAssigner = mentorManagesTeam || employeeDelegatedView;
   const [currentUserId, setCurrentUserId] = useState("");
   const [selfProfile, setSelfProfile] = useState<ProfileOption | null>(null);
   const [employees, setEmployees] = useState<ProfileOption[]>([]);
@@ -282,7 +287,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       let inProgressQuery = supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "In Progress");
       let completedQuery = supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "Completed");
 
-      if (mentorManagesTeam) {
+      if (filterTasksByAssigner) {
         totalQuery = totalQuery.eq("assigned_by", userId);
         pendingQuery = pendingQuery.eq("assigned_by", userId);
         inProgressQuery = inProgressQuery.eq("assigned_by", userId);
@@ -319,7 +324,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         completed: completedRes.count ?? 0,
       });
     },
-    [mentorManagesTeam, seesAllTasks, supabase],
+    [filterTasksByAssigner, seesAllTasks, supabase],
   );
 
   const loadTasks = useCallback(
@@ -330,7 +335,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           "id,title,description,assigned_to,assignee_name,assignee_email,assigned_by,completion_summary,completion_attachment_urls,priority,status,start_date,due_date,progress,assignment_type,project_id,client_ids,attachment_urls,created_at,updated_at",
         );
 
-      if (mentorManagesTeam) query = query.eq("assigned_by", userId);
+      if (filterTasksByAssigner) query = query.eq("assigned_by", userId);
       else if (!seesAllTasks) query = query.eq("assigned_to", userId);
       if (statusFilter) query = query.eq("status", statusFilter);
       if (priorityFilter) query = query.eq("priority", priorityFilter);
@@ -378,14 +383,34 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       const assignerIds = Array.from(
         new Set(rawRows.map((r) => r.assigned_by).filter((id): id is string => Boolean(id))),
       );
-      let assignerMap: Record<string, { full_name: string | null; email: string | null; role: string | null }> = {};
+      const assigneeIds = Array.from(
+        new Set(rawRows.map((r) => r.assigned_to).filter((id): id is string => Boolean(id))),
+      );
+      let assignerMap: Record<string, { full_name: string | null; email: string | null; role: string | null; department: string | null }> = {};
+      let assigneeMap: Record<string, { department: string | null }> = {};
       if (assignerIds.length) {
         const { data: profs, error: profErr } = await supabase
           .from("profiles")
-          .select("id,full_name,email,role")
+          .select("id,full_name,email,role,department")
           .in("id", assignerIds);
         if (!profErr && profs) {
-          assignerMap = Object.fromEntries(profs.map((p) => [p.id, p]));
+          assignerMap = Object.fromEntries(
+            profs.map((p: { id: string; full_name: string | null; email: string | null; role: string | null; department: string | null }) => [
+              p.id,
+              p,
+            ]),
+          );
+        }
+      }
+      if (assigneeIds.length) {
+        const { data: assigneeProfs, error: assigneeErr } = await supabase
+          .from("profiles")
+          .select("id,department")
+          .in("id", assigneeIds);
+        if (!assigneeErr && assigneeProfs) {
+          assigneeMap = Object.fromEntries(
+            assigneeProfs.map((p: { id: string; department: string | null }) => [p.id, p]),
+          );
         }
       }
 
@@ -397,6 +422,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         assigner_display_name: row.assigned_by
           ? assignerDisplayFromProfile(assignerMap[row.assigned_by] ?? null) ?? null
           : null,
+        assigner_department: row.assigned_by ? assignerMap[row.assigned_by]?.department ?? null : null,
+        assignee_department: row.assigned_to ? assigneeMap[row.assigned_to]?.department ?? null : null,
       }));
 
       const projectIds = [...new Set(mapped.map((t) => t.project_id).filter(Boolean))] as string[];
@@ -439,7 +466,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     [
       assignedFilter,
       dueDateFilter,
-      mentorManagesTeam,
+      filterTasksByAssigner,
       priorityFilter,
       searchDebounced,
       seesAllTasks,
@@ -621,6 +648,12 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     totalItems: taskTotalItems,
     pageSize: taskPageSize,
   } = usePagination(rows, 10);
+
+  useEffect(() => {
+    if (!isEmployee) return;
+    setAssignedFilter("");
+    setTaskPage(1);
+  }, [employeeTaskView, isEmployee, setTaskPage]);
 
   const filtersActive = Boolean(
     searchText.trim() || statusFilter || priorityFilter || assignedFilter || dueDateFilter,
@@ -1089,7 +1122,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">
-            {isPortalAssignee && !isEmployee ? "My Tasks" : "Task Assignment"}
+            {isEmployee || (isPortalAssignee && !isEmployee) ? "My Tasks" : "Task Assignment"}
           </h2>
           <p className="mt-1 text-sm text-[#64748b]">
             {isStudent
@@ -1097,7 +1130,9 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
               : isPortalAssignee && !isEmployee
                 ? "Work assigned to you by admins. Update progress and mark tasks complete."
               : isEmployee
-              ? "Admins assign work to your user account; it appears here. You can also assign tasks to yourself or teammates in your department or shared projects."
+              ? employeeDelegatedView
+                ? "Track tasks you delegated to teammates. Switch tabs to see work assigned to you."
+                : "Work assigned to you and tasks you delegate to teammates. Update your own task progress or assign new work."
               : departmentAssigner
                 ? `Assign work to students in your department (${selfProfile?.department ?? "set department in User Master"}). Only matching students appear in the assignee list.`
                 : "Assign, track and manage tasks for students, freelancers, and mentors"}
@@ -1155,6 +1190,40 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         hint={`Showing ${paginatedRows.length} of ${rows.length} task(s)`}
       />
 
+      {isEmployee ? (
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setEmployeeTaskView("assigned-to-me")}
+              className={
+                employeeTaskView === "assigned-to-me"
+                  ? "rounded-full bg-[#1e3a8a] px-4 py-2 text-sm font-semibold text-white shadow-sm"
+                  : "rounded-full border border-[#cbd5e1] bg-white px-4 py-2 text-sm font-semibold text-[#1e3a8a] hover:bg-[#f8fafc]"
+              }
+            >
+              Assigned to me
+            </button>
+            <button
+              type="button"
+              onClick={() => setEmployeeTaskView("assigned-by-me")}
+              className={
+                employeeTaskView === "assigned-by-me"
+                  ? "rounded-full bg-[#1e3a8a] px-4 py-2 text-sm font-semibold text-white shadow-sm"
+                  : "rounded-full border border-[#cbd5e1] bg-white px-4 py-2 text-sm font-semibold text-[#1e3a8a] hover:bg-[#f8fafc]"
+              }
+            >
+              Tasks I assigned
+            </button>
+          </div>
+          <p className="text-sm text-[#64748b]">
+            {employeeDelegatedView
+              ? `Work you delegated to teammates — track their status and progress (read-only). (${rows.length} assigned)`
+              : `Work assigned to you — update status, progress, and mark completion when you finish. (${rows.length} tasks)`}
+          </p>
+        </div>
+      ) : null}
+
       <div className="responsive-table-wrap">
         <TaskTable
           tasks={paginatedRows}
@@ -1162,7 +1231,17 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           tableMissing={tasksTableMissing}
           employeeNameMap={employeeNameMap}
           canManageTasks={canManageTasks}
-          assigneeColumn={isPortalAssignee && !isEmployee ? "assigned-by" : "assigned-to"}
+          assigneeColumn={
+            isEmployee
+              ? employeeDelegatedView
+                ? "assigned-to"
+                : "assigned-by"
+              : isPortalAssignee
+                ? "assigned-by"
+                : "assigned-to"
+          }
+          showDepartment={isEmployee}
+          readOnlyList={employeeDelegatedView}
           statusFilter={statusFilter}
           setStatusFilter={setStatusFilter}
           priorityFilter={priorityFilter}
@@ -1172,14 +1251,19 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           dueDateFilter={dueDateFilter}
           setDueDateFilter={setDueDateFilter}
           employeeOptions={employeeOptions}
-          assigneeFilterDisabled={(!seesAllTasks && !mentorManagesTeam) || tasksTableMissing}
+          assigneeFilterDisabled={
+            tasksTableMissing ||
+            (isEmployee ? !employeeDelegatedView : !seesAllTasks && !mentorManagesTeam)
+          }
           filtersDisabled={tasksTableMissing}
           onView={(task) => setViewTask(task)}
           onEdit={(task) => void openEdit(task)}
           onDelete={(taskId) => void handleDeleteTask(taskId)}
           onEmployeeStatusChange={(taskId, status, progress) => void handleEmployeeStatusChange(taskId, status, progress)}
           onEmployeeProgressChange={(taskId, status, progress) => handleEmployeeProgressAdjust(taskId, status, progress)}
-          onRequestCompleteTask={!canManageTasks ? (task) => setCompleteTask(task) : undefined}
+          onRequestCompleteTask={
+            !canManageTasks && !employeeDelegatedView ? (task) => setCompleteTask(task) : undefined
+          }
         />
       </div>
       <TablePagination
