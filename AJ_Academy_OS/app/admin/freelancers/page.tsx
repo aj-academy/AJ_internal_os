@@ -16,7 +16,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TablePagination } from "@/components/ui/TablePagination";
+import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
+import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
 import { usePagination } from "@/lib/usePagination";
+import { useRowSelection } from "@/lib/useRowSelection";
 import { createClient } from "@/lib/supabase/client";
 
 interface FreelancerRow {
@@ -117,6 +120,26 @@ export default function AdminFreelancersPage() {
     pageSize: freelancerPageSize,
     setPageSize: setFreelancerPageSize,
   } = usePagination(filtered, 10);
+
+  const freelancerBulk = useRowSelection(filtered, (row) => row.id);
+
+  const handleBulkOffboard = async () => {
+    if (freelancerBulk.selectedCount === 0) return;
+    const confirmed = window.confirm(`Offboard ${freelancerBulk.selectedCount} selected freelancer(s)?`);
+    if (!confirmed) return;
+    setError(null);
+    for (const id of freelancerBulk.selected) {
+      const row = freelancers.find((f) => f.id === id);
+      if (!row) continue;
+      const res = await fetch(`/api/admin/employees/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) {
+        setError(`Failed to offboard ${row.full_name}.`);
+        return;
+      }
+    }
+    freelancerBulk.clearSelection();
+    await load();
+  };
 
   const activeCount = freelancers.filter((f) => (f.status ?? "active") === "active").length;
 
@@ -235,6 +258,13 @@ export default function AdminFreelancersPage() {
           />
         </CardHeader>
         <CardContent className="pb-4">
+          {freelancerBulk.selectedCount > 0 ? (
+            <BulkSelectionBar selectedCount={freelancerBulk.selectedCount} totalCount={filtered.length} onClear={freelancerBulk.clearSelection} className="mb-3">
+              <Button type="button" size="sm" className="h-7 rounded-lg bg-rose-600 px-3 text-xs text-white" onClick={() => void handleBulkOffboard()}>
+                Offboard selected
+              </Button>
+            </BulkSelectionBar>
+          ) : null}
           {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
           {loading ? (
             <div className="flex items-center gap-2 py-8 text-sm text-slate-500">
@@ -248,6 +278,15 @@ export default function AdminFreelancersPage() {
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="bg-[#f1f6fc] text-[#64748b]">
                   <tr>
+                    <th className="w-10 px-3 py-3">
+                      <TableBulkCheckbox
+                        checked={freelancerBulk.allSelected}
+                        indeterminate={freelancerBulk.someSelected}
+                        disabled={loading || !paginatedFreelancers.length}
+                        onChange={freelancerBulk.toggleAll}
+                        ariaLabel="Select all freelancers"
+                      />
+                    </th>
                     {["Name", "Department", "Status", "Actions"].map((h) => (
                       <th key={h} className="px-4 py-3">
                         {h}
@@ -258,6 +297,13 @@ export default function AdminFreelancersPage() {
                 <tbody className="divide-y divide-[#e8edf5]">
                   {paginatedFreelancers.map((row) => (
                     <tr key={row.id}>
+                      <td className="px-3 py-3">
+                        <TableBulkCheckbox
+                          checked={freelancerBulk.isSelected(row.id)}
+                          onChange={() => freelancerBulk.toggleOne(row.id)}
+                          ariaLabel={`Select ${row.full_name}`}
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <p className="font-medium text-slate-900">{row.full_name}</p>
                         <p className="text-xs text-slate-500">{row.email}</p>

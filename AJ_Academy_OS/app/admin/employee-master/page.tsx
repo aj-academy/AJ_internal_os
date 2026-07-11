@@ -7,7 +7,10 @@ import { Input } from "@/components/ui/input";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { TablePagination } from "@/components/ui/TablePagination";
+import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
+import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
 import { usePagination } from "@/lib/usePagination";
+import { useRowSelection } from "@/lib/useRowSelection";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { AdminEmployeeProfileView } from "@/components/admin/AdminEmployeeProfileView";
@@ -175,6 +178,36 @@ export default function EmployeeMasterPage() {
     pageSize: directoryPageSize,
     setPageSize: setDirectoryPageSize,
   } = usePagination(filteredEmployees, 10);
+
+  const userBulk = useRowSelection(filteredEmployees, (employee) => employee.id);
+  const [bulkRemoving, setBulkRemoving] = useState(false);
+
+  const handleBulkRemoveUsers = async () => {
+    if (userBulk.selectedCount === 0) return;
+    const confirmed = window.confirm(
+      `Remove ${userBulk.selectedCount} user(s) permanently?\n\nTheir login will be deleted. Completed tasks stay in the system.`,
+    );
+    if (!confirmed) return;
+    setBulkRemoving(true);
+    setSubmitError(null);
+    try {
+      const ids = [...userBulk.selected];
+      for (const id of ids) {
+        const res = await fetch(`/api/admin/employees/${id}`, { method: "DELETE", credentials: "include" });
+        if (!res.ok) {
+          setSubmitError(await readApiError(res, "Could not remove one or more users."));
+          return;
+        }
+      }
+      userBulk.clearSelection();
+      setSuccessMessage(`${ids.length} user(s) removed.`);
+      await loadEmployees();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Bulk remove failed.");
+    } finally {
+      setBulkRemoving(false);
+    }
+  };
 
   const onPickEmployee = (employee: EmployeeRow, selectedMode: "view" | "edit") => {
     if (selectedMode === "view") {
@@ -385,6 +418,24 @@ export default function EmployeeMasterPage() {
             </div>
           </CardHeader>
           <CardContent className="pb-4">
+            {userBulk.selectedCount > 0 ? (
+              <BulkSelectionBar
+                selectedCount={userBulk.selectedCount}
+                totalCount={filteredEmployees.length}
+                onClear={userBulk.clearSelection}
+                className="mb-3"
+              >
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={bulkRemoving}
+                  className="h-7 rounded-lg bg-rose-600 px-3 text-xs text-white hover:bg-rose-700"
+                  onClick={() => void handleBulkRemoveUsers()}
+                >
+                  {bulkRemoving ? "Removing…" : "Delete selected"}
+                </Button>
+              </BulkSelectionBar>
+            ) : null}
             {listError ? <p className="mb-3 text-sm text-red-600">{listError}</p> : null}
             {loadingList ? (
               <div className="flex items-center gap-2 py-8 text-sm text-slate-500">
@@ -396,6 +447,15 @@ export default function EmployeeMasterPage() {
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="bg-[#f1f6fc] text-[#64748b]">
                     <tr>
+                      <th className="w-10 px-3 py-3">
+                        <TableBulkCheckbox
+                          checked={userBulk.allSelected}
+                          indeterminate={userBulk.someSelected}
+                          disabled={loadingList || !paginatedEmployees.length}
+                          onChange={userBulk.toggleAll}
+                          ariaLabel="Select all users"
+                        />
+                      </th>
                       <TableHeaderCell label="Name" className="px-4 py-3" />
                       <TableHeaderCell label="Role" className="px-4 py-3" />
                       <TableHeaderCell label="Department" className="px-4 py-3" />
@@ -417,6 +477,13 @@ export default function EmployeeMasterPage() {
                   <tbody className="divide-y divide-[#e8edf5] text-slate-700">
                     {paginatedEmployees.map((employee) => (
                       <tr key={employee.id}>
+                        <td className="px-3 py-2">
+                          <TableBulkCheckbox
+                            checked={userBulk.isSelected(employee.id)}
+                            onChange={() => userBulk.toggleOne(employee.id)}
+                            ariaLabel={`Select ${employee.full_name}`}
+                          />
+                        </td>
                         <td className="px-4 py-2">
                           <p className="font-medium text-slate-900">{employee.full_name}</p>
                           <p className="text-xs text-slate-500">{employee.email}</p>
@@ -472,7 +539,7 @@ export default function EmployeeMasterPage() {
                     ))}
                     {!filteredEmployees.length ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
+                        <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
                           No employees found for current filters.
                         </td>
                       </tr>

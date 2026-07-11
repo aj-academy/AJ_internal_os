@@ -4,6 +4,7 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
@@ -13,6 +14,7 @@ import { TaskCompleteDialog } from "@/components/task/TaskCompleteDialog";
 import { TaskAttachmentUpload } from "@/components/task/TaskAttachmentUpload";
 import type { AssigneeProfile } from "@/components/task/TaskAssigneePicker";
 import { usePagination } from "@/lib/usePagination";
+import { useRowSelection } from "@/lib/useRowSelection";
 import { assignerDisplayFromProfile } from "@/lib/profileDisplayName";
 import { parseTaskAttachments, uploadTaskAttachments, type TaskAttachment } from "@/lib/taskAttachments";
 import { fetchTaskActivities, logTaskActivity, parseClientIds, type TaskActivityRow } from "@/lib/taskActivities";
@@ -662,6 +664,12 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     setPageSize: setTaskPageSize,
   } = usePagination(rows, 10);
 
+  const taskSelection = useRowSelection(rows, (task) => task.id);
+
+  useEffect(() => {
+    taskSelection.clearSelection();
+  }, [employeeTaskView, statusFilter, priorityFilter, assignedFilter, dueDateFilter, searchDebounced]);
+
   useEffect(() => {
     if (!isEmployee) return;
     setAssignedFilter("");
@@ -1037,6 +1045,21 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     await reload();
   };
 
+  const handleBulkDeleteTasks = async () => {
+    if (!canManageTasks || tasksTableMissing || taskSelection.selectedCount === 0) return;
+    const confirmed = window.confirm(`Delete ${taskSelection.selectedCount} selected task(s)?`);
+    if (!confirmed) return;
+    const ids = [...taskSelection.selected];
+    const { error: deleteError } = await supabase.from("tasks").delete().in("id", ids);
+    if (deleteError) {
+      setError(toReadableTaskError(deleteError));
+      return;
+    }
+    taskSelection.clearSelection();
+    setSuccess(`${ids.length} task(s) deleted.`);
+    await reload();
+  };
+
   const persistEmployeeTaskUpdate = useCallback(
     async (taskId: string, status: TaskStatus, progress: number, prior?: TaskRecord) => {
       if (tasksTableMissing) return;
@@ -1237,6 +1260,19 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         </div>
       ) : null}
 
+      {canManageTasks && taskSelection.selectedCount > 0 ? (
+        <BulkSelectionBar selectedCount={taskSelection.selectedCount} totalCount={rows.length} onClear={taskSelection.clearSelection}>
+          <Button
+            type="button"
+            size="sm"
+            className="h-7 rounded-lg bg-rose-600 px-3 text-xs text-white hover:bg-rose-700"
+            onClick={() => void handleBulkDeleteTasks()}
+          >
+            Delete selected
+          </Button>
+        </BulkSelectionBar>
+      ) : null}
+
       <div className="responsive-table-wrap">
         <TaskTable
           tasks={paginatedRows}
@@ -1285,6 +1321,17 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             onPageChange: setTaskPage,
             onPageSizeChange: setTaskPageSize,
           }}
+          selection={
+            canManageTasks
+              ? {
+                  allSelected: taskSelection.allSelected,
+                  someSelected: taskSelection.someSelected,
+                  isSelected: taskSelection.isSelected,
+                  onToggleAll: taskSelection.toggleAll,
+                  onToggle: taskSelection.toggleOne,
+                }
+              : undefined
+          }
         />
       </div>
 

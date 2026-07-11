@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { ProgressBar } from "@/components/task/ProgressBar";
 import { TablePagination } from "@/components/ui/TablePagination";
+import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
 import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 
 interface TaskTableProps {
@@ -43,6 +44,13 @@ interface TaskTableProps {
     pageSize: number;
     onPageChange: (page: number) => void;
     onPageSizeChange: (size: number) => void;
+  };
+  selection?: {
+    allSelected: boolean;
+    someSelected: boolean;
+    isSelected: (id: string) => boolean;
+    onToggleAll: () => void;
+    onToggle: (id: string) => void;
   };
 }
 
@@ -89,12 +97,14 @@ export function TaskTable({
   onEmployeeProgressChange,
   onRequestCompleteTask,
   pagination,
+  selection,
 }: TaskTableProps) {
   const today = todayDateKey();
   const disabled = tableMissing || filtersDisabled;
   const showAssignedTo = assigneeColumn === "assigned-to";
   const showAssignedBy = assigneeColumn === "assigned-by";
-  const columnCount = 8 + (showAssignedTo || showAssignedBy ? 1 : 0) + (showDepartment ? 1 : 0);
+  const showSelection = Boolean(selection);
+  const columnCount = 8 + (showSelection ? 1 : 0) + (showAssignedTo || showAssignedBy ? 1 : 0) + (showDepartment ? 1 : 0);
 
   return (
     <article className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
@@ -102,6 +112,17 @@ export function TaskTable({
         <table className={`w-full text-sm ${showAssignedTo || showAssignedBy ? "min-w-[1280px]" : "min-w-[1100px]"}`}>
           <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
             <tr>
+              {showSelection ? (
+                <th className="w-10 px-3 py-3">
+                  <TableBulkCheckbox
+                    checked={selection!.allSelected}
+                    indeterminate={selection!.someSelected}
+                    disabled={disabled || !tasks.length}
+                    onChange={selection!.onToggleAll}
+                    ariaLabel="Select all tasks on this page"
+                  />
+                </th>
+              ) : null}
               <TableHeaderCell label="Task Title" className="px-4 py-3 text-center" />
               <TableHeaderCell label="Linked To" className="px-4 py-3 text-center" />
               {showAssignedTo ? (
@@ -181,6 +202,16 @@ export function TaskTable({
                         isDueToday ? "bg-amber-50/70" : "",
                       ].join(" ")}
                     >
+                      {showSelection ? (
+                        <td className="px-3 py-3.5 align-middle">
+                          <TableBulkCheckbox
+                            checked={selection!.isSelected(task.id)}
+                            disabled={disabled}
+                            onChange={() => selection!.onToggle(task.id)}
+                            ariaLabel={`Select task ${task.title}`}
+                          />
+                        </td>
+                      ) : null}
                       <td className="px-4 py-3.5 align-middle font-medium text-[#0f172a]">{task.title}</td>
                       <td className="max-w-[200px] px-4 py-3.5 align-middle text-xs text-[#475569]">
                         {task.assignment_type === "project" && task.project_label ? (

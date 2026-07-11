@@ -6,7 +6,10 @@ import { Button } from "@/components/ui/button";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { TablePagination } from "@/components/ui/TablePagination";
+import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
+import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
 import { usePagination } from "@/lib/usePagination";
+import { useRowSelection } from "@/lib/useRowSelection";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { PROJECT_TAB_IDS, TAB_LABELS } from "@/components/project-master/projectConfig";
@@ -254,6 +257,15 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
   const activeList = filtered.filter((p) => normalizeProjectStatus(String(p.status)) === "Active");
   const completedList = filtered.filter((p) => normalizeProjectStatus(String(p.status)) === "Completed");
   const delayedList = filtered.filter((p) => isDelayedProject(p, today) || normalizeProjectStatus(String(p.status)) === "Delayed");
+  const projectTableRows =
+    activeTab === "active"
+      ? activeList
+      : activeTab === "completed"
+        ? completedList
+        : activeTab === "delayed"
+          ? delayedList
+          : filtered;
+  const projectBulk = useRowSelection(projectTableRows, (p) => p.id);
 
   const overview = useMemo(() => {
     const total = projects.length;
@@ -379,6 +391,19 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
     if (de) setError(de.message);
     else {
       setSuccess("Deleted.");
+      await reload();
+    }
+  };
+
+  const bulkDeleteProjects = async () => {
+    if (!isAdmin || projectBulk.selectedCount === 0) return;
+    if (!confirm(`Delete ${projectBulk.selectedCount} selected project(s)?`)) return;
+    const ids = [...projectBulk.selected];
+    const { error: de } = await supabase.from("projects").delete().in("id", ids);
+    if (de) setError(de.message);
+    else {
+      projectBulk.clearSelection();
+      setSuccess(`${ids.length} project(s) deleted.`);
       await reload();
     }
   };
@@ -536,6 +561,13 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
 
       {["all", "active", "completed", "delayed"].includes(activeTab) && showFullTabs ? (
         <div className="space-y-3">
+          {isAdmin && projectBulk.selectedCount > 0 ? (
+            <BulkSelectionBar selectedCount={projectBulk.selectedCount} totalCount={projectTableRows.length} onClear={projectBulk.clearSelection}>
+              <Button type="button" size="sm" className="h-7 rounded-lg bg-rose-600 px-3 text-xs text-white" onClick={() => void bulkDeleteProjects()}>
+                Delete selected
+              </Button>
+            </BulkSelectionBar>
+          ) : null}
           <TableSearchBar
             value={search}
             onChange={setSearch}
@@ -545,7 +577,7 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
             hint={`Showing ${activeTab === "active" ? activeList.length : activeTab === "completed" ? completedList.length : activeTab === "delayed" ? delayedList.length : filtered.length} project(s)`}
           />
           <ProjectsDataTable
-            rows={activeTab === "active" ? activeList : activeTab === "completed" ? completedList : activeTab === "delayed" ? delayedList : filtered}
+            rows={projectTableRows}
             loading={loading}
             clientMap={clientMap}
             clients={clients}
@@ -567,6 +599,17 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
             onView={setViewProject}
             onEdit={openEdit}
             onDelete={(id) => void deleteProject(id)}
+            selection={
+              isAdmin
+                ? {
+                    allSelected: projectBulk.allSelected,
+                    someSelected: projectBulk.someSelected,
+                    isSelected: projectBulk.isSelected,
+                    onToggleAll: projectBulk.toggleAll,
+                    onToggle: projectBulk.toggleOne,
+                  }
+                : undefined
+            }
           />
         </div>
       ) : null}
@@ -732,6 +775,7 @@ function ProjectsDataTable({
   onView,
   onEdit,
   onDelete,
+  selection,
 }: {
   rows: ProjectRowLoose[];
   loading: boolean;
@@ -755,8 +799,16 @@ function ProjectsDataTable({
   onView: (p: ProjectRowLoose) => void;
   onEdit: (p: ProjectRowLoose) => void;
   onDelete: (id: string) => void;
+  selection?: {
+    allSelected: boolean;
+    someSelected: boolean;
+    isSelected: (id: string) => boolean;
+    onToggleAll: () => void;
+    onToggle: (id: string) => void;
+  };
 }) {
   const today = todayISO();
+  const showSelection = Boolean(selection);
   const {
     paginatedItems: paginatedRows,
     page,
@@ -771,9 +823,20 @@ function ProjectsDataTable({
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
       <div className="overflow-x-auto">
       <table className="w-full min-w-[1100px] text-sm">
-        <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
-          <tr>
-            <TableHeaderCell label="Code" className="px-4 py-3" />
+          <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
+            <tr>
+              {showSelection ? (
+                <th className="w-10 px-3 py-3">
+                  <TableBulkCheckbox
+                    checked={selection!.allSelected}
+                    indeterminate={selection!.someSelected}
+                    disabled={loading || !rows.length}
+                    onChange={selection!.onToggleAll}
+                    ariaLabel="Select all projects"
+                  />
+                </th>
+              ) : null}
+              <TableHeaderCell label="Code" className="px-4 py-3" />
             <TableHeaderCell label="Project" className="px-4 py-3" />
             <TableHeaderFilter
               label="Client"
@@ -843,6 +906,15 @@ function ProjectsDataTable({
                     key={p.id}
                     className={[delayed ? "bg-rose-50/90" : "", urgent ? "outline outline-1 outline-amber-300/80" : "", near ? "bg-amber-50/50" : ""].join(" ")}
                   >
+                    {showSelection ? (
+                      <td className="px-3 py-3">
+                        <TableBulkCheckbox
+                          checked={selection!.isSelected(p.id)}
+                          onChange={() => selection!.onToggle(p.id)}
+                          ariaLabel={`Select project ${p.project_name}`}
+                        />
+                      </td>
+                    ) : null}
                     <td className="px-4 py-3 font-mono text-xs">{p.project_code || "—"}</td>
                     <td className="px-4 py-3 font-semibold text-[#0f172a]">{p.project_name}</td>
                     <td className="max-w-[180px] truncate px-4 py-3">{p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—"}</td>

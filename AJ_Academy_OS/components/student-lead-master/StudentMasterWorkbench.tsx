@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { TablePagination } from "@/components/ui/TablePagination";
+import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
+import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
 import { usePagination } from "@/lib/usePagination";
+import { useRowSelection } from "@/lib/useRowSelection";
 import { saveTaskLeadSelection } from "@/lib/taskLeadPickStorage";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
@@ -657,6 +660,27 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     setPageSize: setLeadsPageSize,
   } = usePagination(filteredClients, 12);
 
+  const leadsForBulk = useMemo(() => {
+    if (pickForTask) return [];
+    if (activeTab === "all-leads") return filteredClients;
+    if (activeTab === "converted") {
+      return filteredClients.filter((leadEntry) => {
+        const st = normalizeStatus(String(leadEntry.status));
+        return st === "Converted" || st === "Admitted";
+      });
+    }
+    if (activeTab === "proposal") return filteredClients;
+    return [];
+  }, [activeTab, filteredClients, pickForTask]);
+
+  const leadBulk = useRowSelection(leadsForBulk, (lead) => lead.id);
+  const [bulkAssignTo, setBulkAssignTo] = useState("");
+
+  useEffect(() => {
+    leadBulk.clearSelection();
+    setBulkAssignTo("");
+  }, [activeTab, pickForTask]);
+
   useEffect(() => {
     if (pickForTask) setActiveTab("all-leads");
   }, [pickForTask]);
@@ -1265,6 +1289,90 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     }
   };
 
+  const handleBulkDeleteLeads = async () => {
+    if (!isAdmin || leadBulk.selectedCount === 0) return;
+    if (!confirm(`Delete ${leadBulk.selectedCount} selected lead(s) permanently?`)) return;
+    const ids = [...leadBulk.selected];
+    const { error: deletionError } = await supabase.from("clients").delete().in("id", ids);
+    if (deletionError) {
+      setError(deletionError.message);
+      return;
+    }
+    leadBulk.clearSelection();
+    setSuccess(`${ids.length} lead(s) deleted.`);
+    await reload();
+  };
+
+  const handleBulkAssignLeads = async () => {
+    if (!isAdmin || leadBulk.selectedCount === 0 || !bulkAssignTo) return;
+    const ids = [...leadBulk.selected];
+    const assignee = employeesForSelect.find((e) => e.id === bulkAssignTo);
+    const label = assignee?.label || "assignee";
+    if (!confirm(`Assign ${ids.length} lead(s) to ${label}?`)) return;
+    const { error: assignError } = await supabase.from("clients").update({ assigned_to: bulkAssignTo }).in("id", ids);
+    if (assignError) {
+      setError(assignError.message);
+      return;
+    }
+    leadBulk.clearSelection();
+    setBulkAssignTo("");
+    setSuccess(`${ids.length} lead(s) assigned to ${label}.`);
+    await reload();
+  };
+
+  const leadBulkSelectionProps = isAdmin && !pickForTask
+    ? {
+        allSelected: leadBulk.allSelected,
+        someSelected: leadBulk.someSelected,
+        isSelected: leadBulk.isSelected,
+        onToggleAll: leadBulk.toggleAll,
+        onToggle: leadBulk.toggleOne,
+      }
+    : undefined;
+
+  const renderLeadBulkBar =
+    isAdmin && !pickForTask && leadBulk.selectedCount > 0 ? (
+      <BulkSelectionBar
+        selectedCount={leadBulk.selectedCount}
+        totalCount={leadsForBulk.length}
+        onClear={() => {
+          leadBulk.clearSelection();
+          setBulkAssignTo("");
+        }}
+        className="mb-3"
+      >
+        <select
+          value={bulkAssignTo}
+          onChange={(e) => setBulkAssignTo(e.target.value)}
+          className="h-7 rounded-lg border border-[#dbe6f3] bg-white px-2 text-xs text-[#334155]"
+        >
+          <option value="">Assign to…</option>
+          {employeesForSelect.map((emp) => (
+            <option key={emp.id} value={emp.id}>
+              {emp.label}
+            </option>
+          ))}
+        </select>
+        <Button
+          type="button"
+          size="sm"
+          disabled={!bulkAssignTo}
+          className="h-7 rounded-lg bg-[#2563eb] px-3 text-xs text-white hover:bg-[#1d4ed8] disabled:opacity-50"
+          onClick={() => void handleBulkAssignLeads()}
+        >
+          Assign selected
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className="h-7 rounded-lg bg-rose-600 px-3 text-xs text-white hover:bg-rose-700"
+          onClick={() => void handleBulkDeleteLeads()}
+        >
+          Delete selected
+        </Button>
+      </BulkSelectionBar>
+    ) : null;
+
   const convertLead = async (leadRow: CrmClientRow) => {
     if (!isAdmin) return;
     const year = new Date().getFullYear();
@@ -1607,6 +1715,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
 
       {activeTab === "all-leads" ? (
         <div className="space-y-3">
+          {renderLeadBulkBar}
           <TableSearchBar
             value={searchText}
             onChange={setSearchText}
@@ -1669,6 +1778,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
               });
             }}
             onConvert={(leadRecord) => void convertLead(leadRecord)}
+            bulkSelection={leadBulkSelectionProps}
             pagination={{
               page: leadsPage,
               totalPages: leadsTotalPages,
@@ -1720,6 +1830,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       )}
 
       {activeTab === "converted" && (
+        <>
+          {renderLeadBulkBar}
         <ConvertedTable
           leads={filteredClients.filter((leadEntry) => {
             const st = normalizeStatus(String(leadEntry.status));
@@ -1728,15 +1840,18 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
           employeeNameMap={employeeNameMap}
           isAdmin={isAdmin}
           onProfile={setProfileLead}
+          bulkSelection={leadBulkSelectionProps}
         />
+        </>
       )}
 
       {activeTab === "proposal" && (
         <>
+          {renderLeadBulkBar}
           <p className="text-sm text-[#64748b]">
             Track and update proposal fields on each lead. Changes save to the lead record and appear in Activity Timeline.
           </p>
-          <ProposalTrackerTable leads={filteredClients} isAdmin={isAdmin} onEdit={(leadRow) => openProposalModal(leadRow)} />
+          <ProposalTrackerTable leads={filteredClients} isAdmin={isAdmin} onEdit={(leadRow) => openProposalModal(leadRow)} bulkSelection={leadBulkSelectionProps} />
           {proposalModalLead ? (
             <ProposalEditModal
               lead={proposalModalLead}
@@ -2057,6 +2172,7 @@ function AllLeadsTable({
   onAddFollow,
   onConvert,
   pagination,
+  bulkSelection,
 }: {
   loading: boolean;
   leads: CrmClientRow[];
@@ -2105,9 +2221,17 @@ function AllLeadsTable({
     onPageChange: (page: number) => void;
     onPageSizeChange: (size: number) => void;
   };
+  bulkSelection?: {
+    allSelected: boolean;
+    someSelected: boolean;
+    isSelected: (id: string) => boolean;
+    onToggleAll: () => void;
+    onToggle: (id: string) => void;
+  };
 }) {
   const today = todayISO();
-  const colCount = pickMode ? 25 : 24;
+  const showBulk = Boolean(bulkSelection) && !pickMode;
+  const colCount = (pickMode ? 1 : 0) + (showBulk ? 1 : 0) + 24;
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
       <div className="overflow-x-auto">
@@ -2115,6 +2239,17 @@ function AllLeadsTable({
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
             {pickMode ? <TableHeaderCell label="Pick" className="px-3 py-2" /> : null}
+            {showBulk ? (
+              <th className="w-10 px-3 py-2">
+                <TableBulkCheckbox
+                  checked={bulkSelection!.allSelected}
+                  indeterminate={bulkSelection!.someSelected}
+                  disabled={!leads.length}
+                  onChange={bulkSelection!.onToggleAll}
+                  ariaLabel="Select all leads"
+                />
+              </th>
+            ) : null}
             <TableHeaderCell label="Student Name" className="px-3 py-2" />
             <TableHeaderCell label="Mobile Number" className="px-3 py-2 text-center" />
             <TableHeaderCell label="WhatsApp Number" className="px-3 py-2 text-center" />
@@ -2239,6 +2374,15 @@ function AllLeadsTable({
                         />
                       </td>
                     ) : null}
+                    {showBulk ? (
+                      <td className="px-3 py-2">
+                        <TableBulkCheckbox
+                          checked={bulkSelection!.isSelected(lead.id)}
+                          onChange={() => bulkSelection!.onToggle(lead.id)}
+                          ariaLabel={`Select ${displayLeadName(lead)}`}
+                        />
+                      </td>
+                    ) : null}
                     <td className="px-3 py-2 font-semibold text-slate-900 whitespace-nowrap">{displayLeadName(lead) || "—"}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-center">
                       <StudentOutreachButtons
@@ -2345,17 +2489,38 @@ function ConvertedTable({
   employeeNameMap,
   isAdmin,
   onProfile,
+  bulkSelection,
 }: {
   leads: CrmClientRow[];
   employeeNameMap: Record<string, string>;
   isAdmin: boolean;
   onProfile: (l: CrmClientRow) => void;
+  bulkSelection?: {
+    allSelected: boolean;
+    someSelected: boolean;
+    isSelected: (id: string) => boolean;
+    onToggleAll: () => void;
+    onToggle: (id: string) => void;
+  };
 }) {
+  const showBulk = Boolean(bulkSelection);
   return (
-    <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white">
+    <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white">
+      <div className="overflow-x-auto">
       <table className="w-full min-w-[900px] text-sm">
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
+            {showBulk ? (
+              <th className="w-10 px-3 py-2">
+                <TableBulkCheckbox
+                  checked={bulkSelection!.allSelected}
+                  indeterminate={bulkSelection!.someSelected}
+                  disabled={!leads.length}
+                  onChange={bulkSelection!.onToggleAll}
+                  ariaLabel="Select all converted leads"
+                />
+              </th>
+            ) : null}
             <th className="px-3 py-2 text-left">Code</th>
             <th className="px-3 py-2 text-left">Client</th>
             <th className="px-3 py-2 text-left">Company</th>
@@ -2371,6 +2536,15 @@ function ConvertedTable({
         <tbody>
           {leads.map((convertedLead) => (
             <tr key={convertedLead.id} className="border-t border-[#eef2ff]">
+              {showBulk ? (
+                <td className="px-3 py-2">
+                  <TableBulkCheckbox
+                    checked={bulkSelection!.isSelected(convertedLead.id)}
+                    onChange={() => bulkSelection!.onToggle(convertedLead.id)}
+                    ariaLabel={`Select ${displayLeadName(convertedLead)}`}
+                  />
+                </td>
+              ) : null}
               <td className="px-3 py-2 font-mono text-xs">{convertedLead.client_code || "—"}</td>
               <td className="px-3 py-2 font-semibold">{displayLeadName(convertedLead)}</td>
               <td>{convertedLead.company_name || "—"}</td>
@@ -2399,6 +2573,7 @@ function ConvertedTable({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -2407,16 +2582,37 @@ function ProposalTrackerTable({
   leads,
   isAdmin,
   onEdit,
+  bulkSelection,
 }: {
   leads: CrmClientRow[];
   isAdmin: boolean;
   onEdit: (l: CrmClientRow) => void;
+  bulkSelection?: {
+    allSelected: boolean;
+    someSelected: boolean;
+    isSelected: (id: string) => boolean;
+    onToggleAll: () => void;
+    onToggle: (id: string) => void;
+  };
 }) {
+  const showBulk = Boolean(bulkSelection);
   return (
-    <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+    <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+      <div className="overflow-x-auto">
       <table className="w-full min-w-[880px] text-sm">
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
+            {showBulk ? (
+              <th className="w-10 px-3 py-2">
+                <TableBulkCheckbox
+                  checked={bulkSelection!.allSelected}
+                  indeterminate={bulkSelection!.someSelected}
+                  disabled={!leads.length}
+                  onChange={bulkSelection!.onToggleAll}
+                  ariaLabel="Select all proposal leads"
+                />
+              </th>
+            ) : null}
             <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Lead</th>
             <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Company</th>
             <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Amount</th>
@@ -2429,13 +2625,22 @@ function ProposalTrackerTable({
         <tbody>
           {leads.length === 0 ? (
             <tr>
-              <td colSpan={7} className="px-6 py-12 text-center text-[#64748b]">
+              <td colSpan={showBulk ? 8 : 7} className="px-6 py-12 text-center text-[#64748b]">
                 No leads match the current filters. Adjust filters on the All Leads tab or add a lead.
               </td>
             </tr>
           ) : (
             leads.map((proposalLead) => (
               <tr key={proposalLead.id} className="border-t border-[#eef2ff]">
+                {showBulk ? (
+                  <td className="px-3 py-2">
+                    <TableBulkCheckbox
+                      checked={bulkSelection!.isSelected(proposalLead.id)}
+                      onChange={() => bulkSelection!.onToggle(proposalLead.id)}
+                      ariaLabel={`Select ${displayLeadName(proposalLead)}`}
+                    />
+                  </td>
+                ) : null}
                 <td className="px-3 py-2 font-semibold text-slate-900">{displayLeadName(proposalLead) || "—"}</td>
                 <td className="max-w-[200px] truncate px-3 py-2">{proposalLead.company_name || "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2">
@@ -2473,6 +2678,7 @@ function ProposalTrackerTable({
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
