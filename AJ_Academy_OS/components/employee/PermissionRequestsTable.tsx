@@ -61,7 +61,7 @@ export function PermissionRequestsTable({
     };
   }, [employeeId, scheduleRefresh]);
 
-  const { paginatedItems, page, setPage, totalPages, totalItems, pageSize } = usePagination(rows, 10);
+  const { paginatedItems, page, setPage, totalPages, totalItems, pageSize, setPageSize } = usePagination(rows, 10);
 
   return (
     <section className="rounded-2xl border border-[#d4deea] bg-white p-4">
@@ -117,7 +117,7 @@ export function PermissionRequestsTable({
           </tbody>
         </table>
       </div>
-      <TablePagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} />
+      <TablePagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
     </section>
   );
 }

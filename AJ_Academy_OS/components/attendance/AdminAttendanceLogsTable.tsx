@@ -70,7 +70,7 @@ export function AdminAttendanceLogsTable({
   const [error, setError] = useState<string | null>(null);
   const allIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const allSelected = rows.length > 0 && selected.size === rows.length;
-  const { paginatedItems, page, setPage, totalPages, totalItems, pageSize } = usePagination(rows, 15);
+  const { paginatedItems, page, setPage, totalPages, totalItems, pageSize, setPageSize } = usePagination(rows, 15);
 
   const toggleAll = () => {
     setSelected(allSelected ? new Set() : new Set(allIds));
@@ -258,7 +258,7 @@ export function AdminAttendanceLogsTable({
           </tbody>
         </table>
       </div>
-      <TablePagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} />
+      <TablePagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
     </section>
   );
 }

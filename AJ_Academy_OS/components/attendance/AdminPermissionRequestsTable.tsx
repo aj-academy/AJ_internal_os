@@ -71,6 +71,7 @@ export function AdminPermissionRequestsTable({
     totalPages,
     totalItems,
     pageSize,
+    setPageSize,
   } = usePagination(rows, 10);
 
   const toggleAll = () => {
@@ -274,6 +275,7 @@ export function AdminPermissionRequestsTable({
         totalItems={totalItems}
         pageSize={pageSize}
         onPageChange={setPage}
+        onPageSizeChange={setPageSize}
         className="px-2"
       />
     </section>

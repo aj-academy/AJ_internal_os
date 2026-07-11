@@ -3,6 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { ProgressBar } from "@/components/task/ProgressBar";
+import { TablePagination } from "@/components/ui/TablePagination";
 import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 
 interface TaskTableProps {
@@ -35,6 +36,14 @@ interface TaskTableProps {
   onEmployeeProgressChange: (taskId: string, status: TaskStatus, progress: number) => void;
   /** Assignee opens completion dialog (summary + notify assigner). */
   onRequestCompleteTask?: (task: TaskRecord) => void;
+  pagination?: {
+    page: number;
+    totalPages: number;
+    totalItems: number;
+    pageSize: number;
+    onPageChange: (page: number) => void;
+    onPageSizeChange: (size: number) => void;
+  };
 }
 
 const statusClassMap: Record<TaskStatus, string> = {
@@ -79,6 +88,7 @@ export function TaskTable({
   onEmployeeStatusChange,
   onEmployeeProgressChange,
   onRequestCompleteTask,
+  pagination,
 }: TaskTableProps) {
   const today = todayDateKey();
   const disabled = tableMissing || filtersDisabled;
@@ -306,6 +316,17 @@ export function TaskTable({
           </tbody>
         </table>
       </div>
+      {pagination ? (
+        <TablePagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.totalItems}
+          pageSize={pagination.pageSize}
+          onPageChange={pagination.onPageChange}
+          onPageSizeChange={pagination.onPageSizeChange}
+          className="rounded-b-[20px]"
+        />
+      ) : null}
     </article>
   );
 }

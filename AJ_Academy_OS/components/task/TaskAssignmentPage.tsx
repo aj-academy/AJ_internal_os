@@ -12,7 +12,6 @@ import { TaskTable } from "@/components/task/TaskTable";
 import { TaskCompleteDialog } from "@/components/task/TaskCompleteDialog";
 import { TaskAttachmentUpload } from "@/components/task/TaskAttachmentUpload";
 import type { AssigneeProfile } from "@/components/task/TaskAssigneePicker";
-import { TablePagination } from "@/components/ui/TablePagination";
 import { usePagination } from "@/lib/usePagination";
 import { assignerDisplayFromProfile } from "@/lib/profileDisplayName";
 import { parseTaskAttachments, uploadTaskAttachments, type TaskAttachment } from "@/lib/taskAttachments";
@@ -660,6 +659,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     totalPages: taskTotalPages,
     totalItems: taskTotalItems,
     pageSize: taskPageSize,
+    setPageSize: setTaskPageSize,
   } = usePagination(rows, 10);
 
   useEffect(() => {
@@ -1277,15 +1277,16 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           onRequestCompleteTask={
             !canManageTasks && !employeeDelegatedView ? (task) => setCompleteTask(task) : undefined
           }
+          pagination={{
+            page: taskPage,
+            totalPages: taskTotalPages,
+            totalItems: taskTotalItems,
+            pageSize: taskPageSize,
+            onPageChange: setTaskPage,
+            onPageSizeChange: setTaskPageSize,
+          }}
         />
       </div>
-      <TablePagination
-        page={taskPage}
-        totalPages={taskTotalPages}
-        totalItems={taskTotalItems}
-        pageSize={taskPageSize}
-        onPageChange={setTaskPage}
-      />
 
       <TaskCompleteDialog
         task={completeTask}

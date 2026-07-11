@@ -115,6 +115,7 @@ export default function AdminFreelancersPage() {
     totalPages: freelancerTotalPages,
     totalItems: freelancerTotalItems,
     pageSize: freelancerPageSize,
+    setPageSize: setFreelancerPageSize,
   } = usePagination(filtered, 10);
 
   const activeCount = freelancers.filter((f) => (f.status ?? "active") === "active").length;
@@ -242,7 +243,8 @@ export default function AdminFreelancersPage() {
           ) : filtered.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-500">No freelancers yet. Create one in User Master.</p>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
+            <div className="overflow-hidden rounded-xl border border-[#dbe6f3]">
+            <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="bg-[#f1f6fc] text-[#64748b]">
                   <tr>
@@ -292,17 +294,16 @@ export default function AdminFreelancersPage() {
                 </tbody>
               </table>
             </div>
-          )}
-          {!loading && filtered.length > 0 ? (
             <TablePagination
               page={freelancerPage}
               totalPages={freelancerTotalPages}
               totalItems={freelancerTotalItems}
               pageSize={freelancerPageSize}
               onPageChange={setFreelancerPage}
-              className="mt-2"
+              onPageSizeChange={setFreelancerPageSize}
             />
-          ) : null}
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -164,7 +164,7 @@ export function MemberReimbursementWorkbench() {
     [claims],
   );
 
-  const { paginatedItems, page, setPage, totalPages, totalItems, pageSize } = usePagination(submittedClaims, 10);
+  const { paginatedItems, page, setPage, totalPages, totalItems, pageSize, setPageSize } = usePagination(submittedClaims, 10);
 
   const buildPayload = (asDraft: boolean) => {
     const amt = Number(form.amount) || 0;
@@ -515,7 +515,7 @@ export function MemberReimbursementWorkbench() {
               </tbody>
             </table>
           </div>
-          <TablePagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} alwaysShow />
+          <TablePagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} alwaysShow />
         </div>
       ) : null}
 

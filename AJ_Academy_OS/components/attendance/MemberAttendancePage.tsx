@@ -373,6 +373,7 @@ export function MemberAttendancePage({
     totalPages: historyTotalPages,
     totalItems: historyTotalItems,
     pageSize: historyPageSize,
+    setPageSize: setHistoryPageSize,
   } = usePagination(history, 10);
 
   const historyHeadings = requireSelfie
@@ -735,6 +736,7 @@ export function MemberAttendancePage({
           totalItems={historyTotalItems}
           pageSize={historyPageSize}
           onPageChange={setHistoryPage}
+          onPageSizeChange={setHistoryPageSize}
         />
       </article>
     </section>

@@ -20,7 +20,7 @@ export function MentorStudentRosterTable({
   students: StudentRow[];
   mentorId: string;
 }) {
-  const { paginatedItems, page, setPage, totalPages, totalItems, pageSize } = usePagination(students, 10);
+  const { paginatedItems, page, setPage, totalPages, totalItems, pageSize, setPageSize } = usePagination(students, 10);
 
   return (
     <>
@@ -64,7 +64,7 @@ export function MentorStudentRosterTable({
           </tbody>
         </table>
       </div>
-      <TablePagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} />
+      <TablePagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
     </>
   );
 }

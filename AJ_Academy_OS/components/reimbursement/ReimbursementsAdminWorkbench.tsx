@@ -188,8 +188,7 @@ export function ReimbursementsAdminWorkbench() {
     });
   }, [activeTab, claims, profileMap, search]);
 
-  const [pageSize, setPageSize] = useState(10);
-  const { paginatedItems, page, setPage, totalPages, totalItems } = usePagination(filteredClaims, pageSize);
+  const { paginatedItems, page, setPage, totalPages, totalItems, pageSize, setPageSize } = usePagination(filteredClaims, 10);
 
   const stats = useMemo(() => {
     const now = new Date();

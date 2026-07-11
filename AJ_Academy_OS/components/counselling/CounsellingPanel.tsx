@@ -188,6 +188,7 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
     totalPages: sessionTotalPages,
     totalItems: sessionTotalItems,
     pageSize: sessionPageSize,
+    setPageSize: setSessionPageSize,
   } = usePagination(rows, 10);
 
   const findProfileIdByText = (list: ProfileOpt[], query: string) => {
@@ -475,10 +476,12 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
         </form>
       ) : null}
 
-      <div className="overflow-x-auto rounded-xl border border-[#ede4d4]">
+      <div className="overflow-hidden rounded-xl border border-[#ede4d4]">
         {loading ? (
           <p className="p-8 text-sm text-[#6b5d4d]">Loading…</p>
         ) : (
+          <>
+          <div className="overflow-x-auto">
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead className="bg-[#faf6ee] text-[#6b5d4d]">
               <tr>
@@ -524,18 +527,18 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
               ) : null}
             </tbody>
           </table>
+          </div>
+          <TablePagination
+            page={sessionPage}
+            totalPages={sessionTotalPages}
+            totalItems={sessionTotalItems}
+            pageSize={sessionPageSize}
+            onPageChange={setSessionPage}
+            onPageSizeChange={setSessionPageSize}
+          />
+          </>
         )}
       </div>
-      {!loading && rows.length > 0 ? (
-        <TablePagination
-          page={sessionPage}
-          totalPages={sessionTotalPages}
-          totalItems={sessionTotalItems}
-          pageSize={sessionPageSize}
-          onPageChange={setSessionPage}
-          className="mt-2"
-        />
-      ) : null}
     </section>
   );
 }

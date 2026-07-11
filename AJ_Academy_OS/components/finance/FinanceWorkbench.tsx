@@ -540,6 +540,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
     totalPages: claimsTotalPages,
     totalItems: claimsTotalItems,
     pageSize: claimsPageSize,
+    setPageSize: setClaimsPageSize,
   } = usePagination(visibleClaims, 10);
 
   return (
@@ -795,6 +796,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
             totalItems={claimsTotalItems}
             pageSize={claimsPageSize}
             onPageChange={setClaimsPage}
+            onPageSizeChange={setClaimsPageSize}
           />
         </div>
       ) : null}
@@ -1328,7 +1330,7 @@ function FinanceTableSection<T>({
   columns: string[];
   renderRow: (row: T) => ReactNode;
 }) {
-  const { paginatedItems, page, setPage, totalPages, totalItems, pageSize } = usePagination(rows, 10);
+  const { paginatedItems, page, setPage, totalPages, totalItems, pageSize, setPageSize } = usePagination(rows, 10);
 
   return (
     <div className="space-y-3">
@@ -1369,7 +1371,7 @@ function FinanceTableSection<T>({
           </tbody>
         </table>
       </div>
-      <TablePagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} />
+      <TablePagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
     </div>
   );
 }

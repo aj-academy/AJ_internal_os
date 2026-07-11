@@ -231,6 +231,7 @@ export function EmployeeLeadManagement() {
     totalPages: leadsTotalPages,
     totalItems: leadsTotalItems,
     pageSize: leadsPageSize,
+    setPageSize: setLeadsPageSize,
   } = usePagination(filteredLeads, 12);
 
   const togglePickLead = (id: string) => {
@@ -730,7 +731,8 @@ export function EmployeeLeadManagement() {
         hint={`Showing ${paginatedLeads.length} of ${filteredLeads.length} lead(s) · page ${leadsPage}/${leadsTotalPages}`}
       />
 
-      <div className="responsive-table-wrap overflow-x-auto rounded-2xl border border-[#dbe6f3]">
+      <div className="responsive-table-wrap overflow-hidden rounded-2xl border border-[#dbe6f3]">
+        <div className="overflow-x-auto">
         <table className="w-full min-w-[1100px] text-left text-sm">
           <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
             <tr>
@@ -900,7 +902,7 @@ export function EmployeeLeadManagement() {
             )}
           </tbody>
         </table>
-      </div>
+        </div>
 
       <TablePagination
         page={leadsPage}
@@ -908,7 +910,9 @@ export function EmployeeLeadManagement() {
         totalItems={leadsTotalItems}
         pageSize={leadsPageSize}
         onPageChange={setLeadsPage}
+        onPageSizeChange={setLeadsPageSize}
       />
+      </div>
 
       <LeadActivityModal
         open={Boolean(activityLead)}

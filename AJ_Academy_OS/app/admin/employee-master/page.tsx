@@ -173,6 +173,7 @@ export default function EmployeeMasterPage() {
     totalPages: directoryTotalPages,
     totalItems: directoryTotalItems,
     pageSize: directoryPageSize,
+    setPageSize: setDirectoryPageSize,
   } = usePagination(filteredEmployees, 10);
 
   const onPickEmployee = (employee: EmployeeRow, selectedMode: "view" | "edit") => {
@@ -390,7 +391,8 @@ export default function EmployeeMasterPage() {
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading employees…
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
+              <div className="overflow-hidden rounded-xl border border-[#dbe6f3]">
+              <div className="overflow-x-auto">
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="bg-[#f1f6fc] text-[#64748b]">
                     <tr>
@@ -478,17 +480,16 @@ export default function EmployeeMasterPage() {
                   </tbody>
                 </table>
               </div>
-            )}
-            {!loadingList && filteredEmployees.length > 0 ? (
               <TablePagination
                 page={directoryPage}
                 totalPages={directoryTotalPages}
                 totalItems={directoryTotalItems}
                 pageSize={directoryPageSize}
                 onPageChange={setDirectoryPage}
-                className="mt-2"
+                onPageSizeChange={setDirectoryPageSize}
               />
-            ) : null}
+              </div>
+            )}
           </CardContent>
         </Card>
 

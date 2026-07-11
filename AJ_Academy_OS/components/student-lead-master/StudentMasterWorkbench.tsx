@@ -654,6 +654,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     totalPages: leadsTotalPages,
     totalItems: leadsTotalItems,
     pageSize: leadsPageSize,
+    setPageSize: setLeadsPageSize,
   } = usePagination(filteredClients, 12);
 
   useEffect(() => {
@@ -1668,13 +1669,14 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
               });
             }}
             onConvert={(leadRecord) => void convertLead(leadRecord)}
-          />
-          <TablePagination
-            page={leadsPage}
-            totalPages={leadsTotalPages}
-            totalItems={leadsTotalItems}
-            pageSize={leadsPageSize}
-            onPageChange={setLeadsPage}
+            pagination={{
+              page: leadsPage,
+              totalPages: leadsTotalPages,
+              totalItems: leadsTotalItems,
+              pageSize: leadsPageSize,
+              onPageChange: setLeadsPage,
+              onPageSizeChange: setLeadsPageSize,
+            }}
           />
         </div>
       ) : null}
@@ -2054,6 +2056,7 @@ function AllLeadsTable({
   onDelete,
   onAddFollow,
   onConvert,
+  pagination,
 }: {
   loading: boolean;
   leads: CrmClientRow[];
@@ -2094,11 +2097,20 @@ function AllLeadsTable({
   onDelete: (id: string) => void;
   onAddFollow: (l: CrmClientRow) => void;
   onConvert: (l: CrmClientRow) => void;
+  pagination?: {
+    page: number;
+    totalPages: number;
+    totalItems: number;
+    pageSize: number;
+    onPageChange: (page: number) => void;
+    onPageSizeChange: (size: number) => void;
+  };
 }) {
   const today = todayISO();
   const colCount = pickMode ? 25 : 24;
   return (
-    <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
+    <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
+      <div className="overflow-x-auto">
       <table className="w-full min-w-[2200px] text-sm">
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
@@ -2312,6 +2324,18 @@ function AllLeadsTable({
           ) : null}
         </tbody>
       </table>
+      </div>
+      {pagination ? (
+        <TablePagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.totalItems}
+          pageSize={pagination.pageSize}
+          onPageChange={pagination.onPageChange}
+          onPageSizeChange={pagination.onPageSizeChange}
+          className="rounded-b-[20px]"
+        />
+      ) : null}
     </div>
   );
 }
