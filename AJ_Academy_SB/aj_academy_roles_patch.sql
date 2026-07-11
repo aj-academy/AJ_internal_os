@@ -47,7 +47,7 @@ as $$
   from public.profiles p
   where lower(coalesce(p.status, 'active')) = 'active'
     and lower(coalesce(p.role, '')) in (
-      'student', 'freelancer', 'mentor', 'admin', 'super_admin'
+      'student', 'freelancer', 'mentor', 'employee', 'admin', 'super_admin', 'manager'
     )
   order by p.full_name nulls last;
 $$;

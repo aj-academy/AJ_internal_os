@@ -249,6 +249,19 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       return;
     }
 
+    if (isAdmin) {
+      const { data, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id,full_name,email,department,role")
+        .in("role", ["student", "freelancer", "mentor", "employee", "admin", "super_admin", "manager"])
+        .or("status.is.null,status.eq.active")
+        .order("full_name", { ascending: true })
+        .returns<ProfileOption[]>();
+      if (profilesError) throw new Error(profilesError.message);
+      setEmployees(data ?? []);
+      return;
+    }
+
     const { data: rpcRows, error: rpcError } = await supabase.rpc("get_task_assignees");
     if (!rpcError && Array.isArray(rpcRows)) {
       const rows = rpcRows as {
@@ -278,7 +291,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       .returns<ProfileOption[]>();
     if (profilesError) throw new Error(profilesError.message);
     setEmployees(data ?? []);
-  }, [departmentAssigner, isEmployee, role, selfProfile?.department, supabase]);
+  }, [departmentAssigner, isAdmin, isEmployee, role, selfProfile?.department, supabase]);
 
   const loadSummary = useCallback(
     async (userId: string) => {

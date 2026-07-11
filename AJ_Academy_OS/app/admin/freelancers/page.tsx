@@ -15,6 +15,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { TablePagination } from "@/components/ui/TablePagination";
+import { usePagination } from "@/lib/usePagination";
 import { createClient } from "@/lib/supabase/client";
 
 interface FreelancerRow {
@@ -105,6 +107,15 @@ export default function AdminFreelancersPage() {
         (f.department ?? "").toLowerCase().includes(q),
     );
   }, [freelancers, search]);
+
+  const {
+    paginatedItems: paginatedFreelancers,
+    page: freelancerPage,
+    setPage: setFreelancerPage,
+    totalPages: freelancerTotalPages,
+    totalItems: freelancerTotalItems,
+    pageSize: freelancerPageSize,
+  } = usePagination(filtered, 10);
 
   const activeCount = freelancers.filter((f) => (f.status ?? "active") === "active").length;
 
@@ -243,7 +254,7 @@ export default function AdminFreelancersPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e8edf5]">
-                  {filtered.map((row) => (
+                  {paginatedFreelancers.map((row) => (
                     <tr key={row.id}>
                       <td className="px-4 py-3">
                         <p className="font-medium text-slate-900">{row.full_name}</p>
@@ -282,6 +293,16 @@ export default function AdminFreelancersPage() {
               </table>
             </div>
           )}
+          {!loading && filtered.length > 0 ? (
+            <TablePagination
+              page={freelancerPage}
+              totalPages={freelancerTotalPages}
+              totalItems={freelancerTotalItems}
+              pageSize={freelancerPageSize}
+              onPageChange={setFreelancerPage}
+              className="mt-2"
+            />
+          ) : null}
         </CardContent>
       </Card>
 

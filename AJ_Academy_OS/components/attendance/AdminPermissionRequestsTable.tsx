@@ -8,6 +8,8 @@ import {
   handlePermissionAction,
 } from "@/app/admin/attendance/actions";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
+import { TablePagination } from "@/components/ui/TablePagination";
+import { usePagination } from "@/lib/usePagination";
 export type AdminPermissionTableRow = {
   id: string;
   employeeName: string;
@@ -62,6 +64,14 @@ export function AdminPermissionRequestsTable({
   const [error, setError] = useState<string | null>(null);
   const allIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const allSelected = rows.length > 0 && selected.size === rows.length;
+  const {
+    paginatedItems: paginatedRows,
+    page,
+    setPage,
+    totalPages,
+    totalItems,
+    pageSize,
+  } = usePagination(rows, 10);
 
   const toggleAll = () => {
     setSelected(allSelected ? new Set() : new Set(allIds));
@@ -169,7 +179,7 @@ export function AdminPermissionRequestsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-[#e8edf5] text-slate-700">
-            {rows.map((row) => (
+            {paginatedRows.map((row) => (
               <tr key={row.id}>
                 <td className="px-3 py-3">
                   <input
@@ -258,6 +268,14 @@ export function AdminPermissionRequestsTable({
           </tbody>
         </table>
       </div>
+      <TablePagination
+        page={page}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        className="px-2"
+      />
     </section>
   );
 }

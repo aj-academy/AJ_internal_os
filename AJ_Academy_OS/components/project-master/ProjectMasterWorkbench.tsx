@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
+import { TablePagination } from "@/components/ui/TablePagination";
+import { usePagination } from "@/lib/usePagination";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { PROJECT_TAB_IDS, TAB_LABELS } from "@/components/project-master/projectConfig";
@@ -755,6 +757,15 @@ function ProjectsDataTable({
   onDelete: (id: string) => void;
 }) {
   const today = todayISO();
+  const {
+    paginatedItems: paginatedRows,
+    page,
+    setPage,
+    totalPages,
+    totalItems,
+    pageSize,
+  } = usePagination(rows, 10);
+
   return (
     <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
       <table className="w-full min-w-[1100px] text-sm">
@@ -819,7 +830,7 @@ function ProjectsDataTable({
                   </td>
                 </tr>
               ))
-            : rows.map((p) => {
+            : paginatedRows.map((p) => {
                 const delayed = isDelayedProject(p, today);
                 const urgent = (p.priority || "") === "Urgent";
                 const tc = teamMembers.filter((t) => t.project_id === p.id).length;
@@ -867,6 +878,14 @@ function ProjectsDataTable({
           ) : null}
         </tbody>
       </table>
+      <TablePagination
+        page={page}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        className="border-t border-[#e8edf5] px-4"
+      />
     </div>
   );
 }

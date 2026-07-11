@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
+import { TablePagination } from "@/components/ui/TablePagination";
+import { usePagination } from "@/lib/usePagination";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { AdminEmployeeProfileView } from "@/components/admin/AdminEmployeeProfileView";
@@ -163,6 +165,15 @@ export default function EmployeeMasterPage() {
       return matchesSearch && matchesStatus && matchesRole;
     });
   }, [employees, search, statusFilter, roleTab]);
+
+  const {
+    paginatedItems: paginatedEmployees,
+    page: directoryPage,
+    setPage: setDirectoryPage,
+    totalPages: directoryTotalPages,
+    totalItems: directoryTotalItems,
+    pageSize: directoryPageSize,
+  } = usePagination(filteredEmployees, 10);
 
   const onPickEmployee = (employee: EmployeeRow, selectedMode: "view" | "edit") => {
     if (selectedMode === "view") {
@@ -344,7 +355,7 @@ export default function EmployeeMasterPage() {
               placeholder="Search by name, email, or profile ID"
               showClear={filtersActive}
               onClear={clearFilters}
-              hint={`Showing ${filteredEmployees.length} of ${employees.length} user(s)`}
+              hint={`Showing ${paginatedEmployees.length} of ${filteredEmployees.length} user(s)`}
             />
             <div className="mt-3 flex flex-wrap gap-2">
               {(
@@ -402,16 +413,16 @@ export default function EmployeeMasterPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#e8edf5] text-slate-700">
-                    {filteredEmployees.map((employee) => (
+                    {paginatedEmployees.map((employee) => (
                       <tr key={employee.id}>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-2">
                           <p className="font-medium text-slate-900">{employee.full_name}</p>
                           <p className="text-xs text-slate-500">{employee.email}</p>
                         </td>
-                        <td className="px-4 py-3 capitalize">{employee.role.replace("_", " ")}</td>
-                        <td className="px-4 py-3">{employee.department ?? "—"}</td>
-                        <td className="px-4 py-3">{employee.course ?? "—"}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-2 capitalize">{employee.role.replace("_", " ")}</td>
+                        <td className="px-4 py-2">{employee.department ?? "—"}</td>
+                        <td className="px-4 py-2">{employee.course ?? "—"}</td>
+                        <td className="px-4 py-2">
                           <span
                             className={[
                               "rounded-full px-2.5 py-1 text-xs font-semibold",
@@ -423,7 +434,7 @@ export default function EmployeeMasterPage() {
                             {employee.status ?? "active"}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-2">
                           <div className="flex gap-2">
                             <Button
                               size="sm"
@@ -468,6 +479,16 @@ export default function EmployeeMasterPage() {
                 </table>
               </div>
             )}
+            {!loadingList && filteredEmployees.length > 0 ? (
+              <TablePagination
+                page={directoryPage}
+                totalPages={directoryTotalPages}
+                totalItems={directoryTotalItems}
+                pageSize={directoryPageSize}
+                onPageChange={setDirectoryPage}
+                className="mt-2"
+              />
+            ) : null}
           </CardContent>
         </Card>
 

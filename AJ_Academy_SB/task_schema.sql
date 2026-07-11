@@ -243,34 +243,19 @@ returns table (
   department text,
   role text
 )
-language plpgsql
+language sql
 stable
 security definer
 set search_path = public
+set row_security = off
 as $$
-begin
-  if not exists (
-    select 1
-    from public.profiles p
-    where p.id = auth.uid()
-      and lower(coalesce(p.role, '')) in ('admin', 'super_admin', 'manager')
-  ) then
-    return;
-  end if;
-
-  return query
-  select
-    p.id,
-    p.full_name,
-    p.email,
-    p.department,
-    p.role
+  select p.id, p.full_name, p.email, p.department, p.role
   from public.profiles p
-  where
-    lower(coalesce(p.role, '')) in ('employee', 'manager', 'admin', 'super_admin')
-    and (p.status is null or lower(trim(p.status)) = 'active')
-  order by p.full_name nulls last, p.email nulls last;
-end;
+  where lower(coalesce(p.status, 'active')) = 'active'
+    and lower(coalesce(p.role, '')) in (
+      'student', 'freelancer', 'mentor', 'employee', 'admin', 'super_admin', 'manager'
+    )
+  order by p.role nulls last, p.full_name nulls last;
 $$;
 
 grant execute on function public.get_task_assignees () to authenticated;

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TablePagination } from "@/components/ui/TablePagination";
+import { usePagination } from "@/lib/usePagination";
 import { createClient } from "@/lib/supabase/client";
 
 type CounsellingRow = {
@@ -178,6 +180,15 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const {
+    paginatedItems: paginatedSessions,
+    page: sessionPage,
+    setPage: setSessionPage,
+    totalPages: sessionTotalPages,
+    totalItems: sessionTotalItems,
+    pageSize: sessionPageSize,
+  } = usePagination(rows, 10);
 
   const findProfileIdByText = (list: ProfileOpt[], query: string) => {
     const needle = query.trim().toLowerCase();
@@ -479,7 +490,7 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#f0e8da]">
-              {rows.map((row) => (
+              {paginatedSessions.map((row) => (
                 <tr key={row.id}>
                   <td className="px-4 py-3">{row.student_display_name || row.student_name || "—"}</td>
                   <td className="px-4 py-3 text-xs">{row.student_email || "—"}</td>
@@ -515,6 +526,16 @@ export function CounsellingPanel({ mode }: CounsellingPanelProps) {
           </table>
         )}
       </div>
+      {!loading && rows.length > 0 ? (
+        <TablePagination
+          page={sessionPage}
+          totalPages={sessionTotalPages}
+          totalItems={sessionTotalItems}
+          pageSize={sessionPageSize}
+          onPageChange={setSessionPage}
+          className="mt-2"
+        />
+      ) : null}
     </section>
   );
 }
