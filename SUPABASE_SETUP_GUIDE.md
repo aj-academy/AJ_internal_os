@@ -135,6 +135,15 @@ If an employee sees **Forbidden** when saving a student, run (in order):
 
 Then hard-refresh the app and try **Add Student** again.
 
+### College Visits
+
+Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / profiles). Adds:
+
+- `/admin/college-visits` — full table, assign owners, bulk assign/delete, activity timeline
+- `/employee/college-visits` — update visits on-site; default list shows **My assigned colleges** (switch to All colleges)
+
+API (staff session): `GET/POST /api/college-visits`, `PATCH/DELETE /api/college-visits/[id]`, `GET/POST /api/college-visits/[id]/activities`.
+
 Task assignment from `/employee/my-tasks` opens **Student Master** to pick leads (same flow as admin).
 
 ### Student portal (same modules as employee)

@@ -7,6 +7,7 @@ const adminSidebarItems = [
   { label: "Counselling", href: "/admin/counselling" },
   { label: "User Master", href: "/admin/employee-master" },
   { label: "Student Master", href: "/admin/student-master" },
+  { label: "College Visits", href: "/admin/college-visits" },
   { label: "Project Master", href: "/admin/project-master" },
   { label: "Task Assignment", href: "/admin/task-assignment" },
   { label: "Freelance Management", href: "/admin/freelancers" },
