@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { saveTaskCollegeSelection } from "@/lib/taskLeadPickStorage";
 import { Button } from "@/components/ui/button";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
@@ -40,6 +42,11 @@ interface ProfileMini {
 
 export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: AppRole; fullAccess?: boolean }) {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pickForTask = searchParams.get("pickForTask") === "1";
+  const defaultReturnTo = role === "admin" ? "/admin/task-assignment" : "/employee/my-tasks";
+  const returnTo = searchParams.get("returnTo") || defaultReturnTo;
   const isEmployeePortal = role === "employee";
   const isAdmin = role === "admin" || (isEmployeePortal && fullAccess);
   const isDbAdmin = role === "admin";
@@ -67,6 +74,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [form, setForm] = useState<CollegeVisitFormValue>(() => emptyCollegeVisitForm());
   const [viewVisit, setViewVisit] = useState<CollegeVisitRow | null>(null);
   const [bulkAssignTo, setBulkAssignTo] = useState("");
+  const [pickedCollegeIds, setPickedCollegeIds] = useState<Set<string>>(new Set());
 
   const ownerOptions = useMemo(
     () =>
@@ -86,7 +94,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   }, [employees]);
 
   const loadVisits = useCallback(async () => {
-    const res = await fetch(`/api/college-visits${listScope === "mine" && isEmployeePortal ? "?mine=1" : ""}`);
+    const useMine = listScope === "mine" && isEmployeePortal && !pickForTask;
+    const res = await fetch(`/api/college-visits${useMine ? "?mine=1" : ""}`);
     const json = (await res.json()) as { visits?: CollegeVisitRow[]; error?: string };
     if (!res.ok) {
       const msg = json.error ?? "Could not load college visits.";
@@ -99,7 +108,31 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     }
     setSchemaMissing(false);
     setVisits(json.visits ?? []);
-  }, [isEmployeePortal, listScope]);
+  }, [isEmployeePortal, listScope, pickForTask]);
+
+  const togglePickCollege = (id: string) => {
+    setPickedCollegeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const confirmCollegePick = () => {
+    const labels = visits.filter((v) => pickedCollegeIds.has(v.id)).map((v) => v.college_name);
+    const pathParts = ["College Visits"];
+    if (listScope === "mine") pathParts.push("My assigned");
+    if (fltVisitStatus) pathParts.push(`Visit=${fltVisitStatus}`);
+    if (fltOwner) pathParts.push(`Owner filter`);
+    if (searchText.trim()) pathParts.push(`Search="${searchText.trim()}"`);
+    saveTaskCollegeSelection({
+      ids: [...pickedCollegeIds],
+      labels,
+      filterPath: pathParts.join(" → "),
+    });
+    router.push(decodeURIComponent(returnTo));
+  };
 
   const reload = useCallback(async () => {
     if (!currentUserId) return;
@@ -320,7 +353,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {isEmployeePortal ? (
+          {isEmployeePortal && !pickForTask ? (
             <select
               className="h-9 rounded-full border border-[#e8dcc8] bg-white px-3 text-sm"
               value={listScope}
@@ -333,7 +366,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
           <Button variant="outline" className="h-9 rounded-full border-[#e8dcc8]" disabled={loading} onClick={() => void reload()}>
             Refresh
           </Button>
-          {isAdmin ? (
+          {isAdmin && !pickForTask ? (
             <Button className="h-9 rounded-full bg-[#c9a227] px-5 text-white hover:bg-[#b8921f]" onClick={openCreate}>
               + Add College
             </Button>
@@ -350,6 +383,28 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-800">{error}</div> : null}
       {success ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">{success}</div> : null}
 
+      {pickForTask ? (
+        <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#c9a227] bg-[#fef3c7] px-3 py-2">
+          <div>
+            <p className="text-sm font-semibold text-[#92400e]">Selecting colleges for task assignment</p>
+            <p className="text-xs text-[#78350f]">{pickedCollegeIds.size} selected · use filters and check rows below</p>
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => router.push(decodeURIComponent(returnTo))}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]"
+              disabled={!pickedCollegeIds.size}
+              onClick={confirmCollegePick}
+            >
+              Confirm {pickedCollegeIds.size ? `${pickedCollegeIds.size} college(s)` : "selection"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="stat-cards-grid">
         <LeadSummaryCard title="Total colleges" value={overview.total} loading={loading} />
         <LeadSummaryCard title="Follow-up due" value={overview.due} loading={loading} accent="rose" />
@@ -360,7 +415,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
       <TableSearchBar value={searchText} onChange={setSearchText} placeholder="Search college, location, contact, email…" />
 
-      {isDbAdmin && visitBulk.selectedCount > 0 ? (
+      {isDbAdmin && !pickForTask && visitBulk.selectedCount > 0 ? (
         <BulkSelectionBar selectedCount={visitBulk.selectedCount} onClear={visitBulk.clearSelection}>
           <select
             className="h-8 rounded-lg border border-[#dbe6f3] bg-white px-2 text-xs"
@@ -385,7 +440,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         <table className="min-w-[2200px] w-full border-collapse">
           <thead className="bg-[#f8fbff]">
             <tr>
-              {isDbAdmin ? (
+              {pickForTask ? <TableHeaderCell label="Pick" className={thClass} /> : null}
+              {isDbAdmin && !pickForTask ? (
                 <th className={thClass}>
                   <TableBulkCheckbox
                     checked={visitBulk.allSelected}
@@ -417,21 +473,30 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
               <TableHeaderCell label="Lead Score" className={thClass} />
               <TableHeaderFilter label="Final Status" value={fltFinalStatus} options={FINAL_STATUSES.map((s) => ({ value: s, label: s }))} onChange={setFltFinalStatus} className={thClass} />
               <TableHeaderCell label="Source" className={thClass} />
-              <TableHeaderCell label="Actions" className={thClass} />
+              {!pickForTask ? <TableHeaderCell label="Actions" className={thClass} /> : null}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={isDbAdmin ? 24 : 23} className="px-4 py-8 text-center text-sm text-[#64748b]">Loading…</td></tr>
+              <tr><td colSpan={pickForTask ? (isDbAdmin ? 24 : 23) : isDbAdmin ? 24 : 23} className="px-4 py-8 text-center text-sm text-[#64748b]">Loading…</td></tr>
             ) : pageRows.length === 0 ? (
-              <tr><td colSpan={isDbAdmin ? 24 : 23} className="px-4 py-8 text-center text-sm text-[#64748b]">No college visits found.</td></tr>
+              <tr><td colSpan={pickForTask ? (isDbAdmin ? 24 : 23) : isDbAdmin ? 24 : 23} className="px-4 py-8 text-center text-sm text-[#64748b]">No college visits found.</td></tr>
             ) : (
               pageRows.map((row, idx) => {
                 const days = daysSince(row.last_follow_up_date);
                 const due = isFollowUpDue(row);
                 return (
                   <tr key={row.id} className="border-t border-[#eef2f7] hover:bg-[#fafcff]">
-                    {isDbAdmin ? (
+                    {pickForTask ? (
+                      <td className={tdClass}>
+                        <TableBulkCheckbox
+                          checked={pickedCollegeIds.has(row.id)}
+                          onChange={() => togglePickCollege(row.id)}
+                          ariaLabel={`Pick ${row.college_name}`}
+                        />
+                      </td>
+                    ) : null}
+                    {isDbAdmin && !pickForTask ? (
                       <td className={tdClass}>
                         <TableBulkCheckbox
                           checked={visitBulk.isSelected(row.id)}
@@ -466,14 +531,16 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
                     <td className={tdClass}>{row.lead_score}</td>
                     <td className={tdClass}>{row.final_status}</td>
                     <td className={tdClass}>{row.source_reference || "—"}</td>
-                    <td className={tdClass}>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => setViewVisit(row)}>Activity</Button>
-                        {isAdmin ? (
-                          <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => openEdit(row)}>Edit</Button>
-                        ) : null}
-                      </div>
-                    </td>
+                    {!pickForTask ? (
+                      <td className={tdClass}>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => setViewVisit(row)}>Activity</Button>
+                          {isAdmin ? (
+                            <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => openEdit(row)}>Edit</Button>
+                          ) : null}
+                        </div>
+                      </td>
+                    ) : null}
                   </tr>
                 );
               })

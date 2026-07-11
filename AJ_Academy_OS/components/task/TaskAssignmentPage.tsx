@@ -18,13 +18,15 @@ import { useRowSelection } from "@/lib/useRowSelection";
 import { assignerDisplayFromProfile } from "@/lib/profileDisplayName";
 import { parseTaskAttachments, uploadTaskAttachments, type TaskAttachment } from "@/lib/taskAttachments";
 import { fetchTaskActivities, logTaskActivity, parseClientIds, type TaskActivityRow } from "@/lib/taskActivities";
-import { displayLeadName } from "@/components/employee/leads/employeeLeadConfig";
+import { mapClientRowToTaskLinkedLead } from "@/lib/taskLeadOutreach";
+import { TaskLeadOutreachBlock } from "@/components/task/TaskLeadOutreachBlock";
 import {
   consumeTaskAssignDraft,
+  consumeTaskCollegeSelection,
   consumeTaskLeadSelection,
   saveTaskAssignDraft,
 } from "@/lib/taskLeadPickStorage";
-import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
+import type { TaskAssignmentType, TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 
 type AppRole = "admin" | "employee" | "student" | "freelancer" | "mentor";
 
@@ -63,6 +65,17 @@ function todayDateKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function taskLinkActivityNote(
+  assignmentType: TaskAssignmentType | null | undefined,
+  leadCount: number,
+  collegeCount: number,
+) {
+  if (assignmentType === "lead") return `${leadCount} lead(s)`;
+  if (assignmentType === "college") return `${collegeCount} college(s)`;
+  if (assignmentType === "project") return "project link";
+  return "no link";
+}
+
 function isMissingTasksTableMessage(message: string) {
   const m = message.toLowerCase();
   return (
@@ -76,6 +89,7 @@ function isMissingTasksTableMessage(message: string) {
         m.includes("completion_summary") ||
         m.includes("completion_attachment_urls") ||
         m.includes("client_ids") ||
+        m.includes("college_visit_ids") ||
         m.includes("assignment_type")))
   );
 }
@@ -90,9 +104,10 @@ function toReadableTaskError(input: unknown) {
     raw.toLowerCase().includes("get_task_assignees") ||
     raw.toLowerCase().includes("tasks_employee_may_assign_to") ||
     raw.toLowerCase().includes("client_ids") ||
+    raw.toLowerCase().includes("college_visit_ids") ||
     raw.toLowerCase().includes("assignment_type")
   ) {
-    return "DATABASE_SETUP: Re-run `AJ_Academy_SB/task_schema.sql` and `AJ_Academy_SB/tasks_assignment_link_patch.sql` in Supabase, then refresh.";
+    return "DATABASE_SETUP: Re-run `AJ_Academy_SB/tasks_assignment_link_patch.sql`, `AJ_Academy_SB/tasks_college_link_patch.sql`, and `AJ_Academy_SB/tasks_employee_rls_fix.sql` in Supabase, then refresh.";
   }
   return raw;
 }
@@ -142,6 +157,9 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [selectedLeadLabels, setSelectedLeadLabels] = useState<string[]>([]);
   const [leadSelectionPath, setLeadSelectionPath] = useState("");
+  const [selectedCollegeVisitIds, setSelectedCollegeVisitIds] = useState<string[]>([]);
+  const [selectedCollegeLabels, setSelectedCollegeLabels] = useState<string[]>([]);
+  const [collegeSelectionPath, setCollegeSelectionPath] = useState("");
 
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "">("");
@@ -346,7 +364,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       let query = supabase
         .from("tasks")
         .select(
-          "id,title,description,assigned_to,assignee_name,assignee_email,assigned_by,completion_summary,completion_attachment_urls,priority,status,start_date,due_date,progress,assignment_type,project_id,client_ids,attachment_urls,created_at,updated_at",
+          "id,title,description,assigned_to,assignee_name,assignee_email,assigned_by,completion_summary,completion_attachment_urls,priority,status,start_date,due_date,progress,assignment_type,project_id,client_ids,college_visit_ids,attachment_urls,created_at,updated_at",
         );
 
       if (filterTasksByAssigner) query = query.eq("assigned_by", userId);
@@ -385,9 +403,10 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         start_date: string | null;
         due_date: string | null;
         progress: number;
-        assignment_type?: "lead" | "project" | null;
+        assignment_type?: "lead" | "project" | "college" | null;
         project_id?: string | null;
         client_ids?: unknown;
+        college_visit_ids?: unknown;
         attachment_urls?: unknown;
         created_at: string;
         updated_at: string;
@@ -431,6 +450,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       const mapped: TaskRecord[] = rawRows.map((row) => ({
         ...row,
         client_ids: parseClientIds(row.client_ids),
+        college_visit_ids: parseClientIds(row.college_visit_ids),
         attachment_urls: parseTaskAttachments(row.attachment_urls),
         completion_attachment_urls: parseTaskAttachments(row.completion_attachment_urls),
         assigner_display_name: row.assigned_by
@@ -442,8 +462,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
 
       const projectIds = [...new Set(mapped.map((t) => t.project_id).filter(Boolean))] as string[];
       const clientIds = [...new Set(mapped.flatMap((t) => t.client_ids ?? []))];
+      const collegeIds = [...new Set(mapped.flatMap((t) => t.college_visit_ids ?? []))];
       let projectLabelMap: Record<string, string> = {};
       let clientLabelMap: Record<string, string> = {};
+      let collegeLabelMap: Record<string, string> = {};
+      let clientDetailMap: Record<string, ReturnType<typeof mapClientRowToTaskLinkedLead>> = {};
       if (projectIds.length) {
         const { data: projects } = await supabase
           .from("projects")
@@ -459,12 +482,31 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       if (clientIds.length) {
         const { data: clients } = await supabase
           .from("clients")
-          .select("id,name,lead_name,company_name")
+          .select("id,name,lead_name,company_name,phone,whatsapp,email,phone_called,whatsapp_sent,email_sent")
           .in("id", clientIds);
-        clientLabelMap = Object.fromEntries(
-          (clients ?? []).map((c: { id: string; name: string | null; lead_name: string | null; company_name: string | null }) => [
+        for (const c of clients ?? []) {
+          const row = c as {
+            id: string;
+            name: string | null;
+            lead_name: string | null;
+            company_name: string | null;
+            phone: string | null;
+            whatsapp: string | null;
+            email: string | null;
+            phone_called: boolean | null;
+            whatsapp_sent: boolean | null;
+            email_sent: boolean | null;
+          };
+          clientDetailMap[row.id] = mapClientRowToTaskLinkedLead(row);
+          clientLabelMap[row.id] = clientDetailMap[row.id].name;
+        }
+      }
+      if (collegeIds.length) {
+        const { data: colleges } = await supabase.from("college_visits").select("id,college_name,location").in("id", collegeIds);
+        collegeLabelMap = Object.fromEntries(
+          (colleges ?? []).map((c: { id: string; college_name: string | null; location: string | null }) => [
             c.id,
-            displayLeadName(c),
+            [c.college_name, c.location].filter(Boolean).join(" · ") || c.id.slice(0, 8),
           ]),
         );
       }
@@ -474,6 +516,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           ...task,
           project_label: task.project_id ? projectLabelMap[task.project_id] ?? null : null,
           linked_lead_labels: (task.client_ids ?? []).map((id) => clientLabelMap[id] ?? id.slice(0, 8)),
+          linked_leads:
+            task.assignment_type === "lead"
+              ? (task.client_ids ?? []).map((id) => clientDetailMap[id]).filter(Boolean)
+              : [],
+          linked_college_labels: (task.college_visit_ids ?? []).map((id) => collegeLabelMap[id] ?? id.slice(0, 8)),
         })),
       );
     },
@@ -753,6 +800,13 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         ? `Task Assignment → Assignee → Leads → ${task.linked_lead_labels.length} selected`
         : "",
     );
+    setSelectedCollegeVisitIds(task.college_visit_ids ?? []);
+    setSelectedCollegeLabels(task.linked_college_labels ?? []);
+    setCollegeSelectionPath(
+      task.assignment_type === "college" && task.linked_college_labels?.length
+        ? `Task Assignment → Assignee → Colleges → ${task.linked_college_labels.length} selected`
+        : "",
+    );
     setPendingAttachmentFiles([]);
     setExistingAttachments(task.attachment_urls ?? []);
     setPanelOpen(true);
@@ -780,7 +834,21 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       setSelectedClientIds(selection.ids);
       setSelectedLeadLabels(selection.labels);
       setLeadSelectionPath(selection.filterPath);
+      setSelectedCollegeVisitIds([]);
+      setSelectedCollegeLabels([]);
+      setCollegeSelectionPath("");
       setForm((prev) => ({ ...prev, assignment_type: "lead" }));
+      setPanelOpen(true);
+    }
+    const collegeSelection = consumeTaskCollegeSelection();
+    if (collegeSelection) {
+      setSelectedCollegeVisitIds(collegeSelection.ids);
+      setSelectedCollegeLabels(collegeSelection.labels);
+      setCollegeSelectionPath(collegeSelection.filterPath);
+      setSelectedClientIds([]);
+      setSelectedLeadLabels([]);
+      setLeadSelectionPath("");
+      setForm((prev) => ({ ...prev, assignment_type: "college" }));
       setPanelOpen(true);
     }
   }, []);
@@ -810,10 +878,38 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     setError("Lead selection is available from Student Master.");
   };
 
+  const handleOpenCollegePicker = () => {
+    saveTaskAssignDraft({
+      title: form.title,
+      description: form.description,
+      assigned_to: form.assigned_to,
+      assignment_type: form.assignment_type,
+      project_id: form.project_id,
+      priority: form.priority,
+      status: form.status,
+      start_date: form.start_date,
+      due_date: form.due_date,
+      progress: form.progress,
+    });
+    const returnTo = encodeURIComponent(pathname);
+    if (isAdmin) {
+      router.push(`/admin/college-visits?pickForTask=1&returnTo=${returnTo}`);
+      return;
+    }
+    if (isEmployee) {
+      router.push(`/employee/college-visits?pickForTask=1&returnTo=${returnTo}`);
+      return;
+    }
+    setError("College selection is available from College Visits.");
+  };
+
   const validateAssignmentLink = (): string | null => {
-    if (!form.assignment_type) return "Choose whether this task is linked to Leads or a Project.";
+    if (!form.assignment_type) return "Choose whether this task is linked to Leads, Colleges, or a Project.";
     if (form.assignment_type === "lead" && !selectedClientIds.length) {
-      return "Select at least one lead from Student Master (or Lead Management).";
+      return "Select at least one lead from Student Master.";
+    }
+    if (form.assignment_type === "college" && !selectedCollegeVisitIds.length) {
+      return "Select at least one college from College Visits.";
     }
     if (form.assignment_type === "project" && !form.project_id.trim()) {
       return "Select a project for this task.";
@@ -827,6 +923,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         assignment_type: "project" as const,
         project_id: form.project_id.trim() || null,
         client_ids: [] as string[],
+        college_visit_ids: [] as string[],
       };
     }
     if (form.assignment_type === "lead") {
@@ -834,12 +931,22 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         assignment_type: "lead" as const,
         project_id: null as string | null,
         client_ids: selectedClientIds,
+        college_visit_ids: [] as string[],
+      };
+    }
+    if (form.assignment_type === "college") {
+      return {
+        assignment_type: "college" as const,
+        project_id: null as string | null,
+        client_ids: [] as string[],
+        college_visit_ids: selectedCollegeVisitIds,
       };
     }
     return {
       assignment_type: null as null,
       project_id: null as string | null,
       client_ids: [] as string[],
+      college_visit_ids: [] as string[],
     };
   };
 
@@ -899,8 +1006,13 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             taskId: inserted.id,
             actorId: currentUserId,
             activityType: "task_created",
-            notes: `Task assigned with ${linkPayload.assignment_type === "lead" ? `${selectedClientIds.length} lead(s)` : "project link"}.`,
-            metadata: { assignment_type: linkPayload.assignment_type, client_ids: linkPayload.client_ids, project_id: linkPayload.project_id },
+            notes: `Task assigned with ${taskLinkActivityNote(linkPayload.assignment_type, selectedClientIds.length, selectedCollegeVisitIds.length)}.`,
+            metadata: {
+              assignment_type: linkPayload.assignment_type,
+              client_ids: linkPayload.client_ids,
+              college_visit_ids: linkPayload.college_visit_ids,
+              project_id: linkPayload.project_id,
+            },
           });
         }
         setSuccess("Task assigned.");
@@ -909,6 +1021,9 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         setSelectedClientIds([]);
         setSelectedLeadLabels([]);
         setLeadSelectionPath("");
+        setSelectedCollegeVisitIds([]);
+        setSelectedCollegeLabels([]);
+        setCollegeSelectionPath("");
         setPendingAttachmentFiles([]);
         await reload();
         if (inserted?.id) void notifyAssigneeInApp(inserted.id);
@@ -983,6 +1098,9 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         setSelectedClientIds([]);
         setSelectedLeadLabels([]);
         setLeadSelectionPath("");
+        setSelectedCollegeVisitIds([]);
+        setSelectedCollegeLabels([]);
+        setCollegeSelectionPath("");
         setPendingAttachmentFiles([]);
         await reload();
         if (priorAssignee !== basePayload.assigned_to) {
@@ -1010,8 +1128,13 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             taskId: inserted.id,
             actorId: currentUserId,
             activityType: "task_created",
-            notes: `Task assigned with ${linkPayload.assignment_type === "lead" ? `${selectedClientIds.length} lead(s)` : "project link"}.`,
-            metadata: { assignment_type: linkPayload.assignment_type, client_ids: linkPayload.client_ids, project_id: linkPayload.project_id },
+            notes: `Task assigned with ${taskLinkActivityNote(linkPayload.assignment_type, selectedClientIds.length, selectedCollegeVisitIds.length)}.`,
+            metadata: {
+              assignment_type: linkPayload.assignment_type,
+              client_ids: linkPayload.client_ids,
+              college_visit_ids: linkPayload.college_visit_ids,
+              project_id: linkPayload.project_id,
+            },
           });
         }
         setSuccess("Task assigned successfully.");
@@ -1021,6 +1144,9 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         setSelectedClientIds([]);
         setSelectedLeadLabels([]);
         setLeadSelectionPath("");
+        setSelectedCollegeVisitIds([]);
+        setSelectedCollegeLabels([]);
+        setCollegeSelectionPath("");
         setPendingAttachmentFiles([]);
         await reload();
         if (inserted?.id) void notifyAssigneeInApp(inserted.id);
@@ -1313,6 +1439,12 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           onRequestCompleteTask={
             !canManageTasks && !employeeDelegatedView ? (task) => setCompleteTask(task) : undefined
           }
+          showLeadOutreach
+          currentUserId={currentUserId}
+          supabase={supabase}
+          onLeadOutreachUpdated={() => void reload()}
+          onLeadOutreachError={setError}
+          onLeadOutreachSuccess={setSuccess}
           pagination={{
             page: taskPage,
             totalPages: taskTotalPages,
@@ -1343,7 +1475,16 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       />
 
       {viewTask ? (
-        <TaskViewPanel task={viewTask} employeeNameMap={employeeNameMap} supabase={supabase} onClose={() => setViewTask(null)} />
+        <TaskViewPanel
+          task={viewTask}
+          employeeNameMap={employeeNameMap}
+          supabase={supabase}
+          currentUserId={currentUserId}
+          onClose={() => setViewTask(null)}
+          onLeadOutreachUpdated={() => void reload()}
+          onError={setError}
+          onSuccess={setSuccess}
+        />
       ) : null}
 
       {panelOpen ? (
@@ -1385,6 +1526,17 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                 leadSelectionPath={leadSelectionPath}
                 onOpenLeadPicker={handleOpenLeadPicker}
                 leadPickerLabel="Open Student Master to select leads"
+                selectedCollegeCount={selectedCollegeVisitIds.length}
+                selectedCollegePreview={
+                  selectedCollegeLabels.length
+                    ? selectedCollegeLabels.length <= 2
+                      ? selectedCollegeLabels.join(", ")
+                      : `${selectedCollegeLabels.slice(0, 2).join(", ")} +${selectedCollegeLabels.length - 2} more`
+                    : ""
+                }
+                collegeSelectionPath={collegeSelectionPath}
+                onOpenCollegePicker={handleOpenCollegePicker}
+                collegePickerLabel="Open College Visits to select colleges"
                 assigneeLockedToSelf={false}
                 assigneeHelperText={
                   isEmployee
@@ -1399,6 +1551,9 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                     setSelectedClientIds([]);
                     setSelectedLeadLabels([]);
                     setLeadSelectionPath("");
+                    setSelectedCollegeVisitIds([]);
+                    setSelectedCollegeLabels([]);
+                    setCollegeSelectionPath("");
                   }
                   setForm(next);
                 }}
@@ -1427,12 +1582,20 @@ function TaskViewPanel({
   task,
   employeeNameMap,
   supabase,
+  currentUserId,
   onClose,
+  onLeadOutreachUpdated,
+  onError,
+  onSuccess,
 }: {
   task: TaskRecord;
   employeeNameMap: Record<string, string>;
   supabase: ReturnType<typeof createClient>;
+  currentUserId: string;
   onClose: () => void;
+  onLeadOutreachUpdated?: () => void;
+  onError?: (msg: string) => void;
+  onSuccess?: (msg: string) => void;
 }) {
   const [activities, setActivities] = useState<TaskActivityRow[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(true);
@@ -1513,8 +1676,31 @@ function TaskViewPanel({
                 {task.assignment_type === "project" && task.project_label ? (
                   <span>Project · {task.project_label}</span>
                 ) : task.assignment_type === "lead" && task.linked_lead_labels?.length ? (
+                  <div className="mt-2 space-y-2">
+                    {task.linked_leads?.length && currentUserId ? (
+                      <TaskLeadOutreachBlock
+                        taskId={task.id}
+                        leads={task.linked_leads}
+                        supabase={supabase}
+                        userId={currentUserId}
+                        onUpdated={() => {
+                          onLeadOutreachUpdated?.();
+                          void fetchTaskActivities(supabase, task.id).then(setActivities);
+                        }}
+                        onError={onError}
+                        onSuccess={onSuccess}
+                      />
+                    ) : (
+                      <ul className="mt-1 list-inside list-disc space-y-0.5">
+                        {task.linked_lead_labels.map((label) => (
+                          <li key={label}>{label}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : task.assignment_type === "college" && task.linked_college_labels?.length ? (
                   <ul className="mt-1 list-inside list-disc space-y-0.5">
-                    {task.linked_lead_labels.map((label) => (
+                    {task.linked_college_labels.map((label) => (
                       <li key={label}>{label}</li>
                     ))}
                   </ul>

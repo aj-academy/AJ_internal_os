@@ -5,6 +5,8 @@ import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderF
 import { ProgressBar } from "@/components/task/ProgressBar";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
+import { TaskLeadOutreachBlock } from "@/components/task/TaskLeadOutreachBlock";
+import type { createClient } from "@/lib/supabase/client";
 import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 
 interface TaskTableProps {
@@ -37,6 +39,12 @@ interface TaskTableProps {
   onEmployeeProgressChange: (taskId: string, status: TaskStatus, progress: number) => void;
   /** Assignee opens completion dialog (summary + notify assigner). */
   onRequestCompleteTask?: (task: TaskRecord) => void;
+  showLeadOutreach?: boolean;
+  currentUserId?: string;
+  supabase?: ReturnType<typeof createClient>;
+  onLeadOutreachUpdated?: () => void;
+  onLeadOutreachError?: (message: string) => void;
+  onLeadOutreachSuccess?: (message: string) => void;
   pagination?: {
     page: number;
     totalPages: number;
@@ -96,6 +104,12 @@ export function TaskTable({
   onEmployeeStatusChange,
   onEmployeeProgressChange,
   onRequestCompleteTask,
+  showLeadOutreach = false,
+  currentUserId = "",
+  supabase,
+  onLeadOutreachUpdated,
+  onLeadOutreachError,
+  onLeadOutreachSuccess,
   pagination,
   selection,
 }: TaskTableProps) {
@@ -125,6 +139,9 @@ export function TaskTable({
               ) : null}
               <TableHeaderCell label="Task Title" className="px-4 py-3 text-center" />
               <TableHeaderCell label="Linked To" className="px-4 py-3 text-center" />
+              {showLeadOutreach ? (
+                <TableHeaderCell label="Lead Contact" className="px-4 py-3 text-center" />
+              ) : null}
               {showAssignedTo ? (
                 <TableHeaderFilter
                   label="Assigned To"
@@ -222,10 +239,34 @@ export function TaskTable({
                               ? task.linked_lead_labels[0]
                               : `${task.linked_lead_labels.length} leads`}
                           </span>
+                        ) : task.assignment_type === "college" && task.linked_college_labels?.length ? (
+                          <span title={task.linked_college_labels.join(", ")}>
+                            {task.linked_college_labels.length === 1
+                              ? task.linked_college_labels[0]
+                              : `${task.linked_college_labels.length} colleges`}
+                          </span>
                         ) : (
                           "—"
                         )}
                       </td>
+                      {showLeadOutreach ? (
+                        <td className="px-4 py-3.5 align-middle">
+                          {task.assignment_type === "lead" && task.linked_leads?.length && currentUserId && supabase ? (
+                            <TaskLeadOutreachBlock
+                              taskId={task.id}
+                              leads={task.linked_leads}
+                              supabase={supabase}
+                              userId={currentUserId}
+                              compact
+                              onUpdated={onLeadOutreachUpdated}
+                              onError={onLeadOutreachError}
+                              onSuccess={onLeadOutreachSuccess}
+                            />
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      ) : null}
                       {showAssignedTo ? (
                         <td className="px-4 py-3.5 align-middle">
                           {(task.assigned_to && employeeNameMap[task.assigned_to]) ||

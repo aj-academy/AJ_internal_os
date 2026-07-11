@@ -40,6 +40,11 @@ interface TaskFormProps {
   leadSelectionPath?: string;
   onOpenLeadPicker?: () => void;
   leadPickerLabel?: string;
+  selectedCollegeCount?: number;
+  selectedCollegePreview?: string;
+  collegeSelectionPath?: string;
+  onOpenCollegePicker?: () => void;
+  collegePickerLabel?: string;
   /** When true, assignee is fixed (self); used for employee personal tasks */
   assigneeLockedToSelf?: boolean;
   /** Shown under assignee field (e.g. who appears in the list) */
@@ -65,6 +70,11 @@ export function TaskForm({
   leadSelectionPath = "",
   onOpenLeadPicker,
   leadPickerLabel = "Open Student Master to select leads",
+  selectedCollegeCount = 0,
+  selectedCollegePreview = "",
+  collegeSelectionPath = "",
+  onOpenCollegePicker,
+  collegePickerLabel = "Open College Visits to select colleges",
   assigneeLockedToSelf = false,
   assigneeHelperText,
   submitting,
@@ -124,8 +134,8 @@ export function TaskForm({
         {showAssignmentFields ? (
           <>
             <Field label="Link task to">
-              <div className="grid grid-cols-2 gap-2">
-                {(["lead", "project"] as TaskAssignmentType[]).map((type) => (
+              <div className="grid grid-cols-3 gap-2">
+                {(["lead", "college", "project"] as TaskAssignmentType[]).map((type) => (
                   <button
                     key={type}
                     type="button"
@@ -138,19 +148,19 @@ export function TaskForm({
                       })
                     }
                     className={[
-                      "rounded-lg border px-3 py-2 text-sm font-medium transition",
+                      "rounded-lg border px-2 py-2 text-xs font-medium transition sm:text-sm",
                       assignmentType === type
                         ? "border-[#c9a227] bg-[#fef3c7] text-[#92400e]"
                         : "border-[#e8dcc8] bg-white text-[#334155] hover:bg-[#faf6ee]",
                       !value.assigned_to && !assigneeLockedToSelf ? "cursor-not-allowed opacity-50" : "",
                     ].join(" ")}
                   >
-                    {type === "lead" ? "Leads" : "Project"}
+                    {type === "lead" ? "Leads" : type === "college" ? "Colleges" : "Project"}
                   </button>
                 ))}
               </div>
               {!value.assigned_to && !assigneeLockedToSelf ? (
-                <p className="mt-1.5 text-xs text-[#64748b]">Select an assignee first to pick leads from their dashboard.</p>
+                <p className="mt-1.5 text-xs text-[#64748b]">Select an assignee first, then link leads, colleges, or a project.</p>
               ) : null}
             </Field>
 
@@ -175,6 +185,31 @@ export function TaskForm({
                   className="h-9 w-full rounded-full border-[#c9a227] text-[#92400e] hover:bg-[#fef3c7]"
                 >
                   {selectedLeadCount ? `Change selection (${selectedLeadCount})` : leadPickerLabel}
+                </Button>
+              </div>
+            ) : null}
+
+            {assignmentType === "college" ? (
+              <div className="space-y-2 rounded-xl border border-[#dbe6f3] bg-[#f8fbff] p-3">
+                <p className="text-sm font-medium text-[#0f172a]">Colleges from College Visits</p>
+                {collegeSelectionPath ? (
+                  <p className="text-xs text-[#64748b]" title={collegeSelectionPath}>
+                    {collegeSelectionPath}
+                  </p>
+                ) : null}
+                {selectedCollegePreview ? (
+                  <p className="text-xs font-medium text-[#334155]">{selectedCollegePreview}</p>
+                ) : (
+                  <p className="text-xs text-[#64748b]">No colleges selected yet. Open College Visits to pick from the outreach table.</p>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={submitting}
+                  onClick={onOpenCollegePicker}
+                  className="h-9 w-full rounded-full border-[#c9a227] text-[#92400e] hover:bg-[#fef3c7]"
+                >
+                  {selectedCollegeCount ? `Change selection (${selectedCollegeCount})` : collegePickerLabel}
                 </Button>
               </div>
             ) : null}

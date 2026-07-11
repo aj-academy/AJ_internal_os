@@ -144,6 +144,10 @@ Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / 
 
 API (staff session): `GET/POST /api/college-visits`, `PATCH/DELETE /api/college-visits/[id]`, `GET/POST /api/college-visits/[id]/activities`.
 
+**Task assignment:** In Assign Task, choose **Colleges** → open College Visits table to pick rows (same flow as Student Master leads). Run `tasks_college_link_patch.sql` after `college_visits_schema.sql`.
+
+**Employee not seeing assigned tasks?** Run **`tasks_employee_rls_fix.sql`** — `aj_academy_roles_patch.sql` removed employee task SELECT policies; this restores them.
+
 Task assignment from `/employee/my-tasks` opens **Student Master** to pick leads (same flow as admin).
 
 ### Student portal (same modules as employee)

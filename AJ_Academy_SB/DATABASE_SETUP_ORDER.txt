@@ -20,6 +20,8 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 
 5b) tasks_assignees_include_employees.sql (admin assignee picker includes employees)
 5c) tasks_assignment_link_patch.sql (link tasks to leads/projects + task activity log)
+5c2) tasks_college_link_patch.sql (link tasks to college visits — after college_visits_schema.sql)
+5c3) tasks_employee_rls_fix.sql (employee sees tasks assigned to them — run after aj_academy_roles_patch.sql)
 
 6) task_notifications_columns.sql
 7) in_app_notifications.sql
