@@ -121,6 +121,14 @@ Desktop/AJ_Academy/
 └── .git/
 ```
 
+### Employee portal
+
+Employees use `/employee/*` for attendance, **My Tasks** (assign tasks with leads/projects + attachments), **Student Master** (full CRM — same as admin), Lead Management, leave, reimbursement, and profile.
+
+After Student Master SQL is applied, run **`employee_student_master_rls.sql`** so employees can read/write CRM data like admin.
+
+Task assignment from `/employee/my-tasks` opens **Student Master** to pick leads (same flow as admin).
+
 ### Student portal (same modules as employee)
 
 Students use `/student/*` with the same attendance (GPS + work summary), permission, leave, policies, and profile flows as employees. Also requires:

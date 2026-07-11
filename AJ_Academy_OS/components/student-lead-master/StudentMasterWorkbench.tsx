@@ -1,10 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
+import { TablePagination } from "@/components/ui/TablePagination";
+import { usePagination } from "@/lib/usePagination";
+import { saveTaskLeadSelection } from "@/lib/taskLeadPickStorage";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { LeadStatusBadge, ProposalStatusBadge } from "@/components/student-lead-master/LeadStatusBadge";
@@ -293,9 +297,16 @@ function numOrNull(raw: string) {
   return Number.isFinite(n) ? n : null;
 }
 
-export function StudentMasterWorkbench({ role }: { role: AppRole }) {
+export function StudentMasterWorkbench({ role, fullAccess = false }: { role: AppRole; fullAccess?: boolean }) {
   const supabase = useMemo(() => createClient(), []);
-  const isAdmin = role === "admin";
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pickForTask = searchParams.get("pickForTask") === "1";
+  const defaultReturnTo = role === "admin" ? "/admin/task-assignment" : "/employee/my-tasks";
+  const returnTo = searchParams.get("returnTo") || defaultReturnTo;
+  const isAdmin = role === "admin" || (role === "employee" && fullAccess);
+
+  const [pickedLeadIds, setPickedLeadIds] = useState<Set<string>>(new Set());
 
   const [activeTab, setActiveTab] = useState<CrmTabId>("overview");
   const [currentUserId, setCurrentUserId] = useState("");
@@ -630,6 +641,55 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
     fltStatus,
     searchText,
   ]);
+
+  const {
+    paginatedItems: paginatedClients,
+    page: leadsPage,
+    setPage: setLeadsPage,
+    totalPages: leadsTotalPages,
+    totalItems: leadsTotalItems,
+    pageSize: leadsPageSize,
+  } = usePagination(filteredClients, 12);
+
+  useEffect(() => {
+    if (pickForTask) setActiveTab("all-leads");
+  }, [pickForTask]);
+
+  const togglePickLead = (id: string) => {
+    setPickedLeadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const tabLabels: Record<CrmTabId, string> = {
+    overview: "Overview",
+    "all-leads": "All Students",
+    "follow-ups": "Follow-ups",
+    pipeline: "Pipeline",
+    converted: "Admitted Students",
+    proposal: "Proposal Tracker",
+    timeline: "Activity Timeline",
+    reports: "Reports",
+    settings: "Settings",
+  };
+
+  const confirmLeadPick = () => {
+    const labels = clients.filter((c) => pickedLeadIds.has(c.id)).map((c) => displayLeadName(c));
+    const pathParts = ["Student Master", tabLabels[activeTab]];
+    if (fltStatus) pathParts.push(`Status=${fltStatus}`);
+    if (fltPriority) pathParts.push(`Priority=${fltPriority}`);
+    if (fltSource) pathParts.push(`Source=${fltSource}`);
+    if (searchText.trim()) pathParts.push(`Search="${searchText.trim()}"`);
+    saveTaskLeadSelection({
+      ids: [...pickedLeadIds],
+      labels,
+      filterPath: pathParts.join(" → "),
+    });
+    router.push(decodeURIComponent(returnTo));
+  };
 
   const filtersActive = Boolean(
     searchText.trim() ||
@@ -1433,18 +1493,6 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
 
   const todayFollowUps = followRowsScoped.filter((f) => f.follow_up_date === todayISO());
 
-  const tabLabels: Record<CrmTabId, string> = {
-    overview: "Overview",
-    "all-leads": "All Students",
-    "follow-ups": "Follow-ups",
-    pipeline: "Pipeline",
-    converted: "Admitted Students",
-    proposal: "Proposal Tracker",
-    timeline: "Activity Timeline",
-    reports: "Reports",
-    settings: "Settings",
-  };
-
   return (
     <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -1471,6 +1519,30 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
 
       {error ? <Banner tone="error" message={error} /> : null}
       {success ? <Banner tone="success" message={success} /> : null}
+
+      {pickForTask ? (
+        <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#c9a227] bg-[#fef3c7] px-3 py-2">
+          <div>
+            <p className="text-sm font-semibold text-[#92400e]">Selecting leads for task assignment</p>
+            <p className="text-xs text-[#78350f]">
+              Tab: {tabLabels[activeTab]} · {pickedLeadIds.size} selected · use any sub-category tab above
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => router.push(decodeURIComponent(returnTo))}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!pickedLeadIds.size}
+              className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f] disabled:opacity-50"
+              onClick={confirmLeadPick}
+            >
+              Confirm {pickedLeadIds.size ? `${pickedLeadIds.size} lead(s)` : "selection"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-2">
         <div className="flex min-w-max gap-2">
@@ -1529,11 +1601,14 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
             placeholder="Search name, email, phone, city…"
             showClear={filtersActive}
             onClear={clearTableFilters}
-            hint={`Showing ${filteredClients.length} of ${clients.length} student(s)`}
+            hint={`Showing ${paginatedClients.length} of ${filteredClients.length} student(s) · page ${leadsPage}/${leadsTotalPages}`}
           />
           <AllLeadsTable
             loading={loading}
-            leads={filteredClients}
+            leads={paginatedClients}
+            pickMode={pickForTask}
+            pickedIds={pickedLeadIds}
+            onTogglePick={togglePickLead}
             employeeNameMap={employeeNameMap}
             isAdmin={isAdmin}
             currentUserId={currentUserId}
@@ -1582,6 +1657,13 @@ export function StudentMasterWorkbench({ role }: { role: AppRole }) {
               });
             }}
             onConvert={(leadRecord) => void convertLead(leadRecord)}
+          />
+          <TablePagination
+            page={leadsPage}
+            totalPages={leadsTotalPages}
+            totalItems={leadsTotalItems}
+            pageSize={leadsPageSize}
+            onPageChange={setLeadsPage}
           />
         </div>
       ) : null}
@@ -1803,15 +1885,15 @@ function FollowUpsTable({
       <table className="w-full min-w-[940px] text-sm">
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase">Lead</th>
-            <th className="px-4 py-3 text-left">Company</th>
-            <th className="px-4 py-3 text-left">Owner</th>
-            <th className="px-4 py-3 text-left">Date</th>
-            <th className="px-4 py-3 text-left">Time</th>
-            <th className="px-4 py-3 text-left">Type</th>
-            <th className="px-4 py-3 text-left">Notes</th>
-            <th className="px-4 py-3 text-left">Status</th>
-            <th className="px-4 py-3 text-right">Actions</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase">Lead</th>
+            <th className="px-3 py-2 text-left">Company</th>
+            <th className="px-3 py-2 text-left">Owner</th>
+            <th className="px-3 py-2 text-left">Date</th>
+            <th className="px-3 py-2 text-left">Time</th>
+            <th className="px-3 py-2 text-left">Type</th>
+            <th className="px-3 py-2 text-left">Notes</th>
+            <th className="px-3 py-2 text-left">Status</th>
+            <th className="px-3 py-2 text-right">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[#e8edf5]">
@@ -1828,15 +1910,15 @@ function FollowUpsTable({
             const canTouch = isAdmin || cli.assigned_to === currentUserId;
             return (
               <tr key={fr.id}>
-                <td className="px-4 py-3 font-semibold text-slate-900">{displayLeadName(cli)}</td>
-                <td className="max-w-[180px] truncate px-4 py-3">{cli.company_name || "—"}</td>
+                <td className="px-3 py-2 font-semibold text-slate-900">{displayLeadName(cli)}</td>
+                <td className="max-w-[180px] truncate px-3 py-2">{cli.company_name || "—"}</td>
                 <td>{cli.assigned_to ? employeeNameMap[cli.assigned_to] ?? "-" : "-"}</td>
-                <td className="whitespace-nowrap px-4 py-3">{fr.follow_up_date || "—"}</td>
+                <td className="whitespace-nowrap px-3 py-2">{fr.follow_up_date || "—"}</td>
                 <td className="whitespace-nowrap">{fr.follow_up_time || "—"}</td>
                 <td>{fr.follow_up_type || "—"}</td>
-                <td className="max-w-[220px] truncate px-4 py-3 text-slate-600">{fr.notes || "—"}</td>
+                <td className="max-w-[220px] truncate px-3 py-2 text-slate-600">{fr.notes || "—"}</td>
                 <td>{fr.status || "Pending"}</td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-3 py-2 text-right">
                   {canTouch && fr.status !== "Completed" ? (
                     <button type="button" className="text-xs font-semibold text-emerald-600 hover:underline" onClick={() => onComplete(fr)}>
                       Done
@@ -1924,6 +2006,9 @@ function EmployeeOutreachBadge({ done, label }: { done: boolean; label: string }
 function AllLeadsTable({
   loading,
   leads,
+  pickMode = false,
+  pickedIds,
+  onTogglePick,
   employeeNameMap,
   isAdmin,
   currentUserId,
@@ -1961,6 +2046,9 @@ function AllLeadsTable({
 }: {
   loading: boolean;
   leads: CrmClientRow[];
+  pickMode?: boolean;
+  pickedIds?: Set<string>;
+  onTogglePick?: (id: string) => void;
   employeeNameMap: Record<string, string>;
   isAdmin: boolean;
   currentUserId: string;
@@ -1997,46 +2085,47 @@ function AllLeadsTable({
   onConvert: (l: CrmClientRow) => void;
 }) {
   const today = todayISO();
-  const colCount = 24;
+  const colCount = pickMode ? 25 : 24;
   return (
     <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
       <table className="w-full min-w-[2200px] text-sm">
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
-            <TableHeaderCell label="Student Name" className="px-4 py-3" />
-            <TableHeaderCell label="Mobile Number" className="px-4 py-3 text-center" />
-            <TableHeaderCell label="WhatsApp Number" className="px-4 py-3 text-center" />
-            <TableHeaderCell label="Email" className="px-4 py-3 text-center" />
+            {pickMode ? <TableHeaderCell label="Pick" className="px-3 py-2" /> : null}
+            <TableHeaderCell label="Student Name" className="px-3 py-2" />
+            <TableHeaderCell label="Mobile Number" className="px-3 py-2 text-center" />
+            <TableHeaderCell label="WhatsApp Number" className="px-3 py-2 text-center" />
+            <TableHeaderCell label="Email" className="px-3 py-2 text-center" />
             <TableHeaderFilter
               label="Degree"
               value={fltDegree}
               onChange={setFltDegree}
               options={degreeOptions.map((d) => ({ value: d, label: d }))}
               allLabel="All degrees"
-              className="px-4 py-3"
+              className="px-3 py-2"
             />
-            <TableHeaderCell label="College" className="px-4 py-3" />
-            <TableHeaderCell label="Year of Passing" className="px-4 py-3" />
-            <TableHeaderCell label="Employment Status" className="px-4 py-3" />
-            <TableHeaderCell label="Current Salary" className="px-4 py-3" />
+            <TableHeaderCell label="College" className="px-3 py-2" />
+            <TableHeaderCell label="Year of Passing" className="px-3 py-2" />
+            <TableHeaderCell label="Employment Status" className="px-3 py-2" />
+            <TableHeaderCell label="Current Salary" className="px-3 py-2" />
             <TableHeaderFilter
               label="Interested Program"
               value={fltProgram}
               onChange={setFltProgram}
               options={programOptions.map((s) => ({ value: s, label: s }))}
               allLabel="All programs"
-              className="px-4 py-3"
+              className="px-3 py-2"
             />
-            <TableHeaderCell label="Joining Timeline" className="px-4 py-3" />
-            <TableHeaderCell label="Program Budget" className="px-4 py-3" />
-            <TableHeaderCell label="Preferred Batch" className="px-4 py-3" />
+            <TableHeaderCell label="Joining Timeline" className="px-3 py-2" />
+            <TableHeaderCell label="Program Budget" className="px-3 py-2" />
+            <TableHeaderCell label="Preferred Batch" className="px-3 py-2" />
             <TableHeaderFilter
               label="Lead Source"
               value={fltSource}
               onChange={setFltSource}
               options={CRM_SOURCES.map((s) => ({ value: s, label: s }))}
               allLabel="All sources"
-              className="px-4 py-3"
+              className="px-3 py-2"
             />
             <TableHeaderFilter
               label="Assigned Counsellor"
@@ -2045,7 +2134,7 @@ function AllLeadsTable({
               options={employeeOptions.map((e) => ({ value: e.id, label: e.label }))}
               allLabel="All counsellors"
               disabled={!isAdmin}
-              className="px-4 py-3"
+              className="px-3 py-2"
             />
             <TableHeaderFilter
               label="Lead Stage"
@@ -2053,7 +2142,7 @@ function AllLeadsTable({
               onChange={setFltStage}
               options={LEAD_STAGES.map((s) => ({ value: s, label: s }))}
               allLabel="All stages"
-              className="px-4 py-3"
+              className="px-3 py-2"
             />
             <TableHeaderFilter
               label="Lead Status"
@@ -2061,7 +2150,7 @@ function AllLeadsTable({
               onChange={setFltStatus}
               options={CRM_LEAD_STATUSES.map((s) => ({ value: s, label: s }))}
               allLabel="All statuses"
-              className="px-4 py-3"
+              className="px-3 py-2"
             />
             <TableHeaderFilter
               label="Priority"
@@ -2069,18 +2158,18 @@ function AllLeadsTable({
               onChange={setFltPriority}
               options={CRM_PRIORITIES.map((p) => ({ value: p, label: p }))}
               allLabel="All priorities"
-              className="px-4 py-3"
+              className="px-3 py-2"
             />
-            <TableHeaderCell label="Next Follow-up Date" className="px-4 py-3" />
-            <TableHeaderCell label="Fee Quoted" className="px-4 py-3" />
-            <TableHeaderCell label="Final Fee" className="px-4 py-3" />
+            <TableHeaderCell label="Next Follow-up Date" className="px-3 py-2" />
+            <TableHeaderCell label="Fee Quoted" className="px-3 py-2" />
+            <TableHeaderCell label="Final Fee" className="px-3 py-2" />
             <TableHeaderFilter
               label="Payment Status"
               value={fltPaymentStatus}
               onChange={setFltPaymentStatus}
               options={PAYMENT_STATUSES.map((s) => ({ value: s, label: s }))}
               allLabel="All payment statuses"
-              className="px-4 py-3"
+              className="px-3 py-2"
             />
             <TableHeaderFilter
               label="Admission Status"
@@ -2088,16 +2177,16 @@ function AllLeadsTable({
               onChange={setFltAdmissionStatus}
               options={ADMISSION_STATUSES.map((s) => ({ value: s, label: s }))}
               allLabel="All admission statuses"
-              className="px-4 py-3"
+              className="px-3 py-2"
             />
-            <TableHeaderCell label="Actions" className="px-4 py-3" />
+            <TableHeaderCell label="Actions" className="px-3 py-2" />
           </tr>
         </thead>
         <tbody className="divide-y divide-[#e8edf5] text-[#334155]">
           {loading
             ? [...Array.from({ length: 6 }).keys()].map((skeletonIdx) => (
                 <tr key={skeletonIdx}>
-                  <td colSpan={colCount} className="px-4 py-3">
+                  <td colSpan={colCount} className="px-3 py-2">
                     <div className="h-5 animate-pulse rounded bg-slate-100" />
                   </td>
                 </tr>
@@ -2117,8 +2206,18 @@ function AllLeadsTable({
                       fu === today ? "shadow-[inset_3px_0_0_#c9a227]" : "",
                     ].join(" ")}
                   >
-                    <td className="px-4 py-3 font-semibold text-slate-900 whitespace-nowrap">{displayLeadName(lead) || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-center">
+                    {pickMode ? (
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={pickedIds?.has(lead.id) ?? false}
+                          onChange={() => onTogglePick?.(lead.id)}
+                          className="h-4 w-4 rounded border-[#cbd5e1]"
+                        />
+                      </td>
+                    ) : null}
+                    <td className="px-3 py-2 font-semibold text-slate-900 whitespace-nowrap">{displayLeadName(lead) || "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-center">
                       <StudentOutreachButtons
                         mode="phone"
                         phone={lead.phone}
@@ -2126,7 +2225,7 @@ function AllLeadsTable({
                         onPhoneClick={contactable ? () => void onPhoneClick(lead) : undefined}
                       />
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-center">
+                    <td className="whitespace-nowrap px-3 py-2 text-center">
                       <StudentOutreachButtons
                         mode="whatsapp"
                         phone={lead.phone}
@@ -2135,7 +2234,7 @@ function AllLeadsTable({
                         onWhatsAppClick={contactable ? () => void onWhatsAppClick(lead) : undefined}
                       />
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-3 py-2 text-center">
                       <StudentOutreachButtons
                         mode="email"
                         email={lead.email}
@@ -2143,28 +2242,28 @@ function AllLeadsTable({
                         onEmailClick={contactable ? () => void onEmailClick(lead) : undefined}
                       />
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.degree || "—"}</td>
-                    <td className="max-w-[160px] truncate px-4 py-3">{lead.college_company || lead.company_name || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.year_of_passing || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.employment_status || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{formatMoney(lead.current_salary)}</td>
-                    <td className="max-w-[160px] truncate px-4 py-3">{String(program)}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.joining_timeline || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{formatMoney(lead.budget)}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.preferred_batch || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.source || "—"}</td>
-                    <td className="max-w-[140px] truncate px-4 py-3">{lead.assigned_to ? employeeNameMap[lead.assigned_to] : "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.lead_stage || "—"}</td>
-                    <td className="px-4 py-3">
+                    <td className="whitespace-nowrap px-3 py-2">{lead.degree || "—"}</td>
+                    <td className="max-w-[160px] truncate px-3 py-2">{lead.college_company || lead.company_name || "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{lead.year_of_passing || "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{lead.employment_status || "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{formatMoney(lead.current_salary)}</td>
+                    <td className="max-w-[160px] truncate px-3 py-2">{String(program)}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{lead.joining_timeline || "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{formatMoney(lead.budget)}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{lead.preferred_batch || "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{lead.source || "—"}</td>
+                    <td className="max-w-[140px] truncate px-3 py-2">{lead.assigned_to ? employeeNameMap[lead.assigned_to] : "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{lead.lead_stage || "—"}</td>
+                    <td className="px-3 py-2">
                       <LeadStatusBadge status={String(lead.status)} />
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 font-medium capitalize">{lead.priority || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs">{fu || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{formatMoney(lead.fee_quoted ?? lead.proposal_amount)}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{formatMoney(lead.final_fee)}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.payment_status || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{lead.admission_status || "—"}</td>
-                    <td className="flex flex-wrap gap-3 px-4 py-3 text-xs whitespace-nowrap">
+                    <td className="whitespace-nowrap px-3 py-2 font-medium capitalize">{lead.priority || "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-xs">{fu || "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{formatMoney(lead.fee_quoted ?? lead.proposal_amount)}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{formatMoney(lead.final_fee)}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{lead.payment_status || "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{lead.admission_status || "—"}</td>
+                    <td className="flex flex-wrap gap-3 px-3 py-2 text-xs whitespace-nowrap">
                       <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onProfile(lead)}>
                         View
                       </button>
@@ -2222,23 +2321,23 @@ function ConvertedTable({
       <table className="w-full min-w-[900px] text-sm">
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
-            <th className="px-4 py-3 text-left">Code</th>
-            <th className="px-4 py-3 text-left">Client</th>
-            <th className="px-4 py-3 text-left">Company</th>
-            <th className="px-4 py-3 text-left">Phone</th>
-            <th className="px-4 py-3 text-left">Email</th>
-            <th className="px-4 py-3 text-left">Services</th>
-            <th className="px-4 py-3 text-left">Deal</th>
-            <th className="px-4 py-3 text-left">Converted</th>
-            <th className="px-4 py-3 text-left">Owner</th>
-            <th className="px-4 py-3 text-right">Actions</th>
+            <th className="px-3 py-2 text-left">Code</th>
+            <th className="px-3 py-2 text-left">Client</th>
+            <th className="px-3 py-2 text-left">Company</th>
+            <th className="px-3 py-2 text-left">Phone</th>
+            <th className="px-3 py-2 text-left">Email</th>
+            <th className="px-3 py-2 text-left">Services</th>
+            <th className="px-3 py-2 text-left">Deal</th>
+            <th className="px-3 py-2 text-left">Converted</th>
+            <th className="px-3 py-2 text-left">Owner</th>
+            <th className="px-3 py-2 text-right">Actions</th>
           </tr>
         </thead>
         <tbody>
           {leads.map((convertedLead) => (
             <tr key={convertedLead.id} className="border-t border-[#eef2ff]">
-              <td className="px-4 py-3 font-mono text-xs">{convertedLead.client_code || "—"}</td>
-              <td className="px-4 py-3 font-semibold">{displayLeadName(convertedLead)}</td>
+              <td className="px-3 py-2 font-mono text-xs">{convertedLead.client_code || "—"}</td>
+              <td className="px-3 py-2 font-semibold">{displayLeadName(convertedLead)}</td>
               <td>{convertedLead.company_name || "—"}</td>
               <td className="whitespace-nowrap">{convertedLead.phone || "—"}</td>
               <td className="truncate max-w-[180px]">{convertedLead.email || "—"}</td>
@@ -2246,7 +2345,7 @@ function ConvertedTable({
               <td>{convertedLead.proposal_amount != null ? `₹${Number(convertedLead.proposal_amount).toLocaleString()}` : "—"}</td>
               <td>{convertedLead.converted_at ? new Date(String(convertedLead.converted_at)).toLocaleDateString() : "—"}</td>
               <td>{convertedLead.assigned_to ? employeeNameMap[convertedLead.assigned_to] : "—"}</td>
-              <td className="space-x-2 px-4 py-3 text-right text-xs">
+              <td className="space-x-2 px-3 py-2 text-right text-xs">
                 <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onProfile(convertedLead)}>
                   Profile
                 </button>
@@ -2283,13 +2382,13 @@ function ProposalTrackerTable({
       <table className="w-full min-w-[880px] text-sm">
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Lead</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Company</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Amount</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Status</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Sent date</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Proposal link</th>
-            <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide">Actions</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Lead</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Company</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Amount</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Status</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Sent date</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Proposal link</th>
+            <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -2302,16 +2401,16 @@ function ProposalTrackerTable({
           ) : (
             leads.map((proposalLead) => (
               <tr key={proposalLead.id} className="border-t border-[#eef2ff]">
-                <td className="px-4 py-3 font-semibold text-slate-900">{displayLeadName(proposalLead) || "—"}</td>
-                <td className="max-w-[200px] truncate px-4 py-3">{proposalLead.company_name || "—"}</td>
-                <td className="whitespace-nowrap px-4 py-3">
+                <td className="px-3 py-2 font-semibold text-slate-900">{displayLeadName(proposalLead) || "—"}</td>
+                <td className="max-w-[200px] truncate px-3 py-2">{proposalLead.company_name || "—"}</td>
+                <td className="whitespace-nowrap px-3 py-2">
                   {proposalLead.proposal_amount != null ? `₹${Number(proposalLead.proposal_amount).toLocaleString()}` : "—"}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-2">
                   <ProposalStatusBadge status={String(proposalLead.proposal_status)} />
                 </td>
-                <td className="whitespace-nowrap px-4 py-3">{proposalLead.proposal_sent_date || "—"}</td>
-                <td className="px-4 py-3">
+                <td className="whitespace-nowrap px-3 py-2">{proposalLead.proposal_sent_date || "—"}</td>
+                <td className="px-3 py-2">
                   {proposalLead.proposal_link ? (
                     <a
                       href={String(proposalLead.proposal_link)}
@@ -2325,7 +2424,7 @@ function ProposalTrackerTable({
                     "—"
                   )}
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-3 py-2 text-right">
                   {isAdmin ? (
                     <button type="button" className="text-xs font-semibold text-blue-700 hover:underline" onClick={() => onEdit(proposalLead)}>
                       Update
@@ -2455,11 +2554,11 @@ function ActivityTable({
         <table className="w-full min-w-[920px] text-sm">
           <thead className="bg-[#f1f6fc] text-[#64748b]">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Date &amp; time</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Lead / client</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Activity type</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Notes</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Created by</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Date &amp; time</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Lead / client</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Activity type</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Notes</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Created by</th>
             </tr>
           </thead>
           <tbody>
@@ -2484,13 +2583,13 @@ function ActivityTable({
                 const by = ar.created_by ? employeeNameMap[ar.created_by] || ar.created_by.slice(0, 8) : "—";
                 return (
                   <tr key={ar.id} className="border-t border-[#f1f5f9]">
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{formatDateTimeIST(String(ar.created_at))}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-900">
+                    <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600">{formatDateTimeIST(String(ar.created_at))}</td>
+                    <td className="px-3 py-2 font-semibold text-slate-900">
                       {clientMap[ar.client_id] ? displayLeadName(clientMap[ar.client_id]) || "—" : "Unknown lead"}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-800">{ar.activity_type || "—"}</td>
-                    <td className="max-w-md px-4 py-3 text-xs text-slate-600 whitespace-pre-wrap">{detail || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-700">{by}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-slate-800">{ar.activity_type || "—"}</td>
+                    <td className="max-w-md px-3 py-2 text-xs text-slate-600 whitespace-pre-wrap">{detail || "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-700">{by}</td>
                   </tr>
                 );
               })
@@ -2627,7 +2726,7 @@ function SimpleReportTable({ title, pairs }: { title: string; pairs: [string, nu
   const rows = [...pairs].sort((aArr, bArr) => bArr[1] - aArr[1]);
   return (
     <div className="rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
-      <p className="border-b border-[#f1f5f9] px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[#64748b]">{title}</p>
+      <p className="border-b border-[#f1f5f9] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#64748b]">{title}</p>
       <table className="w-full text-sm">
         <tbody>
           {rows.length === 0 ? (

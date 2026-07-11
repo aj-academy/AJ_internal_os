@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Download,
   MessageCircle,
@@ -16,6 +17,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
+import { TablePagination } from "@/components/ui/TablePagination";
+import { usePagination } from "@/lib/usePagination";
+import { saveTaskLeadSelection } from "@/lib/taskLeadPickStorage";
 import {
   CommFilter,
   CustomColumnDef,
@@ -78,6 +82,10 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
 
 export function EmployeeLeadManagement() {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pickForTask = searchParams.get("pickForTask") === "1";
+  const returnTo = searchParams.get("returnTo") || "/employee/my-tasks";
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [userId, setUserId] = useState<string | null>(null);
@@ -109,6 +117,7 @@ export function EmployeeLeadManagement() {
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [newColName, setNewColName] = useState("");
   const [newColType, setNewColType] = useState("text");
+  const [pickedLeadIds, setPickedLeadIds] = useState<Set<string>>(new Set());
 
   const loadUser = useCallback(async () => {
     const { data } = await supabase.auth.getUser();
@@ -214,6 +223,38 @@ export function EmployeeLeadManagement() {
       return true;
     });
   }, [commFilter, leads, priorityFilter, search, sourceFilter, statusFilter]);
+
+  const {
+    paginatedItems: paginatedLeads,
+    page: leadsPage,
+    setPage: setLeadsPage,
+    totalPages: leadsTotalPages,
+    totalItems: leadsTotalItems,
+    pageSize: leadsPageSize,
+  } = usePagination(filteredLeads, 12);
+
+  const togglePickLead = (id: string) => {
+    setPickedLeadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const confirmLeadPick = () => {
+    const labels = leads.filter((l) => pickedLeadIds.has(l.id)).map((l) => displayLeadName(l));
+    const pathParts = ["Lead Management"];
+    if (statusFilter) pathParts.push(`Status=${statusFilter}`);
+    if (priorityFilter) pathParts.push(`Priority=${priorityFilter}`);
+    if (search.trim()) pathParts.push(`Search="${search.trim()}"`);
+    saveTaskLeadSelection({
+      ids: [...pickedLeadIds],
+      labels,
+      filterPath: pathParts.join(" → "),
+    });
+    router.push(decodeURIComponent(returnTo));
+  };
 
   const filtersActive = Boolean(search.trim() || statusFilter || priorityFilter || sourceFilter || commFilter);
 
@@ -648,6 +689,29 @@ export function EmployeeLeadManagement() {
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</div> : null}
       {success ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{success}</div> : null}
 
+      {pickForTask ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#c9a227] bg-[#fef3c7] px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-[#92400e]">Selecting leads for task assignment</p>
+            <p className="text-xs text-[#78350f]">{pickedLeadIds.size} selected · filter using the table below</p>
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => router.push(decodeURIComponent(returnTo))}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!pickedLeadIds.size}
+              className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f] disabled:opacity-50"
+              onClick={confirmLeadPick}
+            >
+              Confirm {pickedLeadIds.size ? `${pickedLeadIds.size} lead(s)` : "selection"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {!pickForTask ? (
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard label="Total Assigned Leads" value={stats.total} />
         <StatCard label="Calls Done" value={stats.callsDone} />
@@ -655,6 +719,7 @@ export function EmployeeLeadManagement() {
         <StatCard label="Pending Leads" value={stats.pending} />
         <StatCard label="Follow-up Required" value={stats.followUp} />
       </div>
+      ) : null}
 
       <TableSearchBar
         value={search}
@@ -662,13 +727,14 @@ export function EmployeeLeadManagement() {
         placeholder="Name, company, phone, email…"
         showClear={filtersActive}
         onClear={clearFilters}
-        hint={`Showing ${filteredLeads.length} of ${leads.length} assigned lead(s)`}
+        hint={`Showing ${paginatedLeads.length} of ${filteredLeads.length} lead(s) · page ${leadsPage}/${leadsTotalPages}`}
       />
 
       <div className="responsive-table-wrap overflow-x-auto rounded-2xl border border-[#dbe6f3]">
         <table className="w-full min-w-[1100px] text-left text-sm">
           <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
             <tr>
+              {pickForTask ? <TableHeaderCell label="Pick" /> : null}
               <TableHeaderCell label="Lead Name" />
               <TableHeaderCell label="Company" />
               <TableHeaderCell label="Contact" />
@@ -717,19 +783,29 @@ export function EmployeeLeadManagement() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={11 + customColumns.length} className="px-3 py-10 text-center text-[#64748b]">
+                <td colSpan={(pickForTask ? 12 : 11) + customColumns.length} className="px-3 py-10 text-center text-[#64748b]">
                   Loading leads…
                 </td>
               </tr>
             ) : !filteredLeads.length ? (
               <tr>
-                <td colSpan={11 + customColumns.length} className="px-3 py-10 text-center text-[#64748b]">
+                <td colSpan={(pickForTask ? 12 : 11) + customColumns.length} className="px-3 py-10 text-center text-[#64748b]">
                   {filtersActive ? "No leads match the current filters." : "No leads assigned yet."}
                 </td>
               </tr>
             ) : (
-              filteredLeads.map((row) => (
+              paginatedLeads.map((row) => (
                 <tr key={row.id} className="border-t border-[#eef2f7] align-top">
+                  {pickForTask ? (
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={pickedLeadIds.has(row.id)}
+                        onChange={() => togglePickLead(row.id)}
+                        className="h-4 w-4 rounded border-[#cbd5e1]"
+                      />
+                    </td>
+                  ) : null}
                   <td className="px-3 py-2 font-medium text-[#0f172a]">{displayLeadName(row)}</td>
                   <td className="px-3 py-2 text-[#64748b]">{row.company_name || "—"}</td>
                   <td className="px-3 py-2">
@@ -825,6 +901,14 @@ export function EmployeeLeadManagement() {
           </tbody>
         </table>
       </div>
+
+      <TablePagination
+        page={leadsPage}
+        totalPages={leadsTotalPages}
+        totalItems={leadsTotalItems}
+        pageSize={leadsPageSize}
+        onPageChange={setLeadsPage}
+      />
 
       <LeadActivityModal
         open={Boolean(activityLead)}

@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { TaskAssigneePicker, type AssigneeProfile } from "@/components/task/TaskAssigneePicker";
 import type { TaskAssignmentType, TaskPriority, TaskStatus } from "@/types/task";
 
 export interface TaskFormValue {
@@ -31,13 +32,14 @@ interface TaskFormProps {
   open: boolean;
   title: string;
   value: TaskFormValue;
-  employees: EmployeeOption[];
+  assigneeProfiles: AssigneeProfile[];
   projects?: ProjectOption[];
   showAssignmentFields?: boolean;
   selectedLeadCount?: number;
   selectedLeadPreview?: string;
   leadSelectionPath?: string;
   onOpenLeadPicker?: () => void;
+  leadPickerLabel?: string;
   /** When true, assignee is fixed (self); used for employee personal tasks */
   assigneeLockedToSelf?: boolean;
   /** Shown under assignee field (e.g. who appears in the list) */
@@ -55,13 +57,14 @@ export function TaskForm({
   open,
   title,
   value,
-  employees,
+  assigneeProfiles,
   projects = [],
   showAssignmentFields = false,
   selectedLeadCount = 0,
   selectedLeadPreview = "",
   leadSelectionPath = "",
   onOpenLeadPicker,
+  leadPickerLabel = "Open Student Master to select leads",
   assigneeLockedToSelf = false,
   assigneeHelperText,
   submitting,
@@ -101,25 +104,19 @@ export function TaskForm({
           </div>
         ) : (
           <Field label="Assign to">
-            <select
+            <TaskAssigneePicker
+              profiles={assigneeProfiles}
               value={value.assigned_to}
-              onChange={(event) =>
+              disabled={submitting}
+              onChange={(profileId) =>
                 onChange({
                   ...value,
-                  assigned_to: event.target.value,
+                  assigned_to: profileId,
                   assignment_type: "",
                   project_id: "",
                 })
               }
-              className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227]"
-            >
-              <option value="">Select employee</option>
-              {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.label}
-                </option>
-              ))}
-            </select>
+            />
             {assigneeHelperText ? <p className="mt-1.5 text-xs text-[#64748b]">{assigneeHelperText}</p> : null}
           </Field>
         )}
@@ -159,7 +156,7 @@ export function TaskForm({
 
             {assignmentType === "lead" ? (
               <div className="space-y-2 rounded-xl border border-[#dbe6f3] bg-[#f8fbff] p-3">
-                <p className="text-sm font-medium text-[#0f172a]">Leads from assignee dashboard</p>
+                <p className="text-sm font-medium text-[#0f172a]">Leads from Student Master</p>
                 {leadSelectionPath ? (
                   <p className="text-xs text-[#64748b]" title={leadSelectionPath}>
                     {leadSelectionPath}
@@ -168,16 +165,16 @@ export function TaskForm({
                 {selectedLeadPreview ? (
                   <p className="text-xs font-medium text-[#334155]">{selectedLeadPreview}</p>
                 ) : (
-                  <p className="text-xs text-[#64748b]">No leads selected yet.</p>
+                  <p className="text-xs text-[#64748b]">No leads selected yet. Open Student Master to pick from any tab or sub-category.</p>
                 )}
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={(!value.assigned_to && !assigneeLockedToSelf) || submitting}
+                  disabled={submitting}
                   onClick={onOpenLeadPicker}
                   className="h-9 w-full rounded-full border-[#c9a227] text-[#92400e] hover:bg-[#fef3c7]"
                 >
-                  {selectedLeadCount ? `Change selection (${selectedLeadCount})` : "Browse & select leads"}
+                  {selectedLeadCount ? `Change selection (${selectedLeadCount})` : leadPickerLabel}
                 </Button>
               </div>
             ) : null}

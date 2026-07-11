@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -11,13 +11,18 @@ import { TaskForm, type TaskFormValue } from "@/components/task/TaskForm";
 import { TaskTable } from "@/components/task/TaskTable";
 import { TaskCompleteDialog } from "@/components/task/TaskCompleteDialog";
 import { TaskAttachmentUpload } from "@/components/task/TaskAttachmentUpload";
-import { TaskLeadPickerModal, type TaskLeadPickerSelection } from "@/components/task/TaskLeadPickerModal";
+import type { AssigneeProfile } from "@/components/task/TaskAssigneePicker";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { usePagination } from "@/lib/usePagination";
 import { assignerDisplayFromProfile } from "@/lib/profileDisplayName";
 import { parseTaskAttachments, uploadTaskAttachments, type TaskAttachment } from "@/lib/taskAttachments";
 import { fetchTaskActivities, logTaskActivity, parseClientIds, type TaskActivityRow } from "@/lib/taskActivities";
 import { displayLeadName } from "@/components/employee/leads/employeeLeadConfig";
+import {
+  consumeTaskAssignDraft,
+  consumeTaskLeadSelection,
+  saveTaskAssignDraft,
+} from "@/lib/taskLeadPickStorage";
 import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 
 type AppRole = "admin" | "employee" | "student" | "freelancer" | "mentor";
@@ -92,6 +97,8 @@ function toReadableTaskError(input: unknown) {
 export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const supabase = useMemo(() => createClient(), []);
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const isAdmin = role === "admin";
   const isEmployee = role === "employee";
   const isStudent = role === "student";
@@ -129,7 +136,6 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [selectedLeadLabels, setSelectedLeadLabels] = useState<string[]>([]);
   const [leadSelectionPath, setLeadSelectionPath] = useState("");
-  const [leadPickerOpen, setLeadPickerOpen] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "">("");
@@ -176,6 +182,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           full_name: string | null;
           email: string | null;
           department?: string | null;
+          role?: string | null;
         }[];
         setEmployees(
           rows.map((r) => ({
@@ -183,6 +190,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             full_name: r.full_name,
             email: r.email,
             department: r.department ?? null,
+            role: r.role ?? "employee",
           })),
         );
         return;
@@ -190,7 +198,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       const { data, error: profilesError } = await supabase
         .from("profiles")
         .select("id,full_name,email,department,role")
-        .in("role", ["employee", "admin", "super_admin"])
+        .in("role", ["employee", "admin", "super_admin", "manager", "student", "freelancer", "mentor"])
         .or("status.is.null,status.eq.active")
         .order("full_name", { ascending: true })
         .returns<ProfileOption[]>();
@@ -259,7 +267,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     const { data, error: profilesError } = await supabase
       .from("profiles")
       .select("id,full_name,email,department,role")
-      .in("role", ["student", "freelancer", "mentor", "admin", "super_admin"])
+      .in("role", ["student", "freelancer", "mentor", "employee", "admin", "super_admin", "manager"])
       .or("status.is.null,status.eq.active")
       .order("full_name", { ascending: true })
       .returns<ProfileOption[]>();
@@ -492,6 +500,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             .maybeSingle();
           const profileRow = (me as ProfileOption | null) ?? null;
           setSelfProfile(profileRow);
+          if (isEmployee) await loadAssignees();
         } else {
           setSelfProfile(null);
           await loadAssignees();
@@ -547,6 +556,18 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       Object.values(progressDebounceRef.current).forEach((t) => clearTimeout(t));
     };
   }, []);
+
+  const assigneeProfiles: AssigneeProfile[] = useMemo(
+    () =>
+      employees.map((e) => ({
+        id: e.id,
+        full_name: e.full_name,
+        email: e.email,
+        department: e.department ?? null,
+        role: e.role ?? null,
+      })),
+    [employees],
+  );
 
   const employeeOptions = useMemo(
     () =>
@@ -683,10 +704,62 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     setPanelOpen(true);
   };
 
+  useEffect(() => {
+    const selection = consumeTaskLeadSelection();
+    const draft = consumeTaskAssignDraft();
+    if (draft) {
+      setForm({
+        title: draft.title,
+        description: draft.description,
+        assigned_to: draft.assigned_to,
+        assignment_type: (draft.assignment_type as TaskFormValue["assignment_type"]) || "",
+        project_id: draft.project_id,
+        priority: draft.priority as TaskPriority,
+        status: draft.status as TaskStatus,
+        start_date: draft.start_date,
+        due_date: draft.due_date,
+        progress: draft.progress,
+      });
+      setPanelOpen(true);
+    }
+    if (selection) {
+      setSelectedClientIds(selection.ids);
+      setSelectedLeadLabels(selection.labels);
+      setLeadSelectionPath(selection.filterPath);
+      setForm((prev) => ({ ...prev, assignment_type: "lead" }));
+      setPanelOpen(true);
+    }
+  }, []);
+
+  const handleOpenLeadPicker = () => {
+    saveTaskAssignDraft({
+      title: form.title,
+      description: form.description,
+      assigned_to: form.assigned_to,
+      assignment_type: form.assignment_type,
+      project_id: form.project_id,
+      priority: form.priority,
+      status: form.status,
+      start_date: form.start_date,
+      due_date: form.due_date,
+      progress: form.progress,
+    });
+    const returnTo = encodeURIComponent(pathname);
+    if (isAdmin) {
+      router.push(`/admin/student-master?pickForTask=1&returnTo=${returnTo}`);
+      return;
+    }
+    if (isEmployee) {
+      router.push(`/employee/student-master?pickForTask=1&returnTo=${returnTo}`);
+      return;
+    }
+    setError("Lead selection is available from Student Master.");
+  };
+
   const validateAssignmentLink = (): string | null => {
     if (!form.assignment_type) return "Choose whether this task is linked to Leads or a Project.";
     if (form.assignment_type === "lead" && !selectedClientIds.length) {
-      return "Select at least one lead from the assignee's dashboard.";
+      return "Select at least one lead from Student Master (or Lead Management).";
     }
     if (form.assignment_type === "project" && !form.project_id.trim()) {
       return "Select a project for this task.";
@@ -714,13 +787,6 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       project_id: null as string | null,
       client_ids: [] as string[],
     };
-  };
-
-  const handleLeadPickerConfirm = (selection: TaskLeadPickerSelection) => {
-    setSelectedClientIds(selection.ids);
-    setSelectedLeadLabels(selection.leads.map((l) => displayLeadName(l)));
-    setLeadSelectionPath(selection.filterPath);
-    setForm((prev) => ({ ...prev, assignment_type: "lead", project_id: "" }));
   };
 
   const handleSaveTask = async () => {
@@ -1160,7 +1226,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                 open={panelOpen}
                 title={editId ? "Edit Task" : "Assign task"}
                 value={form}
-                employees={assigneePickerOptions}
+                assigneeProfiles={assigneeProfiles}
                 projects={projectOptions}
                 showAssignmentFields={isAdmin || isEmployee}
                 selectedLeadCount={selectedClientIds.length}
@@ -1172,14 +1238,15 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                     : ""
                 }
                 leadSelectionPath={leadSelectionPath}
-                onOpenLeadPicker={() => setLeadPickerOpen(true)}
+                onOpenLeadPicker={handleOpenLeadPicker}
+                leadPickerLabel="Open Student Master to select leads"
                 assigneeLockedToSelf={false}
                 assigneeHelperText={
                   isEmployee
-                    ? "Choose who should own this task. Leads are loaded from the assignee's Lead Management dashboard."
+                    ? "Pick category → department → person. Employees show name and department."
                     : departmentAssigner
-                    ? "Only active students in your department are listed (same department as your profile in User Master)."
-                    : "Active students, freelancers, mentors, and admins who can receive tasks are shown."
+                    ? "Only active students in your department are listed."
+                    : "Pick Student, Freelancer, Mentor, or Employee — then department and person."
                 }
                 submitting={submitting}
                 onChange={(next) => {
@@ -1207,19 +1274,6 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           </div>
         </>
       ) : null}
-
-      <TaskLeadPickerModal
-        open={leadPickerOpen}
-        assigneeId={form.assigned_to}
-        assigneeName={
-          employeeNameMap[form.assigned_to] ||
-          assigneePickerOptions.find((e) => e.id === form.assigned_to)?.label ||
-          "Assignee"
-        }
-        initialSelectedIds={selectedClientIds}
-        onClose={() => setLeadPickerOpen(false)}
-        onConfirm={handleLeadPickerConfirm}
-      />
     </section>
   );
 }
