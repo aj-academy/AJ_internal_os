@@ -1,5 +1,6 @@
 export type TaskStatus = "Pending" | "In Progress" | "Completed";
 export type TaskPriority = "Low" | "Medium" | "High";
+export type TaskAssignmentType = "lead" | "project";
 
 export interface TaskRecord {
   id: string;
@@ -20,7 +21,11 @@ export interface TaskRecord {
   start_date: string | null;
   due_date: string | null;
   progress: number;
+  assignment_type?: TaskAssignmentType | null;
   project_id?: string | null;
+  project_label?: string | null;
+  client_ids?: string[];
+  linked_lead_labels?: string[];
   attachment_urls?: { name: string; url: string; mime: string; size: number }[];
   created_at: string;
   updated_at: string;

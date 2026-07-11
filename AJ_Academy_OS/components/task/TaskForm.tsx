@@ -2,12 +2,13 @@
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import type { TaskPriority, TaskStatus } from "@/types/task";
+import type { TaskAssignmentType, TaskPriority, TaskStatus } from "@/types/task";
 
 export interface TaskFormValue {
   title: string;
   description: string;
   assigned_to: string;
+  assignment_type: TaskAssignmentType | "";
   project_id: string;
   priority: TaskPriority;
   status: TaskStatus;
@@ -32,7 +33,11 @@ interface TaskFormProps {
   value: TaskFormValue;
   employees: EmployeeOption[];
   projects?: ProjectOption[];
-  showProjectField?: boolean;
+  showAssignmentFields?: boolean;
+  selectedLeadCount?: number;
+  selectedLeadPreview?: string;
+  leadSelectionPath?: string;
+  onOpenLeadPicker?: () => void;
   /** When true, assignee is fixed (self); used for employee personal tasks */
   assigneeLockedToSelf?: boolean;
   /** Shown under assignee field (e.g. who appears in the list) */
@@ -52,7 +57,11 @@ export function TaskForm({
   value,
   employees,
   projects = [],
-  showProjectField = false,
+  showAssignmentFields = false,
+  selectedLeadCount = 0,
+  selectedLeadPreview = "",
+  leadSelectionPath = "",
+  onOpenLeadPicker,
   assigneeLockedToSelf = false,
   assigneeHelperText,
   submitting,
@@ -61,6 +70,8 @@ export function TaskForm({
   onSubmit,
 }: TaskFormProps) {
   if (!open) return null;
+
+  const assignmentType = value.assignment_type;
 
   return (
     <aside className="h-full max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[24px] border border-[#e8dcc8] bg-white p-5 shadow-[0_16px_30px_rgba(30,64,175,0.12)]">
@@ -83,22 +94,6 @@ export function TaskForm({
             className="w-full rounded-lg border border-[#e8dcc8] px-3 py-2 text-sm outline-none focus:border-[#c9a227]"
           />
         </Field>
-        {showProjectField ? (
-          <Field label="Project (optional)">
-            <select
-              value={value.project_id}
-              onChange={(event) => onChange({ ...value, project_id: event.target.value })}
-              className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227]"
-            >
-              <option value="">No project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : null}
         {assigneeLockedToSelf ? (
           <div className="rounded-lg border border-[#dbe6f3] bg-[#f8fbff] px-3 py-2 text-sm text-[#334155]">
             <span className="font-medium text-[#0f172a]">Assigned to</span>
@@ -108,7 +103,14 @@ export function TaskForm({
           <Field label="Assign to">
             <select
               value={value.assigned_to}
-              onChange={(event) => onChange({ ...value, assigned_to: event.target.value })}
+              onChange={(event) =>
+                onChange({
+                  ...value,
+                  assigned_to: event.target.value,
+                  assignment_type: "",
+                  project_id: "",
+                })
+              }
               className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227]"
             >
               <option value="">Select employee</option>
@@ -121,6 +123,84 @@ export function TaskForm({
             {assigneeHelperText ? <p className="mt-1.5 text-xs text-[#64748b]">{assigneeHelperText}</p> : null}
           </Field>
         )}
+
+        {showAssignmentFields ? (
+          <>
+            <Field label="Link task to">
+              <div className="grid grid-cols-2 gap-2">
+                {(["lead", "project"] as TaskAssignmentType[]).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    disabled={!value.assigned_to && !assigneeLockedToSelf}
+                    onClick={() =>
+                      onChange({
+                        ...value,
+                        assignment_type: type,
+                        project_id: type === "project" ? value.project_id : "",
+                      })
+                    }
+                    className={[
+                      "rounded-lg border px-3 py-2 text-sm font-medium transition",
+                      assignmentType === type
+                        ? "border-[#c9a227] bg-[#fef3c7] text-[#92400e]"
+                        : "border-[#e8dcc8] bg-white text-[#334155] hover:bg-[#faf6ee]",
+                      !value.assigned_to && !assigneeLockedToSelf ? "cursor-not-allowed opacity-50" : "",
+                    ].join(" ")}
+                  >
+                    {type === "lead" ? "Leads" : "Project"}
+                  </button>
+                ))}
+              </div>
+              {!value.assigned_to && !assigneeLockedToSelf ? (
+                <p className="mt-1.5 text-xs text-[#64748b]">Select an assignee first to pick leads from their dashboard.</p>
+              ) : null}
+            </Field>
+
+            {assignmentType === "lead" ? (
+              <div className="space-y-2 rounded-xl border border-[#dbe6f3] bg-[#f8fbff] p-3">
+                <p className="text-sm font-medium text-[#0f172a]">Leads from assignee dashboard</p>
+                {leadSelectionPath ? (
+                  <p className="text-xs text-[#64748b]" title={leadSelectionPath}>
+                    {leadSelectionPath}
+                  </p>
+                ) : null}
+                {selectedLeadPreview ? (
+                  <p className="text-xs font-medium text-[#334155]">{selectedLeadPreview}</p>
+                ) : (
+                  <p className="text-xs text-[#64748b]">No leads selected yet.</p>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={(!value.assigned_to && !assigneeLockedToSelf) || submitting}
+                  onClick={onOpenLeadPicker}
+                  className="h-9 w-full rounded-full border-[#c9a227] text-[#92400e] hover:bg-[#fef3c7]"
+                >
+                  {selectedLeadCount ? `Change selection (${selectedLeadCount})` : "Browse & select leads"}
+                </Button>
+              </div>
+            ) : null}
+
+            {assignmentType === "project" ? (
+              <Field label="Project">
+                <select
+                  value={value.project_id}
+                  onChange={(event) => onChange({ ...value, project_id: event.target.value })}
+                  className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227]"
+                >
+                  <option value="">Select project</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : null}
+          </>
+        ) : null}
+
         <Field label="Priority">
           <select
             value={value.priority}

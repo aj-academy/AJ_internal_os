@@ -93,8 +93,8 @@ export type LeadActivityRow = {
   created_by?: string | null;
 };
 
-export function displayLeadName(row: EmployeeLeadRow) {
-  return (row.lead_name || row.name || "Unnamed lead").trim();
+export function displayLeadName(row: Pick<EmployeeLeadRow, "lead_name" | "name"> & { company_name?: string | null }) {
+  return (row.lead_name || row.name || row.company_name || "Unnamed lead").trim();
 }
 
 export function digitsOnly(phone: string | null | undefined) {
