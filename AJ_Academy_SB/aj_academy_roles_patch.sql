@@ -15,6 +15,7 @@ as $$
 $$;
 
 drop policy if exists "tasks_employee_select_assigned" on public.tasks;
+drop policy if exists "tasks_member_select_assigned" on public.tasks;
 create policy "tasks_member_select_assigned"
 on public.tasks for select to authenticated
 using (
@@ -23,6 +24,7 @@ using (
 );
 
 drop policy if exists "tasks_employee_update_status_progress" on public.tasks;
+drop policy if exists "tasks_member_update_status_progress" on public.tasks;
 create policy "tasks_member_update_status_progress"
 on public.tasks for update to authenticated
 using (assigned_to = auth.uid() and public.is_member_role())
