@@ -307,8 +307,10 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const pickForTask = searchParams.get("pickForTask") === "1";
   const defaultReturnTo = role === "admin" ? "/admin/task-assignment" : "/employee/my-tasks";
   const returnTo = searchParams.get("returnTo") || defaultReturnTo;
-  const isAdmin = role === "admin" || (role === "employee" && fullAccess);
   const isEmployeePortal = role === "employee";
+  /** Admin UI + full CRM writes (includes employee Student Master with fullAccess). */
+  const isAdmin = role === "admin" || (isEmployeePortal && fullAccess);
+  const isDbAdmin = role === "admin";
   const visibleTabIds = useMemo(
     () => (isEmployeePortal ? CRM_TAB_IDS.filter((id) => id !== "reports" && id !== "settings") : [...CRM_TAB_IDS]),
     [isEmployeePortal],
@@ -1126,13 +1128,14 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     }
 
     const scoreRaw = Number(v.lead_score);
+    const assignee = v.assigned_to.trim() || null;
     return {
       ...base,
       status: v.status,
       priority: v.priority || "Warm",
       lead_score: Number.isFinite(scoreRaw) ? Math.min(100, Math.max(0, Math.round(scoreRaw))) : 0,
-      assigned_to: isAdmin ? (v.assigned_to || null) : currentUserId,
-      assigned_by: isAdmin ? currentUserId : null,
+      assigned_to: isDbAdmin ? assignee : assignee || currentUserId,
+      assigned_by: currentUserId,
     };
   }
 
@@ -1141,7 +1144,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     setSuccess(null);
     setError(null);
     setEditId(null);
-    setForm(emptyForm(currentUserId, true));
+    setForm(emptyForm(currentUserId, isDbAdmin));
     setPanelOpen(true);
   };
 
@@ -1159,7 +1162,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       if (form.interested_program === NEW_PROGRAM_OPTION) {
         const programName = form.new_program_name.trim();
         if (!programName) throw new Error("Enter a name for the new program.");
-        if (isAdmin) {
+        if (isDbAdmin) {
           const updated = await persistInterestedPrograms([...interestedPrograms, programName]);
           setInterestedPrograms(updated);
         }

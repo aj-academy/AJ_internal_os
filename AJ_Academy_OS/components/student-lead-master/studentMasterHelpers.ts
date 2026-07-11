@@ -160,6 +160,13 @@ export function friendlyError(raw: unknown) {
   if (msg.includes("does not exist") || msg.includes("schema cache")) {
     return "Database tables are missing or out of date. Run `student_lead_master_schema.sql`, then `student_master_columns_patch.sql` from AJ_Academy_SB in Supabase SQL Editor.";
   }
+  if (
+    msg === "Forbidden" ||
+    msg.toLowerCase().includes("row-level security") ||
+    msg.toLowerCase().includes("permission denied")
+  ) {
+    return "Save blocked by database permissions. In Supabase SQL Editor, run `employee_student_master_rls.sql` from AJ_Academy_SB (see DATABASE_SETUP_ORDER.txt step 10j), then refresh and try again.";
+  }
   return msg;
 }
 

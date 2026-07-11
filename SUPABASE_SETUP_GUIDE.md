@@ -125,7 +125,15 @@ Desktop/AJ_Academy/
 
 Employees use `/employee/*` for attendance, **My Tasks** (assign tasks with leads/projects + attachments), **Student Master** (full CRM — same as admin), Lead Management, leave, reimbursement, and profile.
 
-After Student Master SQL is applied, run **`employee_student_master_rls.sql`** so employees can read/write CRM data like admin.
+After Student Master SQL is applied, run **`employee_student_master_rls.sql`** so employees can read/write CRM data like admin. This script drops legacy “assigned-only” policies that block **Add Student** (403 / row-level security errors).
+
+If an employee sees **Forbidden** when saving a student, run (in order):
+
+1. `student_lead_master_schema.sql` + `student_lead_master_aux_schema.sql` (if not already applied)
+2. `security_rls_access_fix.sql`
+3. **`employee_student_master_rls.sql`** — required for employee create/update/select on all leads
+
+Then hard-refresh the app and try **Add Student** again.
 
 Task assignment from `/employee/my-tasks` opens **Student Master** to pick leads (same flow as admin).
 
