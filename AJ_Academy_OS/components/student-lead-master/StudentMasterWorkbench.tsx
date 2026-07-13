@@ -688,6 +688,19 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const leadBulk = useRowSelection(leadsForBulk, (lead) => lead.id);
   const [bulkAssignTo, setBulkAssignTo] = useState("");
 
+  const rowsForExport = useMemo(() => {
+    if (leadBulk.selectedCount > 0) {
+      return filteredClients.filter((c) => leadBulk.selected.has(c.id));
+    }
+    if (activeTab === "converted") {
+      return filteredClients.filter((leadEntry) => {
+        const st = normalizeStatus(String(leadEntry.status));
+        return st === "Converted" || st === "Admitted";
+      });
+    }
+    return filteredClients;
+  }, [activeTab, filteredClients, leadBulk.selected, leadBulk.selectedCount]);
+
   useEffect(() => {
     leadBulk.clearSelection();
     setBulkAssignTo("");
@@ -1632,12 +1645,25 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   };
 
   const handleExportStudents = () => {
-    if (!filteredClients.length) {
-      setError("No rows to export.");
+    if (!rowsForExport.length) {
+      setError("No rows match the current filters to export.");
       return;
     }
-    exportStudentMasterCsv(filteredClients, employeeNameMap);
-    setSuccess(`Exported ${filteredClients.length} student row(s).`);
+    const date = new Date().toISOString().slice(0, 10);
+    const filename =
+      leadBulk.selectedCount > 0
+        ? `student-master-selected-${date}.csv`
+        : filtersActive
+          ? `student-master-filtered-${date}.csv`
+          : `student-master-${date}.csv`;
+    exportStudentMasterCsv(rowsForExport, employeeNameMap, filename);
+    setSuccess(
+      leadBulk.selectedCount > 0
+        ? `Exported ${rowsForExport.length} selected student row(s).`
+        : filtersActive
+          ? `Exported ${rowsForExport.length} filtered student row(s) (of ${clients.length} total).`
+          : `Exported all ${rowsForExport.length} student row(s).`,
+    );
   };
 
   const handleImportStudents = async (file: File) => {
@@ -1723,11 +1749,22 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
                 type="button"
                 variant="outline"
                 className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
-                disabled={!filteredClients.length}
+                disabled={!rowsForExport.length}
                 onClick={handleExportStudents}
+                title={
+                  leadBulk.selectedCount > 0
+                    ? "Export selected rows"
+                    : filtersActive
+                      ? "Export rows matching current table filters"
+                      : "Export all rows visible for this view"
+                }
               >
                 <Download className="mr-1 h-4 w-4" />
-                Export{filteredClients.length ? ` (${filteredClients.length})` : ""}
+                {leadBulk.selectedCount > 0
+                  ? `Export selected (${rowsForExport.length})`
+                  : filtersActive
+                    ? `Export filtered (${rowsForExport.length})`
+                    : `Export${rowsForExport.length ? ` (${rowsForExport.length})` : ""}`}
               </Button>
             </>
           ) : null}

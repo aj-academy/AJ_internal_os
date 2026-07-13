@@ -217,6 +217,19 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     return list;
   }, [visits, searchText, fltVisitStatus, fltPriority, fltOwner, fltFinalStatus, fltFollowUpDue]);
 
+  const filtersActive = Boolean(
+    searchText.trim() || fltVisitStatus || fltPriority || fltOwner || fltFinalStatus || fltFollowUpDue,
+  );
+
+  const clearTableFilters = () => {
+    setSearchText("");
+    setFltVisitStatus("");
+    setFltPriority("");
+    setFltOwner("");
+    setFltFinalStatus("");
+    setFltFollowUpDue("");
+  };
+
   const {
     paginatedItems: pageRows,
     page,
@@ -227,7 +240,15 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setPageSize,
   } = usePagination(filteredVisits, 25);
 
-  const visitBulk = useRowSelection(pageRows, (v) => v.id);
+  /** Select across the full filtered set (not only the current page). */
+  const visitBulk = useRowSelection(filteredVisits, (v) => v.id);
+
+  const rowsForExport = useMemo(() => {
+    if (visitBulk.selectedCount > 0) {
+      return filteredVisits.filter((v) => visitBulk.selected.has(v.id));
+    }
+    return filteredVisits;
+  }, [filteredVisits, visitBulk.selected, visitBulk.selectedCount]);
 
   const overview = useMemo(() => {
     const due = visits.filter((v) => isFollowUpDue(v)).length;
@@ -362,12 +383,25 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   };
 
   const handleExport = () => {
-    if (!filteredVisits.length) {
-      setError("No rows to export.");
+    if (!rowsForExport.length) {
+      setError("No rows match the current filters to export.");
       return;
     }
-    exportCollegeVisitsCsv(filteredVisits, ownerNameMap);
-    setSuccess(`Exported ${filteredVisits.length} college visit row(s).`);
+    const date = new Date().toISOString().slice(0, 10);
+    const filename =
+      visitBulk.selectedCount > 0
+        ? `college-visits-selected-${date}.csv`
+        : filtersActive
+          ? `college-visits-filtered-${date}.csv`
+          : `college-visits-${date}.csv`;
+    exportCollegeVisitsCsv(rowsForExport, ownerNameMap, filename);
+    setSuccess(
+      visitBulk.selectedCount > 0
+        ? `Exported ${rowsForExport.length} selected row(s).`
+        : filtersActive
+          ? `Exported ${rowsForExport.length} filtered row(s) (of ${visits.length} total).`
+          : `Exported all ${rowsForExport.length} college visit row(s).`,
+    );
   };
 
   const handleImportFile = async (file: File) => {
@@ -475,11 +509,22 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
                 type="button"
                 variant="outline"
                 className="h-9 rounded-full border-[#e8dcc8]"
-                disabled={!filteredVisits.length}
+                disabled={!rowsForExport.length}
                 onClick={handleExport}
+                title={
+                  visitBulk.selectedCount > 0
+                    ? "Export selected rows"
+                    : filtersActive
+                      ? "Export rows matching current table filters"
+                      : "Export all rows in the table"
+                }
               >
                 <Download className="mr-1 h-4 w-4" />
-                Export{filteredVisits.length ? ` (${filteredVisits.length})` : ""}
+                {visitBulk.selectedCount > 0
+                  ? `Export selected (${rowsForExport.length})`
+                  : filtersActive
+                    ? `Export filtered (${rowsForExport.length})`
+                    : `Export${rowsForExport.length ? ` (${rowsForExport.length})` : ""}`}
               </Button>
             </>
           ) : null}
@@ -533,7 +578,14 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         {isEmployeePortal ? <LeadSummaryCard title="Assigned to me" value={overview.mine} loading={loading} /> : null}
       </div>
 
-      <TableSearchBar value={searchText} onChange={setSearchText} placeholder="Search college, location, contact, email…" />
+      <TableSearchBar
+        value={searchText}
+        onChange={setSearchText}
+        placeholder="Search college, location, contact, email…"
+        showClear={filtersActive}
+        onClear={clearTableFilters}
+        hint={`Showing ${pageRows.length} of ${filteredVisits.length} college(s) · page ${page}/${totalPages}`}
+      />
 
       {isDbAdmin && !pickForTask && visitBulk.selectedCount > 0 ? (
         <BulkSelectionBar selectedCount={visitBulk.selectedCount} onClear={visitBulk.clearSelection}>
