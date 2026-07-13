@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Download, FileText, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { saveTaskCollegeSelection } from "@/lib/taskLeadPickStorage";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,11 @@ import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { CollegeVisitFormPanel } from "@/components/college-visits/CollegeVisitFormPanel";
+import {
+  downloadCollegeVisitImportTemplate,
+  exportCollegeVisitsCsv,
+  parseCollegeVisitCsvRows,
+} from "@/components/college-visits/collegeVisitsCsv";
 import {
   COLLEGE_PRIORITIES,
   FINAL_STATUSES,
@@ -38,6 +44,14 @@ interface ProfileMini {
   id: string;
   full_name: string | null;
   email: string | null;
+}
+
+function ownerPeopleFromProfiles(employees: ProfileMini[]) {
+  return employees.map((e) => ({
+    id: e.id,
+    label: e.full_name || e.email || "Unnamed",
+    email: e.email,
+  }));
 }
 
 export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: AppRole; fullAccess?: boolean }) {
@@ -75,6 +89,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [viewVisit, setViewVisit] = useState<CollegeVisitRow | null>(null);
   const [bulkAssignTo, setBulkAssignTo] = useState("");
   const [pickedCollegeIds, setPickedCollegeIds] = useState<Set<string>>(new Set());
+  const [importing, setImporting] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   const ownerOptions = useMemo(
     () =>
@@ -340,8 +356,67 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     }
   };
 
-  const thClass = "whitespace-nowrap px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-[#64748b]";
-  const tdClass = "whitespace-nowrap px-2 py-2 text-xs text-[#334155]";
+  const handleDownloadTemplate = () => {
+    downloadCollegeVisitImportTemplate();
+    setSuccess("Import template downloaded (headers match the College Visits table).");
+  };
+
+  const handleExport = () => {
+    if (!filteredVisits.length) {
+      setError("No rows to export.");
+      return;
+    }
+    exportCollegeVisitsCsv(filteredVisits, ownerNameMap);
+    setSuccess(`Exported ${filteredVisits.length} college visit row(s).`);
+  };
+
+  const handleImportFile = async (file: File) => {
+    if (!currentUserId || !isAdmin) return;
+    setImporting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const text = await file.text();
+      const { forms, errors } = parseCollegeVisitCsvRows(text, {
+        owners: ownerPeopleFromProfiles(employees),
+        defaultOwnerId: currentUserId,
+        isDbAdmin,
+      });
+      let ok = 0;
+      let fail = errors.length;
+      const rowErrors = [...errors];
+
+      for (const formRow of forms) {
+        const payload = buildCollegeVisitPayload(formRow, { userId: currentUserId, isDbAdmin });
+        const res = await fetch("/api/college-visits", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...formRow, assigned_to: payload.assigned_to ?? "" }),
+        });
+        if (!res.ok) {
+          const json = (await res.json()) as { error?: string };
+          fail += 1;
+          rowErrors.push(json.error ?? "Insert failed.");
+        } else {
+          ok += 1;
+        }
+      }
+
+      await reload();
+      setSuccess(
+        `Import complete: ${ok} added, ${fail} failed.${rowErrors.length ? ` ${rowErrors.slice(0, 3).join(" ")}` : ""}`,
+      );
+    } catch (e) {
+      setError(friendlyCollegeVisitError(e));
+    } finally {
+      setImporting(false);
+      if (importFileRef.current) importFileRef.current.value = "";
+    }
+  };
+
+  const thClass =
+    "min-w-[10.5rem] whitespace-nowrap px-6 py-3.5 text-center align-middle text-[11px] font-semibold uppercase tracking-wide text-[#64748b]";
+  const tdClass = "min-w-[10.5rem] whitespace-nowrap px-6 py-3.5 text-center align-middle text-xs text-[#334155]";
 
   return (
     <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
@@ -362,6 +437,51 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
               <option value="mine">My assigned colleges</option>
               <option value="all">All colleges</option>
             </select>
+          ) : null}
+          {!pickForTask ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-full border-[#e8dcc8]"
+                onClick={handleDownloadTemplate}
+              >
+                <FileText className="mr-1 h-4 w-4" />
+                Import template
+              </Button>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleImportFile(f);
+                }}
+              />
+              {isAdmin ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 rounded-full border-[#e8dcc8]"
+                  disabled={importing || schemaMissing}
+                  onClick={() => importFileRef.current?.click()}
+                >
+                  <Upload className="mr-1 h-4 w-4" />
+                  {importing ? "Importing…" : "Import"}
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-full border-[#e8dcc8]"
+                disabled={!filteredVisits.length}
+                onClick={handleExport}
+              >
+                <Download className="mr-1 h-4 w-4" />
+                Export{filteredVisits.length ? ` (${filteredVisits.length})` : ""}
+              </Button>
+            </>
           ) : null}
           <Button variant="outline" className="h-9 rounded-full border-[#e8dcc8]" disabled={loading} onClick={() => void reload()}>
             Refresh
@@ -437,18 +557,20 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       ) : null}
 
       <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3]">
-        <table className="min-w-[2200px] w-full border-collapse">
+        <table className="min-w-[3800px] w-full border-separate border-spacing-0">
           <thead className="bg-[#f8fbff]">
             <tr>
-              {pickForTask ? <TableHeaderCell label="Pick" className={thClass} /> : null}
+              {pickForTask ? <TableHeaderCell label="Pick" className={`${thClass} min-w-[4.5rem]`} /> : null}
               {isDbAdmin && !pickForTask ? (
-                <th className={thClass}>
-                  <TableBulkCheckbox
-                    checked={visitBulk.allSelected}
-                    indeterminate={visitBulk.someSelected}
-                    onChange={visitBulk.toggleAll}
-                    ariaLabel="Select all colleges"
-                  />
+                <th className={`${thClass} min-w-[4.5rem]`}>
+                  <div className="flex justify-center">
+                    <TableBulkCheckbox
+                      checked={visitBulk.allSelected}
+                      indeterminate={visitBulk.someSelected}
+                      onChange={visitBulk.toggleAll}
+                      ariaLabel="Select all colleges"
+                    />
+                  </div>
                 </th>
               ) : null}
               <TableHeaderCell label="S.No" className={thClass} />
@@ -456,23 +578,23 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
               <TableHeaderCell label="Location" className={thClass} />
               <TableHeaderCell label="Contact Number" className={thClass} />
               <TableHeaderCell label="Email ID" className={thClass} />
-              <TableHeaderCell label="Connected Person" className={thClass} />
+              <TableHeaderCell label="Connected Person Name" className={thClass} />
               <TableHeaderCell label="Role" className={thClass} />
               <TableHeaderFilter label="Visit Status" value={fltVisitStatus} options={VISIT_STATUSES.map((s) => ({ value: s, label: s }))} onChange={setFltVisitStatus} className={thClass} />
               <TableHeaderCell label="Visit Date" className={thClass} />
-              <TableHeaderCell label="MOU Status" className={thClass} />
+              <TableHeaderCell label="MOU Signed Status" className={thClass} />
               <TableHeaderCell label="Follow-up Stage" className={thClass} />
-              <TableHeaderCell label="Last Follow-up" className={thClass} />
-              <TableHeaderCell label="Next Follow-up" className={thClass} />
+              <TableHeaderCell label="Last Follow-up Date" className={thClass} />
+              <TableHeaderCell label="Next Follow-up Date" className={thClass} />
               <TableHeaderFilter label="Priority" value={fltPriority} options={COLLEGE_PRIORITIES.map((p) => ({ value: p, label: p }))} onChange={setFltPriority} className={thClass} />
               <TableHeaderFilter label="Owner" value={fltOwner} options={ownerOptions.map((o) => ({ value: o.id, label: o.label }))} onChange={setFltOwner} className={thClass} />
               <TableHeaderCell label="Description" className={thClass} />
-              <TableHeaderCell label="Last Outcome" className={thClass} />
-              <TableHeaderCell label="Days Since F/U" className={thClass} />
+              <TableHeaderCell label="Last Outcome / Remarks" className={thClass} />
+              <TableHeaderCell label="Days Since Last Follow-up" className={thClass} />
               <TableHeaderFilter label="Follow-up Due?" value={fltFollowUpDue} options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]} onChange={setFltFollowUpDue} className={thClass} />
               <TableHeaderCell label="Lead Score" className={thClass} />
               <TableHeaderFilter label="Final Status" value={fltFinalStatus} options={FINAL_STATUSES.map((s) => ({ value: s, label: s }))} onChange={setFltFinalStatus} className={thClass} />
-              <TableHeaderCell label="Source" className={thClass} />
+              <TableHeaderCell label="Source / Reference" className={thClass} />
               {!pickForTask ? <TableHeaderCell label="Actions" className={thClass} /> : null}
             </tr>
           </thead>
@@ -488,52 +610,56 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
                 return (
                   <tr key={row.id} className="border-t border-[#eef2f7] hover:bg-[#fafcff]">
                     {pickForTask ? (
-                      <td className={tdClass}>
-                        <TableBulkCheckbox
-                          checked={pickedCollegeIds.has(row.id)}
-                          onChange={() => togglePickCollege(row.id)}
-                          ariaLabel={`Pick ${row.college_name}`}
-                        />
+                      <td className={`${tdClass} min-w-[4.5rem]`}>
+                        <div className="flex justify-center">
+                          <TableBulkCheckbox
+                            checked={pickedCollegeIds.has(row.id)}
+                            onChange={() => togglePickCollege(row.id)}
+                            ariaLabel={`Pick ${row.college_name}`}
+                          />
+                        </div>
                       </td>
                     ) : null}
                     {isDbAdmin && !pickForTask ? (
-                      <td className={tdClass}>
-                        <TableBulkCheckbox
-                          checked={visitBulk.isSelected(row.id)}
-                          onChange={() => visitBulk.toggleOne(row.id)}
-                          ariaLabel={`Select ${row.college_name}`}
-                        />
+                      <td className={`${tdClass} min-w-[4.5rem]`}>
+                        <div className="flex justify-center">
+                          <TableBulkCheckbox
+                            checked={visitBulk.isSelected(row.id)}
+                            onChange={() => visitBulk.toggleOne(row.id)}
+                            ariaLabel={`Select ${row.college_name}`}
+                          />
+                        </div>
                       </td>
                     ) : null}
-                    <td className={tdClass}>{(page - 1) * pageSize + idx + 1}</td>
-                    <td className={`${tdClass} max-w-[160px] truncate font-medium`} title={row.college_name}>{row.college_name}</td>
+                    <td className={`${tdClass} min-w-[4.5rem]`}>{(page - 1) * pageSize + idx + 1}</td>
+                    <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate font-medium`} title={row.college_name}>{row.college_name}</td>
                     <td className={tdClass}>{row.location || "—"}</td>
                     <td className={tdClass}>{row.contact_number || "—"}</td>
                     <td className={tdClass}>{row.email || "—"}</td>
-                    <td className={tdClass}>{row.connected_person_name || "—"}</td>
+                    <td className={`${tdClass} min-w-[12rem]`}>{row.connected_person_name || "—"}</td>
                     <td className={tdClass}>{row.connected_person_role || "—"}</td>
                     <td className={tdClass}>{row.visit_status}</td>
                     <td className={tdClass}>{row.visit_date?.slice(0, 10) || "—"}</td>
-                    <td className={tdClass}>{row.mou_signed_status}</td>
-                    <td className={tdClass}>{row.follow_up_stage || "—"}</td>
-                    <td className={tdClass}>{row.last_follow_up_date?.slice(0, 10) || "—"}</td>
-                    <td className={tdClass}>{row.next_follow_up_date?.slice(0, 10) || "—"}</td>
+                    <td className={`${tdClass} min-w-[11rem]`}>{row.mou_signed_status}</td>
+                    <td className={`${tdClass} min-w-[11rem]`}>{row.follow_up_stage || "—"}</td>
+                    <td className={`${tdClass} min-w-[11rem]`}>{row.last_follow_up_date?.slice(0, 10) || "—"}</td>
+                    <td className={`${tdClass} min-w-[11rem]`}>{row.next_follow_up_date?.slice(0, 10) || "—"}</td>
                     <td className={tdClass}>{row.priority}</td>
-                    <td className={tdClass}>{row.assigned_to ? ownerNameMap[row.assigned_to] || "—" : "—"}</td>
-                    <td className={`${tdClass} max-w-[140px] truncate`} title={row.description ?? ""}>{row.description || "—"}</td>
-                    <td className={`${tdClass} max-w-[140px] truncate`} title={row.last_outcome_remarks ?? ""}>{row.last_outcome_remarks || "—"}</td>
-                    <td className={tdClass}>{days != null ? days : "—"}</td>
+                    <td className={`${tdClass} min-w-[11rem]`}>{row.assigned_to ? ownerNameMap[row.assigned_to] || "—" : "—"}</td>
+                    <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate`} title={row.description ?? ""}>{row.description || "—"}</td>
+                    <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate`} title={row.last_outcome_remarks ?? ""}>{row.last_outcome_remarks || "—"}</td>
+                    <td className={`${tdClass} min-w-[12rem]`}>{days != null ? days : "—"}</td>
                     <td className={tdClass}>
-                      <span className={due ? "rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700" : "rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600"}>
+                      <span className={due ? "inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700" : "inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600"}>
                         {due ? "Yes" : "No"}
                       </span>
                     </td>
                     <td className={tdClass}>{row.lead_score}</td>
                     <td className={tdClass}>{row.final_status}</td>
-                    <td className={tdClass}>{row.source_reference || "—"}</td>
+                    <td className={`${tdClass} min-w-[11rem]`}>{row.source_reference || "—"}</td>
                     {!pickForTask ? (
-                      <td className={tdClass}>
-                        <div className="flex gap-1">
+                      <td className={`${tdClass} min-w-[11rem]`}>
+                        <div className="flex flex-wrap items-center justify-center gap-2">
                           <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => setViewVisit(row)}>Activity</Button>
                           {isAdmin ? (
                             <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => openEdit(row)}>Edit</Button>

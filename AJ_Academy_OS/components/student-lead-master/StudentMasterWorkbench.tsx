@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Download, FileText, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
@@ -39,6 +40,11 @@ import {
   friendlyError,
   normalizeStatus,
 } from "@/components/student-lead-master/studentMasterHelpers";
+import {
+  downloadStudentMasterImportTemplate,
+  exportStudentMasterCsv,
+  parseStudentMasterCsvRows,
+} from "@/components/student-lead-master/studentMasterCsv";
 import { formatDateTimeIST } from "@/lib/datetime";
 import { fetchInterestedPrograms, persistInterestedPrograms } from "@/lib/studentPrograms";
 import { StudentOutreachButtons } from "@/components/student-lead-master/StudentOutreachButtons";
@@ -403,9 +409,13 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       employees.map((employee) => ({
         id: employee.id,
         label: employee.full_name || employee.email || "Unnamed",
+        email: employee.email,
       })),
     [employees],
   );
+
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
 
   const buildClientsBaseQuery = useCallback(() => {
     let q = supabase.from("clients").select(STUDENT_LEAD_SELECT).order("updated_at", { ascending: false }).limit(800);
@@ -1616,6 +1626,58 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
 
   const todayFollowUps = followRowsScoped.filter((f) => f.follow_up_date === todayISO());
 
+  const handleDownloadStudentTemplate = () => {
+    downloadStudentMasterImportTemplate();
+    setSuccess("Import template downloaded (headers match the Student Master table).");
+  };
+
+  const handleExportStudents = () => {
+    if (!filteredClients.length) {
+      setError("No rows to export.");
+      return;
+    }
+    exportStudentMasterCsv(filteredClients, employeeNameMap);
+    setSuccess(`Exported ${filteredClients.length} student row(s).`);
+  };
+
+  const handleImportStudents = async (file: File) => {
+    if (!currentUserId || !isAdmin) return;
+    setImporting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const text = await file.text();
+      const { payloads, errors } = parseStudentMasterCsvRows(text, {
+        counsellors: employeesForSelect,
+        currentUserId,
+        isDbAdmin,
+      });
+      let ok = 0;
+      let fail = errors.length;
+      const rowErrors = [...errors];
+
+      for (const payload of payloads) {
+        const { error: insertError } = await supabase.from("clients").insert(payload);
+        if (insertError) {
+          fail += 1;
+          rowErrors.push(insertError.message);
+        } else {
+          ok += 1;
+        }
+      }
+
+      await reload();
+      setSuccess(
+        `Import complete: ${ok} added, ${fail} failed.${rowErrors.length ? ` ${rowErrors.slice(0, 3).join(" ")}` : ""}`,
+      );
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setImporting(false);
+      if (importFileRef.current) importFileRef.current.value = "";
+    }
+  };
+
   return (
     <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -1623,7 +1685,52 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
           <h2 className="text-3xl font-semibold text-[#0f172a]">Student Master</h2>
           <p className="mt-1 text-sm text-[#64748b]">Manage student leads, counselling follow-ups, fees and admissions.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {!pickForTask ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
+                onClick={handleDownloadStudentTemplate}
+              >
+                <FileText className="mr-1 h-4 w-4" />
+                Import template
+              </Button>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleImportStudents(f);
+                }}
+              />
+              {isAdmin ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
+                  disabled={importing}
+                  onClick={() => importFileRef.current?.click()}
+                >
+                  <Upload className="mr-1 h-4 w-4" />
+                  {importing ? "Importing…" : "Import"}
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
+                disabled={!filteredClients.length}
+                onClick={handleExportStudents}
+              >
+                <Download className="mr-1 h-4 w-4" />
+                Export{filteredClients.length ? ` (${filteredClients.length})` : ""}
+              </Button>
+            </>
+          ) : null}
           <Button
             variant="outline"
             disabled={loading}
@@ -2238,55 +2345,57 @@ function AllLeadsTable({
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[2200px] text-sm">
+      <table className="w-full min-w-[3800px] text-sm">
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
-            {pickMode ? <TableHeaderCell label="Pick" className="px-3 py-2" /> : null}
+            {pickMode ? <TableHeaderCell label="Pick" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" /> : null}
             {showBulk ? (
-              <th className="w-10 px-3 py-2">
-                <TableBulkCheckbox
-                  checked={bulkSelection!.allSelected}
-                  indeterminate={bulkSelection!.someSelected}
-                  disabled={!leads.length}
-                  onChange={bulkSelection!.onToggleAll}
-                  ariaLabel="Select all leads"
-                />
+              <th className="w-12 px-6 py-3.5 text-center align-middle">
+                <div className="flex justify-center">
+                  <TableBulkCheckbox
+                    checked={bulkSelection!.allSelected}
+                    indeterminate={bulkSelection!.someSelected}
+                    disabled={!leads.length}
+                    onChange={bulkSelection!.onToggleAll}
+                    ariaLabel="Select all leads"
+                  />
+                </div>
               </th>
             ) : null}
-            <TableHeaderCell label="Student Name" className="px-3 py-2" />
-            <TableHeaderCell label="Mobile Number" className="px-3 py-2 text-center" />
-            <TableHeaderCell label="WhatsApp Number" className="px-3 py-2 text-center" />
-            <TableHeaderCell label="Email" className="px-3 py-2 text-center" />
+            <TableHeaderCell label="Student Name" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="Mobile Number" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="WhatsApp Number" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="Email" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
             <TableHeaderFilter
               label="Degree"
               value={fltDegree}
               onChange={setFltDegree}
               options={degreeOptions.map((d) => ({ value: d, label: d }))}
               allLabel="All degrees"
-              className="px-3 py-2"
+              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
             />
-            <TableHeaderCell label="College" className="px-3 py-2" />
-            <TableHeaderCell label="Year of Passing" className="px-3 py-2" />
-            <TableHeaderCell label="Employment Status" className="px-3 py-2" />
-            <TableHeaderCell label="Current Salary" className="px-3 py-2" />
+            <TableHeaderCell label="College" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="Year of Passing" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="Employment Status" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="Current Salary" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
             <TableHeaderFilter
               label="Interested Program"
               value={fltProgram}
               onChange={setFltProgram}
               options={programOptions.map((s) => ({ value: s, label: s }))}
               allLabel="All programs"
-              className="px-3 py-2"
+              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
             />
-            <TableHeaderCell label="Joining Timeline" className="px-3 py-2" />
-            <TableHeaderCell label="Program Budget" className="px-3 py-2" />
-            <TableHeaderCell label="Preferred Batch" className="px-3 py-2" />
+            <TableHeaderCell label="Joining Timeline" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="Program Budget" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="Preferred Batch" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
             <TableHeaderFilter
               label="Lead Source"
               value={fltSource}
               onChange={setFltSource}
               options={CRM_SOURCES.map((s) => ({ value: s, label: s }))}
               allLabel="All sources"
-              className="px-3 py-2"
+              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
             />
             <TableHeaderFilter
               label="Assigned Counsellor"
@@ -2295,7 +2404,7 @@ function AllLeadsTable({
               options={employeeOptions.map((e) => ({ value: e.id, label: e.label }))}
               allLabel="All counsellors"
               disabled={!isAdmin}
-              className="px-3 py-2"
+              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
             />
             <TableHeaderFilter
               label="Lead Stage"
@@ -2303,7 +2412,7 @@ function AllLeadsTable({
               onChange={setFltStage}
               options={LEAD_STAGES.map((s) => ({ value: s, label: s }))}
               allLabel="All stages"
-              className="px-3 py-2"
+              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
             />
             <TableHeaderFilter
               label="Lead Status"
@@ -2311,7 +2420,7 @@ function AllLeadsTable({
               onChange={setFltStatus}
               options={CRM_LEAD_STATUSES.map((s) => ({ value: s, label: s }))}
               allLabel="All statuses"
-              className="px-3 py-2"
+              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
             />
             <TableHeaderFilter
               label="Priority"
@@ -2319,18 +2428,18 @@ function AllLeadsTable({
               onChange={setFltPriority}
               options={CRM_PRIORITIES.map((p) => ({ value: p, label: p }))}
               allLabel="All priorities"
-              className="px-3 py-2"
+              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
             />
-            <TableHeaderCell label="Next Follow-up Date" className="px-3 py-2" />
-            <TableHeaderCell label="Fee Quoted" className="px-3 py-2" />
-            <TableHeaderCell label="Final Fee" className="px-3 py-2" />
+            <TableHeaderCell label="Next Follow-up Date" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="Fee Quoted" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="Final Fee" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
             <TableHeaderFilter
               label="Payment Status"
               value={fltPaymentStatus}
               onChange={setFltPaymentStatus}
               options={PAYMENT_STATUSES.map((s) => ({ value: s, label: s }))}
               allLabel="All payment statuses"
-              className="px-3 py-2"
+              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
             />
             <TableHeaderFilter
               label="Admission Status"
@@ -2338,16 +2447,16 @@ function AllLeadsTable({
               onChange={setFltAdmissionStatus}
               options={ADMISSION_STATUSES.map((s) => ({ value: s, label: s }))}
               allLabel="All admission statuses"
-              className="px-3 py-2"
+              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
             />
-            <TableHeaderCell label="Actions" className="px-3 py-2" />
+            <TableHeaderCell label="Actions" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
           </tr>
         </thead>
         <tbody className="divide-y divide-[#e8edf5] text-[#334155]">
           {loading
             ? [...Array.from({ length: 6 }).keys()].map((skeletonIdx) => (
                 <tr key={skeletonIdx}>
-                  <td colSpan={colCount} className="px-3 py-2">
+                  <td colSpan={colCount} className="px-6 py-3.5 text-center align-middle">
                     <div className="h-5 animate-pulse rounded bg-slate-100" />
                   </td>
                 </tr>
@@ -2368,103 +2477,117 @@ function AllLeadsTable({
                     ].join(" ")}
                   >
                     {pickMode ? (
-                      <td className="px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={pickedIds?.has(lead.id) ?? false}
-                          onChange={() => onTogglePick?.(lead.id)}
-                          className="h-4 w-4 rounded border-[#cbd5e1]"
-                        />
+                      <td className="w-12 px-6 py-3.5 text-center align-middle">
+                        <div className="flex justify-center">
+                          <input
+                            type="checkbox"
+                            checked={pickedIds?.has(lead.id) ?? false}
+                            onChange={() => onTogglePick?.(lead.id)}
+                            className="h-4 w-4 rounded border-[#cbd5e1]"
+                          />
+                        </div>
                       </td>
                     ) : null}
                     {showBulk ? (
-                      <td className="px-3 py-2">
-                        <TableBulkCheckbox
-                          checked={bulkSelection!.isSelected(lead.id)}
-                          onChange={() => bulkSelection!.onToggle(lead.id)}
-                          ariaLabel={`Select ${displayLeadName(lead)}`}
-                        />
+                      <td className="w-12 px-6 py-3.5 text-center align-middle">
+                        <div className="flex justify-center">
+                          <TableBulkCheckbox
+                            checked={bulkSelection!.isSelected(lead.id)}
+                            onChange={() => bulkSelection!.onToggle(lead.id)}
+                            ariaLabel={`Select ${displayLeadName(lead)}`}
+                          />
+                        </div>
                       </td>
                     ) : null}
-                    <td className="px-3 py-2 font-semibold text-slate-900 whitespace-nowrap">{displayLeadName(lead) || "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-center">
-                      <StudentOutreachButtons
-                        mode="phone"
-                        phone={lead.phone}
-                        phoneCalled={lead.phone_called}
-                        onPhoneClick={contactable ? () => void onPhoneClick(lead) : undefined}
-                      />
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle font-semibold text-slate-900">{displayLeadName(lead) || "—"}</td>
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">
+                      <div className="flex justify-center">
+                        <StudentOutreachButtons
+                          mode="phone"
+                          phone={lead.phone}
+                          phoneCalled={lead.phone_called}
+                          onPhoneClick={contactable ? () => void onPhoneClick(lead) : undefined}
+                        />
+                      </div>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-center">
-                      <StudentOutreachButtons
-                        mode="whatsapp"
-                        phone={lead.phone}
-                        whatsapp={lead.whatsapp}
-                        whatsappSent={lead.whatsapp_sent}
-                        onWhatsAppClick={contactable ? () => void onWhatsAppClick(lead) : undefined}
-                      />
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">
+                      <div className="flex justify-center">
+                        <StudentOutreachButtons
+                          mode="whatsapp"
+                          phone={lead.phone}
+                          whatsapp={lead.whatsapp}
+                          whatsappSent={lead.whatsapp_sent}
+                          onWhatsAppClick={contactable ? () => void onWhatsAppClick(lead) : undefined}
+                        />
+                      </div>
                     </td>
-                    <td className="px-3 py-2 text-center">
-                      <StudentOutreachButtons
-                        mode="email"
-                        email={lead.email}
-                        emailSent={lead.email_sent}
-                        onEmailClick={contactable ? () => void onEmailClick(lead) : undefined}
-                      />
+                    <td className="px-6 py-3.5 text-center align-middle">
+                      <div className="flex justify-center">
+                        <StudentOutreachButtons
+                          mode="email"
+                          email={lead.email}
+                          emailSent={lead.email_sent}
+                          onEmailClick={contactable ? () => void onEmailClick(lead) : undefined}
+                        />
+                      </div>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2">{lead.degree || "—"}</td>
-                    <td className="max-w-[160px] truncate px-3 py-2">{lead.college_company || lead.company_name || "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{lead.year_of_passing || "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{lead.employment_status || "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{formatMoney(lead.current_salary)}</td>
-                    <td className="max-w-[160px] truncate px-3 py-2">{String(program)}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{lead.joining_timeline || "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{formatMoney(lead.budget)}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{lead.preferred_batch || "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{lead.source || "—"}</td>
-                    <td className="max-w-[140px] truncate px-3 py-2">{lead.assigned_to ? employeeNameMap[lead.assigned_to] : "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{lead.lead_stage || "—"}</td>
-                    <td className="px-3 py-2">
-                      <LeadStatusBadge status={String(lead.status)} />
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.degree || "—"}</td>
+                    <td className="max-w-[160px] truncate px-6 py-3.5 text-center align-middle">{lead.college_company || lead.company_name || "—"}</td>
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.year_of_passing || "—"}</td>
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.employment_status || "—"}</td>
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{formatMoney(lead.current_salary)}</td>
+                    <td className="max-w-[160px] truncate px-6 py-3.5 text-center align-middle">{String(program)}</td>
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.joining_timeline || "—"}</td>
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{formatMoney(lead.budget)}</td>
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.preferred_batch || "—"}</td>
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.source || "—"}</td>
+                    <td className="max-w-[140px] truncate px-6 py-3.5 text-center align-middle">{lead.assigned_to ? employeeNameMap[lead.assigned_to] : "—"}</td>
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.lead_stage || "—"}</td>
+                    <td className="px-6 py-3.5 text-center align-middle">
+                      <div className="flex justify-center">
+                        <LeadStatusBadge status={String(lead.status)} />
+                      </div>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 font-medium capitalize">{lead.priority || "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs">{fu || "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{formatMoney(lead.fee_quoted ?? lead.proposal_amount)}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{formatMoney(lead.final_fee)}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{lead.payment_status || "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{lead.admission_status || "—"}</td>
-                    <td className="flex flex-wrap gap-3 px-3 py-2 text-xs whitespace-nowrap">
-                      <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onProfile(lead)}>
-                        View
-                      </button>
-                      {(isAdmin || lead.assigned_to === currentUserId) && (
-                        <button type="button" className="font-semibold text-slate-600 hover:underline" onClick={() => onEdit(lead)}>
-                          Edit
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle font-medium capitalize">{lead.priority || "—"}</td>
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle text-xs">{fu || "—"}</td>
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{formatMoney(lead.fee_quoted ?? lead.proposal_amount)}</td>
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{formatMoney(lead.final_fee)}</td>
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.payment_status || "—"}</td>
+                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.admission_status || "—"}</td>
+                    <td className="min-w-[14rem] whitespace-nowrap px-6 py-3.5 text-center align-middle text-xs">
+                      <div className="inline-flex flex-wrap items-center justify-center gap-3">
+                        <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onProfile(lead)}>
+                          View
                         </button>
-                      )}
-                      {isAdmin && (
-                        <button type="button" className="font-semibold text-rose-600 hover:underline" onClick={() => onDelete(lead.id)}>
-                          Delete
+                        {(isAdmin || lead.assigned_to === currentUserId) && (
+                          <button type="button" className="font-semibold text-slate-600 hover:underline" onClick={() => onEdit(lead)}>
+                            Edit
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button type="button" className="font-semibold text-rose-600 hover:underline" onClick={() => onDelete(lead.id)}>
+                            Delete
+                          </button>
+                        )}
+                        <button type="button" className="font-semibold text-teal-700 hover:underline" onClick={() => onAddFollow(lead)}>
+                          Follow-up
                         </button>
-                      )}
-                      <button type="button" className="font-semibold text-teal-700 hover:underline" onClick={() => onAddFollow(lead)}>
-                        Follow-up
-                      </button>
-                      <button type="button" className="font-semibold text-violet-700 hover:underline" onClick={() => onOpenActivity(lead)}>
-                        Activity
-                      </button>
-                      {isAdmin && !isClosedLeadStatus(String(lead.status)) && (
-                        <button type="button" className="font-semibold text-emerald-700 hover:underline" onClick={() => onConvert(lead)}>
-                          Admit
+                        <button type="button" className="font-semibold text-violet-700 hover:underline" onClick={() => onOpenActivity(lead)}>
+                          Activity
                         </button>
-                      )}
+                        {isAdmin && !isClosedLeadStatus(String(lead.status)) && (
+                          <button type="button" className="font-semibold text-emerald-700 hover:underline" onClick={() => onConvert(lead)}>
+                            Admit
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
               })}
           {!loading && leads.length === 0 ? (
             <tr>
-              <td colSpan={colCount} className="px-6 py-10 text-center text-slate-500">
+              <td colSpan={colCount} className="px-5 py-10 text-center align-middle text-slate-500">
                 No students match these filters yet.
               </td>
             </tr>

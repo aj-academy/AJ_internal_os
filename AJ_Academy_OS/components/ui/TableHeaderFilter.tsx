@@ -26,16 +26,39 @@ type TableHeaderFilterProps = {
 };
 
 const headerTypography = "text-xs font-semibold uppercase tracking-wide";
+const headerBase = ["whitespace-nowrap", headerTypography].join(" ");
+const headerPadDefault = "px-4 py-3";
 
-const headerBase = ["whitespace-nowrap px-4 py-3 text-left", headerTypography].join(" ");
+function hasTextAlign(className: string) {
+  return /\b!?text-(left|center|right)\b/.test(className);
+}
 
-function headerTriggerClass(active: boolean, disabled: boolean) {
+function mergeHeaderClass(className: string, extra = "") {
+  const hasPadX = /\bpx-\d/.test(className);
+  const hasPadY = /\bpy-\d/.test(className);
+  return [
+    headerBase,
+    hasPadX || hasPadY ? "" : headerPadDefault,
+    hasPadX && !hasPadY ? "py-3" : "",
+    !hasPadX && hasPadY ? "px-4" : "",
+    hasTextAlign(className) ? "" : "text-left",
+    extra,
+    className,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function headerTriggerClass(active: boolean, disabled: boolean, center = false) {
   return [
     "inline-flex items-center gap-1 border-0 bg-transparent p-0 outline-none transition-colors",
+    center ? "mx-auto justify-center" : "",
     headerTypography,
     active ? "text-[#2563eb]" : "text-[#64748b]",
     disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:text-[#334155]",
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 export function TableHeaderFilter({
@@ -50,10 +73,12 @@ export function TableHeaderFilter({
 }: TableHeaderFilterProps) {
   const active = Boolean(value);
   const dateInputRef = useRef<HTMLInputElement>(null);
+  const center = /\b!?text-center\b/.test(className);
+  const thClass = mergeHeaderClass(className);
 
   if (type === "date") {
     return (
-      <th className={[headerBase, className].join(" ")}>
+      <th className={thClass}>
         <button
           type="button"
           disabled={disabled}
@@ -64,7 +89,7 @@ export function TableHeaderFilter({
             if (typeof el.showPicker === "function") el.showPicker();
             else el.click();
           }}
-          className={headerTriggerClass(active, disabled)}
+          className={headerTriggerClass(active, disabled, center)}
         >
           {label}
           <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-80" />
@@ -84,17 +109,17 @@ export function TableHeaderFilter({
   }
 
   return (
-    <th className={[headerBase, className].join(" ")}>
+    <th className={thClass}>
       <DropdownMenu>
         <DropdownMenuTrigger
           disabled={disabled}
           aria-label={`Filter by ${label}`}
-          className={headerTriggerClass(active, disabled)}
+          className={headerTriggerClass(active, disabled, center)}
         >
           {label}
           <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-80" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="max-h-64 min-w-[10rem] overflow-y-auto">
+        <DropdownMenuContent align={center ? "center" : "start"} className="max-h-64 min-w-[10rem] overflow-y-auto">
           <DropdownMenuItem onClick={() => onChange("")} className="justify-between">
             <span>{allLabel}</span>
             {!value ? <Check className="h-3.5 w-3.5 text-[#2563eb]" /> : null}
@@ -112,9 +137,10 @@ export function TableHeaderFilter({
 }
 
 export function TableHeaderCell({ label, className = "" }: { label: string; className?: string }) {
+  const center = /\b!?text-center\b/.test(className);
   return (
-    <th className={[headerBase, "text-[#64748b]", className].join(" ")}>
-      {label}
+    <th className={mergeHeaderClass(className, "text-[#64748b]")}>
+      {center ? <span className="mx-auto block w-fit">{label}</span> : label}
     </th>
   );
 }
