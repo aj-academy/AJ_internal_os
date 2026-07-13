@@ -1,6 +1,9 @@
+/** Allowed / suggested values for College Visits (DB stores free text; these drive filters + forms). */
+
 export const VISIT_STATUSES = [
   "Not Visited",
   "Scheduled",
+  "Contacted",
   "Visited",
   "Revisit Required",
   "On Hold",
@@ -10,24 +13,48 @@ export const MOU_STATUSES = [
   "Not Signed",
   "In Discussion",
   "Draft Shared",
+  "Partially Signed",
   "Signed",
   "Declined",
 ] as const;
 
 export const FOLLOW_UP_STAGES = [
   "Initial Contact",
+  "WhatsApp Follow-up",
+  "Meeting Follow-up",
+  "Appointment Pending",
   "Visit Completed",
-  "MOU Discussion",
-  "Follow-up Call",
+  "Decision Pending",
+  "Approval Pending",
+  "Details to Share",
+  "Proposal Submitted",
+  "Proposal Follow-up",
   "Proposal Sent",
+  "MOU Discussion",
+  "Department Follow-up",
+  "Department MOU Follow-up",
+  "Collaboration Discussion",
+  "Workshop Planning",
+  "Program Planning",
+  "Follow-up Call",
   "Negotiation",
+  "Deferred",
+  "Closed",
   "Closed Won",
   "Closed Lost",
 ] as const;
 
-export const COLLEGE_PRIORITIES = ["Hot", "Warm", "Cold"] as const;
+/** Hot/Warm/Cold + High/Medium/Low (from mapped Excel sheets). */
+export const COLLEGE_PRIORITIES = ["Hot", "Warm", "Cold", "High", "Medium", "Low"] as const;
 
-export const FINAL_STATUSES = ["Open", "In Progress", "Converted", "Lost", "On Hold"] as const;
+export const FINAL_STATUSES = [
+  "Open",
+  "In Progress",
+  "Converted",
+  "Lost",
+  "On Hold",
+  "Closed - Rejected",
+] as const;
 
 export const CONNECTED_PERSON_ROLES = [
   "Principal",
@@ -37,6 +64,7 @@ export const CONNECTED_PERSON_ROLES = [
   "Coordinator",
   "Professor",
   "Admin Staff",
+  "Chairman",
   "Other",
 ] as const;
 

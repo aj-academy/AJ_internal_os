@@ -39,16 +39,27 @@ const HEADER_ALIASES: Record<string, CollegeVisitCsvHeader> = {
   "s.no": "S.No",
   sno: "S.No",
   "college name": "College Name",
+  collegename: "College Name",
   college_name: "College Name",
+  college: "College Name",
+  "name of college": "College Name",
+  "college/institute": "College Name",
+  "college / institute": "College Name",
+  institute: "College Name",
+  "institute name": "College Name",
   location: "Location",
+  city: "Location",
   "contact number": "Contact Number",
   contact_number: "Contact Number",
   phone: "Contact Number",
+  mobile: "Contact Number",
   "email id": "Email ID",
   email: "Email ID",
   "connected person name": "Connected Person Name",
   "connected person": "Connected Person Name",
   connected_person_name: "Connected Person Name",
+  "contact person": "Connected Person Name",
+  "contact person name": "Connected Person Name",
   role: "Role",
   connected_person_role: "Role",
   "visit status": "Visit Status",
@@ -87,12 +98,34 @@ const HEADER_ALIASES: Record<string, CollegeVisitCsvHeader> = {
   source_reference: "Source / Reference",
 };
 
+function stripBom(s: string) {
+  return s.replace(/^\uFEFF/, "");
+}
+
+/** Lowercase + collapse spaces/underscores/punctuation so Excel quirks still match. */
+function headerLookupKey(raw: string): string {
+  return stripBom(raw)
+    .trim()
+    .toLowerCase()
+    .replace(/[\u00a0\u2000-\u200b]/g, " ")
+    .replace(/[_/|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function normalizeHeader(raw: string): CollegeVisitCsvHeader | null {
-  const key = raw.trim().toLowerCase().replace(/\s+/g, " ");
-  if ((COLLEGE_VISIT_CSV_HEADERS as readonly string[]).includes(raw.trim())) {
-    return raw.trim() as CollegeVisitCsvHeader;
+  const trimmed = stripBom(raw).trim();
+  if ((COLLEGE_VISIT_CSV_HEADERS as readonly string[]).includes(trimmed)) {
+    return trimmed as CollegeVisitCsvHeader;
   }
-  return HEADER_ALIASES[key] ?? HEADER_ALIASES[key.replace(/ /g, "_")] ?? null;
+  const key = headerLookupKey(raw);
+  if (!key) return null;
+  return (
+    HEADER_ALIASES[key] ??
+    HEADER_ALIASES[key.replace(/ /g, "_")] ??
+    HEADER_ALIASES[key.replace(/ /g, "")] ??
+    null
+  );
 }
 
 export function buildCollegeVisitCsvHeaderIndex(headerRow: string[]): Map<CollegeVisitCsvHeader, number> {
@@ -107,7 +140,78 @@ export function buildCollegeVisitCsvHeaderIndex(headerRow: string[]): Map<Colleg
 function cell(cells: string[], idx: Map<CollegeVisitCsvHeader, number>, key: CollegeVisitCsvHeader) {
   const i = idx.get(key);
   if (i == null) return "";
-  return (cells[i] ?? "").trim();
+  return stripBom(cells[i] ?? "").trim();
+}
+
+function matrixFromUnknownRows(raw: unknown[][]): string[][] {
+  return raw
+    .map((row) => row.map((c) => (c == null ? "" : stripBom(String(c)).trim())))
+    .filter((row) => row.some((c) => c.length > 0));
+}
+
+/** Prefer a sheet named like College Visits when present. */
+export function pickCollegeVisitImportSheetName(sheetNames: string[]): string {
+  const exact = sheetNames.find((n) => {
+    const k = n.trim().toLowerCase();
+    return k === "college visits" || k === "colleges" || k === "import";
+  });
+  if (exact) return exact;
+  const partial = sheetNames.find((n) => /college/i.test(n));
+  return partial ?? sheetNames[0] ?? "";
+}
+
+function parseDelimitedText(text: string): string[][] {
+  const cleaned = stripBom(text);
+  const firstLine = cleaned.split(/\r?\n/).find((l) => l.trim()) ?? "";
+  const commas = (firstLine.match(/,/g) ?? []).length;
+  const tabs = (firstLine.match(/\t/g) ?? []).length;
+  const semis = (firstLine.match(/;/g) ?? []).length;
+
+  if (tabs > commas && tabs >= semis) {
+    return cleaned
+      .split(/\r?\n/)
+      .map((line) => line.split("\t").map((c) => stripBom(c).trim()))
+      .filter((row) => row.some((c) => c.length > 0));
+  }
+  if (semis > commas && semis > tabs) {
+    return cleaned
+      .split(/\r?\n/)
+      .map((line) => line.split(";").map((c) => stripBom(c).trim()))
+      .filter((row) => row.some((c) => c.length > 0));
+  }
+  return parseCsv(cleaned).map((row) => row.map((c) => stripBom(c).trim()));
+}
+
+/** Read CSV or Excel (.xlsx / .xls) into a string matrix. */
+export async function collegeVisitFileToMatrix(file: File): Promise<string[][]> {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+    const XLSX = await import("xlsx");
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const sheetName = pickCollegeVisitImportSheetName(wb.SheetNames);
+    if (!sheetName || !wb.Sheets[sheetName]) {
+      throw new Error("Excel workbook has no readable sheet.");
+    }
+    const raw = XLSX.utils.sheet_to_json<(string | number | boolean | null | undefined)[]>(wb.Sheets[sheetName], {
+      header: 1,
+      defval: "",
+      raw: false,
+    });
+    return matrixFromUnknownRows(raw as unknown[][]);
+  }
+
+  return parseDelimitedText(await file.text());
+}
+
+/** Skip title rows; find the row that contains College Name (or alias). */
+export function findCollegeVisitHeaderRowIndex(matrix: string[][]): number {
+  const scan = Math.min(matrix.length, 15);
+  for (let i = 0; i < scan; i += 1) {
+    const idx = buildCollegeVisitCsvHeaderIndex(matrix[i] ?? []);
+    if (idx.has("College Name")) return i;
+  }
+  return 0;
 }
 
 export function collegeVisitRowToCsvCells(
@@ -199,26 +303,30 @@ export function resolveOwnerId(
   return byId?.id ?? null;
 }
 
-export function parseCollegeVisitCsvRows(
-  text: string,
+export function parseCollegeVisitMatrix(
+  matrix: string[][],
   opts: {
     owners: { id: string; label: string; email?: string | null }[];
     defaultOwnerId: string;
     isDbAdmin: boolean;
   },
 ): { forms: CollegeVisitFormValue[]; errors: string[] } {
-  const matrix = parseCsv(text);
-  if (matrix.length < 2) throw new Error("CSV must include a header row and at least one data row.");
+  if (matrix.length < 2) throw new Error("File must include a header row and at least one data row.");
 
-  const idx = buildCollegeVisitCsvHeaderIndex(matrix[0]);
+  const headerRowIndex = findCollegeVisitHeaderRowIndex(matrix);
+  const headerRow = matrix[headerRowIndex] ?? [];
+  const idx = buildCollegeVisitCsvHeaderIndex(headerRow);
   if (!idx.has("College Name")) {
-    throw new Error('CSV must include a "College Name" column matching the College Visits table.');
+    const found = headerRow.filter((h) => h.trim()).slice(0, 12).join(", ") || "(none)";
+    throw new Error(
+      `File must include a "College Name" column (also accepts college_name / College). Found headers: ${found}. Tip: use Import template, or upload .csv / .xlsx with that column on the first sheet.`,
+    );
   }
 
   const forms: CollegeVisitFormValue[] = [];
   const errors: string[] = [];
 
-  for (let i = 1; i < matrix.length; i += 1) {
+  for (let i = headerRowIndex + 1; i < matrix.length; i += 1) {
     const cells = matrix[i];
     const collegeName = cell(cells, idx, "College Name");
     if (!collegeName) {
@@ -269,4 +377,16 @@ export function parseCollegeVisitCsvRows(
   }
 
   return { forms, errors };
+}
+
+/** Prefer collegeVisitFileToMatrix + parseCollegeVisitMatrix for Excel support. */
+export function parseCollegeVisitCsvRows(
+  text: string,
+  opts: {
+    owners: { id: string; label: string; email?: string | null }[];
+    defaultOwnerId: string;
+    isDbAdmin: boolean;
+  },
+): { forms: CollegeVisitFormValue[]; errors: string[] } {
+  return parseCollegeVisitMatrix(parseDelimitedText(text), opts);
 }

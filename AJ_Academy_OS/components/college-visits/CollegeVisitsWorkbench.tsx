@@ -18,7 +18,8 @@ import { CollegeVisitFormPanel } from "@/components/college-visits/CollegeVisitF
 import {
   downloadCollegeVisitImportTemplate,
   exportCollegeVisitsCsv,
-  parseCollegeVisitCsvRows,
+  collegeVisitFileToMatrix,
+  parseCollegeVisitMatrix,
 } from "@/components/college-visits/collegeVisitsCsv";
 import {
   COLLEGE_PRIORITIES,
@@ -410,8 +411,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setError(null);
     setSuccess(null);
     try {
-      const text = await file.text();
-      const { forms, errors } = parseCollegeVisitCsvRows(text, {
+      const matrix = await collegeVisitFileToMatrix(file);
+      const { forms, errors } = parseCollegeVisitMatrix(matrix, {
         owners: ownerPeopleFromProfiles(employees),
         defaultOwnerId: currentUserId,
         isDbAdmin,
@@ -486,7 +487,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
               <input
                 ref={importFileRef}
                 type="file"
-                accept=".csv,text/csv"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
