@@ -1712,62 +1712,6 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
           <p className="mt-1 text-sm text-[#64748b]">Manage student leads, counselling follow-ups, fees and admissions.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {!pickForTask ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
-                onClick={handleDownloadStudentTemplate}
-              >
-                <FileText className="mr-1 h-4 w-4" />
-                Import template
-              </Button>
-              <input
-                ref={importFileRef}
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void handleImportStudents(f);
-                }}
-              />
-              {isAdmin ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
-                  disabled={importing}
-                  onClick={() => importFileRef.current?.click()}
-                >
-                  <Upload className="mr-1 h-4 w-4" />
-                  {importing ? "Importing…" : "Import"}
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
-                disabled={!rowsForExport.length}
-                onClick={handleExportStudents}
-                title={
-                  leadBulk.selectedCount > 0
-                    ? "Export selected rows"
-                    : filtersActive
-                      ? "Export rows matching current table filters"
-                      : "Export all rows visible for this view"
-                }
-              >
-                <Download className="mr-1 h-4 w-4" />
-                {leadBulk.selectedCount > 0
-                  ? `Export selected (${rowsForExport.length})`
-                  : filtersActive
-                    ? `Export filtered (${rowsForExport.length})`
-                    : `Export${rowsForExport.length ? ` (${rowsForExport.length})` : ""}`}
-              </Button>
-            </>
-          ) : null}
           <Button
             variant="outline"
             disabled={loading}
@@ -1862,6 +1806,62 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
 
       {activeTab === "all-leads" ? (
         <div className="space-y-3">
+          {!pickForTask ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
+                onClick={handleDownloadStudentTemplate}
+              >
+                <FileText className="mr-1 h-4 w-4" />
+                Import template
+              </Button>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleImportStudents(f);
+                }}
+              />
+              {isAdmin ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
+                  disabled={importing}
+                  onClick={() => importFileRef.current?.click()}
+                >
+                  <Upload className="mr-1 h-4 w-4" />
+                  {importing ? "Importing…" : "Import"}
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
+                disabled={!rowsForExport.length}
+                onClick={handleExportStudents}
+                title={
+                  leadBulk.selectedCount > 0
+                    ? "Export selected rows"
+                    : filtersActive
+                      ? "Export rows matching current table filters"
+                      : "Export all rows in All Students"
+                }
+              >
+                <Download className="mr-1 h-4 w-4" />
+                {leadBulk.selectedCount > 0
+                  ? `Export selected (${rowsForExport.length})`
+                  : filtersActive
+                    ? `Export filtered (${rowsForExport.length})`
+                    : `Export${rowsForExport.length ? ` (${rowsForExport.length})` : ""}`}
+              </Button>
+            </div>
+          ) : null}
           {renderLeadBulkBar}
           <TableSearchBar
             value={searchText}
