@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowRight, ClipboardList } from "lucide-react";
+import { ArrowRight, ClipboardList, Pin } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { TaskRecord } from "@/types/task";
 
@@ -13,7 +13,7 @@ type EmployeeTaskPreviewProps = {
 
 export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveOnly = false }: EmployeeTaskPreviewProps) {
   const supabase = useMemo(() => createClient(), []);
-  const [rows, setRows] = useState<TaskRecord[]>([]);
+  const [rows, setRows] = useState<(TaskRecord & { pinned?: boolean })[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -26,18 +26,49 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
         setRows([]);
         return;
       }
+
+      const pinnedIds: string[] = [];
+      const { data: pins } = await supabase
+        .from("employee_task_pins")
+        .select("task_id,pinned_at")
+        .eq("user_id", user.id)
+        .order("pinned_at", { ascending: false })
+        .limit(6);
+      for (const p of pins ?? []) {
+        if (p.task_id) pinnedIds.push(p.task_id as string);
+      }
+
+      const pinnedTasks: TaskRecord[] = [];
+      if (pinnedIds.length) {
+        const { data: pinnedRows } = await supabase
+          .from("tasks")
+          .select("id,title,description,assigned_to,priority,status,start_date,due_date,progress,project_id,assignment_type,created_at,updated_at")
+          .in("id", pinnedIds)
+          .returns<TaskRecord[]>();
+        const byId = Object.fromEntries((pinnedRows ?? []).map((t) => [t.id, t]));
+        for (const id of pinnedIds) {
+          if (byId[id]) pinnedTasks.push(byId[id]);
+        }
+      }
+
       const { data, error } = await supabase
         .from("tasks")
-        .select("id,title,description,assigned_to,priority,status,start_date,due_date,progress,project_id,created_at,updated_at")
+        .select("id,title,description,assigned_to,priority,status,start_date,due_date,progress,project_id,assignment_type,created_at,updated_at")
         .eq("assigned_to", user.id)
         .order("updated_at", { ascending: false })
         .limit(6)
         .returns<TaskRecord[]>();
       if (error) {
-        setRows([]);
+        setRows(pinnedTasks.map((t) => ({ ...t, pinned: true })));
         return;
       }
-      setRows(data ?? []);
+
+      const recent = (data ?? []).filter((t) => !pinnedIds.includes(t.id));
+      const merged = [
+        ...pinnedTasks.map((t) => ({ ...t, pinned: true })),
+        ...recent.map((t) => ({ ...t, pinned: false })),
+      ].slice(0, 6);
+      setRows(merged);
     } finally {
       setLoading(false);
     }
@@ -66,7 +97,7 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
           <p className="mt-1 text-sm text-[#64748b]">
             {receiveOnly
               ? "Tasks assigned to you by admins, mentors, or freelancers."
-              : "Same list as My Tasks — includes anything admins assign to your account."}
+              : "Pinned handover tasks plus recent work from My Tasks."}
           </p>
         </div>
         <Link
@@ -89,7 +120,7 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
               <p className="mt-1">
                 {receiveOnly
                   ? "When someone assigns you work, it will show here and on My Tasks."
-                  : "When an admin assigns you work, it will show here and on My Tasks. You can also add your own tasks from My Tasks."}
+                  : "When an admin assigns you work, it will show here. Use View / Activity → Add to my dashboard to pin handover follow-ups."}
               </p>
             </div>
           </div>
@@ -97,13 +128,18 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
           rows.map((task) => (
             <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-[#0f172a]">{task.title}</p>
-                <p className="text-xs text-[#64748b]">
+                <p className="flex items-center gap-1.5 truncate font-medium text-[#0f172a]">
+                  {task.pinned ? <Pin className="h-3.5 w-3.5 shrink-0 text-[#c9a227]" aria-label="Pinned" /> : null}
+                  {task.title}
+                </p>
+                <p className="mt-0.5 text-xs text-[#64748b]">
                   {task.status} · {task.priority}
-                  {task.due_date ? ` · Due ${task.due_date}` : ""}
+                  {task.due_date ? ` · due ${task.due_date}` : ""}
                 </p>
               </div>
-              <span className="rounded-full bg-[#eff6ff] px-2.5 py-0.5 text-xs font-medium text-[#1d4ed8]">{task.progress}%</span>
+              <Link href={tasksHref} className="text-xs font-semibold text-[#2563eb] hover:underline">
+                Open
+              </Link>
             </div>
           ))
         )}

@@ -422,7 +422,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const [importing, setImporting] = useState(false);
 
   const buildClientsBaseQuery = useCallback(() => {
-    let q = supabase.from("clients").select(STUDENT_LEAD_SELECT).order("updated_at", { ascending: false }).limit(800);
+    let q = supabase.from("clients").select(STUDENT_LEAD_SELECT).order("updated_at", { ascending: false }).limit(300);
     if (!isAdmin) {
       q = q.eq("assigned_to", currentUserId);
     }

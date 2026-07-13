@@ -6,6 +6,9 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { usePagination } from "@/lib/usePagination";
+import { useRowSelection } from "@/lib/useRowSelection";
+import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
+import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Input } from "@/components/ui/input";
@@ -119,7 +122,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
     };
 
     const tx = await run(async () =>
-      await supabase.from("finance_transactions").select(TX_SELECT).order("transaction_date", { ascending: false }).limit(800).returns<FinanceTransactionRow[]>(),
+      await supabase.from("finance_transactions").select(TX_SELECT).order("transaction_date", { ascending: false }).limit(300).returns<FinanceTransactionRow[]>(),
     );
     if (missingFinance) {
       setSchemaMissing(true);
@@ -132,12 +135,12 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
     setTransactions((tx as FinanceTransactionRow[] | null) ?? []);
 
     const cl = await run(async () =>
-      await supabase.from("expense_claims").select(CLAIM_SELECT).order("created_at", { ascending: false }).limit(500).returns<ExpenseClaimRow[]>(),
+      await supabase.from("expense_claims").select(CLAIM_SELECT).order("created_at", { ascending: false }).limit(200).returns<ExpenseClaimRow[]>(),
     );
     setClaims((cl as ExpenseClaimRow[] | null) ?? []);
 
     const pay = await run(async () =>
-      await supabase.from("project_payments").select(PAYMENT_SELECT).order("payment_date", { ascending: false }).limit(500).returns<ProjectPaymentRow[]>(),
+      await supabase.from("project_payments").select(PAYMENT_SELECT).order("payment_date", { ascending: false }).limit(200).returns<ProjectPaymentRow[]>(),
     );
     setPayments((pay as ProjectPaymentRow[] | null) ?? []);
 
@@ -151,10 +154,10 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
       setActivities([]);
     }
 
-    const pr = await supabase.from("projects").select("id,project_name,project_code,client_id,budget,pending_amount,advance_paid,deadline,project_manager").limit(400).returns<ProjectRow[]>();
+    const pr = await supabase.from("projects").select("id,project_name,project_code,client_id,budget,pending_amount,advance_paid,deadline,project_manager").limit(200).returns<ProjectRow[]>();
     if (!pr.error) setProjects((pr.data as ProjectRow[] | null) ?? []);
 
-    const clt = await supabase.from("clients").select("id,lead_name,name,company_name").limit(600).returns<ClientOption[]>();
+    const clt = await supabase.from("clients").select("id,lead_name,name,company_name").limit(300).returns<ClientOption[]>();
     if (!clt.error) setClients((clt.data as ClientOption[] | null) ?? []);
 
     const em = await supabase
@@ -476,12 +479,45 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
     }
   };
 
+  const deleteTransactionsBulk = async (ids: string[]) => {
+    if (!isPrivileged || !ids.length) return;
+    if (!confirm(`Delete ${ids.length} selected transaction(s)?`)) return;
+    const { error: err } = await supabase.from("finance_transactions").delete().in("id", ids);
+    if (err) showToast("err", err.message);
+    else {
+      showToast("ok", `Deleted ${ids.length} transaction(s).`);
+      await reload();
+    }
+  };
+
   const deletePayment = async (id: string) => {
     if ((!isPrivileged && !isManager) || !confirm("Delete this payment?")) return;
     const { error: err } = await supabase.from("project_payments").delete().eq("id", id);
     if (err) showToast("err", err.message);
     else {
       showToast("ok", "Deleted.");
+      await reload();
+    }
+  };
+
+  const deletePaymentsBulk = async (ids: string[]) => {
+    if ((!isPrivileged && !isManager) || !ids.length) return;
+    if (!confirm(`Delete ${ids.length} selected payment(s)?`)) return;
+    const { error: err } = await supabase.from("project_payments").delete().in("id", ids);
+    if (err) showToast("err", err.message);
+    else {
+      showToast("ok", `Deleted ${ids.length} payment(s).`);
+      await reload();
+    }
+  };
+
+  const deleteClaimsBulk = async (ids: string[]) => {
+    if (!isPrivileged || !ids.length) return;
+    if (!confirm(`Delete ${ids.length} selected claim(s)? This cannot be undone.`)) return;
+    const { error: err } = await supabase.from("expense_claims").delete().in("id", ids);
+    if (err) showToast("err", err.message);
+    else {
+      showToast("ok", `Deleted ${ids.length} claim(s).`);
       await reload();
     }
   };
@@ -542,6 +578,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
     pageSize: claimsPageSize,
     setPageSize: setClaimsPageSize,
   } = usePagination(visibleClaims, 10);
+  const claimsBulk = useRowSelection(paginatedClaims, (c) => c.id);
 
   return (
     <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
@@ -670,9 +707,11 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
           onAction={() => setPanel("income")}
           loading={loading}
           rows={incomeRows}
+          getRowId={(t) => t.id}
+          onBulkDelete={(ids) => void deleteTransactionsBulk(ids)}
           columns={["Code", "Client", "Project", "Amount", "Category", "Method", "Date", "Status", "Actions"]}
-          renderRow={(t) => (
-            <tr key={t.id} className="border-t border-[#eef2ff]">
+          renderCells={(t) => (
+            <>
               <td className="px-3 py-2 font-mono text-xs">{t.transaction_code}</td>
               <td className="px-3 py-2">{t.client_id ? displayClientName(clientMap[t.client_id] || {}) : "—"}</td>
               <td className="px-3 py-2">{t.project_id ? projectMap[t.project_id]?.project_name ?? "—" : "—"}</td>
@@ -686,7 +725,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                   Delete
                 </button>
               </td>
-            </tr>
+            </>
           )}
         />
       ) : null}
@@ -698,9 +737,11 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
           onAction={() => setPanel("expense")}
           loading={loading}
           rows={expenseRows}
+          getRowId={(t) => t.id}
+          onBulkDelete={(ids) => void deleteTransactionsBulk(ids)}
           columns={["Code", "Category", "Amount", "Date", "Method", "By", "Actions"]}
-          renderRow={(t) => (
-            <tr key={t.id} className="border-t border-[#eef2ff]">
+          renderCells={(t) => (
+            <>
               <td className="px-3 py-2 font-mono text-xs">{t.transaction_code}</td>
               <td className="px-3 py-2">{t.category}</td>
               <td className="px-3 py-2 font-semibold">{formatInr(Number(t.amount))}</td>
@@ -712,7 +753,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                   Delete
                 </button>
               </td>
-            </tr>
+            </>
           )}
         />
       ) : null}
@@ -726,10 +767,37 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
               </Button>
             </div>
           ) : null}
+          {isPrivileged ? (
+            <BulkSelectionBar selectedCount={claimsBulk.selectedCount} totalCount={paginatedClaims.length} onClear={claimsBulk.clearSelection}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 rounded-lg border-rose-200 px-2 text-xs text-rose-700 hover:bg-rose-50"
+                onClick={() => {
+                  const ids = [...claimsBulk.selected];
+                  claimsBulk.clearSelection();
+                  void deleteClaimsBulk(ids);
+                }}
+              >
+                Delete selected
+              </Button>
+            </BulkSelectionBar>
+          ) : null}
           <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
             <table className="w-full min-w-[900px] text-sm">
               <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
                 <tr>
+                  {isPrivileged ? (
+                    <th className="w-10 px-3 py-2 text-left">
+                      <TableBulkCheckbox
+                        checked={claimsBulk.allSelected}
+                        indeterminate={claimsBulk.someSelected}
+                        onChange={claimsBulk.toggleAll}
+                        ariaLabel="Select all claims on this page"
+                      />
+                    </th>
+                  ) : null}
                   {(isMemberPortal
                     ? ["Code", "Type", "Amount", "Date", "Status", "Actions"]
                     : ["Code", "Employee", "Type", "Amount", "Date", "Status", "Actions"]
@@ -744,13 +812,22 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                 {loading
                   ? Array.from({ length: 4 }).map((_, i) => (
                       <tr key={i}>
-                        <td colSpan={isMemberPortal ? 6 : 7} className="px-3 py-3">
+                        <td colSpan={(isMemberPortal ? 6 : 7) + (isPrivileged ? 1 : 0)} className="px-3 py-3">
                           <div className="h-4 animate-pulse rounded bg-slate-100" />
                         </td>
                       </tr>
                     ))
                   : paginatedClaims.map((c) => (
                       <tr key={c.id} className="border-t border-[#eef2ff]">
+                        {isPrivileged ? (
+                          <td className="px-3 py-2">
+                            <TableBulkCheckbox
+                              checked={claimsBulk.isSelected(c.id)}
+                              onChange={() => claimsBulk.toggleOne(c.id)}
+                              ariaLabel={`Select claim ${c.claim_code}`}
+                            />
+                          </td>
+                        ) : null}
                         <td className="px-3 py-2 font-mono text-xs">{c.claim_code}</td>
                         {!isMemberPortal ? (
                           <td className="px-3 py-2">{employeeMap[c.employee_id] || c.employee_id.slice(0, 8)}</td>
@@ -782,7 +859,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                     ))}
                 {!loading && !visibleClaims.length ? (
                   <tr>
-                    <td colSpan={isMemberPortal ? 6 : 7} className="px-6 py-8 text-center text-[#64748b]">
+                    <td colSpan={(isMemberPortal ? 6 : 7) + (isPrivileged ? 1 : 0)} className="px-6 py-8 text-center text-[#64748b]">
                       No claims yet.
                     </td>
                   </tr>
@@ -802,63 +879,50 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
       ) : null}
 
       {activeTab === "payments" && (isPrivileged || isManager) ? (
-        <div className="space-y-3">
-          <div className="flex justify-end">
-            <Button className="h-9 rounded-full bg-[#c9a227] px-4 text-white" onClick={() => setPanel("payment")} disabled={schemaMissing}>
-              + Add payment
-            </Button>
-          </div>
-          <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
-            <table className="w-full min-w-[1000px] text-sm">
-              <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
-                <tr>
-                  {["Client", "Project", "Invoice", "Amount", "Date", "Method", "Status", "Actions"].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {payments.map((p) => {
-                  const proj = projectMap[p.project_id];
-                  const pendingProj = Number(proj?.pending_amount ?? 0);
-                  return (
-                    <tr key={p.id} className="border-t border-[#eef2ff]">
-                      <td className="px-3 py-2">{p.client_id ? displayClientName(clientMap[p.client_id] || {}) : proj?.client_id ? displayClientName(clientMap[proj.client_id!] || {}) : "—"}</td>
-                      <td className="px-3 py-2 font-medium">{proj?.project_name ?? "—"}</td>
-                      <td className="px-3 py-2">{p.invoice_number || "—"}</td>
-                      <td className="px-3 py-2 font-semibold">{formatInr(Number(p.amount))}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{String(p.payment_date).slice(0, 10)}</td>
-                      <td className="px-3 py-2">{p.payment_method}</td>
-                      <td className="px-3 py-2">{p.payment_status}</td>
-                      <td className="space-x-2 px-3 py-2 text-xs">
-                        <span className="text-[#64748b]">Pending on project: {formatInr(pendingProj)}</span>
-                        {p.payment_status !== "Paid" ? (
-                          <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => void markPaymentPaid(p)}>
-                            Mark paid
-                          </button>
-                        ) : null}
-                        {isPrivileged || isManager ? (
-                          <button type="button" className="font-semibold text-rose-600 hover:underline" onClick={() => void deletePayment(p.id)}>
-                            Delete
-                          </button>
-                        ) : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {!loading && !payments.length ? (
-                  <tr>
-                    <td colSpan={8} className="px-6 py-8 text-center text-[#64748b]">
-                      No project payments yet.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <FinanceTableSection
+          title="Project payments"
+          actionLabel="+ Add payment"
+          onAction={() => setPanel("payment")}
+          loading={loading}
+          rows={payments}
+          getRowId={(p) => p.id}
+          onBulkDelete={(ids) => void deletePaymentsBulk(ids)}
+          columns={["Client", "Project", "Invoice", "Amount", "Date", "Method", "Status", "Actions"]}
+          renderCells={(p) => {
+            const proj = projectMap[p.project_id];
+            const pendingProj = Number(proj?.pending_amount ?? 0);
+            return (
+              <>
+                <td className="px-3 py-2">
+                  {p.client_id
+                    ? displayClientName(clientMap[p.client_id] || {})
+                    : proj?.client_id
+                      ? displayClientName(clientMap[proj.client_id!] || {})
+                      : "—"}
+                </td>
+                <td className="px-3 py-2 font-medium">{proj?.project_name ?? "—"}</td>
+                <td className="px-3 py-2">{p.invoice_number || "—"}</td>
+                <td className="px-3 py-2 font-semibold">{formatInr(Number(p.amount))}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{String(p.payment_date).slice(0, 10)}</td>
+                <td className="px-3 py-2">{p.payment_method}</td>
+                <td className="px-3 py-2">{p.payment_status}</td>
+                <td className="space-x-2 px-3 py-2 text-xs">
+                  <span className="text-[#64748b]">Pending on project: {formatInr(pendingProj)}</span>
+                  {p.payment_status !== "Paid" ? (
+                    <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => void markPaymentPaid(p)}>
+                      Mark paid
+                    </button>
+                  ) : null}
+                  {isPrivileged || isManager ? (
+                    <button type="button" className="font-semibold text-rose-600 hover:underline" onClick={() => void deletePayment(p.id)}>
+                      Delete
+                    </button>
+                  ) : null}
+                </td>
+              </>
+            );
+          }}
+        />
       ) : null}
 
       {activeTab === "dues" && (isPrivileged || isManager) ? (
@@ -1320,7 +1384,9 @@ function FinanceTableSection<T>({
   loading,
   rows,
   columns,
-  renderRow,
+  renderCells,
+  getRowId,
+  onBulkDelete,
 }: {
   title: string;
   actionLabel: string;
@@ -1328,9 +1394,14 @@ function FinanceTableSection<T>({
   loading: boolean;
   rows: T[];
   columns: string[];
-  renderRow: (row: T) => ReactNode;
+  renderCells: (row: T) => ReactNode;
+  getRowId?: (row: T) => string;
+  onBulkDelete?: (ids: string[]) => void;
 }) {
   const { paginatedItems, page, setPage, totalPages, totalItems, pageSize, setPageSize } = usePagination(rows, 10);
+  const selectable = Boolean(getRowId && onBulkDelete);
+  const selection = useRowSelection(paginatedItems, getRowId ?? ((row) => String(row)));
+  const colSpan = columns.length + (selectable ? 1 : 0);
 
   return (
     <div className="space-y-3">
@@ -1340,10 +1411,37 @@ function FinanceTableSection<T>({
           {actionLabel}
         </Button>
       </div>
+      {selectable ? (
+        <BulkSelectionBar selectedCount={selection.selectedCount} totalCount={paginatedItems.length} onClear={selection.clearSelection}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 rounded-lg border-rose-200 px-2 text-xs text-rose-700 hover:bg-rose-50"
+            onClick={() => {
+              const ids = [...selection.selected];
+              selection.clearSelection();
+              onBulkDelete?.(ids);
+            }}
+          >
+            Delete selected
+          </Button>
+        </BulkSelectionBar>
+      ) : null}
       <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
         <table className="w-full min-w-[960px] text-sm">
           <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
             <tr>
+              {selectable ? (
+                <th className="w-10 px-3 py-2 text-left">
+                  <TableBulkCheckbox
+                    checked={selection.allSelected}
+                    indeterminate={selection.someSelected}
+                    onChange={selection.toggleAll}
+                    ariaLabel="Select all rows on this page"
+                  />
+                </th>
+              ) : null}
               {columns.map((c) => (
                 <th key={c} className="px-3 py-2 text-left">
                   {c}
@@ -1355,15 +1453,31 @@ function FinanceTableSection<T>({
             {loading
               ? Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i}>
-                    <td colSpan={columns.length} className="px-3 py-3">
+                    <td colSpan={colSpan} className="px-3 py-3">
                       <div className="h-4 animate-pulse rounded bg-slate-100" />
                     </td>
                   </tr>
                 ))
-              : paginatedItems.map(renderRow)}
+              : paginatedItems.map((row, idx) => {
+                  const id = getRowId?.(row) ?? String(idx);
+                  return (
+                    <tr key={id} className="border-t border-[#eef2ff]">
+                      {selectable && getRowId ? (
+                        <td className="px-3 py-2">
+                          <TableBulkCheckbox
+                            checked={selection.isSelected(id)}
+                            onChange={() => selection.toggleOne(id)}
+                            ariaLabel={`Select row ${id}`}
+                          />
+                        </td>
+                      ) : null}
+                      {renderCells(row)}
+                    </tr>
+                  );
+                })}
             {!loading && !rows.length ? (
               <tr>
-                <td colSpan={columns.length} className="px-6 py-8 text-center text-[#64748b]">
+                <td colSpan={colSpan} className="px-6 py-8 text-center text-[#64748b]">
                   No rows yet.
                 </td>
               </tr>

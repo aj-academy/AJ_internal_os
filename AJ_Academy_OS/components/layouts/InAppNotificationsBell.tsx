@@ -6,6 +6,7 @@ import { Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { playNotificationSound } from "@/lib/notifications/notificationSound";
 import { Button } from "@/components/ui/button";
+import { resolveNotificationHref } from "@/lib/notificationLinks";
 
 type NotifRow = {
   id: string;
@@ -144,8 +145,8 @@ export function InAppNotificationsBell({ fallbackTaskHref }: { fallbackTaskHref:
               <p className="px-3 py-6 text-center text-sm text-[#64748b]">No notifications yet.</p>
             ) : (
               rows.map((n) => {
-                const href = (n.link_path || fallbackTaskHref).trim() || fallbackTaskHref;
-                const label = actionLabel(n.type, n.link_path);
+                const href = resolveNotificationHref(n.link_path, fallbackTaskHref);
+                const label = actionLabel(n.type, href);
                 return (
                   <div
                     key={n.id}

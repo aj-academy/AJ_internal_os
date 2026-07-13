@@ -26,6 +26,9 @@ import {
   todayISO,
 } from "@/lib/reimbursementHelpers";
 import { usePagination } from "@/lib/usePagination";
+import { useRowSelection } from "@/lib/useRowSelection";
+import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
+import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
 import type { MemberReimbursementTabId } from "@/components/reimbursement/memberReimbursementConfig";
 import type { ReimbursementClaimRow, ReimbursementPolicySettings } from "@/types/reimbursement";
 
@@ -165,6 +168,11 @@ export function MemberReimbursementWorkbench() {
   );
 
   const { paginatedItems, page, setPage, totalPages, totalItems, pageSize, setPageSize } = usePagination(submittedClaims, 10);
+  const draftOnPage = useMemo(
+    () => paginatedItems.filter((c) => c.approval_status === "Draft"),
+    [paginatedItems],
+  );
+  const draftBulk = useRowSelection(draftOnPage, (c) => c.id);
 
   const buildPayload = (asDraft: boolean) => {
     const amt = Number(form.amount) || 0;
@@ -319,6 +327,19 @@ export function MemberReimbursementWorkbench() {
     await loadData();
   };
 
+  const deleteDraftsBulk = async (ids: string[]) => {
+    if (!ids.length || !userId) return;
+    if (!confirm(`Delete ${ids.length} draft claim(s)?`)) return;
+    const { error: err } = await supabase.from("expense_claims").delete().in("id", ids).eq("employee_id", userId);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    if (activeClaimId && ids.includes(activeClaimId)) setActiveClaimId(null);
+    draftBulk.clearSelection();
+    await loadData();
+  };
+
   return (
     <section className="space-y-5 rounded-[24px] border border-[#d4deea] bg-white p-4 shadow-[0_20px_40px_rgba(30,64,175,0.08)] sm:p-6 lg:p-8">
       <header>
@@ -456,10 +477,29 @@ export function MemberReimbursementWorkbench() {
 
       {activeTab === "claims" ? (
         <div className="space-y-3">
+          <BulkSelectionBar selectedCount={draftBulk.selectedCount} onClear={draftBulk.clearSelection}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 rounded-lg border-rose-200 px-2 text-xs text-rose-700 hover:bg-rose-50"
+              onClick={() => void deleteDraftsBulk([...draftBulk.selected])}
+            >
+              Delete selected drafts
+            </Button>
+          </BulkSelectionBar>
           <div className="overflow-x-auto rounded-xl border border-[#dbe6f3]">
             <table className="w-full min-w-[900px] text-sm">
               <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
                 <tr>
+                  <th className="w-10 px-3 py-2 text-left">
+                    <TableBulkCheckbox
+                      checked={draftBulk.allSelected}
+                      indeterminate={draftBulk.someSelected}
+                      onChange={draftBulk.toggleAll}
+                      ariaLabel="Select all draft claims on this page"
+                    />
+                  </th>
                   {["Code", "Type", "Category", "Date", "Amount", "Status", "Submitted", "Action"].map((h) => (
                     <th key={h} className="px-3 py-2 text-left">
                       {h}
@@ -471,13 +511,22 @@ export function MemberReimbursementWorkbench() {
                 {loading
                   ? Array.from({ length: 3 }).map((_, i) => (
                       <tr key={i}>
-                        <td colSpan={8} className="px-3 py-3">
+                        <td colSpan={9} className="px-3 py-3">
                           <div className="h-4 animate-pulse rounded bg-slate-100" />
                         </td>
                       </tr>
                     ))
                   : paginatedItems.map((c) => (
                       <tr key={c.id} className="border-t border-[#eef2ff]">
+                        <td className="px-3 py-2">
+                          {c.approval_status === "Draft" ? (
+                            <TableBulkCheckbox
+                              checked={draftBulk.isSelected(c.id)}
+                              onChange={() => draftBulk.toggleOne(c.id)}
+                              ariaLabel={`Select draft ${c.claim_code ?? c.id}`}
+                            />
+                          ) : null}
+                        </td>
                         <td className="px-3 py-2 font-mono text-xs">{c.claim_code ?? "—"}</td>
                         <td className="px-3 py-2">{c.budget_type ?? "—"}</td>
                         <td className="px-3 py-2">{c.category ?? "—"}</td>
@@ -507,7 +556,7 @@ export function MemberReimbursementWorkbench() {
                     ))}
                 {!loading && !submittedClaims.length ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                       No claims yet.
                     </td>
                   </tr>

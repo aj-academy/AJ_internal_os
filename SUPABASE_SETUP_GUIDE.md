@@ -150,7 +150,11 @@ API (staff session): `GET/POST /api/college-visits`, `PATCH/DELETE /api/college-
 
 **Employee not seeing assigned tasks?** Run **`tasks_employee_rls_fix.sql`** — `aj_academy_roles_patch.sql` removed employee task SELECT policies; this restores them.
 
-Task assignment from `/employee/my-tasks` opens **Student Master** to pick leads (same flow as admin).
+**Employee Lead Contact shows “—” on My Tasks?** Run **`tasks_linked_lead_access.sql`** after `employee_student_master_rls.sql`. It lets assignees/assigners read (and lightly update contact flags on) student leads linked on *their* tasks only — without opening all Student Master rows. Also creates `employee_task_pins` for **Add to my dashboard**.
+
+**Employee task notification opens wrong page / dashboard?** Run **`task_notification_employee_link_fix.sql`**. Older installs linked employees to `/student/my-tasks` (blocked by the student layout). The app also remaps those links client-side; the SQL fixes new notifications and backfills old ones.
+
+My Tasks (employee) uses ownership tabs (**Assigned to me** / **Tasks I assigned**) plus type tabs (**Student Lead** / **College Visit** / **Project**) so columns match the link type. Phone / WhatsApp / email and **View / Activity** work on student-lead tasks for the assignee and the person who assigned the task.
 
 ### Student portal (same modules as employee)
 

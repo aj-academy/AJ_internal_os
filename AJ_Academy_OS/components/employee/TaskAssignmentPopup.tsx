@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ClipboardList, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { resolveNotificationHref } from "@/lib/notificationLinks";
 
 type TaskNotif = {
   id: string;
@@ -131,7 +132,7 @@ export function TaskAssignmentPopup({ fallbackTaskHref = "/employee/my-tasks" }:
 
   if (!popup) return null;
 
-  const href = (popup.link_path || fallbackTaskHref).trim() || fallbackTaskHref;
+  const href = resolveNotificationHref(popup.link_path, fallbackTaskHref);
 
   return (
     <div className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm" role="alertdialog" aria-labelledby="task-popup-title">

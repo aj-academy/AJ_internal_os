@@ -34,6 +34,14 @@ type AppRole = "admin" | "employee" | "student" | "freelancer" | "mentor";
 export type TaskAssignmentVariant = "assignee" | "assigner";
 
 type EmployeeTaskView = "assigned-to-me" | "assigned-by-me";
+type LinkTypeFilter = TaskAssignmentType | "all";
+
+const LINK_TYPE_TABS: { id: LinkTypeFilter; label: string }[] = [
+  { id: "all", label: "All types" },
+  { id: "lead", label: "Student Lead" },
+  { id: "college", label: "College Visit" },
+  { id: "project", label: "Project" },
+];
 
 interface TaskAssignmentPageProps {
   role: AppRole;
@@ -107,7 +115,7 @@ function toReadableTaskError(input: unknown) {
     raw.toLowerCase().includes("college_visit_ids") ||
     raw.toLowerCase().includes("assignment_type")
   ) {
-    return "DATABASE_SETUP: Re-run `AJ_Academy_SB/tasks_assignment_link_patch.sql`, `AJ_Academy_SB/tasks_college_link_patch.sql`, and `AJ_Academy_SB/tasks_employee_rls_fix.sql` in Supabase, then refresh.";
+    return "DATABASE_SETUP: Re-run `AJ_Academy_SB/tasks_assignment_link_patch.sql`, `AJ_Academy_SB/tasks_college_link_patch.sql`, `AJ_Academy_SB/tasks_employee_rls_fix.sql`, and `AJ_Academy_SB/tasks_linked_lead_access.sql` in Supabase, then refresh.";
   }
   return raw;
 }
@@ -133,7 +141,9 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const mentorManagesTeam = departmentAssigner;
   const isPortalAssignee = isAssigneeView && (isStudent || isMentor || isFreelancer);
   const [employeeTaskView, setEmployeeTaskView] = useState<EmployeeTaskView>("assigned-to-me");
+  const [linkTypeFilter, setLinkTypeFilter] = useState<LinkTypeFilter>("all");
   const employeeDelegatedView = isEmployee && employeeTaskView === "assigned-by-me";
+  const showLinkTypeTabs = isEmployee || isAdmin;
   const filterTasksByAssigner = mentorManagesTeam || employeeDelegatedView;
   const [currentUserId, setCurrentUserId] = useState("");
   const [selfProfile, setSelfProfile] = useState<ProfileOption | null>(null);
@@ -375,7 +385,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       if (dueDateFilter) query = query.eq("due_date", dueDateFilter);
       if (searchDebounced) query = query.ilike("title", `%${searchDebounced}%`);
 
-      query = query.order("due_date", { ascending: true, nullsFirst: false });
+      query = query.order("due_date", { ascending: true, nullsFirst: false }).limit(250);
 
       const { data, error: taskError } = await query;
       if (taskError) {
@@ -588,12 +598,13 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             .maybeSingle();
           const profileRow = (me as ProfileOption | null) ?? null;
           setSelfProfile(profileRow);
-          if (isEmployee) await loadAssignees();
+          // Defer heavy assignee/project lists until Assign is opened (employees).
+          if (!isEmployee) await loadAssignees();
         } else {
           setSelfProfile(null);
           await loadAssignees();
         }
-        if (isAdmin || isEmployee) await loadProjectsForForm();
+        if (isAdmin) await loadProjectsForForm();
       } catch (bootstrapError) {
         setError(toReadableTaskError(bootstrapError));
       } finally {
@@ -627,14 +638,19 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
 
   useEffect(() => {
     if (!currentUserId || tasksTableMissing) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel("task-live-updates")
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => {
-        void refreshTaskData(currentUserId);
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          void refreshTaskData(currentUserId);
+        }, 800);
       })
       .subscribe();
 
     return () => {
+      if (timer) clearTimeout(timer);
       void supabase.removeChannel(channel);
     };
   }, [currentUserId, refreshTaskData, supabase, tasksTableMissing]);
@@ -701,6 +717,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     return rows.filter((task) => task.due_date === today).length;
   }, [rows]);
 
+  const filteredRows = useMemo(() => {
+    if (linkTypeFilter === "all") return rows;
+    return rows.filter((t) => (t.assignment_type ?? "") === linkTypeFilter);
+  }, [linkTypeFilter, rows]);
+
   const {
     paginatedItems: paginatedRows,
     page: taskPage,
@@ -709,19 +730,23 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     totalItems: taskTotalItems,
     pageSize: taskPageSize,
     setPageSize: setTaskPageSize,
-  } = usePagination(rows, 10);
+  } = usePagination(filteredRows, 10);
 
-  const taskSelection = useRowSelection(rows, (task) => task.id);
+  const taskSelection = useRowSelection(filteredRows, (task) => task.id);
 
   useEffect(() => {
     taskSelection.clearSelection();
-  }, [employeeTaskView, statusFilter, priorityFilter, assignedFilter, dueDateFilter, searchDebounced]);
+  }, [employeeTaskView, linkTypeFilter, statusFilter, priorityFilter, assignedFilter, dueDateFilter, searchDebounced]);
 
   useEffect(() => {
     if (!isEmployee) return;
     setAssignedFilter("");
     setTaskPage(1);
   }, [employeeTaskView, isEmployee, setTaskPage]);
+
+  useEffect(() => {
+    setTaskPage(1);
+  }, [linkTypeFilter, setTaskPage]);
 
   const filtersActive = Boolean(
     searchText.trim() || statusFilter || priorityFilter || assignedFilter || dueDateFilter,
@@ -747,7 +772,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     [supabase],
   );
 
-  const openCreate = async () => {
+  const openCreate = async (presetType?: LinkTypeFilter) => {
     if (tasksTableMissing || isStudent) return;
     setError(null);
     setSuccess(null);
@@ -758,16 +783,25 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     } catch (assigneeLoadError) {
       setError(toReadableTaskError(assigneeLoadError));
     }
-    setForm(initialForm);
+    const type =
+      presetType && presetType !== "all"
+        ? presetType
+        : linkTypeFilter !== "all"
+          ? linkTypeFilter
+          : "";
+    const base = {
+      ...initialForm,
+      assignment_type: (type || "") as TaskFormValue["assignment_type"],
+      ...(isEmployee && currentUserId ? { assigned_to: currentUserId } : {}),
+    };
+    setForm(base);
     setPendingAttachmentFiles([]);
     setExistingAttachments([]);
     setSelectedClientIds([]);
     setSelectedLeadLabels([]);
     setLeadSelectionPath("");
-    if (isEmployee) {
-      if (!currentUserId) return;
-      setForm({ ...initialForm, assigned_to: currentUserId });
-    }
+    setSelectedCollegeVisitIds([]);
+    if (isEmployee && !currentUserId) return;
     setPanelOpen(true);
   };
 
@@ -1349,11 +1383,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         placeholder="Search task title…"
         showClear={filtersActive}
         onClear={clearTableFilters}
-        hint={`Showing ${paginatedRows.length} of ${rows.length} task(s)`}
+        hint={`Showing ${paginatedRows.length} of ${filteredRows.length} task(s)${linkTypeFilter !== "all" ? ` · ${LINK_TYPE_TABS.find((t) => t.id === linkTypeFilter)?.label ?? ""}` : ""}`}
       />
 
       {isEmployee ? (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -1380,14 +1414,36 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           </div>
           <p className="text-sm text-[#64748b]">
             {employeeDelegatedView
-              ? `Work you delegated to teammates — track their status and progress (read-only). (${rows.length} assigned)`
-              : `Work assigned to you — update status, progress, and mark completion when you finish. (${rows.length} tasks)`}
+              ? `Work you delegated — track status and activity (read-only). (${filteredRows.length} shown)`
+              : `Work assigned to you — call/WhatsApp/email linked student leads, update progress, and open View / Activity. (${filteredRows.length} shown)`}
           </p>
         </div>
       ) : null}
 
+      {showLinkTypeTabs ? (
+        <div className="flex flex-wrap gap-2">
+          {LINK_TYPE_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setLinkTypeFilter(tab.id)}
+              className={
+                linkTypeFilter === tab.id
+                  ? "rounded-full bg-[#c9a227] px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
+                  : "rounded-full border border-[#e8dcc8] bg-white px-3 py-1.5 text-xs font-semibold text-[#64748b] hover:bg-[#f8fbff]"
+              }
+            >
+              {tab.label}
+              {tab.id !== "all"
+                ? ` (${rows.filter((r) => (r.assignment_type ?? "") === tab.id).length})`
+                : ` (${rows.length})`}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {canManageTasks && taskSelection.selectedCount > 0 ? (
-        <BulkSelectionBar selectedCount={taskSelection.selectedCount} totalCount={rows.length} onClear={taskSelection.clearSelection}>
+        <BulkSelectionBar selectedCount={taskSelection.selectedCount} totalCount={filteredRows.length} onClear={taskSelection.clearSelection}>
           <Button
             type="button"
             size="sm"
@@ -1439,6 +1495,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           onRequestCompleteTask={
             !canManageTasks && !employeeDelegatedView ? (task) => setCompleteTask(task) : undefined
           }
+          linkTypePreset={linkTypeFilter}
           showLeadOutreach
           currentUserId={currentUserId}
           supabase={supabase}
@@ -1599,6 +1656,8 @@ function TaskViewPanel({
 }) {
   const [activities, setActivities] = useState<TaskActivityRow[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(true);
+  const [pinned, setPinned] = useState(false);
+  const [pinBusy, setPinBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1619,6 +1678,57 @@ function TaskViewPanel({
     };
   }, [supabase, task.id]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (!currentUserId) return;
+      const { data } = await supabase
+        .from("employee_task_pins")
+        .select("task_id")
+        .eq("user_id", currentUserId)
+        .eq("task_id", task.id)
+        .maybeSingle();
+      if (!cancelled) setPinned(Boolean(data));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, supabase, task.id]);
+
+  const togglePin = async () => {
+    if (!currentUserId || pinBusy) return;
+    setPinBusy(true);
+    try {
+      if (pinned) {
+        const { error } = await supabase
+          .from("employee_task_pins")
+          .delete()
+          .eq("user_id", currentUserId)
+          .eq("task_id", task.id);
+        if (error) throw new Error(error.message);
+        setPinned(false);
+        onSuccess?.("Removed from your dashboard.");
+      } else {
+        const { error } = await supabase.from("employee_task_pins").insert({
+          user_id: currentUserId,
+          task_id: task.id,
+        });
+        if (error) throw new Error(error.message);
+        setPinned(true);
+        onSuccess?.("Added to your dashboard.");
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.toLowerCase().includes("employee_task_pins") || msg.toLowerCase().includes("schema cache")) {
+        onError?.("Run AJ_Academy_SB/tasks_linked_lead_access.sql in Supabase to enable dashboard pins.");
+      } else {
+        onError?.(msg);
+      }
+    } finally {
+      setPinBusy(false);
+    }
+  };
+
   return (
     <>
       <button type="button" aria-label="Close" className="fixed inset-0 z-[60] bg-slate-900/40" onClick={onClose} />
@@ -1634,9 +1744,20 @@ function TaskViewPanel({
               <p className="mt-0.5 text-xs text-[#64748b]">Assigned by {task.assigner_display_name}</p>
             ) : null}
           </div>
-          <button type="button" className="text-sm text-[#64748b]" onClick={onClose}>
-            Close
-          </button>
+          <div className="flex flex-col items-end gap-2">
+            <button type="button" className="text-sm text-[#64748b]" onClick={onClose}>
+              Close
+            </button>
+            <button
+              type="button"
+              disabled={pinBusy}
+              onClick={() => void togglePin()}
+              className="rounded-full border border-[#e8dcc8] px-3 py-1 text-xs font-semibold text-[#0f172a] hover:bg-[#f8fbff] disabled:opacity-50"
+              title="Pin this task on your employee dashboard for handover follow-up"
+            >
+              {pinned ? "Remove from dashboard" : "Add to my dashboard"}
+            </button>
+          </div>
         </div>
         <div className="space-y-3 overflow-y-auto px-5 py-4 text-sm text-[#334155]">
           <div>

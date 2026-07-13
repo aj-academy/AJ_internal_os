@@ -7,7 +7,7 @@ import { TablePagination } from "@/components/ui/TablePagination";
 import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
 import { TaskLeadOutreachBlock } from "@/components/task/TaskLeadOutreachBlock";
 import type { createClient } from "@/lib/supabase/client";
-import type { TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
+import type { TaskAssignmentType, TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 
 interface TaskTableProps {
   tasks: TaskRecord[];
@@ -21,6 +21,8 @@ interface TaskTableProps {
   showDepartment?: boolean;
   /** Delegated tasks list: view-only (no status/progress edits). */
   readOnlyList?: boolean;
+  /** Filter preset drives Linked To label and Lead Contact column. */
+  linkTypePreset?: TaskAssignmentType | "all";
   statusFilter: TaskStatus | "";
   setStatusFilter: (value: TaskStatus | "") => void;
   priorityFilter: TaskPriority | "";
@@ -87,6 +89,7 @@ export function TaskTable({
   assigneeColumn = "assigned-to",
   showDepartment = false,
   readOnlyList = false,
+  linkTypePreset = "all",
   statusFilter,
   setStatusFilter,
   priorityFilter,
@@ -118,7 +121,22 @@ export function TaskTable({
   const showAssignedTo = assigneeColumn === "assigned-to";
   const showAssignedBy = assigneeColumn === "assigned-by";
   const showSelection = Boolean(selection);
-  const columnCount = 8 + (showSelection ? 1 : 0) + (showAssignedTo || showAssignedBy ? 1 : 0) + (showDepartment ? 1 : 0);
+  const showContact =
+    showLeadOutreach && (linkTypePreset === "all" || linkTypePreset === "lead");
+  const linkedHeader =
+    linkTypePreset === "project"
+      ? "Project"
+      : linkTypePreset === "college"
+        ? "College"
+        : linkTypePreset === "lead"
+          ? "Student Lead(s)"
+          : "Linked To";
+  const columnCount =
+    8 +
+    (showSelection ? 1 : 0) +
+    (showAssignedTo || showAssignedBy ? 1 : 0) +
+    (showDepartment ? 1 : 0) +
+    (showContact ? 1 : 0);
 
   return (
     <article className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
@@ -138,8 +156,8 @@ export function TaskTable({
                 </th>
               ) : null}
               <TableHeaderCell label="Task Title" className="px-4 py-3 text-center" />
-              <TableHeaderCell label="Linked To" className="px-4 py-3 text-center" />
-              {showLeadOutreach ? (
+              <TableHeaderCell label={linkedHeader} className="px-4 py-3 text-center" />
+              {showContact ? (
                 <TableHeaderCell label="Lead Contact" className="px-4 py-3 text-center" />
               ) : null}
               {showAssignedTo ? (
@@ -249,7 +267,7 @@ export function TaskTable({
                           "—"
                         )}
                       </td>
-                      {showLeadOutreach ? (
+                      {showContact ? (
                         <td className="px-4 py-3.5 align-middle">
                           {task.assignment_type === "lead" && task.linked_leads?.length && currentUserId && supabase ? (
                             <TaskLeadOutreachBlock
@@ -325,7 +343,7 @@ export function TaskTable({
                             onClick={() => onView(task)}
                             className="text-xs font-medium text-[#a68b2e] hover:underline disabled:opacity-40"
                           >
-                            View Task
+                            View / Activity
                           </button>
                           {readOnlyList ? null : canManageTasks ? (
                             <>

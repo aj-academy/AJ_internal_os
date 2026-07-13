@@ -20,6 +20,9 @@ import {
 } from "@/lib/reimbursementHelpers";
 import { parseBillUrls } from "@/lib/reimbursementBills";
 import { usePagination } from "@/lib/usePagination";
+import { useRowSelection } from "@/lib/useRowSelection";
+import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
+import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
 import type { ReimbursementClaimRow, ReimbursementPolicySettings, ReimbursementTabId } from "@/types/reimbursement";
 
 type ProfileMini = {
@@ -189,6 +192,7 @@ export function ReimbursementsAdminWorkbench() {
   }, [activeTab, claims, profileMap, search]);
 
   const { paginatedItems, page, setPage, totalPages, totalItems, pageSize, setPageSize } = usePagination(filteredClaims, 10);
+  const claimBulk = useRowSelection(paginatedItems, (c) => c.id);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -242,6 +246,20 @@ export function ReimbursementsAdminWorkbench() {
     void updateClaimStatus(claim, "Rejected", { rejection_reason: reason || "Rejected" });
   };
   const handleReimburse = (claim: ReimbursementClaimRow) => void updateClaimStatus(claim, "Reimbursed");
+
+  const deleteClaimsBulk = async (ids: string[]) => {
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} selected claim(s)? This cannot be undone.`)) return;
+    setError(null);
+    const { error: err } = await supabase.from("expense_claims").delete().in("id", ids);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setSuccess(`Deleted ${ids.length} claim(s).`);
+    claimBulk.clearSelection();
+    await loadAll();
+  };
 
   const savePolicy = async () => {
     setSavingPolicy(true);
@@ -397,10 +415,29 @@ export function ReimbursementsAdminWorkbench() {
       {showTable ? (
         <div className="space-y-3">
           <TableSearchBar value={search} onChange={setSearch} placeholder="Search employee, code, category…" />
+          <BulkSelectionBar selectedCount={claimBulk.selectedCount} totalCount={paginatedItems.length} onClear={claimBulk.clearSelection}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 rounded-lg border-rose-200 px-2 text-xs text-rose-700 hover:bg-rose-50"
+              onClick={() => void deleteClaimsBulk([...claimBulk.selected])}
+            >
+              Delete selected
+            </Button>
+          </BulkSelectionBar>
           <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
             <table className="w-full min-w-[1100px] text-sm">
               <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
                 <tr>
+                  <th className="w-10 px-3 py-2 text-left">
+                    <TableBulkCheckbox
+                      checked={claimBulk.allSelected}
+                      indeterminate={claimBulk.someSelected}
+                      onChange={claimBulk.toggleAll}
+                      ariaLabel="Select all claims on this page"
+                    />
+                  </th>
                   {["Code", "Employee", "Dept", "Type", "Category", "Amount", "Limit", "Status", "Submitted", "Actions"].map((h) => (
                     <th key={h} className="px-3 py-2 text-left">
                       {h}
@@ -412,7 +449,7 @@ export function ReimbursementsAdminWorkbench() {
                 {loading
                   ? Array.from({ length: 4 }).map((_, i) => (
                       <tr key={i}>
-                        <td colSpan={10} className="px-3 py-3">
+                        <td colSpan={11} className="px-3 py-3">
                           <div className="h-4 animate-pulse rounded bg-slate-100" />
                         </td>
                       </tr>
@@ -423,6 +460,13 @@ export function ReimbursementsAdminWorkbench() {
                       const statusClass = STATUS_BADGE_CLASS[c.approval_status] ?? "bg-slate-100 text-slate-700";
                       return (
                         <tr key={c.id} className="border-t border-[#eef2ff]">
+                          <td className="px-3 py-2">
+                            <TableBulkCheckbox
+                              checked={claimBulk.isSelected(c.id)}
+                              onChange={() => claimBulk.toggleOne(c.id)}
+                              ariaLabel={`Select claim ${c.claim_code ?? c.id}`}
+                            />
+                          </td>
                           <td className="px-3 py-2 font-mono text-xs">{c.claim_code ?? "—"}</td>
                           <td className="px-3 py-2">{p?.full_name || p?.email || c.employee_id.slice(0, 8)}</td>
                           <td className="px-3 py-2">{p?.department ?? "—"}</td>
@@ -470,7 +514,7 @@ export function ReimbursementsAdminWorkbench() {
                     })}
                 {!loading && !filteredClaims.length ? (
                   <tr>
-                    <td colSpan={10} className="px-6 py-8 text-center text-[#64748b]">
+                    <td colSpan={11} className="px-6 py-8 text-center text-[#64748b]">
                       No claims.
                     </td>
                   </tr>
