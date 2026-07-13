@@ -123,17 +123,19 @@ Desktop/AJ_Academy/
 
 ### Employee portal
 
-Employees use `/employee/*` for attendance, **My Tasks** (assign tasks with leads/projects + attachments), **Student Master** (full CRM — same as admin), Lead Management, leave, reimbursement, and profile.
+Employees use `/employee/*` for attendance, **My Tasks** (assign tasks with leads/projects + attachments), **Student Master** (own assigned leads only), Lead Management, leave, reimbursement, and profile.
 
-After Student Master SQL is applied, run **`employee_student_master_rls.sql`** so employees can read/write CRM data like admin. This script drops legacy “assigned-only” policies that block **Add Student** (403 / row-level security errors).
+After Student Master SQL is applied, run **`employee_student_master_rls.sql`** so employees can select/update/insert **only leads assigned to them** (`assigned_to = auth.uid()`). Re-run this script if an older version granted blanket CRM access to all leads.
 
 If an employee sees **Forbidden** when saving a student, run (in order):
 
 1. `student_lead_master_schema.sql` + `student_lead_master_aux_schema.sql` (if not already applied)
 2. `security_rls_access_fix.sql`
-3. **`employee_student_master_rls.sql`** — required for employee create/update/select on all leads
+3. **`employee_student_master_rls.sql`** — assigned-only employee CRM (create with self as assignee)
 
 Then hard-refresh the app and try **Add Student** again.
+
+**Attendance camera / location:** Employee layout shows a one-time popup asking for camera + location (saved in browser localStorage per user). `Permissions-Policy` must allow `camera=(self)` and `geolocation=(self)` (see `lib/security/headers.ts`). Restart the Next server after header changes.
 
 ### College Visits
 

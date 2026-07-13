@@ -42,7 +42,7 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 10g) employee_module_schema.sql (permission columns + leave_requests for employee panel)
 10h) employee_daily_mood_schema.sql (optional — mood survey on employee login)
 10i) employee_lead_management_schema.sql (employee Lead Management — adds assigned_to on clients if missing)
-10j) employee_student_master_rls.sql (employee Student Master — full CRM access like admin; run after aux schema)
+10j) employee_student_master_rls.sql (employee Student Master — assigned leads only; re-run to drop blanket CRM access)
 10k) college_visits_schema.sql (College Visits outreach tracker — admin + employee)
 10e) system_settings_rls_fix.sql (admin can save departments / settings — run if RLS error on delete)
 11) attendance_delete_grants.sql (optional — admin delete attendance)

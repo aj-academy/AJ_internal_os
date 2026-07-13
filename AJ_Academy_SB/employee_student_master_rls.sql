@@ -1,5 +1,7 @@
--- Employee Student Master — same CRM access as admin on clients + aux tables
--- Run after student_lead_master_schema.sql, student_lead_master_aux_schema.sql, security_rls_access_fix.sql
+-- Employee Student Master — assigned leads only (not all CRM rows)
+-- Replaces the previous blanket clients_employee_crm_all policy.
+-- Run after student_lead_master_schema.sql, student_lead_master_aux_schema.sql,
+-- student_lead_master_rls_fix.sql, and (if already applied) the old employee_student_master_rls.sql.
 -- Safe to re-run.
 
 create or replace function public.is_employee()
@@ -15,49 +17,106 @@ $$;
 
 grant execute on function public.is_employee() to authenticated;
 
--- clients — drop legacy assigned-only policies (they block create/select when assigned_to is unset)
+-- Drop blanket employee CRM policies (from earlier full-access patch)
+drop policy if exists clients_employee_crm_all on public.clients;
+drop policy if exists lead_followups_employee_crm_all on public.lead_followups;
+drop policy if exists lead_activities_employee_crm_all on public.lead_activities;
+drop policy if exists client_documents_employee_crm_all on public.client_documents;
+
+-- clients — assigned rows only + self-insert
 drop policy if exists "clients_employee_select_assigned" on public.clients;
 drop policy if exists clients_employee_select_assigned on public.clients;
+create policy clients_employee_select_assigned
+on public.clients for select to authenticated
+using (public.is_employee() and assigned_to = auth.uid());
+
 drop policy if exists "clients_employee_update_assigned" on public.clients;
 drop policy if exists clients_employee_update_assigned on public.clients;
+create policy clients_employee_update_assigned
+on public.clients for update to authenticated
+using (public.is_employee() and assigned_to = auth.uid())
+with check (public.is_employee() and assigned_to = auth.uid());
+
 drop policy if exists "clients_employee_insert_assigned_self" on public.clients;
 drop policy if exists clients_employee_insert_assigned_self on public.clients;
-drop policy if exists clients_employee_update_assigned_self on public.clients;
+create policy clients_employee_insert_assigned_self
+on public.clients for insert to authenticated
+with check (
+  public.is_employee()
+  and assigned_to = auth.uid()
+  and (assigned_by is null or assigned_by = auth.uid())
+);
 
--- clients — full CRM for employees (Student Master)
-drop policy if exists clients_employee_crm_all on public.clients;
-create policy clients_employee_crm_all
-on public.clients for all to authenticated
-using (public.is_employee())
-with check (public.is_employee());
-
--- lead_followups — drop legacy assigned-only policies
+-- lead_followups — only for assigned clients
 drop policy if exists "lead_followups_employee_select" on public.lead_followups;
 drop policy if exists lead_followups_employee_select on public.lead_followups;
+create policy lead_followups_employee_select
+on public.lead_followups for select to authenticated
+using (
+  public.is_employee()
+  and exists (
+    select 1 from public.clients c
+    where c.id = client_id and c.assigned_to = auth.uid()
+  )
+);
+
 drop policy if exists "lead_followups_employee_insert" on public.lead_followups;
 drop policy if exists lead_followups_employee_insert on public.lead_followups;
+create policy lead_followups_employee_insert
+on public.lead_followups for insert to authenticated
+with check (
+  public.is_employee()
+  and exists (
+    select 1 from public.clients c
+    where c.id = client_id and c.assigned_to = auth.uid()
+  )
+);
+
 drop policy if exists "lead_followups_employee_update" on public.lead_followups;
 drop policy if exists lead_followups_employee_update on public.lead_followups;
+create policy lead_followups_employee_update
+on public.lead_followups for update to authenticated
+using (
+  public.is_employee()
+  and exists (
+    select 1 from public.clients c
+    where c.id = client_id and c.assigned_to = auth.uid()
+  )
+)
+with check (
+  public.is_employee()
+  and exists (
+    select 1 from public.clients c
+    where c.id = client_id and c.assigned_to = auth.uid()
+  )
+);
 
-drop policy if exists lead_followups_employee_crm_all on public.lead_followups;
-create policy lead_followups_employee_crm_all
-on public.lead_followups for all to authenticated
-using (public.is_employee())
-with check (public.is_employee());
-
--- lead_activities — drop legacy assigned-only policies
+-- lead_activities — only for assigned clients
 drop policy if exists "lead_activities_employee_select" on public.lead_activities;
 drop policy if exists lead_activities_employee_select on public.lead_activities;
+create policy lead_activities_employee_select
+on public.lead_activities for select to authenticated
+using (
+  public.is_employee()
+  and exists (
+    select 1 from public.clients c
+    where c.id = client_id and c.assigned_to = auth.uid()
+  )
+);
+
 drop policy if exists "lead_activities_employee_insert" on public.lead_activities;
 drop policy if exists lead_activities_employee_insert on public.lead_activities;
+create policy lead_activities_employee_insert
+on public.lead_activities for insert to authenticated
+with check (
+  public.is_employee()
+  and exists (
+    select 1 from public.clients c
+    where c.id = client_id and c.assigned_to = auth.uid()
+  )
+);
 
-drop policy if exists lead_activities_employee_crm_all on public.lead_activities;
-create policy lead_activities_employee_crm_all
-on public.lead_activities for all to authenticated
-using (public.is_employee())
-with check (public.is_employee());
-
--- client_documents (if table exists)
+-- client_documents (if present) — assigned clients only
 do $$
 begin
   if exists (
@@ -65,25 +124,44 @@ begin
     where table_schema = 'public' and table_name = 'client_documents'
   ) then
     execute 'drop policy if exists client_documents_employee_crm_all on public.client_documents';
+    execute 'drop policy if exists client_documents_employee_assigned_rw on public.client_documents';
+    execute 'drop policy if exists "client_documents_employee_assigned_rw" on public.client_documents';
+    execute 'drop policy if exists client_documents_employee_assigned_select on public.client_documents';
+    execute 'drop policy if exists "client_documents_employee_assigned_select" on public.client_documents';
     execute $p$
-      create policy client_documents_employee_crm_all
-      on public.client_documents for all to authenticated
-      using (public.is_employee())
-      with check (public.is_employee())
+      create policy client_documents_employee_assigned_select
+      on public.client_documents for select to authenticated
+      using (
+        public.is_employee()
+        and exists (
+          select 1 from public.clients c
+          where c.id = client_id and c.assigned_to = auth.uid()
+        )
+      )
+    $p$;
+    execute $p$
+      create policy client_documents_employee_assigned_rw
+      on public.client_documents for insert to authenticated
+      with check (
+        public.is_employee()
+        and exists (
+          select 1 from public.clients c
+          where c.id = client_id and c.assigned_to = auth.uid()
+        )
+      )
     $p$;
   end if;
 end $$;
 
--- system_settings read for CRM templates (employees)
+-- Keep read access for templates + assignee name lists
 drop policy if exists system_settings_employee_select on public.system_settings;
 create policy system_settings_employee_select
 on public.system_settings for select to authenticated
 using (public.is_employee());
 
--- profiles — assignee lists + owner names in Student Master
 drop policy if exists profiles_employee_crm_select on public.profiles;
 create policy profiles_employee_crm_select
 on public.profiles for select to authenticated
 using (public.is_employee());
 
-comment on function public.is_employee() is 'Employee role check for Student Master CRM RLS.';
+comment on function public.is_employee() is 'Employee role check — Student Master RLS scopes clients to assigned_to = auth.uid().';

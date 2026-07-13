@@ -316,9 +316,11 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const defaultReturnTo = role === "admin" ? "/admin/task-assignment" : "/employee/my-tasks";
   const returnTo = searchParams.get("returnTo") || defaultReturnTo;
   const isEmployeePortal = role === "employee";
-  /** Admin UI + full CRM writes (includes employee Student Master with fullAccess). */
-  const isAdmin = role === "admin" || (isEmployeePortal && fullAccess);
-  const isDbAdmin = role === "admin";
+  /** True admin only — sees all leads; bulk assign / admit / delete. */
+  const isAdmin = role === "admin";
+  const isDbAdmin = isAdmin;
+  /** Employee portal write UX for own assigned leads (add / import / edit own). */
+  const canWriteOwnLeads = isAdmin || (isEmployeePortal && fullAccess);
   const visibleTabIds = useMemo(
     () => (isEmployeePortal ? CRM_TAB_IDS.filter((id) => id !== "reports" && id !== "settings") : [...CRM_TAB_IDS]),
     [isEmployeePortal],
@@ -1165,7 +1167,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   }
 
   const openCreate = () => {
-    if (!isAdmin) return;
+    if (!canWriteOwnLeads) return;
     setSuccess(null);
     setError(null);
     setEditId(null);
@@ -1175,8 +1177,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
 
   const handleSave = async () => {
     if (!currentUserId) return;
-    if (!isAdmin && !editId) {
-      setError("Only admins can create leads.");
+    if (!editId && !canWriteOwnLeads) {
+      setError("You cannot create leads.");
       return;
     }
     setSubmitting(true);
@@ -1281,13 +1283,17 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
           await insertActivityClient(supabase, editId, "Lead Updated", "", currentUserId);
         }
         setSuccess("Lead saved.");
-      } else if (!editId && isAdmin) {
+      } else if (!editId && canWriteOwnLeads) {
+        const payload = buildPayload(saveForm, { full: true }) as Record<string, unknown>;
+        if (!isDbAdmin) {
+          payload.assigned_to = currentUserId;
+          payload.assigned_by = currentUserId;
+        } else {
+          payload.assigned_by = currentUserId;
+        }
         const inserted = await supabase
           .from("clients")
-          .insert({
-            ...(buildPayload(saveForm, { full: true }) as Record<string, unknown>),
-            assigned_by: currentUserId,
-          })
+          .insert(payload)
           .select("id")
           .maybeSingle();
 
@@ -1669,7 +1675,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   };
 
   const handleImportStudents = async (file: File) => {
-    if (!currentUserId || !isAdmin) return;
+    if (!currentUserId || !canWriteOwnLeads) return;
     setImporting(true);
     setError(null);
     setSuccess(null);
@@ -1722,7 +1728,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
           >
             Refresh
           </Button>
-          {isAdmin ? (
+          {canWriteOwnLeads ? (
             <Button data-requires-online onClick={openCreate} className="h-9 rounded-full bg-[#c9a227] px-5 text-white hover:bg-[#b8921f]">
               + Add Student
             </Button>
@@ -1829,7 +1835,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
                   if (f) void handleImportStudents(f);
                 }}
               />
-              {isAdmin ? (
+              {canWriteOwnLeads ? (
                 <Button
                   type="button"
                   variant="outline"

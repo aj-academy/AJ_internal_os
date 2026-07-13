@@ -213,8 +213,13 @@ export function MemberAttendancePage({
         await videoRef.current.play();
       }
       setCameraReady(true);
+      setMessage((prev) => (prev?.type === "error" && prev.text.toLowerCase().includes("camera") ? null : prev));
     } catch {
-      setMessage({ type: "error", text: "Camera access is required for selfie check-in." });
+      setCameraReady(false);
+      setMessage({
+        type: "error",
+        text: "Camera access is required for selfie check-in. Use Allow camera & location on first login, or enable camera in browser settings.",
+      });
     }
   }, [requireSelfie, stopCamera]);
 
@@ -571,7 +576,16 @@ export function MemberAttendancePage({
             <div className="relative aspect-[4/3] w-full max-w-sm overflow-hidden rounded-xl border border-[#dbe6f3] bg-black">
               <video ref={videoRef} className="h-full w-full scale-x-[-1] object-cover" playsInline muted />
               {!cameraReady ? (
-                <p className="absolute inset-0 flex items-center justify-center text-sm text-white/80">Starting camera…</p>
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center">
+                  <p className="text-sm text-white/80">Camera not ready</p>
+                  <button
+                    type="button"
+                    className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900"
+                    onClick={() => void startCamera()}
+                  >
+                    Enable camera
+                  </button>
+                </div>
               ) : null}
             </div>
             {selfiePreview || todayRecord?.check_in_selfie_url ? (
