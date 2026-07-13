@@ -43,7 +43,9 @@ import {
 import {
   downloadStudentMasterImportTemplate,
   exportStudentMasterCsv,
-  parseStudentMasterCsvRows,
+  parseStudentMasterMatrix,
+  studentMasterFileToMatrix,
+  STUDENT_MASTER_DATA_COLUMN_COUNT,
 } from "@/components/student-lead-master/studentMasterCsv";
 import { formatDateTimeIST } from "@/lib/datetime";
 import { fetchInterestedPrograms, persistInterestedPrograms } from "@/lib/studentPrograms";
@@ -1641,7 +1643,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
 
   const handleDownloadStudentTemplate = () => {
     downloadStudentMasterImportTemplate();
-    setSuccess("Import template downloaded (headers match the Student Master table).");
+    setSuccess("Import template downloaded (headers match Meta CRM Import / All Students table).");
   };
 
   const handleExportStudents = () => {
@@ -1672,8 +1674,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     setError(null);
     setSuccess(null);
     try {
-      const text = await file.text();
-      const { payloads, errors } = parseStudentMasterCsvRows(text, {
+      const matrix = await studentMasterFileToMatrix(file);
+      const { payloads, errors } = parseStudentMasterMatrix(matrix, {
         counsellors: employeesForSelect,
         currentUserId,
         isDbAdmin,
@@ -1820,7 +1822,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
               <input
                 ref={importFileRef}
                 type="file"
-                accept=".csv,text/csv"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -2378,14 +2380,17 @@ function AllLeadsTable({
 }) {
   const today = todayISO();
   const showBulk = Boolean(bulkSelection) && !pickMode;
-  const colCount = (pickMode ? 1 : 0) + (showBulk ? 1 : 0) + 24;
+  const colCount = (pickMode ? 1 : 0) + (showBulk ? 1 : 0) + STUDENT_MASTER_DATA_COLUMN_COUNT + 1;
+  const thCls = "px-6 py-3.5 text-center align-middle min-w-[10.5rem]";
+  const tdCls = "whitespace-nowrap px-6 py-3.5 text-center align-middle";
+  const tdTrunc = "max-w-[160px] truncate px-6 py-3.5 text-center align-middle";
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[3800px] text-sm">
+      <table className="w-full min-w-[5200px] text-sm">
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
-            {pickMode ? <TableHeaderCell label="Pick" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" /> : null}
+            {pickMode ? <TableHeaderCell label="Pick" className={thCls} /> : null}
             {showBulk ? (
               <th className="w-12 px-6 py-3.5 text-center align-middle">
                 <div className="flex justify-center">
@@ -2399,40 +2404,51 @@ function AllLeadsTable({
                 </div>
               </th>
             ) : null}
-            <TableHeaderCell label="Student Name" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
-            <TableHeaderCell label="Mobile Number" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
-            <TableHeaderCell label="WhatsApp Number" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
-            <TableHeaderCell label="Email" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="Student Name" className={thCls} />
+            <TableHeaderCell label="Mobile Number" className={thCls} />
+            <TableHeaderCell label="WhatsApp Number" className={thCls} />
+            <TableHeaderCell label="Email" className={thCls} />
+            <TableHeaderCell label="City" className={thCls} />
+            <TableHeaderCell label="Current Profile" className={thCls} />
             <TableHeaderFilter
               label="Degree"
               value={fltDegree}
               onChange={setFltDegree}
               options={degreeOptions.map((d) => ({ value: d, label: d }))}
               allLabel="All degrees"
-              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
+              className={thCls}
             />
-            <TableHeaderCell label="College" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
-            <TableHeaderCell label="Year of Passing" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
-            <TableHeaderCell label="Employment Status" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
-            <TableHeaderCell label="Current Salary" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="College/Company" className={thCls} />
+            <TableHeaderCell label="Year of Passing" className={thCls} />
+            <TableHeaderCell label="Employment Status" className={thCls} />
+            <TableHeaderCell label="Current Salary" className={thCls} />
             <TableHeaderFilter
               label="Interested Program"
               value={fltProgram}
               onChange={setFltProgram}
               options={programOptions.map((s) => ({ value: s, label: s }))}
               allLabel="All programs"
-              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
+              className={thCls}
             />
-            <TableHeaderCell label="Joining Timeline" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
-            <TableHeaderCell label="Program Budget" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
-            <TableHeaderCell label="Preferred Batch" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="Career Goal" className={thCls} />
+            <TableHeaderCell label="Preferred Job Role" className={thCls} />
+            <TableHeaderCell label="Target Salary" className={thCls} />
+            <TableHeaderCell label="Current Skill Level" className={thCls} />
+            <TableHeaderCell label="Main Career Problem" className={thCls} />
+            <TableHeaderCell label="Joining Timeline" className={thCls} />
+            <TableHeaderCell label="Program Budget" className={thCls} />
+            <TableHeaderCell label="Full Payment or Instalment" className={thCls} />
+            <TableHeaderCell label="Parent Approval Required" className={thCls} />
+            <TableHeaderCell label="Decision Maker" className={thCls} />
+            <TableHeaderCell label="Preferred Batch" className={thCls} />
+            <TableHeaderCell label="Laptop Availability" className={thCls} />
             <TableHeaderFilter
               label="Lead Source"
               value={fltSource}
               onChange={setFltSource}
               options={CRM_SOURCES.map((s) => ({ value: s, label: s }))}
               allLabel="All sources"
-              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
+              className={thCls}
             />
             <TableHeaderFilter
               label="Assigned Counsellor"
@@ -2441,7 +2457,7 @@ function AllLeadsTable({
               options={employeeOptions.map((e) => ({ value: e.id, label: e.label }))}
               allLabel="All counsellors"
               disabled={!isAdmin}
-              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
+              className={thCls}
             />
             <TableHeaderFilter
               label="Lead Stage"
@@ -2449,7 +2465,7 @@ function AllLeadsTable({
               onChange={setFltStage}
               options={LEAD_STAGES.map((s) => ({ value: s, label: s }))}
               allLabel="All stages"
-              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
+              className={thCls}
             />
             <TableHeaderFilter
               label="Lead Status"
@@ -2457,7 +2473,7 @@ function AllLeadsTable({
               onChange={setFltStatus}
               options={CRM_LEAD_STATUSES.map((s) => ({ value: s, label: s }))}
               allLabel="All statuses"
-              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
+              className={thCls}
             />
             <TableHeaderFilter
               label="Priority"
@@ -2465,18 +2481,19 @@ function AllLeadsTable({
               onChange={setFltPriority}
               options={CRM_PRIORITIES.map((p) => ({ value: p, label: p }))}
               allLabel="All priorities"
-              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
+              className={thCls}
             />
-            <TableHeaderCell label="Next Follow-up Date" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
-            <TableHeaderCell label="Fee Quoted" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
-            <TableHeaderCell label="Final Fee" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="Primary Objection" className={thCls} />
+            <TableHeaderCell label="Next Follow-up Date" className={thCls} />
+            <TableHeaderCell label="Fee Quoted" className={thCls} />
+            <TableHeaderCell label="Final Fee" className={thCls} />
             <TableHeaderFilter
               label="Payment Status"
               value={fltPaymentStatus}
               onChange={setFltPaymentStatus}
               options={PAYMENT_STATUSES.map((s) => ({ value: s, label: s }))}
               allLabel="All payment statuses"
-              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
+              className={thCls}
             />
             <TableHeaderFilter
               label="Admission Status"
@@ -2484,9 +2501,9 @@ function AllLeadsTable({
               onChange={setFltAdmissionStatus}
               options={ADMISSION_STATUSES.map((s) => ({ value: s, label: s }))}
               allLabel="All admission statuses"
-              className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]"
+              className={thCls}
             />
-            <TableHeaderCell label="Actions" className="px-6 py-3.5 text-center align-middle min-w-[10.5rem]" />
+            <TableHeaderCell label="Actions" className={thCls} />
           </tr>
         </thead>
         <tbody className="divide-y divide-[#e8edf5] text-[#334155]">
@@ -2568,29 +2585,41 @@ function AllLeadsTable({
                         />
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.degree || "—"}</td>
-                    <td className="max-w-[160px] truncate px-6 py-3.5 text-center align-middle">{lead.college_company || lead.company_name || "—"}</td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.year_of_passing || "—"}</td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.employment_status || "—"}</td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{formatMoney(lead.current_salary)}</td>
-                    <td className="max-w-[160px] truncate px-6 py-3.5 text-center align-middle">{String(program)}</td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.joining_timeline || "—"}</td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{formatMoney(lead.budget)}</td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.preferred_batch || "—"}</td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.source || "—"}</td>
-                    <td className="max-w-[140px] truncate px-6 py-3.5 text-center align-middle">{lead.assigned_to ? employeeNameMap[lead.assigned_to] : "—"}</td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.lead_stage || "—"}</td>
+                    <td className={tdCls}>{lead.city || "—"}</td>
+                    <td className={tdTrunc}>{lead.current_profile || "—"}</td>
+                    <td className={tdCls}>{lead.degree || "—"}</td>
+                    <td className={tdTrunc}>{lead.college_company || lead.company_name || "—"}</td>
+                    <td className={tdCls}>{lead.year_of_passing || "—"}</td>
+                    <td className={tdCls}>{lead.employment_status || "—"}</td>
+                    <td className={tdCls}>{formatMoney(lead.current_salary)}</td>
+                    <td className={tdTrunc}>{String(program)}</td>
+                    <td className={tdTrunc}>{lead.career_goal || "—"}</td>
+                    <td className={tdTrunc}>{lead.preferred_job_role || "—"}</td>
+                    <td className={tdCls}>{formatMoney(lead.target_salary)}</td>
+                    <td className={tdTrunc}>{lead.current_skill_level || "—"}</td>
+                    <td className={tdTrunc}>{lead.main_career_problem || "—"}</td>
+                    <td className={tdCls}>{lead.joining_timeline || "—"}</td>
+                    <td className={tdCls}>{formatMoney(lead.budget)}</td>
+                    <td className={tdCls}>{lead.payment_plan || "—"}</td>
+                    <td className={tdCls}>{lead.parent_approval_required || "—"}</td>
+                    <td className={tdCls}>{lead.decision_maker || "—"}</td>
+                    <td className={tdCls}>{lead.preferred_batch || "—"}</td>
+                    <td className={tdCls}>{lead.laptop_availability || "—"}</td>
+                    <td className={tdCls}>{lead.source || "—"}</td>
+                    <td className={tdTrunc}>{lead.assigned_to ? employeeNameMap[lead.assigned_to] : "—"}</td>
+                    <td className={tdCls}>{lead.lead_stage || "—"}</td>
                     <td className="px-6 py-3.5 text-center align-middle">
                       <div className="flex justify-center">
                         <LeadStatusBadge status={String(lead.status)} />
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle font-medium capitalize">{lead.priority || "—"}</td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle text-xs">{fu || "—"}</td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{formatMoney(lead.fee_quoted ?? lead.proposal_amount)}</td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{formatMoney(lead.final_fee)}</td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.payment_status || "—"}</td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">{lead.admission_status || "—"}</td>
+                    <td className={`${tdCls} font-medium capitalize`}>{lead.priority || "—"}</td>
+                    <td className={tdTrunc}>{lead.primary_objection || "—"}</td>
+                    <td className={`${tdCls} text-xs`}>{fu || "—"}</td>
+                    <td className={tdCls}>{formatMoney(lead.fee_quoted ?? lead.proposal_amount)}</td>
+                    <td className={tdCls}>{formatMoney(lead.final_fee)}</td>
+                    <td className={tdCls}>{lead.payment_status || "—"}</td>
+                    <td className={tdCls}>{lead.admission_status || "—"}</td>
                     <td className="min-w-[14rem] whitespace-nowrap px-6 py-3.5 text-center align-middle text-xs">
                       <div className="inline-flex flex-wrap items-center justify-center gap-3">
                         <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onProfile(lead)}>

@@ -189,8 +189,8 @@ Run **`portfolio_schema.sql`**. Admin: **Portfolio** in sidebar — upload HTML/
 ### Student Master (admin)
 
 Run **`student_lead_master_schema.sql`**, then **`student_lead_master_aux_schema.sql`** (follow-ups/activities), then **`student_master_columns_patch.sql`**, then **`student_lead_master_rls_fix.sql`**.  
-Admin sidebar **Student Master** (`/admin/student-master`) — All Students table with counselling/admission fields and header filters (program, source, stage, status, priority, counsellor, payment, admission).  
-Legacy URL `/admin/client-lead-master` redirects to `/admin/student-master`. Table name remains `public.clients` (FKs from projects/finance).
+Admin sidebar **Student Master** (`/admin/student-master`) — All Students table columns match Meta CRM Import (`AJ_Academy_Meta_Leads_CRM_Import_*.xlsx` sheet **CRM Import**): City, Current Profile, College/Company, Career Goal, Preferred Job Role, Target Salary, Current Skill Level, Main Career Problem, Full Payment or Instalment, Parent Approval Required, Decision Maker, Laptop Availability, Primary Objection, plus counselling/admission fields. CSV/XLSX import & export use the same headers; XLSX import prefers the **CRM Import** sheet. Header filters: program, source, stage, status, priority, counsellor, payment, admission.  
+Legacy URL `/admin/client-lead-master` redirects to `/admin/student-master`. Table name remains `public.clients` (FKs from projects/finance). Requires `student_master_columns_patch.sql` for the extra counselling columns.
 
 10f4) portal_expense_claims_rls.sql (reimbursement for employee / mentor / freelancer — after finance_schema.sql)
 
