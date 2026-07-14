@@ -158,7 +158,7 @@ function emptyForm(assignedFallback: string, admin: boolean): StudentLeadFormVal
     preferred_batch: "",
     laptop_availability: "",
     source: CRM_SOURCES[0],
-    assigned_to: admin ? "" : assignedFallback,
+    assigned_to: assignedFallback,
     lead_stage: "",
     status: "New",
     priority: "Warm",
@@ -425,11 +425,10 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
 
   const buildClientsBaseQuery = useCallback(() => {
     let q = supabase.from("clients").select(STUDENT_LEAD_SELECT).order("updated_at", { ascending: false }).limit(300);
-    if (!isAdmin) {
-      q = q.eq("assigned_to", currentUserId);
-    }
+    // Own CRM only (admin + employee). Share via tasks — not by browsing others' leads.
+    if (currentUserId) q = q.eq("assigned_to", currentUserId);
     return q.returns<CrmClientRow[]>();
-  }, [currentUserId, isAdmin, supabase]);
+  }, [currentUserId, supabase]);
 
   const loadClientsDataset = useCallback(async () => {
     const { data, error: loadError } = await buildClientsBaseQuery();
@@ -440,7 +439,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const loadOverviewCounts = useCallback(async () => {
     async function counted(status?: string) {
       let qb = supabase.from("clients").select("id", { count: "exact", head: true });
-      if (!isAdmin && currentUserId) qb = qb.eq("assigned_to", currentUserId);
+      if (currentUserId) qb = qb.eq("assigned_to", currentUserId);
       if (status) qb = qb.eq("status", status);
       return qb;
     }
@@ -469,7 +468,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       (async () => {
         const td = todayISO();
         let q = supabase.from("clients").select("id", { count: "exact", head: true }).eq("follow_up_date", td);
-        if (!isAdmin && currentUserId) q = q.eq("assigned_to", currentUserId);
+        if (currentUserId) q = q.eq("assigned_to", currentUserId);
         return q;
       })(),
     ]);
@@ -495,14 +494,15 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       .not("follow_up_date", "is", null)
       .lt("follow_up_date", todayStr)
       .not("status", "in", "(Converted,Admitted,Lost,Not Interested)");
-    if (!isAdmin && currentUserId) overdueQ = overdueQ.eq("assigned_to", currentUserId);
+    if (currentUserId) overdueQ = overdueQ.eq("assigned_to", currentUserId);
     const overdueRes = await overdueQ;
 
     let revenueSum = 0;
-    if (isAdmin) {
+    if (isAdmin && currentUserId) {
       const rv = await supabase
         .from("clients")
         .select("budget")
+        .eq("assigned_to", currentUserId)
         .not("budget", "is", null)
         .not("status", "in", "(Converted,Admitted,Lost,Not Interested)");
       revenueSum =
@@ -1158,13 +1158,13 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     }
 
     const scoreRaw = Number(v.lead_score);
-    const assignee = v.assigned_to.trim() || null;
     return {
       ...base,
       status: v.status,
       priority: v.priority || "Warm",
       lead_score: Number.isFinite(scoreRaw) ? Math.min(100, Math.max(0, Math.round(scoreRaw))) : 0,
-      assigned_to: isDbAdmin ? assignee : assignee || currentUserId,
+      // Ownership stays with the creator; share work via Assign as Student Lead task.
+      assigned_to: currentUserId,
       assigned_by: currentUserId,
     };
   }
@@ -1256,11 +1256,14 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       } else if (editId && isAdmin) {
         const full = buildPayload(saveForm, { full: true }) as Record<string, unknown>;
         const previous = clients.find((cRow) => cRow.id === editId);
+        // Keep CRM ownership stable; share work via Assign as Student Lead task.
+        full.assigned_to = previous?.assigned_to ?? currentUserId;
+        full.assigned_by = previous?.assigned_by ?? currentUserId;
         const up = await supabase.from("clients").update(full).eq("id", editId);
         if (up.error) throw up.error;
         const prevStat = normalizeStatus(String(previous?.status ?? ""));
         const prevAss = previous?.assigned_to ? String(previous.assigned_to) : "";
-        const newAss = form.assigned_to ? String(form.assigned_to) : "";
+        const newAss = String(full.assigned_to ?? "");
         const prevProp = {
           st: String(previous?.proposal_status ?? ""),
           am: previous?.proposal_amount != null ? String(previous.proposal_amount) : "",
@@ -1314,12 +1317,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         setSuccess("Lead saved.");
       } else if (!editId && canWriteOwnLeads) {
         const payload = buildPayload(saveForm, { full: true }) as Record<string, unknown>;
-        if (!isDbAdmin) {
-          payload.assigned_to = currentUserId;
-          payload.assigned_by = currentUserId;
-        } else {
-          payload.assigned_by = currentUserId;
-        }
+        payload.assigned_to = currentUserId;
+        payload.assigned_by = currentUserId;
         const inserted = await supabase
           .from("clients")
           .insert(payload)
@@ -1344,27 +1343,39 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const handleDeleteLead = async (id: string) => {
     if (!isAdmin) return;
     if (!confirm("Delete this lead permanently?")) return;
-    const { error: deletionError } = await supabase.from("clients").delete().eq("id", id);
-    if (deletionError) setError(deletionError.message);
-    else {
-      setSuccess("Deleted.");
-      await reload();
+    const { data: deletedCount, error: deletionError } = await supabase.rpc("delete_owned_clients", {
+      p_ids: [id],
+    });
+    if (deletionError) {
+      setError(deletionError.message);
+      return;
     }
+    if (!deletedCount) {
+      setError("Could not delete this lead (you can only delete your own Student Master rows).");
+      return;
+    }
+    setSuccess("Deleted.");
+    await reload();
   };
 
   const handleBulkDeleteLeads = async () => {
     if (leadBulk.selectedCount === 0) return;
     if (!confirm(`Delete ${leadBulk.selectedCount} selected lead(s) permanently?`)) return;
     const ids = [...leadBulk.selected];
-    let q = supabase.from("clients").delete().in("id", ids);
-    if (!isAdmin && currentUserId) q = q.eq("assigned_to", currentUserId);
-    const { error: deletionError } = await q;
+    const { data: deletedCount, error: deletionError } = await supabase.rpc("delete_owned_clients", {
+      p_ids: ids,
+    });
     if (deletionError) {
       setError(deletionError.message);
       return;
     }
+    const n = Number(deletedCount ?? 0);
+    if (n === 0) {
+      setError("No leads were deleted. You can only delete your own Student Master rows.");
+      return;
+    }
     leadBulk.clearSelection();
-    setSuccess(`${ids.length} lead(s) deleted.`);
+    setSuccess(n === ids.length ? `${n} lead(s) deleted.` : `${n} of ${ids.length} lead(s) deleted (others were not yours).`);
     await reload();
   };
 
@@ -2113,7 +2124,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
               value={form}
               programOptions={interestedPrograms}
               employees={employeesForSelect}
-              canAssign={isAdmin}
+              canAssign={false}
               submitting={submitting}
               onChange={setForm}
               onClose={() => setPanelOpen(false)}

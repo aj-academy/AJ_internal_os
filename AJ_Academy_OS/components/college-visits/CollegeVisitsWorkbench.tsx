@@ -83,7 +83,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [fltOwner, setFltOwner] = useState("");
   const [fltFinalStatus, setFltFinalStatus] = useState("");
   const [fltFollowUpDue, setFltFollowUpDue] = useState("");
-  const [listScope, setListScope] = useState<"all" | "mine">(isEmployeePortal ? "mine" : "all");
+  const [listScope] = useState<"mine">("mine");
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -112,8 +112,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   }, [employees]);
 
   const loadVisits = useCallback(async () => {
-    const useMine = listScope === "mine" && isEmployeePortal && !pickForTask;
-    const res = await fetch(`/api/college-visits${useMine ? "?mine=1" : ""}`);
+    const res = await fetch("/api/college-visits");
     const json = (await res.json()) as { visits?: CollegeVisitRow[]; error?: string };
     if (!res.ok) {
       const msg = json.error ?? "Could not load college visits.";
@@ -126,7 +125,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     }
     setSchemaMissing(false);
     setVisits(json.visits ?? []);
-  }, [isEmployeePortal, listScope, pickForTask]);
+  }, []);
 
   const togglePickCollege = (id: string) => {
     setPickedCollegeIds((prev) => {
@@ -186,7 +185,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   useEffect(() => {
     if (!currentUserId) return;
     void reload();
-  }, [currentUserId, reload, listScope]);
+  }, [currentUserId, reload]);
 
   useEffect(() => {
     if (!viewVisit?.id) {
@@ -262,7 +261,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const openCreate = () => {
     setEditId(null);
-    setForm(emptyCollegeVisitForm(isDbAdmin ? "" : currentUserId));
+    setForm(emptyCollegeVisitForm(currentUserId));
     setPanelOpen(true);
     setError(null);
     setSuccess(null);
@@ -312,7 +311,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   };
 
   const handleDelete = async (id: string) => {
-    if (!isDbAdmin || !confirm("Delete this college visit permanently?")) return;
+    if (!confirm("Delete this college visit permanently?")) return;
     const res = await fetch(`/api/college-visits/${id}`, { method: "DELETE" });
     const json = (await res.json()) as { error?: string };
     if (!res.ok) {
@@ -379,15 +378,19 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     if (!confirm(`Delete ${visitBulk.selectedCount} selected college visit(s)?`)) return;
     setSubmitting(true);
     try {
-      for (const id of visitBulk.selected) {
-        const res = await fetch(`/api/college-visits/${id}`, { method: "DELETE" });
-        if (!res.ok) {
-          const json = (await res.json()) as { error?: string };
-          throw new Error(json.error ?? "Bulk delete failed.");
-        }
-      }
+      const ids = [...visitBulk.selected];
+      const { data: deletedCount, error: rpcError } = await supabase.rpc("delete_owned_college_visits", {
+        p_ids: ids,
+      });
+      if (rpcError) throw new Error(rpcError.message);
+      const n = Number(deletedCount ?? 0);
+      if (n === 0) throw new Error("No college visits were deleted. You can only delete your own rows.");
       visitBulk.clearSelection();
-      setSuccess("Selected college visits deleted.");
+      setSuccess(
+        n === ids.length
+          ? `${n} college visit(s) deleted.`
+          : `${n} of ${ids.length} deleted (others were not yours).`,
+      );
       await reload();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
@@ -477,20 +480,10 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">College Visits</h2>
           <p className="mt-1 text-sm text-[#64748b]">
-            Track college outreach, MOU status, follow-ups, and field visit activity. Admin can assign owners; employees update visits on-site.
+            Your college outreach only. Share work with others via Assign as College Visit task (My Tasks).
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {isEmployeePortal && !pickForTask ? (
-            <select
-              className="h-9 rounded-full border border-[#e8dcc8] bg-white px-3 text-sm"
-              value={listScope}
-              onChange={(e) => setListScope(e.target.value as "all" | "mine")}
-            >
-              <option value="mine">My assigned colleges</option>
-              <option value="all">All colleges</option>
-            </select>
-          ) : null}
           {!pickForTask ? (
             <>
               <Button
@@ -771,7 +764,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         value={form}
         owners={ownerOptions}
         submitting={submitting}
-        canAssign={isDbAdmin}
+        canAssign={false}
         onChange={setForm}
         onClose={() => setPanelOpen(false)}
         onSubmit={() => void handleSave()}

@@ -185,7 +185,8 @@
     position: sticky;
     z-index: 2;
     background: #fff;
-    box-shadow: 1px 0 0 0 #e8edf5;
+    border-right: none;
+    box-shadow: none;
   }
 
   table.table-freeze-cols thead th.sticky-col {

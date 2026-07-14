@@ -1221,14 +1221,18 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     if (tasksTableMissing) return;
     const confirmed = window.confirm("Delete this task?");
     if (!confirmed) return;
-    let q = supabase.from("tasks").delete().eq("id", taskId);
+    let q = supabase.from("tasks").delete().eq("id", taskId).select("id");
     if (!canManageTasks && currentUserId) {
       // Employees may delete tasks they create or that are assigned to them (RLS still applies).
       q = q.or(`assigned_to.eq.${currentUserId},assigned_by.eq.${currentUserId}`);
     }
-    const { error: deleteError } = await q;
+    const { data: deletedRows, error: deleteError } = await q;
     if (deleteError) {
       setError(toReadableTaskError(deleteError));
+      return;
+    }
+    if (!deletedRows?.length) {
+      setError("Could not delete this task (permission denied or already removed).");
       return;
     }
     setSuccess("Task deleted successfully.");
@@ -1240,17 +1244,22 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     const confirmed = window.confirm(`Delete ${taskSelection.selectedCount} selected task(s)?`);
     if (!confirmed) return;
     const ids = [...taskSelection.selected];
-    let q = supabase.from("tasks").delete().in("id", ids);
+    let q = supabase.from("tasks").delete().in("id", ids).select("id");
     if (!canManageTasks && currentUserId) {
       q = q.or(`assigned_to.eq.${currentUserId},assigned_by.eq.${currentUserId}`);
     }
-    const { error: deleteError } = await q;
+    const { data: deletedRows, error: deleteError } = await q;
     if (deleteError) {
       setError(toReadableTaskError(deleteError));
       return;
     }
+    const n = deletedRows?.length ?? 0;
+    if (n === 0) {
+      setError("No tasks were deleted (permission denied).");
+      return;
+    }
     taskSelection.clearSelection();
-    setSuccess(`${ids.length} task(s) deleted.`);
+    setSuccess(n === ids.length ? `${n} task(s) deleted.` : `${n} of ${ids.length} task(s) deleted.`);
     await reload();
   };
 

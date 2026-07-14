@@ -472,8 +472,9 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
 
   const deleteTransaction = async (id: string) => {
     if (!isPrivileged || !confirm("Delete this transaction?")) return;
-    const { error: err } = await supabase.from("finance_transactions").delete().eq("id", id);
+    const { data, error: err } = await supabase.from("finance_transactions").delete().eq("id", id).select("id");
     if (err) showToast("err", err.message);
+    else if (!data?.length) showToast("err", "Could not delete (permission denied).");
     else {
       showToast("ok", "Deleted.");
       await reload();
@@ -483,18 +484,20 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
   const deleteTransactionsBulk = async (ids: string[]) => {
     if (!isPrivileged || !ids.length) return;
     if (!confirm(`Delete ${ids.length} selected transaction(s)?`)) return;
-    const { error: err } = await supabase.from("finance_transactions").delete().in("id", ids);
+    const { data, error: err } = await supabase.from("finance_transactions").delete().in("id", ids).select("id");
     if (err) showToast("err", err.message);
+    else if (!data?.length) showToast("err", "No transactions deleted (permission denied).");
     else {
-      showToast("ok", `Deleted ${ids.length} transaction(s).`);
+      showToast("ok", `Deleted ${data.length} transaction(s).`);
       await reload();
     }
   };
 
   const deletePayment = async (id: string) => {
     if ((!isPrivileged && !isManager) || !confirm("Delete this payment?")) return;
-    const { error: err } = await supabase.from("project_payments").delete().eq("id", id);
+    const { data, error: err } = await supabase.from("project_payments").delete().eq("id", id).select("id");
     if (err) showToast("err", err.message);
+    else if (!data?.length) showToast("err", "Could not delete (permission denied).");
     else {
       showToast("ok", "Deleted.");
       await reload();
@@ -504,10 +507,11 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
   const deletePaymentsBulk = async (ids: string[]) => {
     if ((!isPrivileged && !isManager) || !ids.length) return;
     if (!confirm(`Delete ${ids.length} selected payment(s)?`)) return;
-    const { error: err } = await supabase.from("project_payments").delete().in("id", ids);
+    const { data, error: err } = await supabase.from("project_payments").delete().in("id", ids).select("id");
     if (err) showToast("err", err.message);
+    else if (!data?.length) showToast("err", "No payments deleted (permission denied).");
     else {
-      showToast("ok", `Deleted ${ids.length} payment(s).`);
+      showToast("ok", `Deleted ${data.length} payment(s).`);
       await reload();
     }
   };
@@ -515,10 +519,11 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
   const deleteClaimsBulk = async (ids: string[]) => {
     if (!isPrivileged || !ids.length) return;
     if (!confirm(`Delete ${ids.length} selected claim(s)? This cannot be undone.`)) return;
-    const { error: err } = await supabase.from("expense_claims").delete().in("id", ids);
+    const { data, error: err } = await supabase.from("expense_claims").delete().in("id", ids).select("id");
     if (err) showToast("err", err.message);
+    else if (!data?.length) showToast("err", "No claims deleted (permission denied).");
     else {
-      showToast("ok", `Deleted ${ids.length} claim(s).`);
+      showToast("ok", `Deleted ${data.length} claim(s).`);
       await reload();
     }
   };
@@ -1421,7 +1426,7 @@ function FinanceTableSection<T>({
             className="h-7 rounded-lg border-rose-200 px-2 text-xs text-rose-700 hover:bg-rose-50"
             onClick={() => {
               const ids = [...selection.selected];
-              selection.clearSelection();
+              if (!ids.length) return;
               onBulkDelete?.(ids);
             }}
           >

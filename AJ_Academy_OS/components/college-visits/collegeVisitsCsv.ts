@@ -334,16 +334,7 @@ export function parseCollegeVisitMatrix(
       continue;
     }
 
-    const ownerRaw = cell(cells, idx, "Owner");
-    const resolvedOwner = resolveOwnerId(ownerRaw, opts.owners);
-    const assigned_to = opts.isDbAdmin
-      ? resolvedOwner || ownerRaw || ""
-      : resolvedOwner || opts.defaultOwnerId;
-
-    if (opts.isDbAdmin && ownerRaw && !resolvedOwner) {
-      errors.push(`Row ${i + 1}: Owner "${ownerRaw}" not found (use employee name or email).`);
-      continue;
-    }
+    const assigned_to = opts.defaultOwnerId;
 
     const email = cell(cells, idx, "Email ID");
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {

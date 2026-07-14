@@ -381,13 +381,6 @@ export function parseStudentMasterMatrix(
       continue;
     }
 
-    const counsellorRaw = cell(cells, idx, "Assigned Counsellor");
-    const resolved = resolveCounsellorId(counsellorRaw, opts.counsellors);
-    if (opts.isDbAdmin && counsellorRaw && !resolved) {
-      errors.push(`Row ${i + 1}: Assigned Counsellor "${counsellorRaw}" not found (use name or email).`);
-      continue;
-    }
-
     const phone = cell(cells, idx, "Mobile Number") || null;
     const program = cell(cells, idx, "Interested Program") || null;
     const college = cell(cells, idx, "College/Company") || null;
@@ -421,7 +414,7 @@ export function parseStudentMasterMatrix(
       preferred_batch: cell(cells, idx, "Preferred Batch") || null,
       laptop_availability: cell(cells, idx, "Laptop Availability") || null,
       source: cell(cells, idx, "Lead Source") || null,
-      assigned_to: opts.isDbAdmin ? resolved : opts.currentUserId,
+      assigned_to: opts.currentUserId,
       assigned_by: opts.currentUserId,
       lead_stage: cell(cells, idx, "Lead Stage") || null,
       status: cell(cells, idx, "Lead Status") || "New",

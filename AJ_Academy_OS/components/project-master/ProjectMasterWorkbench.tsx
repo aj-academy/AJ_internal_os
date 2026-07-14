@@ -387,8 +387,9 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
 
   const deleteProject = async (id: string) => {
     if (!isAdmin || !confirm("Delete this project? Linked tasks will have project_id cleared.")) return;
-    const { error: de } = await supabase.from("projects").delete().eq("id", id);
+    const { data, error: de } = await supabase.from("projects").delete().eq("id", id).select("id");
     if (de) setError(de.message);
+    else if (!data?.length) setError("Could not delete project (permission denied).");
     else {
       setSuccess("Deleted.");
       await reload();
@@ -399,11 +400,12 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
     if (!isAdmin || projectBulk.selectedCount === 0) return;
     if (!confirm(`Delete ${projectBulk.selectedCount} selected project(s)?`)) return;
     const ids = [...projectBulk.selected];
-    const { error: de } = await supabase.from("projects").delete().in("id", ids);
+    const { data, error: de } = await supabase.from("projects").delete().in("id", ids).select("id");
     if (de) setError(de.message);
+    else if (!data?.length) setError("No projects were deleted (permission denied).");
     else {
       projectBulk.clearSelection();
-      setSuccess(`${ids.length} project(s) deleted.`);
+      setSuccess(`${data.length} project(s) deleted.`);
       await reload();
     }
   };

@@ -24,11 +24,14 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const role = profile?.role?.trim().toLowerCase() ?? "";
-  const isDbAdmin = role === "admin" || role === "super_admin";
-  const payload = buildPayloadFromApi(parsed.form, user.id, isDbAdmin);
+  void role;
+  const payload = buildPayloadFromApi(parsed.form, user.id, false);
 
   const supabase = await createClient();
   const { data: prev } = await supabase.from("college_visits").select(COLLEGE_VISIT_SELECT).eq("id", id).maybeSingle();
+
+  // Never transfer ownership via edit — share via College Visit tasks only.
+  delete payload.assigned_to;
 
   const { data, error } = await supabase.from("college_visits").update(payload).eq("id", id).select(COLLEGE_VISIT_SELECT).single();
 
@@ -71,20 +74,23 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  const { response, user, profile } = await requireStaffApiSession();
+  const { response, user } = await requireStaffApiSession();
   if (response || !user) return response!;
-
-  const role = profile?.role?.trim().toLowerCase() ?? "";
-  if (role !== "admin" && role !== "super_admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
 
   const { id } = await context.params;
   if (!id) return NextResponse.json({ error: "Missing id." }, { status: 400 });
 
   const supabase = await createClient();
-  const { error } = await supabase.from("college_visits").delete().eq("id", id);
+  const { data: deletedCount, error } = await supabase.rpc("delete_owned_college_visits", {
+    p_ids: [id],
+  });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (!deletedCount) {
+    return NextResponse.json(
+      { error: "Could not delete this college visit (you can only delete your own rows)." },
+      { status: 403 },
+    );
+  }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, deleted: deletedCount });
 }

@@ -183,7 +183,7 @@ export function buildCollegeVisitPayload(
   opts: { userId: string; isDbAdmin: boolean },
 ): Record<string, unknown> {
   const scoreRaw = Number(v.lead_score);
-  const assignee = v.assigned_to.trim() || null;
+  const assignee = opts.userId;
   return {
     college_name: v.college_name.trim(),
     location: v.location.trim() || null,
@@ -198,7 +198,7 @@ export function buildCollegeVisitPayload(
     last_follow_up_date: v.last_follow_up_date || null,
     next_follow_up_date: v.next_follow_up_date || null,
     priority: v.priority || "Warm",
-    assigned_to: opts.isDbAdmin ? assignee : assignee || opts.userId,
+    assigned_to: assignee,
     assigned_by: opts.userId,
     description: v.description.trim() || null,
     last_outcome_remarks: v.last_outcome_remarks.trim() || null,
