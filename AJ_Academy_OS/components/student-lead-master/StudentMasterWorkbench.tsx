@@ -33,6 +33,8 @@ import {
   type CrmTabId,
 } from "@/components/student-lead-master/studentMasterConfig";
 import { StudentLeadFormPanel, type StudentLeadFormValue } from "@/components/student-lead-master/StudentLeadFormPanel";
+import { ProposalFileUpload, uploadProposalFile } from "@/components/shared/ProposalFileUpload";
+import type { ProposalFileMeta } from "@/lib/proposalFiles";
 import {
   STUDENT_LEAD_SELECT,
   type CrmClientRow,
@@ -389,6 +391,15 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     agreement_link: "",
   });
   const [proposalSubmitting, setProposalSubmitting] = useState(false);
+  const [pendingProposalFile, setPendingProposalFile] = useState<File | null>(null);
+  const [proposalFileMeta, setProposalFileMeta] = useState<ProposalFileMeta>({
+    proposal_file_name: null,
+    proposal_file_path: null,
+    proposal_file_type: null,
+    proposal_file_size: null,
+    proposal_uploaded_at: null,
+    proposal_link: null,
+  });
 
   const [overview, setOverview] = useState({
     total: 0,
@@ -1176,6 +1187,15 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     setError(null);
     setEditId(null);
     setForm(emptyForm(currentUserId, isDbAdmin));
+    setPendingProposalFile(null);
+    setProposalFileMeta({
+      proposal_file_name: null,
+      proposal_file_path: null,
+      proposal_file_type: null,
+      proposal_file_size: null,
+      proposal_uploaded_at: null,
+      proposal_link: null,
+    });
     setPanelOpen(true);
   };
 
@@ -1188,6 +1208,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     setSubmitting(true);
     setError(null);
     setSuccess(null);
+    const fileToUpload = pendingProposalFile;
+    const editingId = editId;
     try {
       let saveForm = form;
       if (form.interested_program === NEW_PROGRAM_OPTION) {
@@ -1329,10 +1351,32 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         if (inserted.error) throw inserted.error;
         const nid = inserted.data?.id as string | undefined;
         if (nid) await insertActivityClient(supabase, nid, "Lead Created", `Source ${form.source}`, currentUserId);
-        setSuccess("Lead created.");
+        if (nid && fileToUpload) {
+          const uploaded = await uploadProposalFile({
+            entityType: "student",
+            entityId: nid,
+            file: fileToUpload,
+          });
+          setProposalFileMeta((m) => ({ ...m, ...uploaded, proposal_link: m.proposal_link }));
+          setPendingProposalFile(null);
+        }
+        setSuccess(nid && fileToUpload ? "Lead created and proposal uploaded." : "Lead created.");
       }
+
+      if (editingId && fileToUpload) {
+        const uploaded = await uploadProposalFile({
+          entityType: "student",
+          entityId: editingId,
+          file: fileToUpload,
+        });
+        setProposalFileMeta((m) => ({ ...m, ...uploaded, proposal_link: m.proposal_link }));
+        setPendingProposalFile(null);
+        setSuccess("Lead saved and proposal uploaded.");
+      }
+
       setPanelOpen(false);
       setEditId(null);
+      setPendingProposalFile(null);
       await reload();
     } catch (e) {
       setError(friendlyError(e));
@@ -1654,6 +1698,15 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       quotation_link: String(lead.quotation_link ?? ""),
       agreement_link: String(lead.agreement_link ?? ""),
     });
+    setPendingProposalFile(null);
+    setProposalFileMeta({
+      proposal_file_name: lead.proposal_file_name ?? null,
+      proposal_file_path: lead.proposal_file_path ?? null,
+      proposal_file_type: lead.proposal_file_type ?? null,
+      proposal_file_size: lead.proposal_file_size ?? null,
+      proposal_uploaded_at: lead.proposal_uploaded_at ?? null,
+      proposal_link: lead.proposal_link ?? null,
+    });
   };
 
   const saveProposalFromModal = async () => {
@@ -1664,6 +1717,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     }
     setProposalSubmitting(true);
     setError(null);
+    const fileToUpload = pendingProposalFile;
     try {
       const prev = proposalModalLead;
       const amtRaw = proposalDraft.amount.trim();
@@ -1676,7 +1730,6 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         proposal_status: proposalDraft.status,
         proposal_amount: amt,
         proposal_sent_date: proposalDraft.sent_date.trim() || null,
-        proposal_link: proposalDraft.proposal_link.trim() || null,
         quotation_link: proposalDraft.quotation_link.trim() || null,
         agreement_link: proposalDraft.agreement_link.trim() || null,
       };
@@ -1703,6 +1756,15 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       const noteLine = `Status: ${proposalDraft.status}${amt != null ? ` · Amount: ₹${Number(amt).toLocaleString()}` : ""}`;
       await insertActivityClient(supabase, prev.id, "Proposal Updated", noteLine, currentUserId);
 
+      if (fileToUpload) {
+        await uploadProposalFile({
+          entityType: "student",
+          entityId: prev.id,
+          file: fileToUpload,
+        });
+        setPendingProposalFile(null);
+      }
+
       if (proposalDraft.status === "Accepted" && normalizeStatus(String(prev.status)) !== "Converted") {
         await insertActivityClient(
           supabase,
@@ -1714,7 +1776,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       }
 
       setProposalModalLead(null);
-      setSuccess("Proposal saved.");
+      setSuccess(fileToUpload ? "Proposal saved and file uploaded." : "Proposal saved.");
       await silentRefreshCrm();
     } catch (e) {
       setError(friendlyError(e));
@@ -1999,6 +2061,15 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
               setError(null);
               setEditId(leadRecord.id);
               setForm(rowToForm(leadRecord));
+              setPendingProposalFile(null);
+              setProposalFileMeta({
+                proposal_file_name: leadRecord.proposal_file_name ?? null,
+                proposal_file_path: leadRecord.proposal_file_path ?? null,
+                proposal_file_type: leadRecord.proposal_file_type ?? null,
+                proposal_file_size: leadRecord.proposal_file_size ?? null,
+                proposal_uploaded_at: leadRecord.proposal_uploaded_at ?? null,
+                proposal_link: leadRecord.proposal_link ?? null,
+              });
               setPanelOpen(true);
             }}
             onDelete={(id: string) => void handleDeleteLead(id)}
@@ -2083,7 +2154,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         <>
           {renderLeadBulkBar}
           <p className="text-sm text-[#64748b]">
-            Track and update proposal fields on each lead. Changes save to the lead record and appear in Activity Timeline.
+            Track proposal status and upload PDF/DOC files. Changes save to the lead and appear in Activity Timeline.
           </p>
           <ProposalTrackerTable leads={filteredClients} isAdmin={isAdmin} onEdit={(leadRow) => openProposalModal(leadRow)} bulkSelection={leadBulkSelectionProps} />
           {proposalModalLead ? (
@@ -2092,8 +2163,17 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
               draft={proposalDraft}
               setDraft={setProposalDraft}
               submitting={proposalSubmitting}
-              onClose={() => setProposalModalLead(null)}
+              onClose={() => {
+                setProposalModalLead(null);
+                setPendingProposalFile(null);
+              }}
               onSave={() => void saveProposalFromModal()}
+              proposalFileMeta={proposalFileMeta}
+              pendingProposalFile={pendingProposalFile}
+              onPendingFileChange={setPendingProposalFile}
+              onProposalMetaChange={setProposalFileMeta}
+              onUploadError={setError}
+              onUploadSuccess={setSuccess}
             />
           ) : null}
         </>
@@ -2129,6 +2209,19 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
               onChange={setForm}
               onClose={() => setPanelOpen(false)}
               onSubmit={() => void handleSave()}
+              proposalUploadSlot={
+                <ProposalFileUpload
+                  entityType="student"
+                  entityId={editId}
+                  meta={proposalFileMeta}
+                  pendingFile={pendingProposalFile}
+                  onPendingFileChange={setPendingProposalFile}
+                  onMetaChange={setProposalFileMeta}
+                  disabled={submitting}
+                  onError={setError}
+                  onSuccess={setSuccess}
+                />
+              }
             />
           </div>
         </>
@@ -2936,7 +3029,7 @@ function ProposalTrackerTable({
             <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Amount</th>
             <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Status</th>
             <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Sent date</th>
-            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Proposal link</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Proposal</th>
             <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide">Actions</th>
           </tr>
         </thead>
@@ -2969,18 +3062,12 @@ function ProposalTrackerTable({
                 </td>
                 <td className="whitespace-nowrap px-3 py-2">{proposalLead.proposal_sent_date || "—"}</td>
                 <td className="px-3 py-2">
-                  {proposalLead.proposal_link ? (
-                    <a
-                      href={String(proposalLead.proposal_link)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-semibold text-blue-700 hover:underline"
-                    >
-                      Open
-                    </a>
-                  ) : (
-                    "—"
-                  )}
+                  <ProposalFileOpenCell
+                    entityType="student"
+                    entityId={proposalLead.id}
+                    filePath={proposalLead.proposal_file_path}
+                    legacyHref={proposalLead.proposal_link}
+                  />
                 </td>
                 <td className="px-3 py-2 text-right">
                   {isAdmin ? (
@@ -3001,6 +3088,63 @@ function ProposalTrackerTable({
   );
 }
 
+function ProposalFileOpenCell({
+  entityType,
+  entityId,
+  filePath,
+  legacyHref,
+}: {
+  entityType: "student" | "college";
+  entityId: string;
+  filePath?: string | null;
+  legacyHref?: string | null;
+}) {
+  const [busy, setBusy] = useState(false);
+  if (filePath?.trim()) {
+    return (
+      <button
+        type="button"
+        disabled={busy}
+        className="text-xs font-semibold text-[#a68b2e] hover:underline disabled:opacity-60"
+        onClick={() => {
+          void (async () => {
+            setBusy(true);
+            try {
+              const res = await fetch("/api/proposals/signed-url", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ entityType, entityId, download: false }),
+              });
+              const json = (await res.json()) as { url?: string; error?: string };
+              if (!res.ok || !json.url) throw new Error(json.error || "Could not open file.");
+              window.open(json.url, "_blank", "noopener,noreferrer");
+            } catch {
+              /* parent banners handle save errors; table open fails silently to avoid noisy popups */
+            } finally {
+              setBusy(false);
+            }
+          })();
+        }}
+      >
+        {busy ? "Opening…" : "View Proposal"}
+      </button>
+    );
+  }
+  if (legacyHref?.trim()) {
+    return (
+      <a
+        href={legacyHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-xs font-semibold text-[#a68b2e] hover:underline"
+      >
+        Open link
+      </a>
+    );
+  }
+  return <span className="text-xs text-[#94a3b8]">Not Uploaded</span>;
+}
+
 function ProposalEditModal({
   lead,
   draft,
@@ -3008,6 +3152,12 @@ function ProposalEditModal({
   onClose,
   onSave,
   submitting,
+  proposalFileMeta,
+  pendingProposalFile,
+  onPendingFileChange,
+  onProposalMetaChange,
+  onUploadError,
+  onUploadSuccess,
 }: {
   lead: CrmClientRow;
   draft: {
@@ -3031,6 +3181,12 @@ function ProposalEditModal({
   onClose: () => void;
   onSave: () => void;
   submitting: boolean;
+  proposalFileMeta: ProposalFileMeta;
+  pendingProposalFile: File | null;
+  onPendingFileChange: (file: File | null) => void;
+  onProposalMetaChange: (meta: ProposalFileMeta) => void;
+  onUploadError: (message: string) => void;
+  onUploadSuccess: (message: string) => void;
 }) {
   return (
     <>
@@ -3061,10 +3217,17 @@ function ProposalEditModal({
             <span className="text-xs font-medium text-[#64748b]">Sent date</span>
             <Input type="date" value={draft.sent_date} onChange={(e) => setDraft((d) => ({ ...d, sent_date: e.target.value }))} className="rounded-lg border-[#dbe6f3]" />
           </label>
-          <label className="grid gap-1">
-            <span className="text-xs font-medium text-[#64748b]">Proposal link</span>
-            <Input value={draft.proposal_link} onChange={(e) => setDraft((d) => ({ ...d, proposal_link: e.target.value }))} className="rounded-lg border-[#dbe6f3]" />
-          </label>
+          <ProposalFileUpload
+            entityType="student"
+            entityId={lead.id}
+            meta={proposalFileMeta}
+            pendingFile={pendingProposalFile}
+            onPendingFileChange={onPendingFileChange}
+            onMetaChange={onProposalMetaChange}
+            disabled={submitting}
+            onError={onUploadError}
+            onSuccess={onUploadSuccess}
+          />
           <label className="grid gap-1">
             <span className="text-xs font-medium text-[#64748b]">Quotation link</span>
             <Input value={draft.quotation_link} onChange={(e) => setDraft((d) => ({ ...d, quotation_link: e.target.value }))} className="rounded-lg border-[#dbe6f3]" />

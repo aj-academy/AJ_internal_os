@@ -37,6 +37,11 @@ export type StudentLeadRow = Record<string, unknown> & {
   proposal_amount?: number | null;
   proposal_sent_date?: string | null;
   proposal_link?: string | null;
+  proposal_file_name?: string | null;
+  proposal_file_path?: string | null;
+  proposal_file_type?: string | null;
+  proposal_file_size?: number | null;
+  proposal_uploaded_at?: string | null;
   quotation_link?: string | null;
   agreement_link?: string | null;
   converted_at?: string | null;
@@ -109,6 +114,11 @@ export const STUDENT_LEAD_SELECT = [
   "proposal_amount",
   "proposal_sent_date",
   "proposal_link",
+  "proposal_file_name",
+  "proposal_file_path",
+  "proposal_file_type",
+  "proposal_file_size",
+  "proposal_uploaded_at",
   "quotation_link",
   "agreement_link",
   "converted_at",
@@ -158,7 +168,7 @@ export function normalizeStatus(raw: string | null | undefined): CrmLeadStatus |
 export function friendlyError(raw: unknown) {
   const msg = raw instanceof Error ? raw.message : "Unexpected error.";
   if (msg.includes("does not exist") || msg.includes("schema cache")) {
-    return "Database tables are missing or out of date. Run `student_lead_master_schema.sql`, then `student_master_columns_patch.sql` from AJ_Academy_SB in Supabase SQL Editor.";
+    return "Database tables are missing or out of date. Run `student_lead_master_schema.sql`, then `student_master_columns_patch.sql`, then `proposals_file_upload_patch.sql` from AJ_Academy_SB in Supabase SQL Editor.";
   }
   if (
     msg === "Forbidden" ||

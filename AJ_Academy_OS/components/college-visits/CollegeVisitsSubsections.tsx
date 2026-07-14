@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { TablePagination } from "@/components/ui/TablePagination";
@@ -424,19 +425,18 @@ export function CollegeProposalTrackerTable({
   return (
     <div className="space-y-3">
       <p className="text-sm text-[#64748b]">
-        Save each college proposal as a shareable link and/or a PDF upload. Updates appear in Activity Timeline.
+        Upload a proposal file (PDF/DOC/DOCX) per college, or view any legacy link. Updates appear in Activity Timeline.
       </p>
       <div className="overflow-hidden rounded-2xl border border-[#dbe6f3]">
         <div className="overflow-x-auto">
-          <table className="min-w-[1100px] w-full text-sm">
+          <table className="min-w-[1000px] w-full text-sm">
             <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
               <tr>
                 <th className="px-4 py-3 text-left">College</th>
                 <th className="px-4 py-3 text-left">Status</th>
                 <th className="px-4 py-3 text-left">Amount</th>
                 <th className="px-4 py-3 text-left">Sent date</th>
-                <th className="px-4 py-3 text-left">Link</th>
-                <th className="px-4 py-3 text-left">PDF</th>
+                <th className="px-4 py-3 text-left">Proposal</th>
                 <th className="px-4 py-3 text-left">Owner</th>
                 <th className="px-4 py-3 text-left">Actions</th>
               </tr>
@@ -444,7 +444,7 @@ export function CollegeProposalTrackerTable({
             <tbody>
               {totalItems === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-[#64748b]">
+                  <td colSpan={7} className="px-4 py-10 text-center text-[#64748b]">
                     No colleges to track.
                   </td>
                 </tr>
@@ -458,32 +458,7 @@ export function CollegeProposalTrackerTable({
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">{row.proposal_sent_date?.slice(0, 10) || "-"}</td>
                     <td className="px-4 py-3">
-                      {row.proposal_link ? (
-                        <a
-                          href={row.proposal_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-blue-700 hover:underline"
-                        >
-                          Open link
-                        </a>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.proposal_pdf_url ? (
-                        <a
-                          href={row.proposal_pdf_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-blue-700 hover:underline"
-                        >
-                          {row.proposal_pdf_name || "Open PDF"}
-                        </a>
-                      ) : (
-                        "-"
-                      )}
+                      <CollegeProposalFileCell row={row} />
                     </td>
                     <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
                     <td className="px-4 py-3">
@@ -519,6 +494,49 @@ export function CollegeProposalTrackerTable({
   );
 }
 
+function CollegeProposalFileCell({ row }: { row: CollegeVisitRow }) {
+  const [busy, setBusy] = useState(false);
+  if (row.proposal_file_path?.trim()) {
+    return (
+      <button
+        type="button"
+        disabled={busy}
+        className="text-xs font-semibold text-[#a68b2e] hover:underline disabled:opacity-60"
+        onClick={() => {
+          void (async () => {
+            setBusy(true);
+            try {
+              const res = await fetch("/api/proposals/signed-url", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ entityType: "college", entityId: row.id, download: false }),
+              });
+              const json = (await res.json()) as { url?: string; error?: string };
+              if (!res.ok || !json.url) throw new Error(json.error || "Could not open file.");
+              window.open(json.url, "_blank", "noopener,noreferrer");
+            } catch {
+              /* ignore */
+            } finally {
+              setBusy(false);
+            }
+          })();
+        }}
+      >
+        {busy ? "Opening…" : "View Proposal"}
+      </button>
+    );
+  }
+  const legacy = row.proposal_pdf_url?.trim() || row.proposal_link?.trim();
+  if (legacy) {
+    return (
+      <a href={legacy} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[#a68b2e] hover:underline">
+        {row.proposal_pdf_name || "Open link"}
+      </a>
+    );
+  }
+  return <span className="text-xs text-[#94a3b8]">Not Uploaded</span>;
+}
+
 export function CollegeProposalEditModal({
   row,
   draft,
@@ -526,8 +544,7 @@ export function CollegeProposalEditModal({
   onClose,
   onSave,
   submitting,
-  uploading,
-  onPickPdf,
+  proposalUploadSlot,
 }: {
   row: CollegeVisitRow;
   draft: CollegeProposalDraft;
@@ -535,8 +552,7 @@ export function CollegeProposalEditModal({
   onClose: () => void;
   onSave: () => void;
   submitting: boolean;
-  uploading: boolean;
-  onPickPdf: (file: File | null) => void;
+  proposalUploadSlot?: ReactNode;
 }) {
   return (
     <>
@@ -579,49 +595,19 @@ export function CollegeProposalEditModal({
               onChange={(e) => setDraft((d) => ({ ...d, sent_date: e.target.value }))}
             />
           </label>
-          <label className="grid gap-1">
-            <span className="text-xs font-medium text-[#64748b]">Proposal link (URL)</span>
-            <input
-              className="h-9 rounded-lg border border-[#dbe6f3] bg-white px-3"
-              value={draft.proposal_link}
-              onChange={(e) => setDraft((d) => ({ ...d, proposal_link: e.target.value }))}
-              placeholder="https://..."
-            />
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs font-medium text-[#64748b]">Proposal PDF</span>
-            <input
-              type="file"
-              accept="application/pdf,.pdf"
-              className="block w-full text-xs"
-              disabled={uploading || submitting}
-              onChange={(e) => onPickPdf(e.target.files?.[0] ?? null)}
-            />
-            {draft.proposal_pdf_url ? (
-              <a
-                href={draft.proposal_pdf_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs font-semibold text-blue-700 hover:underline"
-              >
-                {draft.proposal_pdf_name || "Current PDF"}
-              </a>
-            ) : (
-              <span className="text-xs text-[#64748b]">No PDF uploaded yet.</span>
-            )}
-          </label>
+          {proposalUploadSlot}
         </div>
         <div className="mt-6 flex justify-end gap-2">
-          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={submitting || uploading}>
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
           <Button
             type="button"
             className="rounded-full bg-[#c9a227] text-white"
-            disabled={submitting || uploading}
+            disabled={submitting}
             onClick={onSave}
           >
-            {uploading ? "Uploading..." : submitting ? "Saving..." : "Save"}
+            {submitting ? "Saving..." : "Save"}
           </Button>
         </div>
       </div>

@@ -44,6 +44,11 @@ export type CollegeVisitRow = {
   proposal_link: string | null;
   proposal_pdf_url: string | null;
   proposal_pdf_name: string | null;
+  proposal_file_name: string | null;
+  proposal_file_path: string | null;
+  proposal_file_type: string | null;
+  proposal_file_size: number | null;
+  proposal_uploaded_at: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -89,6 +94,11 @@ export const COLLEGE_VISIT_SELECT = [
   "proposal_link",
   "proposal_pdf_url",
   "proposal_pdf_name",
+  "proposal_file_name",
+  "proposal_file_path",
+  "proposal_file_type",
+  "proposal_file_size",
+  "proposal_uploaded_at",
   "created_by",
   "created_at",
   "updated_at",
@@ -312,7 +322,7 @@ export function friendlyCollegeVisitError(raw: unknown) {
     (msg.includes("proposal_") && (msg.includes("column") || msg.includes("schema cache"))) ||
     (msg.includes("contacts") && (msg.includes("column") || msg.includes("schema cache")))
   ) {
-    return "Database table missing or outdated. Run `college_visits_schema.sql`, `college_visits_proposal_patch.sql`, and `college_visits_contacts_patch.sql` from AJ_Academy_SB in Supabase SQL Editor.";
+    return "Database table missing or outdated. Run `college_visits_schema.sql`, `college_visits_proposal_patch.sql`, `college_visits_contacts_patch.sql`, and `proposals_file_upload_patch.sql` from AJ_Academy_SB in Supabase SQL Editor.";
   }
   if (
     msg === "Forbidden" ||
@@ -351,6 +361,11 @@ export type CollegeVisitFormValue = {
   proposal_link: string;
   proposal_pdf_url: string;
   proposal_pdf_name: string;
+  proposal_file_name: string;
+  proposal_file_path: string;
+  proposal_file_type: string;
+  proposal_file_size: string;
+  proposal_uploaded_at: string;
 };
 
 export function emptyCollegeVisitForm(assignedFallback = ""): CollegeVisitFormValue {
@@ -381,6 +396,11 @@ export function emptyCollegeVisitForm(assignedFallback = ""): CollegeVisitFormVa
     proposal_link: "",
     proposal_pdf_url: "",
     proposal_pdf_name: "",
+    proposal_file_name: "",
+    proposal_file_path: "",
+    proposal_file_type: "",
+    proposal_file_size: "",
+    proposal_uploaded_at: "",
   };
 }
 
@@ -414,6 +434,11 @@ export function collegeVisitRowToForm(row: CollegeVisitRow): CollegeVisitFormVal
     proposal_link: row.proposal_link ?? "",
     proposal_pdf_url: row.proposal_pdf_url ?? "",
     proposal_pdf_name: row.proposal_pdf_name ?? "",
+    proposal_file_name: row.proposal_file_name ?? "",
+    proposal_file_path: row.proposal_file_path ?? "",
+    proposal_file_type: row.proposal_file_type ?? "",
+    proposal_file_size: row.proposal_file_size != null ? String(row.proposal_file_size) : "",
+    proposal_uploaded_at: row.proposal_uploaded_at ?? "",
   };
 }
 
@@ -454,5 +479,6 @@ export function buildCollegeVisitPayload(
     proposal_link: v.proposal_link.trim() || null,
     proposal_pdf_url: v.proposal_pdf_url.trim() || null,
     proposal_pdf_name: v.proposal_pdf_name.trim() || null,
+    // File metadata is written by /api/proposals/upload — don't overwrite with empty form clears here
   };
 }

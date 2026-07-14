@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import type { ReactNode } from "react";
 import {
   ADMISSION_STATUSES,
   CRM_FOLLOW_UP_TYPES_UI,
@@ -94,6 +95,8 @@ interface StudentLeadFormPanelProps {
   onChange: (next: StudentLeadFormValue) => void;
   onClose: () => void;
   onSubmit: () => void;
+  /** Shared proposal upload UI (works on Add + Edit). */
+  proposalUploadSlot?: ReactNode;
 }
 
 const selectClass =
@@ -110,6 +113,7 @@ export function StudentLeadFormPanel({
   onChange,
   onClose,
   onSubmit,
+  proposalUploadSlot,
 }: StudentLeadFormPanelProps) {
   if (!open) return null;
 
@@ -445,9 +449,7 @@ export function StudentLeadFormPanel({
             <Field label="Proposal sent date">
               <Input type="date" value={value.proposal_sent_date} onChange={(e) => onChange({ ...value, proposal_sent_date: e.target.value })} />
             </Field>
-            <Field label="Proposal link">
-              <Input value={value.proposal_link} onChange={(e) => onChange({ ...value, proposal_link: e.target.value })} placeholder="URL" />
-            </Field>
+            {proposalUploadSlot}
           </div>
         </section>
       </div>

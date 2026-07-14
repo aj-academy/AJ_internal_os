@@ -145,11 +145,13 @@ Then hard-refresh the app and try **Add Student** again.
 
 ### College Visits
 
-Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / profiles), then **`college_visits_proposal_patch.sql`** (Proposal Tracker: link + PDF columns and `college-visit-proposals` storage bucket), then **`college_visits_contacts_patch.sql`** (multiple contacts: name / role / alternate phones / email JSON + primary sync), then **`crm_owner_isolation.sql`**, then **`crm_delete_fix.sql`**. Adds:
+Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / profiles), then **`college_visits_proposal_patch.sql`** (Proposal Tracker: link + PDF columns and `college-visit-proposals` storage bucket), then **`college_visits_contacts_patch.sql`** (multiple contacts: name / role / alternate phones / email JSON + primary sync), then **`proposals_file_upload_patch.sql`** (unified private `proposals` bucket + file columns on `clients` and `college_visits` for PDF/DOC/DOCX upload on Add/Edit), then **`crm_owner_isolation.sql`**, then **`crm_delete_fix.sql`**. Adds:
 
 - `/admin/college-visits` and `/employee/college-visits` — **same subsection tabs as Student Master**: Overview, All Colleges, Follow-ups, Pipeline, Converted Colleges, MOU Tracker, **Proposal Tracker**, Activity Timeline (+ Reports / Settings for admin). Own rows only; share via College Visit tasks.
-- Proposal Tracker stores a **URL link** and/or an uploaded **PDF** per college.
+- Proposal Tracker / Add·Edit forms upload **PDF, DOC, or DOCX** (max 10 MB) into the private `proposals` bucket; legacy URL/PDF fields remain readable.
 - Pick-for-task flow uses the **All Colleges** tab (same pattern as Student Master → All Students).
+
+**Student Master proposals:** Same file upload (Add + Edit + Proposal Tracker) after `proposals_file_upload_patch.sql`. Paths: `students/{client_id}/…` and `colleges/{college_visit_id}/…`. APIs: `POST /api/proposals/upload`, `/signed-url`, `/remove` (staff session + service role).
 
 API (staff session): `GET/POST /api/college-visits`, `PATCH/DELETE /api/college-visits/[id]`, `GET/POST /api/college-visits/[id]/activities`. GET returns the signed-in user’s rows only.
 

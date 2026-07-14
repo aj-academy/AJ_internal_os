@@ -53,6 +53,11 @@ export function parseCollegeVisitBody(body: unknown): { ok: true; form: CollegeV
     proposal_link: String(record.proposal_link ?? ""),
     proposal_pdf_url: String(record.proposal_pdf_url ?? ""),
     proposal_pdf_name: String(record.proposal_pdf_name ?? ""),
+    proposal_file_name: String(record.proposal_file_name ?? ""),
+    proposal_file_path: String(record.proposal_file_path ?? ""),
+    proposal_file_type: String(record.proposal_file_type ?? ""),
+    proposal_file_size: String(record.proposal_file_size ?? ""),
+    proposal_uploaded_at: String(record.proposal_uploaded_at ?? ""),
   };
 
   return { ok: true, form };
@@ -100,6 +105,11 @@ export function mapCollegeVisitRow(row: unknown): CollegeVisitRow {
     proposal_link: r.proposal_link ?? null,
     proposal_pdf_url: r.proposal_pdf_url ?? null,
     proposal_pdf_name: r.proposal_pdf_name ?? null,
+    proposal_file_name: r.proposal_file_name ?? null,
+    proposal_file_path: r.proposal_file_path ?? null,
+    proposal_file_type: r.proposal_file_type ?? null,
+    proposal_file_size: r.proposal_file_size ?? null,
+    proposal_uploaded_at: r.proposal_uploaded_at ?? null,
     created_by: r.created_by ?? null,
     created_at: r.created_at ?? "",
     updated_at: r.updated_at ?? "",

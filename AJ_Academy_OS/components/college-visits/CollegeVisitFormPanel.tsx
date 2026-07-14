@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, Trash2, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -36,6 +37,7 @@ interface CollegeVisitFormPanelProps {
   onChange: (v: CollegeVisitFormValue) => void;
   onClose: () => void;
   onSubmit: () => void;
+  proposalUploadSlot?: ReactNode;
 }
 
 function updateContacts(value: CollegeVisitFormValue, contacts: CollegeContact[], onChange: (v: CollegeVisitFormValue) => void) {
@@ -52,6 +54,7 @@ export function CollegeVisitFormPanel({
   onChange,
   onClose,
   onSubmit,
+  proposalUploadSlot,
 }: CollegeVisitFormPanelProps) {
   if (!open) return null;
 
@@ -383,36 +386,17 @@ export function CollegeVisitFormPanel({
                     placeholder="Optional"
                   />
                 </label>
-                <label className="grid gap-1">
-                  <span className="font-medium text-[#334155]">Sent date</span>
-                  <Input
-                    type="date"
-                    value={value.proposal_sent_date}
-                    onChange={(e) => onChange({ ...value, proposal_sent_date: e.target.value })}
-                    className="border-[#e8dcc8]"
-                  />
-                </label>
-              </div>
               <label className="grid gap-1">
-                <span className="font-medium text-[#334155]">Proposal link (URL)</span>
+                <span className="font-medium text-[#334155]">Sent date</span>
                 <Input
-                  value={value.proposal_link}
-                  onChange={(e) => onChange({ ...value, proposal_link: e.target.value })}
+                  type="date"
+                  value={value.proposal_sent_date}
+                  onChange={(e) => onChange({ ...value, proposal_sent_date: e.target.value })}
                   className="border-[#e8dcc8]"
-                  placeholder="https://..."
                 />
               </label>
-              {value.proposal_pdf_url ? (
-                <p className="text-xs text-[#64748b]">
-                  PDF on file:{" "}
-                  <a href={value.proposal_pdf_url} target="_blank" rel="noopener noreferrer" className="font-semibold text-[#a68b2e] hover:underline">
-                    {value.proposal_pdf_name || "Open PDF"}
-                  </a>
-                  {" "}(upload or replace from Proposal Tracker)
-                </p>
-              ) : (
-                <p className="text-xs text-[#64748b]">Upload a proposal PDF from the Proposal Tracker tab.</p>
-              )}
+              </div>
+              {proposalUploadSlot}
             </section>
           </div>
         </div>

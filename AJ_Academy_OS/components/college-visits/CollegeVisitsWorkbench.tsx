@@ -69,7 +69,8 @@ import {
   type CollegeVisitFormValue,
   type CollegeVisitRow,
 } from "@/components/college-visits/collegeVisitsHelpers";
-import { uploadCollegeVisitProposalPdf } from "@/lib/collegeVisitProposals";
+import { ProposalFileUpload, uploadProposalFile } from "@/components/shared/ProposalFileUpload";
+import type { ProposalFileMeta } from "@/lib/proposalFiles";
 
 type CollegeOutreachFlags = {
   phoneCalled?: boolean;
@@ -144,7 +145,17 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     proposal_pdf_name: "",
   });
   const [proposalSubmitting, setProposalSubmitting] = useState(false);
-  const [proposalUploading, setProposalUploading] = useState(false);
+  const [pendingProposalFile, setPendingProposalFile] = useState<File | null>(null);
+  const [proposalFileMeta, setProposalFileMeta] = useState<ProposalFileMeta>({
+    proposal_file_name: null,
+    proposal_file_path: null,
+    proposal_file_type: null,
+    proposal_file_size: null,
+    proposal_uploaded_at: null,
+    proposal_link: null,
+    proposal_pdf_url: null,
+    proposal_pdf_name: null,
+  });
   const [bulkAssignTo, setBulkAssignTo] = useState("");
   const [pickedCollegeIds, setPickedCollegeIds] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
@@ -629,6 +640,17 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const openCreate = () => {
     setEditId(null);
     setForm(emptyCollegeVisitForm(currentUserId));
+    setPendingProposalFile(null);
+    setProposalFileMeta({
+      proposal_file_name: null,
+      proposal_file_path: null,
+      proposal_file_type: null,
+      proposal_file_size: null,
+      proposal_uploaded_at: null,
+      proposal_link: null,
+      proposal_pdf_url: null,
+      proposal_pdf_name: null,
+    });
     setPanelOpen(true);
     setError(null);
     setSuccess(null);
@@ -637,6 +659,17 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const openEdit = (row: CollegeVisitRow) => {
     setEditId(row.id);
     setForm(collegeVisitRowToForm(row));
+    setPendingProposalFile(null);
+    setProposalFileMeta({
+      proposal_file_name: row.proposal_file_name ?? null,
+      proposal_file_path: row.proposal_file_path ?? null,
+      proposal_file_type: row.proposal_file_type ?? null,
+      proposal_file_size: row.proposal_file_size ?? null,
+      proposal_uploaded_at: row.proposal_uploaded_at ?? null,
+      proposal_link: row.proposal_link ?? null,
+      proposal_pdf_url: row.proposal_pdf_url ?? null,
+      proposal_pdf_name: row.proposal_pdf_name ?? null,
+    });
     setPanelOpen(true);
     setViewVisit(null);
   };
@@ -651,27 +684,19 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       proposal_pdf_url: row.proposal_pdf_url ?? "",
       proposal_pdf_name: row.proposal_pdf_name ?? "",
     });
+    setPendingProposalFile(null);
+    setProposalFileMeta({
+      proposal_file_name: row.proposal_file_name ?? null,
+      proposal_file_path: row.proposal_file_path ?? null,
+      proposal_file_type: row.proposal_file_type ?? null,
+      proposal_file_size: row.proposal_file_size ?? null,
+      proposal_uploaded_at: row.proposal_uploaded_at ?? null,
+      proposal_link: row.proposal_link ?? null,
+      proposal_pdf_url: row.proposal_pdf_url ?? null,
+      proposal_pdf_name: row.proposal_pdf_name ?? null,
+    });
     setError(null);
     setSuccess(null);
-  };
-
-  const handleProposalPdfPick = async (file: File | null) => {
-    if (!file || !proposalRow || !currentUserId) return;
-    setProposalUploading(true);
-    setError(null);
-    try {
-      const uploaded = await uploadCollegeVisitProposalPdf(supabase, currentUserId, proposalRow.id, file);
-      setProposalDraft((d) => ({
-        ...d,
-        proposal_pdf_url: uploaded.url,
-        proposal_pdf_name: uploaded.name,
-      }));
-      setSuccess("PDF uploaded. Click Save to keep it on this college.");
-    } catch (e) {
-      setError(friendlyCollegeVisitError(e));
-    } finally {
-      setProposalUploading(false);
-    }
   };
 
   const handleProposalSave = async () => {
@@ -679,6 +704,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setProposalSubmitting(true);
     setError(null);
     setSuccess(null);
+    const fileToUpload = pendingProposalFile;
     try {
       const base = collegeVisitRowToForm(proposalRow);
       const formRow: CollegeVisitFormValue = {
@@ -697,7 +723,15 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Could not save proposal.");
-      setSuccess("Proposal updated.");
+      if (fileToUpload) {
+        await uploadProposalFile({
+          entityType: "college",
+          entityId: proposalRow.id,
+          file: fileToUpload,
+        });
+        setPendingProposalFile(null);
+      }
+      setSuccess(fileToUpload ? "Proposal updated and file uploaded." : "Proposal updated.");
       setProposalRow(null);
       await reload();
     } catch (e) {
@@ -712,29 +746,51 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setSubmitting(true);
     setError(null);
     setSuccess(null);
+    const fileToUpload = pendingProposalFile;
+    const editingId = editId;
     try {
       const payload = buildCollegeVisitPayload(form, { userId: currentUserId, isDbAdmin });
-      if (editId) {
-        const res = await fetch(`/api/college-visits/${editId}`, {
+      if (editingId) {
+        const res = await fetch(`/api/college-visits/${editingId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...form, assigned_to: payload.assigned_to ?? "" }),
         });
         const json = (await res.json()) as { error?: string };
         if (!res.ok) throw new Error(json.error ?? "Update failed.");
-        setSuccess("College visit updated.");
+        if (fileToUpload) {
+          const uploaded = await uploadProposalFile({
+            entityType: "college",
+            entityId: editingId,
+            file: fileToUpload,
+          });
+          setProposalFileMeta((m) => ({ ...m, ...uploaded }));
+          setPendingProposalFile(null);
+        }
+        setSuccess(fileToUpload ? "College visit updated and proposal uploaded." : "College visit updated.");
       } else {
         const res = await fetch("/api/college-visits", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...form, assigned_to: payload.assigned_to ?? "" }),
         });
-        const json = (await res.json()) as { error?: string };
+        const json = (await res.json()) as { visit?: { id?: string }; error?: string };
         if (!res.ok) throw new Error(json.error ?? "Create failed.");
-        setSuccess("College visit created.");
+        const nid = json.visit?.id;
+        if (nid && fileToUpload) {
+          const uploaded = await uploadProposalFile({
+            entityType: "college",
+            entityId: nid,
+            file: fileToUpload,
+          });
+          setProposalFileMeta((m) => ({ ...m, ...uploaded }));
+          setPendingProposalFile(null);
+        }
+        setSuccess(nid && fileToUpload ? "College visit created and proposal uploaded." : "College visit created.");
       }
       setPanelOpen(false);
       setEditId(null);
+      setPendingProposalFile(null);
       await reload();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
@@ -1329,6 +1385,19 @@ return (
         onChange={setForm}
         onClose={() => setPanelOpen(false)}
         onSubmit={() => void handleSave()}
+        proposalUploadSlot={
+          <ProposalFileUpload
+            entityType="college"
+            entityId={editId}
+            meta={proposalFileMeta}
+            pendingFile={pendingProposalFile}
+            onPendingFileChange={setPendingProposalFile}
+            onMetaChange={setProposalFileMeta}
+            disabled={submitting}
+            onError={setError}
+            onSuccess={setSuccess}
+          />
+        }
       />
 
       {proposalRow ? (
@@ -1336,11 +1405,25 @@ return (
           row={proposalRow}
           draft={proposalDraft}
           setDraft={setProposalDraft}
-          onClose={() => setProposalRow(null)}
+          onClose={() => {
+            setProposalRow(null);
+            setPendingProposalFile(null);
+          }}
           onSave={() => void handleProposalSave()}
           submitting={proposalSubmitting}
-          uploading={proposalUploading}
-          onPickPdf={(file) => void handleProposalPdfPick(file)}
+          proposalUploadSlot={
+            <ProposalFileUpload
+              entityType="college"
+              entityId={proposalRow.id}
+              meta={proposalFileMeta}
+              pendingFile={pendingProposalFile}
+              onPendingFileChange={setPendingProposalFile}
+              onMetaChange={setProposalFileMeta}
+              disabled={proposalSubmitting}
+              onError={setError}
+              onSuccess={setSuccess}
+            />
+          }
         />
       ) : null}
 
