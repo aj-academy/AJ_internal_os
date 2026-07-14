@@ -151,6 +151,17 @@ export const STUDENT_LEAD_SELECT = [
   "admission_status",
 ].join(",");
 
+const PROPOSAL_FILE_SELECT =
+  "proposal_file_name,proposal_file_path,proposal_file_type,proposal_file_size,proposal_uploaded_at,";
+
+/** Fallback when proposals_file_upload_patch.sql not applied yet. */
+export const STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES = STUDENT_LEAD_SELECT.replace(PROPOSAL_FILE_SELECT, "");
+
+export function isMissingStudentProposalFileColumn(msg: string) {
+  const m = msg.toLowerCase();
+  return m.includes("proposal_file_") && (m.includes("column") || m.includes("schema cache") || m.includes("does not exist"));
+}
+
 /** @deprecated Prefer STUDENT_LEAD_SELECT */
 export const CRM_CLIENT_SELECT = STUDENT_LEAD_SELECT;
 
@@ -167,8 +178,17 @@ export function normalizeStatus(raw: string | null | undefined): CrmLeadStatus |
 
 export function friendlyError(raw: unknown) {
   const msg = raw instanceof Error ? raw.message : "Unexpected error.";
+  if (isMissingStudentProposalFileColumn(msg)) {
+    return "Proposal file columns are missing. Run `proposals_file_upload_patch.sql` from AJ_Academy_SB in Supabase SQL Editor, then refresh.";
+  }
+  if (
+    (msg.includes("does not exist") || msg.includes("schema cache")) &&
+    !msg.toLowerCase().includes("column")
+  ) {
+    return "Database tables are missing or out of date. Run `student_lead_master_schema.sql`, then `student_master_columns_patch.sql` from AJ_Academy_SB in Supabase SQL Editor.";
+  }
   if (msg.includes("does not exist") || msg.includes("schema cache")) {
-    return "Database tables are missing or out of date. Run `student_lead_master_schema.sql`, then `student_master_columns_patch.sql`, then `proposals_file_upload_patch.sql` from AJ_Academy_SB in Supabase SQL Editor.";
+    return "A database column is missing or out of date. Run the latest patches from AJ_Academy_SB (see DATABASE_SETUP_ORDER.txt), especially `proposals_file_upload_patch.sql` if using proposal upload.";
   }
   if (
     msg === "Forbidden" ||

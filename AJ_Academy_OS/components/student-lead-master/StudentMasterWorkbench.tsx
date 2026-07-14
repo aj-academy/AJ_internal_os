@@ -37,6 +37,8 @@ import { ProposalFileUpload, uploadProposalFile } from "@/components/shared/Prop
 import type { ProposalFileMeta } from "@/lib/proposalFiles";
 import {
   STUDENT_LEAD_SELECT,
+  STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES,
+  isMissingStudentProposalFileColumn,
   type CrmClientRow,
   displayLeadName,
   formatMoney,
@@ -435,15 +437,21 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const importFileRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
 
-  const buildClientsBaseQuery = useCallback(() => {
-    let q = supabase.from("clients").select(STUDENT_LEAD_SELECT).order("updated_at", { ascending: false }).limit(300);
-    // Own CRM only (admin + employee). Share via tasks — not by browsing others' leads.
-    if (currentUserId) q = q.eq("assigned_to", currentUserId);
-    return q.returns<CrmClientRow[]>();
-  }, [currentUserId, supabase]);
+  const buildClientsBaseQuery = useCallback(
+    (select = STUDENT_LEAD_SELECT) => {
+      let q = supabase.from("clients").select(select).order("updated_at", { ascending: false }).limit(300);
+      // Own CRM only (admin + employee). Share via tasks — not by browsing others' leads.
+      if (currentUserId) q = q.eq("assigned_to", currentUserId);
+      return q.returns<CrmClientRow[]>();
+    },
+    [currentUserId, supabase],
+  );
 
   const loadClientsDataset = useCallback(async () => {
-    const { data, error: loadError } = await buildClientsBaseQuery();
+    let { data, error: loadError } = await buildClientsBaseQuery();
+    if (loadError && isMissingStudentProposalFileColumn(loadError.message)) {
+      ({ data, error: loadError } = await buildClientsBaseQuery(STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES));
+    }
     if (loadError) throw new Error(loadError.message);
     setClients(data ?? []);
   }, [buildClientsBaseQuery]);
@@ -558,7 +566,10 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const silentRefreshCrm = useCallback(async () => {
     if (!currentUserId) return;
     try {
-      const { data, error: loadError } = await buildClientsBaseQuery();
+      let { data, error: loadError } = await buildClientsBaseQuery();
+      if (loadError && isMissingStudentProposalFileColumn(loadError.message)) {
+        ({ data, error: loadError } = await buildClientsBaseQuery(STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES));
+      }
       if (loadError) throw new Error(loadError.message);
       const next = data ?? [];
       setClients(next);
