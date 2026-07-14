@@ -120,17 +120,22 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
   }, [items]);
 
   return (
-    <aside className="flex h-full w-full flex-col overflow-hidden rounded-r-[24px] rounded-l-[20px] border border-[#d4b84a]/80 bg-gradient-to-b from-[#d4b84a] via-[#c9a227] to-[#a68b2e] shadow-[0_18px_45px_rgba(166,139,46,0.28)] transition-all duration-200 ease-out">
-      <div className="flex items-center justify-between gap-2 px-4 py-5">
+    <aside className="flex h-full w-full flex-col overflow-hidden rounded-[1.25rem] border border-[#d4b84a]/70 bg-gradient-to-b from-[#d4b84a] via-[#c9a227] to-[#a68b2e] shadow-[0_12px_36px_rgba(166,139,46,0.22)] transition-all duration-200 ease-out">
+      <div className="flex items-center justify-between gap-2 px-3.5 py-4 sm:px-4">
         {!collapsed ? (
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/95 p-0.5 shadow-sm">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/95 p-0.5 shadow-sm">
               <AppLogo size={32} className="h-8 w-8" priority />
             </span>
-            <p className="truncate text-base font-semibold text-white">AJ Academy</p>
+            <div className="min-w-0">
+              <p className="truncate text-[0.9375rem] font-semibold tracking-tight text-white">AJ Academy</p>
+              <p className="truncate text-[0.625rem] font-medium uppercase tracking-[0.12em] text-white/70">
+                Internal OS
+              </p>
+            </div>
           </div>
         ) : (
-          <span className="mx-auto inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-white/95 p-0.5 shadow-sm">
+          <span className="mx-auto inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white/95 p-0.5 shadow-sm">
             <AppLogo size={32} className="h-8 w-8" priority />
           </span>
         )}
@@ -138,7 +143,7 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="hidden rounded-full p-1.5 text-white/90 transition-colors duration-200 hover:bg-white/20 hover:text-white lg:inline-flex"
+            className="hidden rounded-xl p-2 text-white/90 transition-colors duration-200 hover:bg-white/20 hover:text-white lg:inline-flex"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -146,7 +151,7 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
         ) : null}
       </div>
 
-      <nav className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain p-3 pb-4">
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-2.5 pb-4 sm:px-3">
         {uniqueItems.map((item) => {
           const isActive = pathNorm === routePathOnly(item.href);
           const hasChildren = Boolean(item.children?.length);
@@ -165,24 +170,24 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
                 href={toLinkHref(item.href)}
                 onClick={() => onNavigate?.()}
                 className={cn(
-                  "group flex items-center justify-between rounded-full px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-out",
+                  "group flex min-h-11 items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-out sm:min-h-10",
                   isActive
-                    ? "bg-[#fffdf8] text-[#3d3428] shadow-md"
+                    ? "bg-[#fffdf8] text-[#3d3428] shadow-[0_4px_14px_rgba(61,52,40,0.12)]"
                     : hasActiveChild
                       ? "bg-white/15 text-white"
-                      : "text-white/90 hover:bg-[#fffdf8] hover:text-[#3d3428]",
+                      : "text-white/92 hover:bg-white/15 hover:text-white",
                 )}
               >
-                <span className="flex items-center gap-3">
+                <span className="flex min-w-0 items-center gap-3">
                   <Icon
                     className={cn(
-                      "h-4 w-4 transition-colors duration-200",
-                      isActive ? "text-[#c9a227]" : "text-white group-hover:text-[#c9a227]",
+                      "h-4 w-4 shrink-0 transition-colors duration-200",
+                      isActive ? "text-[#c9a227]" : "text-white/95 group-hover:text-white",
                     )}
                   />
                   <span
                     className={cn(
-                      "origin-left whitespace-nowrap transition-all duration-300 ease-in-out",
+                      "origin-left truncate whitespace-nowrap transition-all duration-300 ease-in-out",
                       collapsed ? "w-0 scale-95 opacity-0" : "w-auto scale-100 opacity-100",
                     )}
                   >
@@ -192,14 +197,14 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
                 {!collapsed && hasChildren ? (
                   <ChevronDown
                     className={cn(
-                      "h-4 w-4 text-white/70 transition-transform",
+                      "h-4 w-4 shrink-0 text-white/70 transition-transform",
                       isExpanded ? "rotate-180" : "rotate-0",
                     )}
                   />
                 ) : null}
               </Link>
               {isExpanded && hasChildren ? (
-                <div className="ml-8 space-y-1 border-l border-white/25 pl-3">
+                <div className="ml-4 space-y-0.5 border-l border-white/25 pl-3 sm:ml-5">
                   {item.children!.map((child) => {
                     const childUrl = new URL(child.href, "http://localhost");
                     const childIsActive =
@@ -211,10 +216,10 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
                         href={toLinkHref(child.href)}
                         onClick={onNavigate}
                         className={cn(
-                          "block rounded-md px-2 py-1.5 text-xs transition-colors duration-200",
+                          "block rounded-lg px-2.5 py-2 text-xs font-medium transition-colors duration-200",
                           childIsActive
-                            ? "bg-white/20 font-semibold text-white"
-                            : "text-white/80 hover:bg-white/15 hover:text-white",
+                            ? "bg-white/22 font-semibold text-white"
+                            : "text-white/80 hover:bg-white/12 hover:text-white",
                         )}
                       >
                         {child.label}

@@ -19,15 +19,12 @@ import {
 } from "recharts";
 import {
   AlertTriangle,
-  Bell,
   BriefcaseBusiness,
   CheckCircle2,
   CircleDollarSign,
   ClipboardList,
   FileText,
   ListChecks,
-  Plus,
-  Search,
   TrendingUp,
   UserCheck2,
   UsersRound,
@@ -37,9 +34,7 @@ import { fetchOrEmpty, formatBatchAccessWarning, type SupabaseQueryError } from 
 import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 import { AttendanceSelfieThumb } from "@/components/attendance/AttendanceSelfieThumb";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
 type DateFilter = "today" | "week" | "month" | "year";
 type Profile = { id: string; full_name: string | null; email: string | null; department: string | null; role?: string | null; status: string | null; created_at: string };
@@ -129,14 +124,6 @@ function inRange(dateStr: string | null | undefined, range: { start: Date; end: 
   return d >= range.start && d <= range.end;
 }
 
-function initials(name: string) {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((s) => s[0]?.toUpperCase())
-    .join("");
-}
-
 export default function AdminDashboardPage() {
   const supabase = useMemo(() => createClient(), []);
   const [dateFilter, setDateFilter] = useState<DateFilter>("month");
@@ -146,7 +133,6 @@ export default function AdminDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [attendanceSchemaWarning, setAttendanceSchemaWarning] = useState<string | null>(null);
   const [skipAttendanceOpsFetch, setSkipAttendanceOpsFetch] = useState(false);
-  const [userName, setUserName] = useState("Admin");
 
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
@@ -163,14 +149,6 @@ export default function AdminDashboardPage() {
     if (!options?.silent) setLoading(true);
     setError(null);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user?.id) {
-        const { data: me } = await supabase.from("profiles").select("full_name,email").eq("id", user.id).maybeSingle();
-        setUserName((me?.full_name as string | null) || (me?.email as string | null) || "Admin");
-      }
-
       const queryErrors: SupabaseQueryError[] = [];
 
       const [pr, at, cl, pj, tk, tx, tm, ec] = await Promise.all([
@@ -486,23 +464,28 @@ export default function AdminDashboardPage() {
   ];
 
   return (
-    <section className="dashboard-section space-y-6 rounded-[24px] border border-[#e8dcc8] bg-white p-4 shadow-[0_20px_40px_rgba(30,64,175,0.08)] sm:p-6 lg:p-8">
-      <header className="grid gap-4 xl:grid-cols-[1fr_auto] xl:items-center">
-        <div className="min-w-0">
-          <p className="aj-page-label">Company Operations Control Center</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[#3d3428] sm:text-3xl">Admin Dashboard</h2>
-          <p className="mt-1 text-sm text-[#6b5d4d]">{new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+    <section className="dashboard-section space-y-5 rounded-[1.25rem] border border-[#e8dcc8] bg-white p-4 shadow-[0_1px_2px_rgba(61,52,40,0.04),0_12px_32px_rgba(61,52,40,0.06)] sm:space-y-6 sm:p-6 lg:p-7">
+      <header className="aj-page-header">
+        <div className="aj-page-header__copy">
+          <p className="aj-page-kicker">Operations control</p>
+          <h1 className="aj-page-title">Admin Dashboard</h1>
+          <p className="aj-page-subtitle">
+            {new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          </p>
         </div>
-        <div className="hidden" aria-hidden>
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94a3b8]" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search activities" className="h-10 rounded-full border-[#e8dcc8] bg-[#f8fbff] pl-9" />
-        </div>
-        <div className="-mx-1 flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto px-1 pb-1 xl:mx-0 xl:flex-wrap xl:justify-end xl:overflow-visible xl:px-0 xl:pb-0">
-          <Button variant="outline" size="icon" className="rounded-full border-[#e8dcc8]"><Bell className="h-4 w-4" /></Button>
-          <Button className="rounded-full bg-[#c9a227] px-3 text-white hover:bg-[#b8921f]"><Plus className="mr-1 h-4 w-4" />Quick Action</Button>
-          <Avatar size="sm" className="border border-[#e8dcc8] bg-[#faf3e3]"><AvatarFallback>{initials(userName)}</AvatarFallback></Avatar>
-          <Link href="/admin/reports"><Button variant="outline" className="rounded-full border-[#e8dcc8]"><FileText className="mr-1 h-4 w-4" />Generate Report</Button></Link>
-          <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value as DateFilter)} className="h-10 rounded-full border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155]">
+        <div className="aj-page-actions">
+          <Link href="/admin/reports" className="w-full sm:w-auto">
+            <Button variant="outline" className="w-full rounded-xl border-[#e8dcc8] sm:w-auto">
+              <FileText className="mr-1.5 h-4 w-4" />
+              Generate report
+            </Button>
+          </Link>
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value as DateFilter)}
+            className="h-11 w-full rounded-xl border border-[#e8dcc8] bg-white px-3.5 text-sm text-[#3d3428] outline-none transition focus:border-[#c9a227] focus:ring-2 focus:ring-[#c9a227]/25 sm:h-10 sm:w-auto"
+            aria-label="Date range"
+          >
             <option value="today">Today</option>
             <option value="week">This Week</option>
             <option value="month">This Month</option>

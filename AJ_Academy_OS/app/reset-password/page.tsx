@@ -114,54 +114,75 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-blue-50 to-white p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <Card className="w-full max-w-md rounded-2xl border-blue-100 shadow-sm">
-        <CardHeader className="space-y-2">
-          <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
-            <KeyRound className="h-5 w-5" />
+    <div className="aj-auth-canvas">
+      <Card className="aj-auth-card border-[#e8dcc8] py-1 shadow-none">
+        <CardHeader className="space-y-3 px-5 pt-6 sm:px-6">
+          <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-[#e8dcc8] bg-[#faf3e3] text-[#a68b2e]">
+            <KeyRound className="h-5 w-5" aria-hidden />
           </div>
-          <CardTitle className="text-2xl">Set New Password</CardTitle>
-          {accountEmail ? (
-            <p className="text-sm text-slate-500">Account: {accountEmail}</p>
-          ) : null}
+          <div className="space-y-1">
+            <p className="aj-page-kicker">Account recovery</p>
+            <CardTitle className="text-2xl tracking-tight text-[#3d3428]">Set new password</CardTitle>
+            {accountEmail ? (
+              <p className="text-sm leading-relaxed text-[#6b5d4d]">Account: {accountEmail}</p>
+            ) : (
+              <p className="text-sm leading-relaxed text-[#6b5d4d]">
+                Choose a strong password to finish resetting your account.
+              </p>
+            )}
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-5 pb-6 sm:px-6">
           {booting ? (
-            <p className="flex items-center gap-2 text-sm text-slate-600">
+            <p className="flex items-center gap-2 text-sm text-[#6b5d4d]">
               <Loader2 className="h-4 w-4 animate-spin" />
               Verifying reset link…
             </p>
           ) : (
             <form onSubmit={onSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">New Password</label>
+              <div className="aj-field">
+                <label className="aj-field-label" htmlFor="new-password">
+                  New password
+                </label>
                 <Input
+                  id="new-password"
                   type="password"
                   placeholder="Minimum 8 characters"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   required
                   disabled={!sessionReady || isSaving}
+                  autoComplete="new-password"
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Confirm Password</label>
+              <div className="aj-field">
+                <label className="aj-field-label" htmlFor="confirm-password">
+                  Confirm password
+                </label>
                 <Input
+                  id="confirm-password"
                   type="password"
                   placeholder="Re-enter new password"
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   required
                   disabled={!sessionReady || isSaving}
+                  autoComplete="new-password"
                 />
               </div>
 
-              {error ? <p className="text-sm text-red-600">{error}</p> : null}
-              {notice ? <p className="text-sm text-emerald-700">{notice}</p> : null}
+              {error ? (
+                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+              ) : null}
+              {notice ? (
+                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                  {notice}
+                </p>
+              ) : null}
 
               <Button type="submit" className="w-full" disabled={!sessionReady || isSaving}>
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {isSaving ? "Saving..." : "Save New Password"}
+                {isSaving ? "Saving…" : "Save new password"}
               </Button>
             </form>
           )}

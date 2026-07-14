@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Circle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface StatCardProps {
   title: string;
@@ -26,27 +27,31 @@ export function StatCard({
 
   return (
     <Card
-      className={[
-        "rounded-[20px] border border-[#e8dcc8] py-0 shadow-[0_6px_18px_rgba(61,52,40,0.06)]",
-        variant === "accent" ? "bg-gradient-to-br from-[#faf3e3] to-[#fffdf8]" : "bg-white",
-      ].join(" ")}
+      className={cn(
+        "rounded-[1rem] border border-[#e8dcc8]/90 py-0 shadow-[0_1px_2px_rgba(61,52,40,0.04),0_8px_24px_rgba(61,52,40,0.05)]",
+        variant === "accent" ? "bg-[#faf3e3]/55" : "bg-white",
+      )}
     >
-      <CardHeader className="pb-0 pt-5">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#faf3e3] text-[#c9a227]">
-            <Icon className="h-4 w-4" />
+      <CardHeader className="pb-0 pt-4 sm:pt-5">
+        <div className="mb-2.5 flex items-center justify-between gap-2">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#faf3e3] text-[#c9a227] ring-1 ring-[#e8dcc8]/70">
+            <Icon className="h-4 w-4" aria-hidden />
           </span>
           {trend ? (
-            <Badge className="rounded-full border border-[#e8dcc8] bg-[#faf3e3] px-2.5 py-0.5 text-[#a68b2e] hover:bg-[#faf3e3]">
+            <Badge variant="secondary" className="rounded-full px-2.5">
               {trend}
             </Badge>
           ) : null}
         </div>
-        <CardTitle className="text-sm font-medium text-[#6b5d4d]">{title}</CardTitle>
+        <CardTitle className="text-sm font-medium tracking-normal text-[#6b5d4d]">
+          {title}
+        </CardTitle>
       </CardHeader>
-      <CardContent className="pb-5 pt-1">
-        <p className="text-3xl font-semibold text-[#3d3428]">{value}</p>
-        {subtext ? <p className="mt-2 text-xs text-[#6b5d4d]">{subtext}</p> : null}
+      <CardContent className="pb-4 pt-1 sm:pb-5">
+        <p className="text-2xl font-semibold tracking-tight text-[#3d3428] sm:text-3xl">
+          {value}
+        </p>
+        {subtext ? <p className="mt-1.5 text-xs leading-relaxed text-[#6b5d4d]">{subtext}</p> : null}
       </CardContent>
     </Card>
   );

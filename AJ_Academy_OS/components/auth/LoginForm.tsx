@@ -333,22 +333,32 @@ export function LoginForm({ initialError, resetSuccess = false, initialEmail = "
   };
 
   return (
-    <Card className="w-full max-w-md rounded-2xl border-[#e8dcc8] shadow-sm">
-      <CardHeader className="space-y-2">
-        <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-[#e8dcc8] bg-[#fffdf8]">
+    <Card className="aj-auth-card border-[#e8dcc8] py-1 shadow-none ring-0">
+      <CardHeader className="space-y-3 px-5 pt-6 sm:px-6">
+        <div className="relative h-14 w-14 overflow-hidden rounded-2xl border border-[#e8dcc8] bg-[#fffdf8] shadow-[0_1px_2px_rgba(61,52,40,0.04)]">
           <AppLogo size={56} className="h-full w-full" priority />
         </div>
-        <CardTitle className="text-2xl text-[#3d3428]">AJ Academy</CardTitle>
-        <p className="text-sm text-[#6b5d4d]">Sign in to your dashboard</p>
+        <div className="space-y-1">
+          <p className="aj-page-kicker">AJ Academy OS</p>
+          <CardTitle className="text-2xl tracking-tight text-[#3d3428] sm:text-[1.75rem]">
+            Welcome back
+          </CardTitle>
+          <p className="text-sm leading-relaxed text-[#6b5d4d]">
+            Sign in to continue to your workspace
+          </p>
+        </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-5 pb-6 sm:px-6">
         <form onSubmit={onSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-[#3d3428]">Select role</label>
+          <div className="aj-field">
+            <label className="aj-field-label" htmlFor="login-role">
+              Role
+            </label>
             <select
+              id="login-role"
               value={selectedRole}
               onChange={(event) => setSelectedRole(event.target.value as LoginRoleOption)}
-              className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2.5 text-sm outline-none focus-visible:border-[#c9a227] focus-visible:ring-2 focus-visible:ring-[#c9a227]/30"
+              className="h-11 w-full rounded-xl border border-[#e8dcc8] bg-white px-3.5 text-sm text-[#3d3428] outline-none transition focus-visible:border-[#c9a227] focus-visible:ring-3 focus-visible:ring-[#c9a227]/25 sm:h-10"
               required
             >
               <option value="admin">Admin</option>
@@ -358,39 +368,55 @@ export function LoginForm({ initialError, resetSuccess = false, initialEmail = "
               <option value="mentor">Mentor</option>
             </select>
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-[#3d3428]">Email</label>
+          <div className="aj-field">
+            <label className="aj-field-label" htmlFor="login-email">
+              Email
+            </label>
             <Input
+              id="login-email"
               type="email"
-              placeholder="admin123@gmail.com"
+              placeholder="you@ajacademy.co.in"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               required
               className="border-[#e8dcc8]"
+              autoComplete="email"
             />
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-[#3d3428]">Password</label>
+          <div className="aj-field">
+            <label className="aj-field-label" htmlFor="login-password">
+              Password
+            </label>
             <Input
+              id="login-password"
               type="password"
-              placeholder="********"
+              placeholder="••••••••"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               required
               className="border-[#e8dcc8]"
+              autoComplete="current-password"
             />
           </div>
 
-          {resetNotice ? <p className="text-sm text-emerald-700">{resetNotice}</p> : null}
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          {resetNotice ? (
+            <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {resetNotice}
+            </p>
+          ) : null}
+          {error ? (
+            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </p>
+          ) : null}
 
-          <Button type="submit" className="w-full bg-[#c9a227] text-white hover:bg-[#b8921f]" disabled={isLoading}>
+          <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            {isLoading ? "Signing in..." : "Sign in"}
+            {isLoading ? "Signing in…" : "Sign in"}
           </Button>
           <Link
             href="/forgot-password"
-            className="block text-center text-sm font-medium text-[#a68b2e] hover:underline"
+            className="block pt-1 text-center text-sm font-medium text-[#a68b2e] transition hover:text-[#b8921f] hover:underline"
           >
             Forgot password?
           </Link>

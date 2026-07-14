@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "../styles/premium-surface.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -72,7 +73,7 @@
   --chart-3: #a68b2e;
   --chart-4: #10b981;
   --chart-5: #6b5d4d;
-  --radius: 0.625rem;
+  --radius: 0.75rem;
   --sidebar: #c9a227;
   --sidebar-foreground: #ffffff;
   --sidebar-primary: #fffdf8;
@@ -302,10 +303,6 @@
   }
 
   .aj-page-label {
-    @apply text-xs font-semibold uppercase tracking-wider text-[#a68b2e];
-  }
-
-  .aj-card {
-    @apply rounded-2xl border border-[#e8dcc8] bg-white shadow-sm;
+    @apply text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-[#a68b2e];
   }
 }

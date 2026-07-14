@@ -35,7 +35,7 @@ export function DashboardLayout({
           type="button"
           variant="outline"
           size="icon"
-          className="touch-target shrink-0 rounded-full border-[#e8dcc8] bg-white text-[#a68b2e] lg:hidden"
+          className="touch-target shrink-0 rounded-xl border-[#e8dcc8] bg-white text-[#a68b2e] lg:hidden"
           aria-label="Open navigation menu"
         />
       }
@@ -49,8 +49,8 @@ export function DashboardLayout({
       <div className="min-h-[100dvh] min-w-0 overflow-x-hidden bg-[#fffdf8] text-[#3d3428]">
         <div
           className={[
-            "hidden lg:fixed lg:inset-y-0 lg:z-30 lg:block lg:p-4 lg:pr-0 lg:transition-all lg:duration-200 lg:ease-out",
-            collapsed ? "lg:w-[92px]" : "lg:w-[270px]",
+            "hidden lg:fixed lg:inset-y-0 lg:z-30 lg:block lg:p-3 lg:pr-0 lg:transition-all lg:duration-200 lg:ease-out xl:p-4 xl:pr-0",
+            collapsed ? "lg:w-[88px]" : "lg:w-[268px]",
           ].join(" ")}
         >
           <Sidebar
@@ -63,8 +63,8 @@ export function DashboardLayout({
 
         <div
           className={[
-            "min-w-0 lg:pr-4 lg:transition-all lg:duration-200 lg:ease-out",
-            collapsed ? "lg:pl-[92px]" : "lg:pl-[270px]",
+            "min-w-0 lg:pr-3 lg:transition-all lg:duration-200 lg:ease-out xl:pr-4",
+            collapsed ? "lg:pl-[88px]" : "lg:pl-[268px]",
           ].join(" ")}
         >
           <Topbar
@@ -74,8 +74,8 @@ export function DashboardLayout({
             mobileMenuTrigger={mobileMenuTrigger}
           />
 
-          <main className="mx-auto min-h-0 w-full max-w-[1920px] min-w-0 px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 lg:px-6 lg:pb-8">
-            {children}
+          <main className="mx-auto min-h-0 w-full max-w-[1920px] min-w-0 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pt-4 lg:px-6 lg:pb-8 lg:pt-5">
+            <div className="aj-page">{children}</div>
           </main>
         </div>
 

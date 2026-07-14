@@ -1,0 +1,218 @@
+/**
+ * AJ Academy premium surface system (additive).
+ * Benchmark: Linear / Stripe Dashboard density with AJ gold brand.
+ * Improves type rhythm, spacing, and control chrome without removing pages.
+ */
+
+:root {
+  --aj-space-1: 0.25rem;
+  --aj-space-2: 0.5rem;
+  --aj-space-3: 0.75rem;
+  --aj-space-4: 1rem;
+  --aj-space-5: 1.25rem;
+  --aj-space-6: 1.5rem;
+  --aj-space-8: 2rem;
+  --aj-radius-control: 0.75rem;
+  --aj-radius-surface: 1rem;
+  --aj-radius-panel: 1.25rem;
+  --aj-shadow-soft: 0 1px 2px rgb(61 52 40 / 0.04), 0 8px 24px rgb(61 52 40 / 0.05);
+  --aj-shadow-lift: 0 2px 4px rgb(61 52 40 / 0.04), 0 12px 32px rgb(61 52 40 / 0.08);
+  --aj-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --aj-text-display: 1.75rem;
+  --aj-text-title: 1.25rem;
+  --aj-text-body: 0.875rem;
+  --aj-text-meta: 0.75rem;
+  --aj-leading-tight: 1.25;
+  --aj-leading-body: 1.5;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --aj-text-display: 1.875rem;
+    --aj-text-title: 1.375rem;
+  }
+}
+
+@layer base {
+  html {
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  p,
+  li,
+  label {
+    text-wrap: pretty;
+  }
+}
+
+@layer utilities {
+  /* Page composition — use on portal page roots for consistent laptop/mobile rhythm */
+  .aj-page {
+    @apply mx-auto flex w-full min-w-0 max-w-[1920px] flex-col;
+    gap: var(--aj-space-5);
+  }
+
+  @media (min-width: 1024px) {
+    .aj-page {
+      gap: var(--aj-space-6);
+    }
+  }
+
+  .aj-page-header {
+    @apply flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between;
+  }
+
+  .aj-page-header__copy {
+    @apply min-w-0 flex-1 space-y-1;
+  }
+
+  .aj-page-kicker {
+    @apply text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-[#a68b2e];
+  }
+
+  .aj-page-title {
+    @apply text-[length:var(--aj-text-display)] font-semibold leading-[var(--aj-leading-tight)] tracking-tight text-[#3d3428];
+  }
+
+  .aj-page-subtitle {
+    @apply max-w-2xl text-sm leading-relaxed text-[#6b5d4d] sm:text-[0.9375rem];
+  }
+
+  .aj-page-actions {
+    @apply flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end;
+  }
+
+  .aj-section {
+    @apply flex min-w-0 flex-col gap-3 sm:gap-4;
+  }
+
+  .aj-section-title {
+    @apply text-base font-semibold tracking-tight text-[#3d3428] sm:text-lg;
+  }
+
+  .aj-meta {
+    @apply text-[length:var(--aj-text-meta)] leading-5 text-[#6b5d4d];
+  }
+
+  /* Surfaces */
+  .aj-card {
+    border-radius: var(--aj-radius-surface);
+    border: 1px solid rgb(232 220 200 / 0.95);
+    background: #ffffff;
+    box-shadow: var(--aj-shadow-soft);
+  }
+
+  .aj-card-quiet {
+    border-radius: var(--aj-radius-surface);
+    border: 1px solid rgb(232 220 200 / 0.7);
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .aj-panel {
+    border-radius: var(--aj-radius-panel);
+    border: 1px solid #e8dcc8;
+    background: #fffdf8;
+    box-shadow: var(--aj-shadow-soft);
+  }
+
+  .aj-workbench {
+    @apply overflow-hidden;
+    border-radius: var(--aj-radius-panel);
+    border: 1px solid #e8dcc8;
+    background: #ffffff;
+    box-shadow: var(--aj-shadow-soft);
+  }
+
+  /* Controls — premium default for ad-hoc buttons/links */
+  .aj-btn-primary {
+    @apply inline-flex h-11 min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-white transition sm:h-10 sm:min-h-10;
+    background: #c9a227;
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.2) inset;
+  }
+
+  .aj-btn-primary:hover {
+    background: #b8921f;
+  }
+
+  .aj-btn-primary:active {
+    transform: translateY(0.5px);
+  }
+
+  .aj-btn-secondary {
+    @apply inline-flex h-11 min-h-11 items-center justify-center gap-2 rounded-xl border border-[#e8dcc8] bg-white px-4 text-sm font-semibold text-[#3d3428] transition hover:bg-[#faf3e3] sm:h-10 sm:min-h-10;
+  }
+
+  .aj-field {
+    @apply flex min-w-0 flex-col gap-1.5;
+  }
+
+  .aj-field-label {
+    @apply text-sm font-medium text-[#3d3428];
+  }
+
+  .aj-field-hint {
+    @apply text-xs text-[#6b5d4d];
+  }
+
+  /* Tab chip strip used across CRM — calmer than raw blue strip */
+  .aj-tab-strip {
+    @apply flex gap-2 overflow-x-auto overscroll-x-contain pb-1 [-ms-overflow-style:none] [scrollbar-width:none];
+  }
+
+  .aj-tab-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .aj-tab {
+    @apply shrink-0 rounded-full border border-transparent px-3.5 py-2 text-sm font-medium text-[#6b5d4d] transition;
+  }
+
+  .aj-tab:hover {
+    @apply bg-[#faf3e3] text-[#3d3428];
+  }
+
+  .aj-tab[data-active="true"],
+  .aj-tab.is-active {
+    @apply border-[#e8dcc8] bg-[#c9a227] text-white shadow-sm;
+  }
+
+  /* Auth pages shared canvas */
+  .aj-auth-canvas {
+    @apply relative flex min-h-[100dvh] items-center justify-center overflow-hidden px-4;
+    padding-top: max(1.25rem, env(safe-area-inset-top));
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgb(201 162 39 / 0.14), transparent 55%),
+      linear-gradient(180deg, #fffdf8 0%, #faf6ee 100%);
+  }
+
+  .aj-auth-card {
+    @apply w-full max-w-md border border-[#e8dcc8] bg-white/95 backdrop-blur-sm;
+    border-radius: var(--aj-radius-panel);
+    box-shadow: var(--aj-shadow-lift);
+  }
+
+  /* Stacked mobile action rails */
+  .aj-action-rail {
+    @apply flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center;
+  }
+
+  .aj-action-rail > * {
+    @apply w-full sm:w-auto;
+  }
+
+  /* Align filter rows on mobile */
+  .aj-filter-bar {
+    @apply grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 lg:items-end;
+  }
+}
