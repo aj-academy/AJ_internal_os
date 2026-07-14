@@ -24,6 +24,16 @@ import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
 import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
+import { MobileRecordCard } from "@/components/ui/MobileRecordCard";
+import {
+  ResponsiveDataView,
+  TABLE_CHECK_TD,
+  TABLE_CHECK_TH,
+  TABLE_DATA_TD,
+  TABLE_DATA_TH,
+  TABLE_SNO_TD,
+  TABLE_SNO_TH,
+} from "@/components/ui/ResponsiveDataView";
 import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { CollegeVisitFormPanel } from "@/components/college-visits/CollegeVisitFormPanel";
@@ -960,9 +970,9 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     }
   };
 
-  const thClass =
-    "min-w-[10.5rem] whitespace-nowrap px-6 py-3.5 text-center align-middle text-[11px] font-semibold uppercase tracking-wide text-[#64748b]";
-  const tdClass = "min-w-[10.5rem] whitespace-nowrap px-6 py-3.5 text-center align-middle text-xs text-[#334155]";
+  const thClass = TABLE_DATA_TH;
+  const tdClass = TABLE_DATA_TD;
+  const dash = (v: unknown) => (v == null || v === "" ? "—" : String(v));
 return (
     <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -1073,9 +1083,9 @@ return (
       {activeTab === "all-colleges" ? (
         <div className="space-y-3">
           {!pickForTask ? (
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Button type="button" variant="outline" className="h-9 rounded-full border-[#e8dcc8]" onClick={handleDownloadTemplate}>
-                <FileText className="mr-1 h-4 w-4" />
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
+              <Button type="button" variant="outline" className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm" onClick={handleDownloadTemplate}>
+                <FileText className="mr-1 h-4 w-4 shrink-0" />
                 Import template
               </Button>
               <input
@@ -1092,22 +1102,22 @@ return (
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-9 rounded-full border-[#e8dcc8]"
+                  className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm"
                   disabled={importing || schemaMissing}
                   onClick={() => importFileRef.current?.click()}
                 >
-                  <Upload className="mr-1 h-4 w-4" />
+                  <Upload className="mr-1 h-4 w-4 shrink-0" />
                   {importing ? "Importing..." : "Import"}
                 </Button>
               ) : null}
               <Button
                 type="button"
                 variant="outline"
-                className="h-9 rounded-full border-[#e8dcc8]"
+                className="col-span-2 h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:col-span-1 sm:text-sm"
                 disabled={!rowsForExport.length}
                 onClick={handleExport}
               >
-                <Download className="mr-1 h-4 w-4" />
+                <Download className="mr-1 h-4 w-4 shrink-0" />
                 {visitBulk.selectedCount > 0
                   ? `Export selected (${rowsForExport.length})`
                   : filtersActive
@@ -1164,21 +1174,35 @@ return (
             </BulkSelectionBar>
           ) : null}
 
-          <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3]">
+          <ResponsiveDataView
+            stickyToolbar
+            selectAll={
+              !pickForTask
+                ? {
+                    checked: visitBulk.allSelected,
+                    indeterminate: visitBulk.someSelected,
+                    onChange: visitBulk.toggleAll,
+                    label: "Select all",
+                    countLabel: `${visitBulk.selectedCount} selected`,
+                  }
+                : undefined
+            }
+            desktop={
+          <div className="responsive-table-wrap rounded-2xl border border-[#dbe6f3]">
             <table
-              className="table-freeze-cols min-w-[3800px] w-full"
+              className="table-freeze-cols w-full min-w-[3200px]"
               style={
                 {
                   ["--sticky-col-2" as string]: "14rem",
-                  ["--sticky-check-w" as string]: "3rem",
+                  ["--sticky-check-w" as string]: "2.75rem",
                 } as CSSProperties
               }
             >
               <thead className="cv-head bg-[#f8fbff]">
                 <tr>
-                  {pickForTask ? <TableHeaderCell label="Pick" className={`${thClass} sticky-col sticky-col-1 sticky-check-col`} /> : null}
+                  {pickForTask ? <TableHeaderCell label="Pick" className={TABLE_CHECK_TH} /> : null}
                   {!pickForTask ? (
-                    <th className={`${thClass} sticky-col sticky-col-1 sticky-check-col`}>
+                    <th className={TABLE_CHECK_TH}>
                       <div className="flex justify-center">
                         <TableBulkCheckbox
                           checked={visitBulk.allSelected}
@@ -1189,7 +1213,7 @@ return (
                       </div>
                     </th>
                   ) : null}
-                  <TableHeaderCell label="S.No" className={`${thClass} sticky-col sticky-col-after-check min-w-[4.5rem]`} />
+                  <TableHeaderCell label="S.No" className={TABLE_SNO_TH} />
                   <TableHeaderCell label="College Name" className={`${thClass} min-w-[14rem]`} />
                   <TableHeaderCell label="Location" className={thClass} />
                   <TableHeaderCell label="Contact Number" className={`${thClass} min-w-[12rem]`} />
@@ -1249,7 +1273,7 @@ return (
                     return (
                       <tr key={row.id} className="border-t border-[#eef2f7] hover:bg-[#fafcff]">
                         {pickForTask ? (
-                          <td className={`${tdClass} sticky-col sticky-col-1 sticky-check-col`}>
+                          <td className={TABLE_CHECK_TD}>
                             <div className="flex justify-center">
                               <TableBulkCheckbox
                                 checked={pickedCollegeIds.has(row.id)}
@@ -1260,7 +1284,7 @@ return (
                           </td>
                         ) : null}
                         {!pickForTask ? (
-                          <td className={`${tdClass} sticky-col sticky-col-1 sticky-check-col`}>
+                          <td className={TABLE_CHECK_TD}>
                             <div className="flex justify-center">
                               <TableBulkCheckbox
                                 checked={visitBulk.isSelected(row.id)}
@@ -1270,7 +1294,7 @@ return (
                             </div>
                           </td>
                         ) : null}
-                        <td className={`${tdClass} sticky-col sticky-col-after-check min-w-[4.5rem]`}>{(page - 1) * pageSize + idx + 1}</td>
+                        <td className={TABLE_SNO_TD}>{(page - 1) * pageSize + idx + 1}</td>
                         <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate font-medium`} title={row.college_name}>
                           {row.college_name}
                         </td>
@@ -1363,6 +1387,87 @@ return (
               </tbody>
             </table>
           </div>
+            }
+            mobile={
+              loading ? (
+                <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">Loading...</p>
+              ) : pageRows.length === 0 ? (
+                <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">No college visits found.</p>
+              ) : (
+                pageRows.map((row, idx) => {
+                  const days = daysSince(row.last_follow_up_date);
+                  const due = isFollowUpDue(row);
+                  const person = row.connected_person_name || row.contacts?.find((c) => c.is_primary)?.name || "—";
+                  const personRole = row.connected_person_role || row.contacts?.find((c) => c.is_primary)?.role || "";
+                  return (
+                    <MobileRecordCard
+                      key={row.id}
+                      title={row.college_name}
+                      subtitle={`#${(page - 1) * pageSize + idx + 1}${row.location ? ` · ${row.location}` : ""}`}
+                      showSelect={!pickForTask || pickForTask}
+                      selected={pickForTask ? pickedCollegeIds.has(row.id) : visitBulk.isSelected(row.id)}
+                      onToggleSelect={() => (pickForTask ? togglePickCollege(row.id) : visitBulk.toggleOne(row.id))}
+                      selectAriaLabel={`${pickForTask ? "Pick" : "Select"} ${row.college_name}`}
+                      previewFields={[
+                        { label: "Location", value: dash(row.location) },
+                        { label: "Contact person", value: person },
+                        { label: "Follow-up stage", value: dash(row.follow_up_stage) },
+                        { label: "Next follow-up", value: formatDisplayDate(row.next_follow_up_date) || "—" },
+                        { label: "Final status", value: dash(row.final_status) },
+                        { label: "Priority", value: dash(row.priority) },
+                        { label: "Lead score", value: dash(row.lead_score) },
+                        { label: "Proposal status", value: dash(row.proposal_status) },
+                      ]}
+                      detailFields={[
+                        { label: "College Name", value: row.college_name },
+                        { label: "Location", value: dash(row.location) },
+                        { label: "Contact Number", value: dash(row.contact_number) },
+                        { label: "Email", value: dash(row.email) },
+                        { label: "Contact Person", value: person },
+                        { label: "Role", value: dash(personRole || row.connected_person_role) },
+                        { label: "Visit Status", value: dash(row.visit_status) },
+                        { label: "Visit Date", value: formatDisplayDate(row.visit_date) || "—" },
+                        { label: "MOU Signed Status", value: dash(row.mou_signed_status) },
+                        { label: "Follow-up Stage", value: dash(row.follow_up_stage) },
+                        { label: "Last Follow-up Date", value: formatDisplayDate(row.last_follow_up_date) || "—" },
+                        { label: "Next Follow-up Date", value: formatDisplayDate(row.next_follow_up_date) || "—" },
+                        { label: "Priority", value: dash(row.priority) },
+                        { label: "Owner", value: row.assigned_to ? ownerNameMap[row.assigned_to] || "—" : "—" },
+                        { label: "Description", value: dash(row.description), clamp: true },
+                        { label: "Last Outcome / Remarks", value: dash(row.last_outcome_remarks), clamp: true },
+                        { label: "Days Since Last Follow-up", value: days != null ? String(days) : "—" },
+                        { label: "Follow-up Due?", value: due ? "Yes" : "No" },
+                        { label: "Lead Score", value: dash(row.lead_score) },
+                        { label: "Final Status", value: dash(row.final_status) },
+                        { label: "Source / Reference", value: dash(row.source_reference) },
+                        { label: "Proposal Status", value: dash(row.proposal_status) },
+                        { label: "Proposal Amount", value: row.proposal_amount != null ? `₹${Number(row.proposal_amount).toLocaleString()}` : "—" },
+                        { label: "Proposal Sent Date", value: formatDisplayDate(row.proposal_sent_date) || "—" },
+                      ]}
+                      primaryActions={
+                        pickForTask
+                          ? []
+                          : [
+                              { label: "View", onClick: () => setViewVisit(row) },
+                              ...(isAdmin ? [{ label: "Edit", onClick: () => openEdit(row) }] : []),
+                            ]
+                      }
+                      moreActions={
+                        pickForTask
+                          ? []
+                          : [
+                              { label: "Activity", onClick: () => setViewVisit(row) },
+                              { label: "Call", onClick: () => requestCollegePhone(row) },
+                              { label: "WhatsApp", onClick: () => requestCollegeWhatsApp(row) },
+                              { label: "Email", onClick: () => requestCollegeEmail(row) },
+                            ]
+                      }
+                    />
+                  );
+                })
+              )
+            }
+          />
 
           <TablePagination
             page={page}

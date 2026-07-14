@@ -4,6 +4,8 @@ import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { TablePagination } from "@/components/ui/TablePagination";
+import { MobileRecordCard } from "@/components/ui/MobileRecordCard";
+import { ResponsiveDataView } from "@/components/ui/ResponsiveDataView";
 import { formatDisplayDate } from "@/lib/datetime";
 import { usePagination } from "@/lib/usePagination";
 import {
@@ -140,59 +142,97 @@ export function CollegeFollowUpsPanel({
         <LeadSummaryCard title="Upcoming" value={upcoming.length} loading={loading} />
         <LeadSummaryCard title="With next follow-up" value={withFollow.length} loading={loading} />
       </div>
-      <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3]">
-        <table className="min-w-[960px] w-full text-sm">
-          <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
-            <tr>
-              <th className="px-4 py-3 text-left">College</th>
-              <th className="px-4 py-3 text-left">Next follow-up</th>
-              <th className="px-4 py-3 text-left">Stage</th>
-              <th className="px-4 py-3 text-left">Visit status</th>
-              <th className="px-4 py-3 text-left">Owner</th>
-              <th className="px-4 py-3 text-left">Due?</th>
-              <th className="px-4 py-3 text-left">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-[#64748b]">
-                  No follow-ups due. Add next dates from All Colleges {"->"} Edit.
-                </td>
-              </tr>
-            ) : (
-              sorted.map((row) => {
-                const due = isFollowUpDue(row);
-                return (
-                  <tr key={row.id} className="border-t border-[#eef2f7]">
-                    <td className="px-4 py-3 font-medium text-[#0f172a]">{row.college_name}</td>
-                    <td className="px-4 py-3">{formatDisplayDate(row.next_follow_up_date)}</td>
-                    <td className="px-4 py-3">{row.follow_up_stage || "-"}</td>
-                    <td className="px-4 py-3">{row.visit_status}</td>
-                    <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={
-                          due
-                            ? "rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700"
-                            : "rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600"
-                        }
-                      >
-                        {due ? "Yes" : "No"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => onOpen(row)}>
-                        Open
-                      </Button>
+      <ResponsiveDataView
+        desktop={
+          <div className="responsive-table-wrap rounded-2xl border border-[#dbe6f3]">
+            <table className="min-w-[960px] w-full text-sm">
+              <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
+                <tr>
+                  <th className="px-4 py-3 text-left">College</th>
+                  <th className="px-4 py-3 text-left">Next follow-up</th>
+                  <th className="px-4 py-3 text-left">Stage</th>
+                  <th className="px-4 py-3 text-left">Visit status</th>
+                  <th className="px-4 py-3 text-left">Owner</th>
+                  <th className="px-4 py-3 text-left">Due?</th>
+                  <th className="px-4 py-3 text-left">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-10 text-center text-[#64748b]">
+                      No follow-ups due. Add next dates from All Colleges {"->"} Edit.
                     </td>
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                ) : (
+                  sorted.map((row) => {
+                    const due = isFollowUpDue(row);
+                    return (
+                      <tr key={row.id} className="border-t border-[#eef2f7]">
+                        <td className="px-4 py-3 font-medium text-[#0f172a]">{row.college_name}</td>
+                        <td className="px-4 py-3">{formatDisplayDate(row.next_follow_up_date)}</td>
+                        <td className="px-4 py-3">{row.follow_up_stage || "-"}</td>
+                        <td className="px-4 py-3">{row.visit_status}</td>
+                        <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={
+                              due
+                                ? "rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700"
+                                : "rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600"
+                            }
+                          >
+                            {due ? "Yes" : "No"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => onOpen(row)}>
+                            Open
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        }
+        mobile={
+          sorted.length === 0 ? (
+            <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+              No follow-ups due. Add next dates from All Colleges → Edit.
+            </p>
+          ) : (
+            sorted.map((row) => {
+              const due = isFollowUpDue(row);
+              const owner = row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-";
+              return (
+                <MobileRecordCard
+                  key={row.id}
+                  title={row.college_name}
+                  subtitle={formatDisplayDate(row.next_follow_up_date) || undefined}
+                  previewFields={[
+                    { label: "Stage", value: row.follow_up_stage || "-" },
+                    { label: "Visit status", value: row.visit_status },
+                    { label: "Owner", value: owner },
+                    { label: "Due?", value: due ? "Yes" : "No" },
+                  ]}
+                  detailFields={[
+                    { label: "College", value: row.college_name },
+                    { label: "Next follow-up", value: formatDisplayDate(row.next_follow_up_date) || "-" },
+                    { label: "Stage", value: row.follow_up_stage || "-" },
+                    { label: "Visit status", value: row.visit_status },
+                    { label: "Owner", value: owner },
+                    { label: "Due?", value: due ? "Yes" : "No" },
+                  ]}
+                  primaryActions={[{ label: "Open", onClick: () => onOpen(row) }]}
+                />
+              );
+            })
+          )
+        }
+      />
     </div>
   );
 }
@@ -261,46 +301,83 @@ export function CollegeConvertedTable({
 }) {
   const rows = visits.filter((v) => v.final_status === "Converted" || v.mou_signed_status === "Signed");
   return (
-    <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3]">
-      <table className="min-w-[900px] w-full text-sm">
-        <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
-          <tr>
-            <th className="px-4 py-3 text-left">College</th>
-            <th className="px-4 py-3 text-left">Location</th>
-            <th className="px-4 py-3 text-left">MOU</th>
-            <th className="px-4 py-3 text-left">Final status</th>
-            <th className="px-4 py-3 text-left">Owner</th>
-            <th className="px-4 py-3 text-left">Visit date</th>
-            <th className="px-4 py-3 text-left">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={7} className="px-4 py-10 text-center text-[#64748b]">
-                No converted / MOU-signed colleges yet.
-              </td>
-            </tr>
-          ) : (
-            rows.map((row) => (
-              <tr key={row.id} className="border-t border-[#eef2f7]">
-                <td className="px-4 py-3 font-medium">{row.college_name}</td>
-                <td className="px-4 py-3">{row.location || "-"}</td>
-                <td className="px-4 py-3">{row.mou_signed_status}</td>
-                <td className="px-4 py-3">{row.final_status}</td>
-                <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
-                <td className="px-4 py-3">{formatDisplayDate(row.visit_date)}</td>
-                <td className="px-4 py-3">
-                  <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => onOpen(row)}>
-                    Open
-                  </Button>
-                </td>
+    <ResponsiveDataView
+      desktop={
+        <div className="responsive-table-wrap rounded-2xl border border-[#dbe6f3]">
+          <table className="min-w-[900px] w-full text-sm">
+            <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
+              <tr>
+                <th className="px-4 py-3 text-left">College</th>
+                <th className="px-4 py-3 text-left">Location</th>
+                <th className="px-4 py-3 text-left">MOU</th>
+                <th className="px-4 py-3 text-left">Final status</th>
+                <th className="px-4 py-3 text-left">Owner</th>
+                <th className="px-4 py-3 text-left">Visit date</th>
+                <th className="px-4 py-3 text-left">Actions</th>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-[#64748b]">
+                    No converted / MOU-signed colleges yet.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row) => (
+                  <tr key={row.id} className="border-t border-[#eef2f7]">
+                    <td className="px-4 py-3 font-medium">{row.college_name}</td>
+                    <td className="px-4 py-3">{row.location || "-"}</td>
+                    <td className="px-4 py-3">{row.mou_signed_status}</td>
+                    <td className="px-4 py-3">{row.final_status}</td>
+                    <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
+                    <td className="px-4 py-3">{formatDisplayDate(row.visit_date)}</td>
+                    <td className="px-4 py-3">
+                      <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => onOpen(row)}>
+                        Open
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      }
+      mobile={
+        rows.length === 0 ? (
+          <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+            No converted / MOU-signed colleges yet.
+          </p>
+        ) : (
+          rows.map((row) => {
+            const owner = row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-";
+            return (
+              <MobileRecordCard
+                key={row.id}
+                title={row.college_name}
+                subtitle={row.location || undefined}
+                previewFields={[
+                  { label: "MOU", value: row.mou_signed_status },
+                  { label: "Final status", value: row.final_status },
+                  { label: "Owner", value: owner },
+                  { label: "Visit date", value: formatDisplayDate(row.visit_date) || "-" },
+                ]}
+                detailFields={[
+                  { label: "College", value: row.college_name },
+                  { label: "Location", value: row.location || "-" },
+                  { label: "MOU", value: row.mou_signed_status },
+                  { label: "Final status", value: row.final_status },
+                  { label: "Owner", value: owner },
+                  { label: "Visit date", value: formatDisplayDate(row.visit_date) || "-" },
+                ]}
+                primaryActions={[{ label: "Open", onClick: () => onOpen(row) }]}
+              />
+            );
+          })
+        )
+      }
+    />
   );
 }
 
@@ -331,54 +408,92 @@ export function CollegeMouTrackerTable({
         Track MOU progress on each college. Edits save to the college record and show in Activity Timeline.
       </p>
       <div className="overflow-hidden rounded-2xl border border-[#dbe6f3]">
-        <div className="overflow-x-auto">
-          <table className="min-w-[1000px] w-full text-sm">
-            <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
-              <tr>
-                <th className="px-4 py-3 text-left">College</th>
-                <th className="px-4 py-3 text-left">MOU status</th>
-                <th className="px-4 py-3 text-left">Follow-up stage</th>
-                <th className="px-4 py-3 text-left">Final status</th>
-                <th className="px-4 py-3 text-left">Priority</th>
-                <th className="px-4 py-3 text-left">Owner</th>
-                <th className="px-4 py-3 text-left">Last outcome</th>
-                <th className="px-4 py-3 text-left">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {totalItems === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-[#64748b]">
-                    No colleges to track.
-                  </td>
-                </tr>
-              ) : (
-                pageRows.map((row) => (
-                  <tr key={row.id} className="border-t border-[#eef2f7]">
-                    <td className="px-4 py-3 font-medium">{row.college_name}</td>
-                    <td className="px-4 py-3">{row.mou_signed_status}</td>
-                    <td className="px-4 py-3">{row.follow_up_stage || "-"}</td>
-                    <td className="px-4 py-3">{row.final_status}</td>
-                    <td className="px-4 py-3">{row.priority}</td>
-                    <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
-                    <td className="max-w-[14rem] truncate px-4 py-3" title={row.last_outcome_remarks ?? ""}>
-                      {row.last_outcome_remarks || "-"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {canEdit ? (
-                        <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => onEdit(row)}>
-                          Edit MOU
-                        </Button>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
+        <ResponsiveDataView
+          desktop={
+            <div className="responsive-table-wrap">
+              <table className="min-w-[1000px] w-full text-sm">
+                <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
+                  <tr>
+                    <th className="px-4 py-3 text-left">College</th>
+                    <th className="px-4 py-3 text-left">MOU status</th>
+                    <th className="px-4 py-3 text-left">Follow-up stage</th>
+                    <th className="px-4 py-3 text-left">Final status</th>
+                    <th className="px-4 py-3 text-left">Priority</th>
+                    <th className="px-4 py-3 text-left">Owner</th>
+                    <th className="px-4 py-3 text-left">Last outcome</th>
+                    <th className="px-4 py-3 text-left">Actions</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {totalItems === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-10 text-center text-[#64748b]">
+                        No colleges to track.
+                      </td>
+                    </tr>
+                  ) : (
+                    pageRows.map((row) => (
+                      <tr key={row.id} className="border-t border-[#eef2f7]">
+                        <td className="px-4 py-3 font-medium">{row.college_name}</td>
+                        <td className="px-4 py-3">{row.mou_signed_status}</td>
+                        <td className="px-4 py-3">{row.follow_up_stage || "-"}</td>
+                        <td className="px-4 py-3">{row.final_status}</td>
+                        <td className="px-4 py-3">{row.priority}</td>
+                        <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
+                        <td className="max-w-[14rem] truncate px-4 py-3" title={row.last_outcome_remarks ?? ""}>
+                          {row.last_outcome_remarks || "-"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {canEdit ? (
+                            <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => onEdit(row)}>
+                              Edit MOU
+                            </Button>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          }
+          mobile={
+            totalItems === 0 ? (
+              <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+                No colleges to track.
+              </p>
+            ) : (
+              pageRows.map((row) => {
+                const owner = row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-";
+                return (
+                  <MobileRecordCard
+                    key={row.id}
+                    title={row.college_name}
+                    subtitle={row.mou_signed_status}
+                    previewFields={[
+                      { label: "Follow-up stage", value: row.follow_up_stage || "-" },
+                      { label: "Final status", value: row.final_status },
+                      { label: "Priority", value: row.priority },
+                      { label: "Owner", value: owner },
+                    ]}
+                    detailFields={[
+                      { label: "College", value: row.college_name },
+                      { label: "MOU status", value: row.mou_signed_status },
+                      { label: "Follow-up stage", value: row.follow_up_stage || "-" },
+                      { label: "Final status", value: row.final_status },
+                      { label: "Priority", value: row.priority },
+                      { label: "Owner", value: owner },
+                      { label: "Last outcome", value: row.last_outcome_remarks || "-", clamp: true },
+                    ]}
+                    primaryActions={canEdit ? [{ label: "Edit MOU", onClick: () => onEdit(row) }] : []}
+                  />
+                );
+              })
+            )
+          }
+        />
         <TablePagination
           page={page}
           totalPages={totalPages}
@@ -428,59 +543,104 @@ export function CollegeProposalTrackerTable({
         Upload a proposal file (PDF/DOC/DOCX) per college, or view any legacy link. Updates appear in Activity Timeline.
       </p>
       <div className="overflow-hidden rounded-2xl border border-[#dbe6f3]">
-        <div className="overflow-x-auto">
-          <table className="min-w-[1000px] w-full text-sm">
-            <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
-              <tr>
-                <th className="px-4 py-3 text-left">College</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-left">Amount</th>
-                <th className="px-4 py-3 text-left">Sent date</th>
-                <th className="px-4 py-3 text-left">Proposal</th>
-                <th className="px-4 py-3 text-left">Owner</th>
-                <th className="px-4 py-3 text-left">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {totalItems === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-[#64748b]">
-                    No colleges to track.
-                  </td>
-                </tr>
-              ) : (
-                pageRows.map((row) => (
-                  <tr key={row.id} className="border-t border-[#eef2f7]">
-                    <td className="px-4 py-3 font-medium">{row.college_name}</td>
-                    <td className="px-4 py-3">{row.proposal_status || "Not Sent"}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {row.proposal_amount != null ? `Rs ${Number(row.proposal_amount).toLocaleString()}` : "-"}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">{row.proposal_sent_date?.slice(0, 10) || "-"}</td>
-                    <td className="px-4 py-3">
-                      <CollegeProposalFileCell row={row} />
-                    </td>
-                    <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
-                    <td className="px-4 py-3">
-                      {canEdit ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 rounded-full px-2 text-[11px]"
-                          onClick={() => onEdit(row)}
-                        >
-                          Update proposal
-                        </Button>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
+        <ResponsiveDataView
+          desktop={
+            <div className="responsive-table-wrap">
+              <table className="min-w-[1000px] w-full text-sm">
+                <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
+                  <tr>
+                    <th className="px-4 py-3 text-left">College</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Amount</th>
+                    <th className="px-4 py-3 text-left">Sent date</th>
+                    <th className="px-4 py-3 text-left">Proposal</th>
+                    <th className="px-4 py-3 text-left">Owner</th>
+                    <th className="px-4 py-3 text-left">Actions</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {totalItems === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-10 text-center text-[#64748b]">
+                        No colleges to track.
+                      </td>
+                    </tr>
+                  ) : (
+                    pageRows.map((row) => (
+                      <tr key={row.id} className="border-t border-[#eef2f7]">
+                        <td className="px-4 py-3 font-medium">{row.college_name}</td>
+                        <td className="px-4 py-3">{row.proposal_status || "Not Sent"}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {row.proposal_amount != null ? `Rs ${Number(row.proposal_amount).toLocaleString()}` : "-"}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">{row.proposal_sent_date?.slice(0, 10) || "-"}</td>
+                        <td className="px-4 py-3">
+                          <CollegeProposalFileCell row={row} />
+                        </td>
+                        <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
+                        <td className="px-4 py-3">
+                          {canEdit ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 rounded-full px-2 text-[11px]"
+                              onClick={() => onEdit(row)}
+                            >
+                              Update proposal
+                            </Button>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          }
+          mobile={
+            totalItems === 0 ? (
+              <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+                No colleges to track.
+              </p>
+            ) : (
+              pageRows.map((row) => {
+                const owner = row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-";
+                const amount =
+                  row.proposal_amount != null ? `Rs ${Number(row.proposal_amount).toLocaleString()}` : "-";
+                return (
+                  <MobileRecordCard
+                    key={row.id}
+                    title={row.college_name}
+                    subtitle={row.proposal_status || "Not Sent"}
+                    previewFields={[
+                      { label: "Amount", value: amount },
+                      { label: "Sent date", value: row.proposal_sent_date?.slice(0, 10) || "-" },
+                      { label: "Owner", value: owner },
+                      {
+                        label: "Proposal",
+                        value: row.proposal_file_path?.trim()
+                          ? row.proposal_pdf_name || "File attached"
+                          : row.proposal_link?.trim()
+                            ? "Link available"
+                            : "-",
+                      },
+                    ]}
+                    detailFields={[
+                      { label: "College", value: row.college_name },
+                      { label: "Status", value: row.proposal_status || "Not Sent" },
+                      { label: "Amount", value: amount },
+                      { label: "Sent date", value: row.proposal_sent_date?.slice(0, 10) || "-" },
+                      { label: "Owner", value: owner },
+                    ]}
+                    primaryActions={canEdit ? [{ label: "Update", onClick: () => onEdit(row) }] : []}
+                  />
+                );
+              })
+            )
+          }
+        />
         <TablePagination
           page={page}
           totalPages={totalPages}

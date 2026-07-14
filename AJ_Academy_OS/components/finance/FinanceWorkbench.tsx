@@ -9,6 +9,12 @@ import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
 import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
+import { MobileRecordCard } from "@/components/ui/MobileRecordCard";
+import {
+  ResponsiveDataView,
+  TABLE_CHECK_TH,
+  TABLE_CHECK_TD,
+} from "@/components/ui/ResponsiveDataView";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Input } from "@/components/ui/input";
@@ -733,6 +739,37 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
               </td>
             </>
           )}
+          renderMobile={(t, select) => {
+            const client = t.client_id ? displayClientName(clientMap[t.client_id] || {}) : "—";
+            const project = t.project_id ? projectMap[t.project_id]?.project_name ?? "—" : "—";
+            return (
+              <MobileRecordCard
+                title={t.transaction_code ?? "Transaction"}
+                subtitle={formatInr(Number(t.amount))}
+                showSelect={Boolean(select)}
+                selected={select?.selected}
+                onToggleSelect={select?.onToggle}
+                selectAriaLabel={`Select ${t.transaction_code}`}
+                previewFields={[
+                  { label: "Client", value: client },
+                  { label: "Project", value: project },
+                  { label: "Category", value: t.category },
+                  { label: "Status", value: t.payment_status },
+                ]}
+                detailFields={[
+                  { label: "Code", value: t.transaction_code },
+                  { label: "Client", value: client },
+                  { label: "Project", value: project },
+                  { label: "Amount", value: formatInr(Number(t.amount)) },
+                  { label: "Category", value: t.category },
+                  { label: "Method", value: t.payment_method },
+                  { label: "Date", value: formatDisplayDate(t.transaction_date) || "—" },
+                  { label: "Status", value: t.payment_status },
+                ]}
+                moreActions={[{ label: "Delete", destructive: true, onClick: () => void deleteTransaction(t.id) }]}
+              />
+            );
+          }}
         />
       ) : null}
 
@@ -760,6 +797,31 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                 </button>
               </td>
             </>
+          )}
+          renderMobile={(t, select) => (
+            <MobileRecordCard
+              title={t.transaction_code ?? "Transaction"}
+              subtitle={formatInr(Number(t.amount))}
+              showSelect={Boolean(select)}
+              selected={select?.selected}
+              onToggleSelect={select?.onToggle}
+              selectAriaLabel={`Select ${t.transaction_code}`}
+              previewFields={[
+                { label: "Category", value: t.category },
+                { label: "Date", value: formatDisplayDate(t.transaction_date) || "—" },
+                { label: "Method", value: t.payment_method },
+                { label: "By", value: t.created_by ? employeeMap[t.created_by] || "—" : "—" },
+              ]}
+              detailFields={[
+                { label: "Code", value: t.transaction_code },
+                { label: "Category", value: t.category },
+                { label: "Amount", value: formatInr(Number(t.amount)) },
+                { label: "Date", value: formatDisplayDate(t.transaction_date) || "—" },
+                { label: "Method", value: t.payment_method },
+                { label: "By", value: t.created_by ? employeeMap[t.created_by] || "—" : "—" },
+              ]}
+              moreActions={[{ label: "Delete", destructive: true, onClick: () => void deleteTransaction(t.id) }]}
+            />
           )}
         />
       ) : null}
@@ -790,89 +852,161 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
               </Button>
             </BulkSelectionBar>
           ) : null}
-          <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
-                <tr>
-                  {isPrivileged ? (
-                    <th className="w-10 px-3 py-2 text-left">
-                      <TableBulkCheckbox
-                        checked={claimsBulk.allSelected}
-                        indeterminate={claimsBulk.someSelected}
-                        onChange={claimsBulk.toggleAll}
-                        ariaLabel="Select all claims on this page"
-                      />
-                    </th>
-                  ) : null}
-                  {(isMemberPortal
-                    ? ["Code", "Type", "Amount", "Date", "Status", "Actions"]
-                    : ["Code", "Employee", "Type", "Amount", "Date", "Status", "Actions"]
-                  ).map((h) => (
-                    <th key={h} className="px-3 py-2 text-left">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {loading
-                  ? Array.from({ length: 4 }).map((_, i) => (
-                      <tr key={i}>
-                        <td colSpan={(isMemberPortal ? 6 : 7) + (isPrivileged ? 1 : 0)} className="px-3 py-3">
-                          <div className="h-4 animate-pulse rounded bg-slate-100" />
-                        </td>
-                      </tr>
-                    ))
-                  : paginatedClaims.map((c) => (
-                      <tr key={c.id} className="border-t border-[#eef2ff]">
-                        {isPrivileged ? (
-                          <td className="px-3 py-2">
+          <ResponsiveDataView
+            selectAll={
+              isPrivileged
+                ? {
+                    checked: claimsBulk.allSelected,
+                    indeterminate: claimsBulk.someSelected,
+                    onChange: claimsBulk.toggleAll,
+                    label: "Select all",
+                    countLabel: `${claimsBulk.selectedCount} selected`,
+                  }
+                : undefined
+            }
+            desktop={
+              <div className="responsive-table-wrap rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
+                <table className="w-full min-w-[900px] text-sm">
+                  <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
+                    <tr>
+                      {isPrivileged ? (
+                        <th className={TABLE_CHECK_TH}>
+                          <div className="flex justify-center">
                             <TableBulkCheckbox
-                              checked={claimsBulk.isSelected(c.id)}
-                              onChange={() => claimsBulk.toggleOne(c.id)}
-                              ariaLabel={`Select claim ${c.claim_code}`}
+                              checked={claimsBulk.allSelected}
+                              indeterminate={claimsBulk.someSelected}
+                              onChange={claimsBulk.toggleAll}
+                              ariaLabel="Select all claims on this page"
                             />
-                          </td>
-                        ) : null}
-                        <td className="px-3 py-2 font-mono text-xs">{c.claim_code}</td>
-                        {!isMemberPortal ? (
-                          <td className="px-3 py-2">{employeeMap[c.employee_id] || c.employee_id.slice(0, 8)}</td>
-                        ) : null}
-                        <td className="px-3 py-2">{c.expense_type}</td>
-                        <td className="px-3 py-2 font-semibold">{formatInr(Number(c.amount))}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{formatDisplayDate(c.expense_date)}</td>
-                        <td className="px-3 py-2">{c.approval_status}</td>
-                        <td className="space-x-2 px-3 py-2">
-                          {c.receipt_url ? (
-                            <a href={c.receipt_url} target="_blank" rel="noreferrer" className="text-blue-700 text-xs font-semibold">
-                              Receipt
-                            </a>
-                          ) : (
-                            <span className="text-xs text-[#94a3b8]">—</span>
-                          )}
-                          {isPrivileged && c.approval_status === "Pending" ? (
-                            <>
-                              <button type="button" data-requires-online className="text-emerald-700 text-xs font-semibold" onClick={() => void approveClaim(c)}>
-                                Approve
-                              </button>
-                              <button type="button" data-requires-online className="text-rose-700 text-xs font-semibold" onClick={() => void rejectClaim(c)}>
-                                Reject
-                              </button>
-                            </>
-                          ) : null}
+                          </div>
+                        </th>
+                      ) : null}
+                      {(isMemberPortal
+                        ? ["Code", "Type", "Amount", "Date", "Status", "Actions"]
+                        : ["Code", "Employee", "Type", "Amount", "Date", "Status", "Actions"]
+                      ).map((h) => (
+                        <th key={h} className="px-3 py-2 text-left">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading
+                      ? Array.from({ length: 4 }).map((_, i) => (
+                          <tr key={i}>
+                            <td colSpan={(isMemberPortal ? 6 : 7) + (isPrivileged ? 1 : 0)} className="px-3 py-3">
+                              <div className="h-4 animate-pulse rounded bg-slate-100" />
+                            </td>
+                          </tr>
+                        ))
+                      : paginatedClaims.map((c) => (
+                          <tr key={c.id} className="border-t border-[#eef2ff]">
+                            {isPrivileged ? (
+                              <td className={TABLE_CHECK_TD}>
+                                <div className="flex justify-center">
+                                  <TableBulkCheckbox
+                                    checked={claimsBulk.isSelected(c.id)}
+                                    onChange={() => claimsBulk.toggleOne(c.id)}
+                                    ariaLabel={`Select claim ${c.claim_code}`}
+                                  />
+                                </div>
+                              </td>
+                            ) : null}
+                            <td className="px-3 py-2 font-mono text-xs">{c.claim_code}</td>
+                            {!isMemberPortal ? (
+                              <td className="px-3 py-2">{employeeMap[c.employee_id] || c.employee_id.slice(0, 8)}</td>
+                            ) : null}
+                            <td className="px-3 py-2">{c.expense_type}</td>
+                            <td className="px-3 py-2 font-semibold">{formatInr(Number(c.amount))}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{formatDisplayDate(c.expense_date)}</td>
+                            <td className="px-3 py-2">{c.approval_status}</td>
+                            <td className="space-x-2 px-3 py-2">
+                              {c.receipt_url ? (
+                                <a href={c.receipt_url} target="_blank" rel="noreferrer" className="text-blue-700 text-xs font-semibold">
+                                  Receipt
+                                </a>
+                              ) : (
+                                <span className="text-xs text-[#94a3b8]">—</span>
+                              )}
+                              {isPrivileged && c.approval_status === "Pending" ? (
+                                <>
+                                  <button type="button" data-requires-online className="text-emerald-700 text-xs font-semibold" onClick={() => void approveClaim(c)}>
+                                    Approve
+                                  </button>
+                                  <button type="button" data-requires-online className="text-rose-700 text-xs font-semibold" onClick={() => void rejectClaim(c)}>
+                                    Reject
+                                  </button>
+                                </>
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))}
+                    {!loading && !visibleClaims.length ? (
+                      <tr>
+                        <td colSpan={(isMemberPortal ? 6 : 7) + (isPrivileged ? 1 : 0)} className="px-6 py-8 text-center text-[#64748b]">
+                          No claims yet.
                         </td>
                       </tr>
-                    ))}
-                {!loading && !visibleClaims.length ? (
-                  <tr>
-                    <td colSpan={(isMemberPortal ? 6 : 7) + (isPrivileged ? 1 : 0)} className="px-6 py-8 text-center text-[#64748b]">
-                      No claims yet.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            }
+            mobile={
+              loading ? (
+                <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">Loading…</p>
+              ) : !paginatedClaims.length ? (
+                <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">No claims yet.</p>
+              ) : (
+                paginatedClaims.map((c) => {
+                  const primaryActions: { label: string; onClick: () => void }[] = [];
+                  const moreActions: { label: string; onClick: () => void; destructive?: boolean }[] = [];
+                  if (c.receipt_url) {
+                    primaryActions.push({
+                      label: "Receipt",
+                      onClick: () => window.open(c.receipt_url!, "_blank", "noopener,noreferrer"),
+                    });
+                  }
+                  if (isPrivileged && c.approval_status === "Pending") {
+                    primaryActions.push({ label: "Approve", onClick: () => void approveClaim(c) });
+                    moreActions.push({ label: "Reject", destructive: true, onClick: () => void rejectClaim(c) });
+                  }
+                  return (
+                    <MobileRecordCard
+                      key={c.id}
+                      title={c.claim_code ?? "Claim"}
+                      subtitle={formatInr(Number(c.amount))}
+                      showSelect={isPrivileged}
+                      selected={isPrivileged ? claimsBulk.isSelected(c.id) : false}
+                      onToggleSelect={isPrivileged ? () => claimsBulk.toggleOne(c.id) : undefined}
+                      selectAriaLabel={`Select claim ${c.claim_code}`}
+                      previewFields={[
+                        ...(!isMemberPortal
+                          ? [{ label: "Employee", value: employeeMap[c.employee_id] || c.employee_id.slice(0, 8) }]
+                          : []),
+                        { label: "Type", value: c.expense_type },
+                        { label: "Date", value: formatDisplayDate(c.expense_date) || "—" },
+                        { label: "Status", value: c.approval_status },
+                      ]}
+                      detailFields={[
+                        { label: "Code", value: c.claim_code },
+                        ...(!isMemberPortal
+                          ? [{ label: "Employee", value: employeeMap[c.employee_id] || c.employee_id.slice(0, 8) }]
+                          : []),
+                        { label: "Type", value: c.expense_type },
+                        { label: "Amount", value: formatInr(Number(c.amount)) },
+                        { label: "Date", value: formatDisplayDate(c.expense_date) || "—" },
+                        { label: "Status", value: c.approval_status },
+                      ]}
+                      primaryActions={primaryActions}
+                      moreActions={moreActions}
+                    />
+                  );
+                })
+              )
+            }
+          />
           <TablePagination
             page={claimsPage}
             totalPages={claimsTotalPages}
@@ -928,6 +1062,51 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
               </>
             );
           }}
+          renderMobile={(p, select) => {
+            const proj = projectMap[p.project_id];
+            const pendingProj = Number(proj?.pending_amount ?? 0);
+            const client = p.client_id
+              ? displayClientName(clientMap[p.client_id] || {})
+              : proj?.client_id
+                ? displayClientName(clientMap[proj.client_id!] || {})
+                : "—";
+            const primaryActions =
+              p.payment_status !== "Paid"
+                ? [{ label: "Mark paid", onClick: () => void markPaymentPaid(p) }]
+                : [];
+            const moreActions =
+              isPrivileged || isManager
+                ? [{ label: "Delete", destructive: true as const, onClick: () => void deletePayment(p.id) }]
+                : [];
+            return (
+              <MobileRecordCard
+                title={proj?.project_name ?? "—"}
+                subtitle={client}
+                showSelect={Boolean(select)}
+                selected={select?.selected}
+                onToggleSelect={select?.onToggle}
+                selectAriaLabel={`Select payment ${p.invoice_number || p.id}`}
+                previewFields={[
+                  { label: "Amount", value: formatInr(Number(p.amount)) },
+                  { label: "Date", value: formatDisplayDate(p.payment_date) || "—" },
+                  { label: "Status", value: p.payment_status },
+                  { label: "Method", value: p.payment_method },
+                ]}
+                detailFields={[
+                  { label: "Client", value: client },
+                  { label: "Project", value: proj?.project_name ?? "—" },
+                  { label: "Invoice", value: p.invoice_number || "—" },
+                  { label: "Amount", value: formatInr(Number(p.amount)) },
+                  { label: "Date", value: formatDisplayDate(p.payment_date) || "—" },
+                  { label: "Method", value: p.payment_method },
+                  { label: "Status", value: p.payment_status },
+                  { label: "Pending on project", value: formatInr(pendingProj) },
+                ]}
+                primaryActions={primaryActions}
+                moreActions={moreActions}
+              />
+            );
+          }}
         />
       ) : null}
 
@@ -938,43 +1117,85 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
             <LeadSummaryCard title="Overdue rows" value={overdueProjects.length} loading={loading} accent="rose" />
             <LeadSummaryCard title="Projects with balance" value={projects.filter((p) => Number(p.pending_amount) > 0).length} loading={loading} />
           </div>
-          <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
-                <tr>
-                  {["Client", "Project", "Due amount", "Deadline", "Manager", "Status"].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {projects
-                  .filter((p) => Number(p.pending_amount) > 0)
-                  .map((p) => {
-                    const overdue = p.deadline && String(p.deadline).slice(0, 10) < todayISO();
-                    return (
-                      <tr key={p.id} className={overdue ? "border-t border-rose-100 bg-rose-50/80" : "border-t border-[#eef2ff]"}>
-                        <td className="px-3 py-2">{p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—"}</td>
-                        <td className="px-3 py-2 font-medium">{p.project_name}</td>
-                        <td className="px-3 py-2 font-semibold">{formatInr(Number(p.pending_amount))}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{p.deadline ? formatDisplayDate(p.deadline) : "—"}</td>
-                        <td className="px-3 py-2">{p.project_manager ? employeeMap[p.project_manager] || "—" : "—"}</td>
-                        <td className="px-3 py-2">{overdue ? "Overdue" : "Pending"}</td>
+          <ResponsiveDataView
+            desktop={
+              <div className="responsive-table-wrap rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
+                <table className="w-full min-w-[900px] text-sm">
+                  <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
+                    <tr>
+                      {["Client", "Project", "Due amount", "Deadline", "Manager", "Status"].map((h) => (
+                        <th key={h} className="px-3 py-2 text-left">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projects
+                      .filter((p) => Number(p.pending_amount) > 0)
+                      .map((p) => {
+                        const overdue = p.deadline && String(p.deadline).slice(0, 10) < todayISO();
+                        return (
+                          <tr key={p.id} className={overdue ? "border-t border-rose-100 bg-rose-50/80" : "border-t border-[#eef2ff]"}>
+                            <td className="px-3 py-2">{p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—"}</td>
+                            <td className="px-3 py-2 font-medium">{p.project_name}</td>
+                            <td className="px-3 py-2 font-semibold">{formatInr(Number(p.pending_amount))}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{p.deadline ? formatDisplayDate(p.deadline) : "—"}</td>
+                            <td className="px-3 py-2">{p.project_manager ? employeeMap[p.project_manager] || "—" : "—"}</td>
+                            <td className="px-3 py-2">{overdue ? "Overdue" : "Pending"}</td>
+                          </tr>
+                        );
+                      })}
+                    {!loading && !projects.filter((p) => Number(p.pending_amount) > 0).length ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-8 text-center text-[#64748b]">
+                          No pending balances on projects.
+                        </td>
                       </tr>
-                    );
-                  })}
-                {!loading && !projects.filter((p) => Number(p.pending_amount) > 0).length ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-[#64748b]">
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            }
+            mobile={
+              (() => {
+                const dueRows = projects.filter((p) => Number(p.pending_amount) > 0);
+                if (!dueRows.length) {
+                  return (
+                    <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
                       No pending balances on projects.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+                    </p>
+                  );
+                }
+                return dueRows.map((p) => {
+                  const overdue = p.deadline && String(p.deadline).slice(0, 10) < todayISO();
+                  const client = p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—";
+                  return (
+                    <MobileRecordCard
+                      key={p.id}
+                      title={p.project_name}
+                      subtitle={client}
+                      previewFields={[
+                        { label: "Due amount", value: formatInr(Number(p.pending_amount)) },
+                        { label: "Deadline", value: p.deadline ? formatDisplayDate(p.deadline) || "—" : "—" },
+                        { label: "Status", value: overdue ? "Overdue" : "Pending" },
+                        { label: "Manager", value: p.project_manager ? employeeMap[p.project_manager] || "—" : "—" },
+                      ]}
+                      detailFields={[
+                        { label: "Client", value: client },
+                        { label: "Project", value: p.project_name },
+                        { label: "Due amount", value: formatInr(Number(p.pending_amount)) },
+                        { label: "Deadline", value: p.deadline ? formatDisplayDate(p.deadline) || "—" : "—" },
+                        { label: "Manager", value: p.project_manager ? employeeMap[p.project_manager] || "—" : "—" },
+                        { label: "Status", value: overdue ? "Overdue" : "Pending" },
+                      ]}
+                      className={overdue ? "border-rose-200 bg-rose-50/80" : undefined}
+                    />
+                  );
+                });
+              })()
+            }
+          />
         </div>
       ) : null}
 
@@ -1071,77 +1292,116 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
             onClear={clearTxFilters}
             hint={`Showing ${filteredTransactions.length} of ${transactions.length} transaction(s)`}
           />
-          <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
-            <table className="w-full min-w-[960px] text-sm">
-              <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
-                <tr>
-                  <TableHeaderCell label="Code" />
-                  <TableHeaderFilter
-                    label="Type"
-                    value={fltTxType}
-                    onChange={setFltTxType}
-                    options={[
-                      { value: "Income", label: "Income" },
-                      { value: "Expense", label: "Expense" },
+          <ResponsiveDataView
+            desktop={
+              <div className="responsive-table-wrap rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
+                <table className="w-full min-w-[960px] text-sm">
+                  <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
+                    <tr>
+                      <TableHeaderCell label="Code" />
+                      <TableHeaderFilter
+                        label="Type"
+                        value={fltTxType}
+                        onChange={setFltTxType}
+                        options={[
+                          { value: "Income", label: "Income" },
+                          { value: "Expense", label: "Expense" },
+                        ]}
+                        allLabel="All types"
+                      />
+                      <TableHeaderFilter
+                        label="Category"
+                        value={fltTxCat}
+                        onChange={setFltTxCat}
+                        options={txCategoryOptions}
+                        allLabel="All categories"
+                      />
+                      <TableHeaderCell label="Amount" />
+                      <TableHeaderFilter label="Date from" type="date" value={fltTxFrom} onChange={setFltTxFrom} />
+                      <TableHeaderFilter label="Date to" type="date" value={fltTxTo} onChange={setFltTxTo} />
+                      <TableHeaderFilter
+                        label="Method"
+                        value={fltTxMethod}
+                        onChange={setFltTxMethod}
+                        options={PAYMENT_METHODS.map((m) => ({ value: m, label: m }))}
+                        allLabel="All methods"
+                      />
+                      <TableHeaderFilter
+                        label="Status"
+                        value={fltTxStatus}
+                        onChange={setFltTxStatus}
+                        options={[
+                          { value: "Paid", label: "Paid" },
+                          { value: "Pending", label: "Pending" },
+                          { value: "Partial", label: "Partial" },
+                          { value: "Overdue", label: "Overdue" },
+                        ]}
+                        allLabel="All statuses"
+                      />
+                      <TableHeaderCell label="Actions" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredTransactions.map((t) => (
+                      <tr key={t.id} className="border-t border-[#eef2ff]">
+                        <td className="px-3 py-2 font-mono text-xs">{t.transaction_code}</td>
+                        <td className="px-3 py-2">{t.transaction_type}</td>
+                        <td className="px-3 py-2">{t.category}</td>
+                        <td className="px-3 py-2 font-semibold">{formatInr(Number(t.amount))}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{formatDisplayDate(t.transaction_date)}</td>
+                        <td className="px-3 py-2">{t.payment_method}</td>
+                        <td className="px-3 py-2">{t.payment_status}</td>
+                        <td className="px-3 py-2">
+                          {isPrivileged ? (
+                            <button type="button" className="text-rose-600 text-xs font-semibold hover:underline" onClick={() => void deleteTransaction(t.id)}>
+                              Delete
+                            </button>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            }
+            mobile={
+              !filteredTransactions.length ? (
+                <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+                  No transactions match filters.
+                </p>
+              ) : (
+                filteredTransactions.map((t) => (
+                  <MobileRecordCard
+                    key={t.id}
+                    title={t.transaction_code ?? "Transaction"}
+                    subtitle={`${t.transaction_type} · ${formatInr(Number(t.amount))}`}
+                    previewFields={[
+                      { label: "Category", value: t.category },
+                      { label: "Date", value: formatDisplayDate(t.transaction_date) || "—" },
+                      { label: "Method", value: t.payment_method },
+                      { label: "Status", value: t.payment_status },
                     ]}
-                    allLabel="All types"
-                  />
-                  <TableHeaderFilter
-                    label="Category"
-                    value={fltTxCat}
-                    onChange={setFltTxCat}
-                    options={txCategoryOptions}
-                    allLabel="All categories"
-                  />
-                  <TableHeaderCell label="Amount" />
-                  <TableHeaderFilter label="Date from" type="date" value={fltTxFrom} onChange={setFltTxFrom} />
-                  <TableHeaderFilter label="Date to" type="date" value={fltTxTo} onChange={setFltTxTo} />
-                  <TableHeaderFilter
-                    label="Method"
-                    value={fltTxMethod}
-                    onChange={setFltTxMethod}
-                    options={PAYMENT_METHODS.map((m) => ({ value: m, label: m }))}
-                    allLabel="All methods"
-                  />
-                  <TableHeaderFilter
-                    label="Status"
-                    value={fltTxStatus}
-                    onChange={setFltTxStatus}
-                    options={[
-                      { value: "Paid", label: "Paid" },
-                      { value: "Pending", label: "Pending" },
-                      { value: "Partial", label: "Partial" },
-                      { value: "Overdue", label: "Overdue" },
+                    detailFields={[
+                      { label: "Code", value: t.transaction_code },
+                      { label: "Type", value: t.transaction_type },
+                      { label: "Category", value: t.category },
+                      { label: "Amount", value: formatInr(Number(t.amount)) },
+                      { label: "Date", value: formatDisplayDate(t.transaction_date) || "—" },
+                      { label: "Method", value: t.payment_method },
+                      { label: "Status", value: t.payment_status },
                     ]}
-                    allLabel="All statuses"
+                    moreActions={
+                      isPrivileged
+                        ? [{ label: "Delete", destructive: true, onClick: () => void deleteTransaction(t.id) }]
+                        : []
+                    }
                   />
-                  <TableHeaderCell label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTransactions.map((t) => (
-                  <tr key={t.id} className="border-t border-[#eef2ff]">
-                    <td className="px-3 py-2 font-mono text-xs">{t.transaction_code}</td>
-                    <td className="px-3 py-2">{t.transaction_type}</td>
-                    <td className="px-3 py-2">{t.category}</td>
-                    <td className="px-3 py-2 font-semibold">{formatInr(Number(t.amount))}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{formatDisplayDate(t.transaction_date)}</td>
-                    <td className="px-3 py-2">{t.payment_method}</td>
-                    <td className="px-3 py-2">{t.payment_status}</td>
-                    <td className="px-3 py-2">
-                      {isPrivileged ? (
-                        <button type="button" className="text-rose-600 text-xs font-semibold hover:underline" onClick={() => void deleteTransaction(t.id)}>
-                          Delete
-                        </button>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )
+            }
+          />
         </div>
       ) : null}
 
@@ -1391,6 +1651,7 @@ function FinanceTableSection<T>({
   rows,
   columns,
   renderCells,
+  renderMobile,
   getRowId,
   onBulkDelete,
 }: {
@@ -1401,6 +1662,10 @@ function FinanceTableSection<T>({
   rows: T[];
   columns: string[];
   renderCells: (row: T) => ReactNode;
+  renderMobile?: (
+    row: T,
+    select?: { selected: boolean; onToggle: () => void },
+  ) => ReactNode;
   getRowId?: (row: T) => string;
   onBulkDelete?: (ids: string[]) => void;
 }) {
@@ -1434,63 +1699,102 @@ function FinanceTableSection<T>({
           </Button>
         </BulkSelectionBar>
       ) : null}
-      <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
-        <table className="w-full min-w-[960px] text-sm">
-          <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
-            <tr>
-              {selectable ? (
-                <th className="w-10 px-3 py-2 text-left">
-                  <TableBulkCheckbox
-                    checked={selection.allSelected}
-                    indeterminate={selection.someSelected}
-                    onChange={selection.toggleAll}
-                    ariaLabel="Select all rows on this page"
-                  />
-                </th>
-              ) : null}
-              {columns.map((c) => (
-                <th key={c} className="px-3 py-2 text-left">
-                  {c}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading
-              ? Array.from({ length: 4 }).map((_, i) => (
-                  <tr key={i}>
-                    <td colSpan={colSpan} className="px-3 py-3">
-                      <div className="h-4 animate-pulse rounded bg-slate-100" />
+      <ResponsiveDataView
+        selectAll={
+          selectable
+            ? {
+                checked: selection.allSelected,
+                indeterminate: selection.someSelected,
+                onChange: selection.toggleAll,
+                label: "Select all",
+                countLabel: `${selection.selectedCount} selected`,
+              }
+            : undefined
+        }
+        desktop={
+          <div className="responsive-table-wrap rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
+            <table className="w-full min-w-[960px] text-sm">
+              <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
+                <tr>
+                  {selectable ? (
+                    <th className={TABLE_CHECK_TH}>
+                      <div className="flex justify-center">
+                        <TableBulkCheckbox
+                          checked={selection.allSelected}
+                          indeterminate={selection.someSelected}
+                          onChange={selection.toggleAll}
+                          ariaLabel="Select all rows on this page"
+                        />
+                      </div>
+                    </th>
+                  ) : null}
+                  {columns.map((c) => (
+                    <th key={c} className="px-3 py-2 text-left">
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading
+                  ? Array.from({ length: 4 }).map((_, i) => (
+                      <tr key={i}>
+                        <td colSpan={colSpan} className="px-3 py-3">
+                          <div className="h-4 animate-pulse rounded bg-slate-100" />
+                        </td>
+                      </tr>
+                    ))
+                  : paginatedItems.map((row, idx) => {
+                      const id = getRowId?.(row) ?? String(idx);
+                      return (
+                        <tr key={id} className="border-t border-[#eef2ff]">
+                          {selectable && getRowId ? (
+                            <td className={TABLE_CHECK_TD}>
+                              <div className="flex justify-center">
+                                <TableBulkCheckbox
+                                  checked={selection.isSelected(id)}
+                                  onChange={() => selection.toggleOne(id)}
+                                  ariaLabel={`Select row ${id}`}
+                                />
+                              </div>
+                            </td>
+                          ) : null}
+                          {renderCells(row)}
+                        </tr>
+                      );
+                    })}
+                {!loading && !rows.length ? (
+                  <tr>
+                    <td colSpan={colSpan} className="px-6 py-8 text-center text-[#64748b]">
+                      No rows yet.
                     </td>
                   </tr>
-                ))
-              : paginatedItems.map((row, idx) => {
-                  const id = getRowId?.(row) ?? String(idx);
-                  return (
-                    <tr key={id} className="border-t border-[#eef2ff]">
-                      {selectable && getRowId ? (
-                        <td className="px-3 py-2">
-                          <TableBulkCheckbox
-                            checked={selection.isSelected(id)}
-                            onChange={() => selection.toggleOne(id)}
-                            ariaLabel={`Select row ${id}`}
-                          />
-                        </td>
-                      ) : null}
-                      {renderCells(row)}
-                    </tr>
-                  );
-                })}
-            {!loading && !rows.length ? (
-              <tr>
-                <td colSpan={colSpan} className="px-6 py-8 text-center text-[#64748b]">
-                  No rows yet.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        }
+        mobile={
+          loading ? (
+            <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">Loading…</p>
+          ) : !paginatedItems.length ? (
+            <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">No rows yet.</p>
+          ) : renderMobile ? (
+            paginatedItems.map((row, idx) => {
+              const id = getRowId?.(row) ?? String(idx);
+              const select =
+                selectable && getRowId
+                  ? { selected: selection.isSelected(id), onToggle: () => selection.toggleOne(id) }
+                  : undefined;
+              return <div key={id}>{renderMobile(row, select)}</div>;
+            })
+          ) : (
+            <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+              Open on a larger screen to view this table.
+            </p>
+          )
+        }
+      />
       <TablePagination page={page} totalPages={totalPages} totalItems={totalItems} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
     </div>
   );

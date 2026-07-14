@@ -9,6 +9,12 @@ import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
 import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
+import { MobileRecordCard } from "@/components/ui/MobileRecordCard";
+import {
+  ResponsiveDataView,
+  TABLE_CHECK_TH,
+  TABLE_CHECK_TD,
+} from "@/components/ui/ResponsiveDataView";
 import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -443,18 +449,29 @@ export default function EmployeeMasterPage() {
               </div>
             ) : (
               <div className="overflow-hidden rounded-xl border border-[#dbe6f3]">
-              <div className="overflow-x-auto">
+              <ResponsiveDataView
+                selectAll={{
+                  checked: userBulk.allSelected,
+                  indeterminate: userBulk.someSelected,
+                  onChange: userBulk.toggleAll,
+                  label: "Select all",
+                  countLabel: `${userBulk.selectedCount} selected`,
+                }}
+                desktop={
+                <div className="responsive-table-wrap">
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="bg-[#f1f6fc] text-[#64748b]">
                     <tr>
-                      <th className="w-10 px-3 py-3">
-                        <TableBulkCheckbox
-                          checked={userBulk.allSelected}
-                          indeterminate={userBulk.someSelected}
-                          disabled={loadingList || !paginatedEmployees.length}
-                          onChange={userBulk.toggleAll}
-                          ariaLabel="Select all users"
-                        />
+                      <th className={TABLE_CHECK_TH}>
+                        <div className="flex justify-center">
+                          <TableBulkCheckbox
+                            checked={userBulk.allSelected}
+                            indeterminate={userBulk.someSelected}
+                            disabled={loadingList || !paginatedEmployees.length}
+                            onChange={userBulk.toggleAll}
+                            ariaLabel="Select all users"
+                          />
+                        </div>
                       </th>
                       <TableHeaderCell label="Name" className="px-4 py-3" />
                       <TableHeaderCell label="Role" className="px-4 py-3" />
@@ -477,12 +494,14 @@ export default function EmployeeMasterPage() {
                   <tbody className="divide-y divide-[#e8edf5] text-slate-700">
                     {paginatedEmployees.map((employee) => (
                       <tr key={employee.id}>
-                        <td className="px-3 py-2">
-                          <TableBulkCheckbox
-                            checked={userBulk.isSelected(employee.id)}
-                            onChange={() => userBulk.toggleOne(employee.id)}
-                            ariaLabel={`Select ${employee.full_name}`}
-                          />
+                        <td className={TABLE_CHECK_TD}>
+                          <div className="flex justify-center">
+                            <TableBulkCheckbox
+                              checked={userBulk.isSelected(employee.id)}
+                              onChange={() => userBulk.toggleOne(employee.id)}
+                              ariaLabel={`Select ${employee.full_name}`}
+                            />
+                          </div>
                         </td>
                         <td className="px-4 py-2">
                           <p className="font-medium text-slate-900">{employee.full_name}</p>
@@ -547,6 +566,54 @@ export default function EmployeeMasterPage() {
                   </tbody>
                 </table>
               </div>
+                }
+                mobile={
+                  !paginatedEmployees.length ? (
+                    <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-slate-500">
+                      No employees found for current filters.
+                    </p>
+                  ) : (
+                    paginatedEmployees.map((employee) => (
+                      <MobileRecordCard
+                        key={employee.id}
+                        title={employee.full_name || "—"}
+                        subtitle={employee.email}
+                        showSelect
+                        selected={userBulk.isSelected(employee.id)}
+                        onToggleSelect={() => userBulk.toggleOne(employee.id)}
+                        selectAriaLabel={`Select ${employee.full_name}`}
+                        previewFields={[
+                          { label: "Role", value: employee.role.replace("_", " ") },
+                          { label: "Department", value: employee.department ?? "—" },
+                          { label: "Status", value: employee.status ?? "active" },
+                          { label: "Course", value: employee.course ?? "—" },
+                        ]}
+                        detailFields={[
+                          { label: "Name", value: employee.full_name || "—" },
+                          { label: "Email", value: employee.email || "—" },
+                          { label: "Role", value: employee.role.replace("_", " ") },
+                          { label: "Department", value: employee.department ?? "—" },
+                          { label: "Course", value: employee.course ?? "—" },
+                          { label: "Status", value: employee.status ?? "active" },
+                        ]}
+                        primaryActions={[
+                          { label: "View", onClick: () => onPickEmployee(employee, "view") },
+                          { label: "Edit", onClick: () => onPickEmployee(employee, "edit") },
+                        ]}
+                        moreActions={[
+                          {
+                            label: removingId === employee.id ? "Removing…" : "Delete",
+                            destructive: true,
+                            onClick: () => {
+                              if (removingId !== employee.id) void onRemoveUser(employee);
+                            },
+                          },
+                        ]}
+                      />
+                    ))
+                  )
+                }
+              />
               <TablePagination
                 page={directoryPage}
                 totalPages={directoryTotalPages}

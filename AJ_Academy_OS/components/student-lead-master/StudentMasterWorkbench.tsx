@@ -10,6 +10,12 @@ import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
 import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
+import { MobileRecordCard } from "@/components/ui/MobileRecordCard";
+import {
+  ResponsiveDataView,
+  TABLE_CHECK_TD,
+  TABLE_CHECK_TH,
+} from "@/components/ui/ResponsiveDataView";
 import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { saveTaskLeadSelection } from "@/lib/taskLeadPickStorage";
@@ -2346,59 +2352,104 @@ function FollowUpsTable({
   currentUserId: string;
   onComplete: (r: FollowRow) => void;
 }) {
+  const visibleRows = rows.filter((fr) => clientMap[fr.client_id]);
   return (
-    <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
-      <table className="w-full min-w-[940px] text-sm">
-        <thead className="bg-[#f1f6fc] text-[#64748b]">
-          <tr>
-            <th className="px-3 py-2 text-left text-xs font-semibold uppercase">Lead</th>
-            <th className="px-3 py-2 text-left">Company</th>
-            <th className="px-3 py-2 text-left">Owner</th>
-            <th className="px-3 py-2 text-left">Date</th>
-            <th className="px-3 py-2 text-left">Time</th>
-            <th className="px-3 py-2 text-left">Type</th>
-            <th className="px-3 py-2 text-left">Notes</th>
-            <th className="px-3 py-2 text-left">Status</th>
-            <th className="px-3 py-2 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[#e8edf5]">
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={9} className="px-6 py-12 text-center text-[#64748b]">
-                No follow-ups loaded yet. Add one from All Leads → Follow-up, or ensure follow-up rows exist for your visible leads.
-              </td>
-            </tr>
-          ) : null}
-          {rows.map((fr) => {
+    <ResponsiveDataView
+      desktop={
+        <div className="responsive-table-wrap rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
+          <table className="w-full min-w-[940px] text-sm">
+            <thead className="bg-[#f1f6fc] text-[#64748b]">
+              <tr>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase">Lead</th>
+                <th className="px-3 py-2 text-left">Company</th>
+                <th className="px-3 py-2 text-left">Owner</th>
+                <th className="px-3 py-2 text-left">Date</th>
+                <th className="px-3 py-2 text-left">Time</th>
+                <th className="px-3 py-2 text-left">Type</th>
+                <th className="px-3 py-2 text-left">Notes</th>
+                <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-3 py-2 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#e8edf5]">
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-12 text-center text-[#64748b]">
+                    No follow-ups loaded yet. Add one from All Leads → Follow-up, or ensure follow-up rows exist for your visible leads.
+                  </td>
+                </tr>
+              ) : null}
+              {rows.map((fr) => {
+                const cli = clientMap[fr.client_id];
+                if (!cli) return null;
+                const canTouch = isAdmin || cli.assigned_to === currentUserId;
+                return (
+                  <tr key={fr.id}>
+                    <td className="px-3 py-2 font-semibold text-slate-900">{displayLeadName(cli)}</td>
+                    <td className="max-w-[180px] truncate px-3 py-2">{cli.company_name || "—"}</td>
+                    <td>{cli.assigned_to ? employeeNameMap[cli.assigned_to] ?? "-" : "-"}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{formatDisplayDate(fr.follow_up_date)}</td>
+                    <td className="whitespace-nowrap">{fr.follow_up_time || "—"}</td>
+                    <td>{fr.follow_up_type || "—"}</td>
+                    <td className="max-w-[220px] truncate px-3 py-2 text-slate-600">{fr.notes || "—"}</td>
+                    <td>{fr.status || "Pending"}</td>
+                    <td className="px-3 py-2 text-right">
+                      {canTouch && fr.status !== "Completed" ? (
+                        <button type="button" className="text-xs font-semibold text-emerald-600 hover:underline" onClick={() => onComplete(fr)}>
+                          Done
+                        </button>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      }
+      mobile={
+        visibleRows.length === 0 ? (
+          <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+            No follow-ups loaded yet. Add one from All Leads → Follow-up, or ensure follow-up rows exist for your visible leads.
+          </p>
+        ) : (
+          visibleRows.map((fr) => {
             const cli = clientMap[fr.client_id];
-            if (!cli) return null;
             const canTouch = isAdmin || cli.assigned_to === currentUserId;
             return (
-              <tr key={fr.id}>
-                <td className="px-3 py-2 font-semibold text-slate-900">{displayLeadName(cli)}</td>
-                <td className="max-w-[180px] truncate px-3 py-2">{cli.company_name || "—"}</td>
-                <td>{cli.assigned_to ? employeeNameMap[cli.assigned_to] ?? "-" : "-"}</td>
-                <td className="whitespace-nowrap px-3 py-2">{formatDisplayDate(fr.follow_up_date)}</td>
-                <td className="whitespace-nowrap">{fr.follow_up_time || "—"}</td>
-                <td>{fr.follow_up_type || "—"}</td>
-                <td className="max-w-[220px] truncate px-3 py-2 text-slate-600">{fr.notes || "—"}</td>
-                <td>{fr.status || "Pending"}</td>
-                <td className="px-3 py-2 text-right">
-                  {canTouch && fr.status !== "Completed" ? (
-                    <button type="button" className="text-xs font-semibold text-emerald-600 hover:underline" onClick={() => onComplete(fr)}>
-                      Done
-                    </button>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              </tr>
+              <MobileRecordCard
+                key={fr.id}
+                title={displayLeadName(cli)}
+                subtitle={cli.company_name || undefined}
+                previewFields={[
+                  { label: "Date", value: formatDisplayDate(fr.follow_up_date) || "—" },
+                  { label: "Type", value: fr.follow_up_type || "—" },
+                  { label: "Status", value: fr.status || "Pending" },
+                  { label: "Owner", value: cli.assigned_to ? employeeNameMap[cli.assigned_to] ?? "—" : "—" },
+                ]}
+                detailFields={[
+                  { label: "Lead", value: displayLeadName(cli) },
+                  { label: "Company", value: cli.company_name || "—" },
+                  { label: "Owner", value: cli.assigned_to ? employeeNameMap[cli.assigned_to] ?? "—" : "—" },
+                  { label: "Date", value: formatDisplayDate(fr.follow_up_date) || "—" },
+                  { label: "Time", value: fr.follow_up_time || "—" },
+                  { label: "Type", value: fr.follow_up_type || "—" },
+                  { label: "Status", value: fr.status || "Pending" },
+                  { label: "Notes", value: fr.notes || "—", clamp: true },
+                ]}
+                primaryActions={
+                  canTouch && fr.status !== "Completed"
+                    ? [{ label: "Done", onClick: () => onComplete(fr) }]
+                    : []
+                }
+              />
             );
-          })}
-        </tbody>
-      </table>
-    </div>
+          })
+        )
+      }
+    />
   );
 }
 
@@ -2570,327 +2621,414 @@ function AllLeadsTable({
   const today = todayISO();
   const showBulk = Boolean(bulkSelection) && !pickMode;
   const colCount = (pickMode ? 1 : 0) + (showBulk ? 1 : 0) + STUDENT_MASTER_DATA_COLUMN_COUNT + 1;
-  const thCls = "px-6 py-3.5 text-center align-middle min-w-[10.5rem]";
-  const tdCls = "whitespace-nowrap px-6 py-3.5 text-center align-middle";
-  const tdTrunc = "max-w-[160px] truncate px-6 py-3.5 text-center align-middle";
+  const thCls = "px-4 py-3 text-center align-middle min-w-[9rem]";
+  const tdCls = "whitespace-nowrap px-4 py-3 text-center align-middle";
+  const tdTrunc = "max-w-[160px] truncate px-4 py-3 text-center align-middle";
+  const dash = (v: unknown) => (v == null || v === "" ? "—" : String(v));
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
-      <div className="overflow-x-auto">
-      <table
-        className="table-freeze-cols w-full min-w-[5200px] text-sm"
-        style={
-          {
-            ["--sticky-col-2" as string]: "14rem",
-            ["--sticky-check-w" as string]: "3rem",
-          } as CSSProperties
+      <ResponsiveDataView
+        selectAll={
+          showBulk
+            ? {
+                checked: bulkSelection!.allSelected,
+                indeterminate: bulkSelection!.someSelected,
+                onChange: bulkSelection!.onToggleAll,
+                label: "Select all",
+              }
+            : undefined
         }
-      >
-        <thead className="bg-[#f1f6fc] text-[#64748b]">
-          <tr>
-            {pickMode ? (
-              <TableHeaderCell
-                label="Pick"
-                className={`${thCls} sticky-col sticky-col-1 sticky-check-col`}
-              />
-            ) : null}
-            {showBulk ? (
-              <th
-                className={`sticky-col sticky-check-col py-3.5 text-center align-middle ${
-                  pickMode ? "sticky-col-after-check" : "sticky-col-1"
-                }`}
-              >
-                <div className="flex justify-center">
-                  <TableBulkCheckbox
-                    checked={bulkSelection!.allSelected}
-                    indeterminate={bulkSelection!.someSelected}
-                    disabled={!leads.length}
-                    onChange={bulkSelection!.onToggleAll}
-                    ariaLabel="Select all leads"
+        desktop={
+          <div className="responsive-table-wrap">
+            <table
+              className="table-freeze-cols w-full min-w-[5200px] text-sm"
+              style={
+                {
+                  ["--sticky-col-2" as string]: "14rem",
+                  ["--sticky-check-w" as string]: "2.75rem",
+                } as CSSProperties
+              }
+            >
+              <thead className="bg-[#f1f6fc] text-[#64748b]">
+                <tr>
+                  {pickMode ? <TableHeaderCell label="Pick" className={TABLE_CHECK_TH} /> : null}
+                  {showBulk ? (
+                    <th className={TABLE_CHECK_TH}>
+                      <div className="flex justify-center">
+                        <TableBulkCheckbox
+                          checked={bulkSelection!.allSelected}
+                          indeterminate={bulkSelection!.someSelected}
+                          disabled={!leads.length}
+                          onChange={bulkSelection!.onToggleAll}
+                          ariaLabel="Select all leads"
+                        />
+                      </div>
+                    </th>
+                  ) : null}
+                  <TableHeaderCell
+                    label="Student Name"
+                    className={`${thCls} sticky-col ${
+                      pickMode || showBulk ? "sticky-col-after-check" : "sticky-col-1"
+                    } min-w-[14rem]`}
                   />
-                </div>
-              </th>
-            ) : null}
-            <TableHeaderCell
-              label="Student Name"
-              className={`${thCls} sticky-col ${
-                pickMode || showBulk ? "sticky-col-after-check" : "sticky-col-1"
-              } min-w-[14rem]`}
-            />
-            <TableHeaderCell
-              label="Mobile Number"
-              className={`${thCls} min-w-[11rem] ${
-                pickMode || showBulk ? "" : "sticky-col sticky-col-2"
-              }`}
-            />
-            <TableHeaderCell label="WhatsApp Number" className={thCls} />
-            <TableHeaderCell label="Email" className={thCls} />
-            <TableHeaderCell label="City" className={thCls} />
-            <TableHeaderCell label="Current Profile" className={thCls} />
-            <TableHeaderFilter
-              label="Degree"
-              value={fltDegree}
-              onChange={setFltDegree}
-              options={degreeOptions.map((d) => ({ value: d, label: d }))}
-              allLabel="All degrees"
-              className={thCls}
-            />
-            <TableHeaderCell label="College/Company" className={thCls} />
-            <TableHeaderCell label="Year of Passing" className={thCls} />
-            <TableHeaderCell label="Employment Status" className={thCls} />
-            <TableHeaderCell label="Current Salary" className={thCls} />
-            <TableHeaderFilter
-              label="Interested Program"
-              value={fltProgram}
-              onChange={setFltProgram}
-              options={programOptions.map((s) => ({ value: s, label: s }))}
-              allLabel="All programs"
-              className={thCls}
-            />
-            <TableHeaderCell label="Career Goal" className={thCls} />
-            <TableHeaderCell label="Preferred Job Role" className={thCls} />
-            <TableHeaderCell label="Target Salary" className={thCls} />
-            <TableHeaderCell label="Current Skill Level" className={thCls} />
-            <TableHeaderCell label="Main Career Problem" className={thCls} />
-            <TableHeaderCell label="Joining Timeline" className={thCls} />
-            <TableHeaderCell label="Program Budget" className={thCls} />
-            <TableHeaderCell label="Full Payment or Instalment" className={thCls} />
-            <TableHeaderCell label="Parent Approval Required" className={thCls} />
-            <TableHeaderCell label="Decision Maker" className={thCls} />
-            <TableHeaderCell label="Preferred Batch" className={thCls} />
-            <TableHeaderCell label="Laptop Availability" className={thCls} />
-            <TableHeaderFilter
-              label="Lead Source"
-              value={fltSource}
-              onChange={setFltSource}
-              options={CRM_SOURCES.map((s) => ({ value: s, label: s }))}
-              allLabel="All sources"
-              className={thCls}
-            />
-            <TableHeaderFilter
-              label="Assigned Counsellor"
-              value={fltAssigned}
-              onChange={setFltAssigned}
-              options={employeeOptions.map((e) => ({ value: e.id, label: e.label }))}
-              allLabel="All counsellors"
-              disabled={!isAdmin}
-              className={thCls}
-            />
-            <TableHeaderFilter
-              label="Lead Stage"
-              value={fltStage}
-              onChange={setFltStage}
-              options={LEAD_STAGES.map((s) => ({ value: s, label: s }))}
-              allLabel="All stages"
-              className={thCls}
-            />
-            <TableHeaderFilter
-              label="Lead Status"
-              value={fltStatus}
-              onChange={setFltStatus}
-              options={CRM_LEAD_STATUSES.map((s) => ({ value: s, label: s }))}
-              allLabel="All statuses"
-              className={thCls}
-            />
-            <TableHeaderFilter
-              label="Priority"
-              value={fltPriority}
-              onChange={setFltPriority}
-              options={CRM_PRIORITIES.map((p) => ({ value: p, label: p }))}
-              allLabel="All priorities"
-              className={thCls}
-            />
-            <TableHeaderCell label="Primary Objection" className={thCls} />
-            <TableHeaderCell label="Next Follow-up Date" className={thCls} />
-            <TableHeaderCell label="Fee Quoted" className={thCls} />
-            <TableHeaderCell label="Final Fee" className={thCls} />
-            <TableHeaderFilter
-              label="Payment Status"
-              value={fltPaymentStatus}
-              onChange={setFltPaymentStatus}
-              options={PAYMENT_STATUSES.map((s) => ({ value: s, label: s }))}
-              allLabel="All payment statuses"
-              className={thCls}
-            />
-            <TableHeaderFilter
-              label="Admission Status"
-              value={fltAdmissionStatus}
-              onChange={setFltAdmissionStatus}
-              options={ADMISSION_STATUSES.map((s) => ({ value: s, label: s }))}
-              allLabel="All admission statuses"
-              className={thCls}
-            />
-            <TableHeaderCell label="Actions" className={thCls} />
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[#e8edf5] text-[#334155]">
-          {loading
-            ? [...Array.from({ length: 6 }).keys()].map((skeletonIdx) => (
-                <tr key={skeletonIdx}>
-                  <td colSpan={colCount} className="px-6 py-3.5 text-center align-middle">
-                    <div className="h-5 animate-pulse rounded bg-slate-100" />
-                  </td>
+                  <TableHeaderCell
+                    label="Mobile Number"
+                    className={`${thCls} min-w-[11rem] ${
+                      pickMode || showBulk ? "" : "sticky-col sticky-col-2"
+                    }`}
+                  />
+                  <TableHeaderCell label="WhatsApp Number" className={thCls} />
+                  <TableHeaderCell label="Email" className={thCls} />
+                  <TableHeaderCell label="City" className={thCls} />
+                  <TableHeaderCell label="Current Profile" className={thCls} />
+                  <TableHeaderFilter
+                    label="Degree"
+                    value={fltDegree}
+                    onChange={setFltDegree}
+                    options={degreeOptions.map((d) => ({ value: d, label: d }))}
+                    allLabel="All degrees"
+                    className={thCls}
+                  />
+                  <TableHeaderCell label="College/Company" className={thCls} />
+                  <TableHeaderCell label="Year of Passing" className={thCls} />
+                  <TableHeaderCell label="Employment Status" className={thCls} />
+                  <TableHeaderCell label="Current Salary" className={thCls} />
+                  <TableHeaderFilter
+                    label="Interested Program"
+                    value={fltProgram}
+                    onChange={setFltProgram}
+                    options={programOptions.map((s) => ({ value: s, label: s }))}
+                    allLabel="All programs"
+                    className={thCls}
+                  />
+                  <TableHeaderCell label="Career Goal" className={thCls} />
+                  <TableHeaderCell label="Preferred Job Role" className={thCls} />
+                  <TableHeaderCell label="Target Salary" className={thCls} />
+                  <TableHeaderCell label="Current Skill Level" className={thCls} />
+                  <TableHeaderCell label="Main Career Problem" className={thCls} />
+                  <TableHeaderCell label="Joining Timeline" className={thCls} />
+                  <TableHeaderCell label="Program Budget" className={thCls} />
+                  <TableHeaderCell label="Full Payment or Instalment" className={thCls} />
+                  <TableHeaderCell label="Parent Approval Required" className={thCls} />
+                  <TableHeaderCell label="Decision Maker" className={thCls} />
+                  <TableHeaderCell label="Preferred Batch" className={thCls} />
+                  <TableHeaderCell label="Laptop Availability" className={thCls} />
+                  <TableHeaderFilter
+                    label="Lead Source"
+                    value={fltSource}
+                    onChange={setFltSource}
+                    options={CRM_SOURCES.map((s) => ({ value: s, label: s }))}
+                    allLabel="All sources"
+                    className={thCls}
+                  />
+                  <TableHeaderFilter
+                    label="Assigned Counsellor"
+                    value={fltAssigned}
+                    onChange={setFltAssigned}
+                    options={employeeOptions.map((e) => ({ value: e.id, label: e.label }))}
+                    allLabel="All counsellors"
+                    disabled={!isAdmin}
+                    className={thCls}
+                  />
+                  <TableHeaderFilter
+                    label="Lead Stage"
+                    value={fltStage}
+                    onChange={setFltStage}
+                    options={LEAD_STAGES.map((s) => ({ value: s, label: s }))}
+                    allLabel="All stages"
+                    className={thCls}
+                  />
+                  <TableHeaderFilter
+                    label="Lead Status"
+                    value={fltStatus}
+                    onChange={setFltStatus}
+                    options={CRM_LEAD_STATUSES.map((s) => ({ value: s, label: s }))}
+                    allLabel="All statuses"
+                    className={thCls}
+                  />
+                  <TableHeaderFilter
+                    label="Priority"
+                    value={fltPriority}
+                    onChange={setFltPriority}
+                    options={CRM_PRIORITIES.map((p) => ({ value: p, label: p }))}
+                    allLabel="All priorities"
+                    className={thCls}
+                  />
+                  <TableHeaderCell label="Primary Objection" className={thCls} />
+                  <TableHeaderCell label="Next Follow-up Date" className={thCls} />
+                  <TableHeaderCell label="Fee Quoted" className={thCls} />
+                  <TableHeaderCell label="Final Fee" className={thCls} />
+                  <TableHeaderFilter
+                    label="Payment Status"
+                    value={fltPaymentStatus}
+                    onChange={setFltPaymentStatus}
+                    options={PAYMENT_STATUSES.map((s) => ({ value: s, label: s }))}
+                    allLabel="All payment statuses"
+                    className={thCls}
+                  />
+                  <TableHeaderFilter
+                    label="Admission Status"
+                    value={fltAdmissionStatus}
+                    onChange={setFltAdmissionStatus}
+                    options={ADMISSION_STATUSES.map((s) => ({ value: s, label: s }))}
+                    allLabel="All admission statuses"
+                    className={thCls}
+                  />
+                  <TableHeaderCell label="Actions" className={thCls} />
                 </tr>
-              ))
-            : leads.map((lead) => {
-                const fu = lead.follow_up_date ? String(lead.follow_up_date) : null;
-                const overdue = !!(fu && fu < today && !isClosedLeadStatus(String(lead.status || "")));
-                const hot = lead.priority === "Hot";
-                const program = lead.interested_program || lead.service_interest || "—";
-                const contactable = canContactLead(lead);
-                return (
-                  <tr
-                    key={lead.id}
-                    className={[
-                      overdue ? "bg-rose-50/80" : "",
-                      hot ? "outline outline-2 outline-orange-200/70" : "",
-                      fu === today ? "shadow-[inset_3px_0_0_#c9a227]" : "",
-                    ].join(" ")}
-                  >
-                    {pickMode ? (
-                      <td className="sticky-col sticky-col-1 sticky-check-col py-3.5 text-center align-middle">
-                        <div className="flex justify-center">
-                          <input
-                            type="checkbox"
-                            checked={pickedIds?.has(lead.id) ?? false}
-                            onChange={() => onTogglePick?.(lead.id)}
-                            className="h-4 w-4 rounded border-[#cbd5e1]"
-                          />
-                        </div>
-                      </td>
-                    ) : null}
-                    {showBulk ? (
-                      <td
-                        className={`sticky-col sticky-check-col py-3.5 text-center align-middle ${
-                          pickMode ? "sticky-col-after-check" : "sticky-col-1"
-                        }`}
-                      >
-                        <div className="flex justify-center">
-                          <TableBulkCheckbox
-                            checked={bulkSelection!.isSelected(lead.id)}
-                            onChange={() => bulkSelection!.onToggle(lead.id)}
-                            ariaLabel={`Select ${displayLeadName(lead)}`}
-                          />
-                        </div>
-                      </td>
-                    ) : null}
-                    <td
-                      className={`sticky-col whitespace-nowrap px-6 py-3.5 text-center align-middle font-semibold text-slate-900 min-w-[14rem] ${
-                        pickMode || showBulk ? "sticky-col-after-check" : "sticky-col-1"
-                      }`}
-                    >
-                      {displayLeadName(lead) || "—"}
-                    </td>
-                    <td
-                      className={`whitespace-nowrap px-6 py-3.5 text-center align-middle min-w-[11rem] ${
-                        pickMode || showBulk ? "" : "sticky-col sticky-col-2"
-                      }`}
-                    >
-                      <div className="flex justify-center">
-                        <StudentOutreachButtons
-                          mode="phone"
-                          phone={lead.phone}
-                          phoneCalled={lead.phone_called}
-                          onPhoneClick={contactable ? () => void onPhoneClick(lead) : undefined}
-                        />
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">
-                      <div className="flex justify-center">
-                        <StudentOutreachButtons
-                          mode="whatsapp"
-                          phone={lead.phone}
-                          whatsapp={lead.whatsapp}
-                          whatsappSent={lead.whatsapp_sent}
-                          onWhatsAppClick={contactable ? () => void onWhatsAppClick(lead) : undefined}
-                        />
-                      </div>
-                    </td>
-                    <td className="px-6 py-3.5 text-center align-middle">
-                      <div className="flex justify-center">
-                        <StudentOutreachButtons
-                          mode="email"
-                          email={lead.email}
-                          emailSent={lead.email_sent}
-                          onEmailClick={contactable ? () => void onEmailClick(lead) : undefined}
-                        />
-                      </div>
-                    </td>
-                    <td className={tdCls}>{lead.city || "—"}</td>
-                    <td className={tdTrunc}>{lead.current_profile || "—"}</td>
-                    <td className={tdCls}>{lead.degree || "—"}</td>
-                    <td className={tdTrunc}>{lead.college_company || lead.company_name || "—"}</td>
-                    <td className={tdCls}>{lead.year_of_passing || "—"}</td>
-                    <td className={tdCls}>{lead.employment_status || "—"}</td>
-                    <td className={tdCls}>{formatMoney(lead.current_salary)}</td>
-                    <td className={tdTrunc}>{String(program)}</td>
-                    <td className={tdTrunc}>{lead.career_goal || "—"}</td>
-                    <td className={tdTrunc}>{lead.preferred_job_role || "—"}</td>
-                    <td className={tdCls}>{formatMoney(lead.target_salary)}</td>
-                    <td className={tdTrunc}>{lead.current_skill_level || "—"}</td>
-                    <td className={tdTrunc}>{lead.main_career_problem || "—"}</td>
-                    <td className={tdCls}>{lead.joining_timeline || "—"}</td>
-                    <td className={tdCls}>{formatMoney(lead.budget)}</td>
-                    <td className={tdCls}>{lead.payment_plan || "—"}</td>
-                    <td className={tdCls}>{lead.parent_approval_required || "—"}</td>
-                    <td className={tdCls}>{lead.decision_maker || "—"}</td>
-                    <td className={tdCls}>{lead.preferred_batch || "—"}</td>
-                    <td className={tdCls}>{lead.laptop_availability || "—"}</td>
-                    <td className={tdCls}>{lead.source || "—"}</td>
-                    <td className={tdTrunc}>{lead.assigned_to ? employeeNameMap[lead.assigned_to] : "—"}</td>
-                    <td className={tdCls}>{lead.lead_stage || "—"}</td>
-                    <td className="px-6 py-3.5 text-center align-middle">
-                      <div className="flex justify-center">
-                        <LeadStatusBadge status={String(lead.status)} />
-                      </div>
-                    </td>
-                    <td className={`${tdCls} font-medium capitalize`}>{lead.priority || "—"}</td>
-                    <td className={tdTrunc}>{lead.primary_objection || "—"}</td>
-                    <td className={`${tdCls} text-xs`}>{formatDisplayDate(fu)}</td>
-                    <td className={tdCls}>{formatMoney(lead.fee_quoted ?? lead.proposal_amount)}</td>
-                    <td className={tdCls}>{formatMoney(lead.final_fee)}</td>
-                    <td className={tdCls}>{lead.payment_status || "—"}</td>
-                    <td className={tdCls}>{lead.admission_status || "—"}</td>
-                    <td className="min-w-[14rem] whitespace-nowrap px-6 py-3.5 text-center align-middle text-xs">
-                      <div className="inline-flex flex-wrap items-center justify-center gap-3">
-                        <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onProfile(lead)}>
-                          View
-                        </button>
-                        {(isAdmin || lead.assigned_to === currentUserId) && (
-                          <button type="button" className="font-semibold text-slate-600 hover:underline" onClick={() => onEdit(lead)}>
-                            Edit
-                          </button>
-                        )}
-                        {isAdmin && (
-                          <button type="button" className="font-semibold text-rose-600 hover:underline" onClick={() => onDelete(lead.id)}>
-                            Delete
-                          </button>
-                        )}
-                        <button type="button" className="font-semibold text-teal-700 hover:underline" onClick={() => onAddFollow(lead)}>
-                          Follow-up
-                        </button>
-                        <button type="button" className="font-semibold text-violet-700 hover:underline" onClick={() => onOpenActivity(lead)}>
-                          Activity
-                        </button>
-                        {isAdmin && !isClosedLeadStatus(String(lead.status)) && (
-                          <button type="button" className="font-semibold text-emerald-700 hover:underline" onClick={() => onConvert(lead)}>
-                            Admit
-                          </button>
-                        )}
-                      </div>
+              </thead>
+              <tbody className="divide-y divide-[#e8edf5] text-[#334155]">
+                {loading
+                  ? [...Array.from({ length: 6 }).keys()].map((skeletonIdx) => (
+                      <tr key={skeletonIdx}>
+                        <td colSpan={colCount} className="px-4 py-3 text-center align-middle">
+                          <div className="h-5 animate-pulse rounded bg-slate-100" />
+                        </td>
+                      </tr>
+                    ))
+                  : leads.map((lead) => {
+                      const fu = lead.follow_up_date ? String(lead.follow_up_date) : null;
+                      const overdue = !!(fu && fu < today && !isClosedLeadStatus(String(lead.status || "")));
+                      const hot = lead.priority === "Hot";
+                      const program = lead.interested_program || lead.service_interest || "—";
+                      const contactable = canContactLead(lead);
+                      return (
+                        <tr
+                          key={lead.id}
+                          className={[
+                            overdue ? "bg-rose-50/80" : "",
+                            hot ? "outline outline-2 outline-orange-200/70" : "",
+                            fu === today ? "shadow-[inset_3px_0_0_#c9a227]" : "",
+                          ].join(" ")}
+                        >
+                          {pickMode ? (
+                            <td className={TABLE_CHECK_TD}>
+                              <div className="flex justify-center">
+                                <input
+                                  type="checkbox"
+                                  checked={pickedIds?.has(lead.id) ?? false}
+                                  onChange={() => onTogglePick?.(lead.id)}
+                                  className="h-4 w-4 rounded border-[#cbd5e1]"
+                                />
+                              </div>
+                            </td>
+                          ) : null}
+                          {showBulk ? (
+                            <td className={TABLE_CHECK_TD}>
+                              <div className="flex justify-center">
+                                <TableBulkCheckbox
+                                  checked={bulkSelection!.isSelected(lead.id)}
+                                  onChange={() => bulkSelection!.onToggle(lead.id)}
+                                  ariaLabel={`Select ${displayLeadName(lead)}`}
+                                />
+                              </div>
+                            </td>
+                          ) : null}
+                          <td
+                            className={`sticky-col whitespace-nowrap px-4 py-3 text-center align-middle font-semibold text-slate-900 min-w-[14rem] ${
+                              pickMode || showBulk ? "sticky-col-after-check" : "sticky-col-1"
+                            }`}
+                          >
+                            {displayLeadName(lead) || "—"}
+                          </td>
+                          <td
+                            className={`whitespace-nowrap px-4 py-3 text-center align-middle min-w-[11rem] ${
+                              pickMode || showBulk ? "" : "sticky-col sticky-col-2"
+                            }`}
+                          >
+                            <div className="flex justify-center">
+                              <StudentOutreachButtons
+                                mode="phone"
+                                phone={lead.phone}
+                                phoneCalled={lead.phone_called}
+                                onPhoneClick={contactable ? () => void onPhoneClick(lead) : undefined}
+                              />
+                            </div>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-center align-middle">
+                            <div className="flex justify-center">
+                              <StudentOutreachButtons
+                                mode="whatsapp"
+                                phone={lead.phone}
+                                whatsapp={lead.whatsapp}
+                                whatsappSent={lead.whatsapp_sent}
+                                onWhatsAppClick={contactable ? () => void onWhatsAppClick(lead) : undefined}
+                              />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center align-middle">
+                            <div className="flex justify-center">
+                              <StudentOutreachButtons
+                                mode="email"
+                                email={lead.email}
+                                emailSent={lead.email_sent}
+                                onEmailClick={contactable ? () => void onEmailClick(lead) : undefined}
+                              />
+                            </div>
+                          </td>
+                          <td className={tdCls}>{lead.city || "—"}</td>
+                          <td className={tdTrunc}>{lead.current_profile || "—"}</td>
+                          <td className={tdCls}>{lead.degree || "—"}</td>
+                          <td className={tdTrunc}>{lead.college_company || lead.company_name || "—"}</td>
+                          <td className={tdCls}>{lead.year_of_passing || "—"}</td>
+                          <td className={tdCls}>{lead.employment_status || "—"}</td>
+                          <td className={tdCls}>{formatMoney(lead.current_salary)}</td>
+                          <td className={tdTrunc}>{String(program)}</td>
+                          <td className={tdTrunc}>{lead.career_goal || "—"}</td>
+                          <td className={tdTrunc}>{lead.preferred_job_role || "—"}</td>
+                          <td className={tdCls}>{formatMoney(lead.target_salary)}</td>
+                          <td className={tdTrunc}>{lead.current_skill_level || "—"}</td>
+                          <td className={tdTrunc}>{lead.main_career_problem || "—"}</td>
+                          <td className={tdCls}>{lead.joining_timeline || "—"}</td>
+                          <td className={tdCls}>{formatMoney(lead.budget)}</td>
+                          <td className={tdCls}>{lead.payment_plan || "—"}</td>
+                          <td className={tdCls}>{lead.parent_approval_required || "—"}</td>
+                          <td className={tdCls}>{lead.decision_maker || "—"}</td>
+                          <td className={tdCls}>{lead.preferred_batch || "—"}</td>
+                          <td className={tdCls}>{lead.laptop_availability || "—"}</td>
+                          <td className={tdCls}>{lead.source || "—"}</td>
+                          <td className={tdTrunc}>{lead.assigned_to ? employeeNameMap[lead.assigned_to] : "—"}</td>
+                          <td className={tdCls}>{lead.lead_stage || "—"}</td>
+                          <td className="px-4 py-3 text-center align-middle">
+                            <div className="flex justify-center">
+                              <LeadStatusBadge status={String(lead.status)} />
+                            </div>
+                          </td>
+                          <td className={`${tdCls} font-medium capitalize`}>{lead.priority || "—"}</td>
+                          <td className={tdTrunc}>{lead.primary_objection || "—"}</td>
+                          <td className={`${tdCls} text-xs`}>{formatDisplayDate(fu)}</td>
+                          <td className={tdCls}>{formatMoney(lead.fee_quoted ?? lead.proposal_amount)}</td>
+                          <td className={tdCls}>{formatMoney(lead.final_fee)}</td>
+                          <td className={tdCls}>{lead.payment_status || "—"}</td>
+                          <td className={tdCls}>{lead.admission_status || "—"}</td>
+                          <td className="min-w-[14rem] whitespace-nowrap px-4 py-3 text-center align-middle text-xs">
+                            <div className="inline-flex flex-wrap items-center justify-center gap-3">
+                              <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onProfile(lead)}>
+                                View
+                              </button>
+                              {(isAdmin || lead.assigned_to === currentUserId) && (
+                                <button type="button" className="font-semibold text-slate-600 hover:underline" onClick={() => onEdit(lead)}>
+                                  Edit
+                                </button>
+                              )}
+                              {isAdmin && (
+                                <button type="button" className="font-semibold text-rose-600 hover:underline" onClick={() => onDelete(lead.id)}>
+                                  Delete
+                                </button>
+                              )}
+                              <button type="button" className="font-semibold text-teal-700 hover:underline" onClick={() => onAddFollow(lead)}>
+                                Follow-up
+                              </button>
+                              <button type="button" className="font-semibold text-violet-700 hover:underline" onClick={() => onOpenActivity(lead)}>
+                                Activity
+                              </button>
+                              {isAdmin && !isClosedLeadStatus(String(lead.status)) && (
+                                <button type="button" className="font-semibold text-emerald-700 hover:underline" onClick={() => onConvert(lead)}>
+                                  Admit
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                {!loading && leads.length === 0 ? (
+                  <tr>
+                    <td colSpan={colCount} className="px-5 py-10 text-center align-middle text-slate-500">
+                      No students match these filters yet.
                     </td>
                   </tr>
-                );
-              })}
-          {!loading && leads.length === 0 ? (
-            <tr>
-              <td colSpan={colCount} className="px-5 py-10 text-center align-middle text-slate-500">
-                No students match these filters yet.
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
-      </div>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        }
+        mobile={
+          loading ? (
+            <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">Loading…</p>
+          ) : leads.length === 0 ? (
+            <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+              No students match these filters yet.
+            </p>
+          ) : (
+            leads.map((lead) => {
+              const program = lead.interested_program || lead.service_interest || "—";
+              const canEdit = isAdmin || lead.assigned_to === currentUserId;
+              const canAdmit = isAdmin && !isClosedLeadStatus(String(lead.status));
+              const counsellor = lead.assigned_to ? employeeNameMap[lead.assigned_to] : "—";
+              const stageOrStatus = lead.lead_stage || lead.status || "—";
+              const moreActions = [
+                { label: "Activity", onClick: () => onOpenActivity(lead) },
+                { label: "Follow-up", onClick: () => onAddFollow(lead) },
+                ...(canAdmit ? [{ label: "Admit", onClick: () => onConvert(lead) }] : []),
+                ...(isAdmin
+                  ? [{ label: "Delete", onClick: () => onDelete(lead.id), destructive: true as const }]
+                  : []),
+              ];
+              return (
+                <MobileRecordCard
+                  key={lead.id}
+                  title={displayLeadName(lead) || "—"}
+                  subtitle={dash(lead.phone)}
+                  showSelect={pickMode || showBulk}
+                  selected={
+                    pickMode ? (pickedIds?.has(lead.id) ?? false) : showBulk ? bulkSelection!.isSelected(lead.id) : false
+                  }
+                  onToggleSelect={
+                    pickMode
+                      ? () => onTogglePick?.(lead.id)
+                      : showBulk
+                        ? () => bulkSelection!.onToggle(lead.id)
+                        : undefined
+                  }
+                  selectAriaLabel={`${pickMode ? "Pick" : "Select"} ${displayLeadName(lead)}`}
+                  previewFields={[
+                    { label: "Mobile", value: dash(lead.phone) },
+                    { label: "Program", value: dash(program) },
+                    { label: "Stage/Status", value: dash(stageOrStatus) },
+                    { label: "Next follow-up", value: formatDisplayDate(lead.follow_up_date) || "—" },
+                    { label: "Counsellor", value: dash(counsellor) },
+                  ]}
+                  detailFields={[
+                    { label: "Student Name", value: displayLeadName(lead) || "—" },
+                    { label: "Mobile", value: dash(lead.phone) },
+                    { label: "WhatsApp", value: dash(lead.whatsapp) },
+                    { label: "Email", value: dash(lead.email) },
+                    { label: "City", value: dash(lead.city) },
+                    { label: "Current Profile", value: dash(lead.current_profile) },
+                    { label: "Degree", value: dash(lead.degree) },
+                    { label: "College/Company", value: dash(lead.college_company || lead.company_name) },
+                    { label: "Year of Passing", value: dash(lead.year_of_passing) },
+                    { label: "Employment Status", value: dash(lead.employment_status) },
+                    { label: "Current Salary", value: formatMoney(lead.current_salary) },
+                    { label: "Interested Program", value: dash(program) },
+                    { label: "Career Goal", value: dash(lead.career_goal) },
+                    { label: "Preferred Job Role", value: dash(lead.preferred_job_role) },
+                    { label: "Target Salary", value: formatMoney(lead.target_salary) },
+                    { label: "Lead Source", value: dash(lead.source) },
+                    { label: "Counsellor", value: dash(counsellor) },
+                    { label: "Lead Stage", value: dash(lead.lead_stage) },
+                    { label: "Lead Status", value: dash(lead.status) },
+                    { label: "Priority", value: dash(lead.priority) },
+                    { label: "Primary Objection", value: dash(lead.primary_objection) },
+                    { label: "Next Follow-up", value: formatDisplayDate(lead.follow_up_date) || "—" },
+                    { label: "Fee Quoted", value: formatMoney(lead.fee_quoted ?? lead.proposal_amount) },
+                    { label: "Final Fee", value: formatMoney(lead.final_fee) },
+                    { label: "Payment Status", value: dash(lead.payment_status) },
+                    { label: "Admission Status", value: dash(lead.admission_status) },
+                    { label: "Notes", value: dash(lead.notes), clamp: true },
+                  ]}
+                  primaryActions={[
+                    { label: "View", onClick: () => onProfile(lead) },
+                    ...(canEdit ? [{ label: "Edit", onClick: () => onEdit(lead) }] : []),
+                  ]}
+                  moreActions={moreActions}
+                />
+              );
+            })
+          )
+        }
+      />
       {pagination ? (
         <TablePagination
           page={pagination.page}
@@ -2928,74 +3066,160 @@ function ConvertedTable({
   const showBulk = Boolean(bulkSelection);
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white">
-      <div className="overflow-x-auto">
-      <table className="w-full min-w-[900px] text-sm">
-        <thead className="bg-[#f1f6fc] text-[#64748b]">
-          <tr>
-            {showBulk ? (
-              <th className="w-10 px-3 py-2">
-                <TableBulkCheckbox
-                  checked={bulkSelection!.allSelected}
-                  indeterminate={bulkSelection!.someSelected}
-                  disabled={!leads.length}
-                  onChange={bulkSelection!.onToggleAll}
-                  ariaLabel="Select all converted leads"
-                />
-              </th>
-            ) : null}
-            <th className="px-3 py-2 text-left">Code</th>
-            <th className="px-3 py-2 text-left">Client</th>
-            <th className="px-3 py-2 text-left">Company</th>
-            <th className="px-3 py-2 text-left">Phone</th>
-            <th className="px-3 py-2 text-left">Email</th>
-            <th className="px-3 py-2 text-left">Services</th>
-            <th className="px-3 py-2 text-left">Deal</th>
-            <th className="px-3 py-2 text-left">Converted</th>
-            <th className="px-3 py-2 text-left">Owner</th>
-            <th className="px-3 py-2 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {leads.map((convertedLead) => (
-            <tr key={convertedLead.id} className="border-t border-[#eef2ff]">
-              {showBulk ? (
-                <td className="px-3 py-2">
-                  <TableBulkCheckbox
-                    checked={bulkSelection!.isSelected(convertedLead.id)}
-                    onChange={() => bulkSelection!.onToggle(convertedLead.id)}
-                    ariaLabel={`Select ${displayLeadName(convertedLead)}`}
-                  />
-                </td>
-              ) : null}
-              <td className="px-3 py-2 font-mono text-xs">{convertedLead.client_code || "—"}</td>
-              <td className="px-3 py-2 font-semibold">{displayLeadName(convertedLead)}</td>
-              <td>{convertedLead.company_name || "—"}</td>
-              <td className="whitespace-nowrap">{convertedLead.phone || "—"}</td>
-              <td className="truncate max-w-[180px]">{convertedLead.email || "—"}</td>
-              <td className="max-w-[200px] truncate text-xs">{String(convertedLead.service_interest || "—")}</td>
-              <td>{convertedLead.proposal_amount != null ? `₹${Number(convertedLead.proposal_amount).toLocaleString()}` : "—"}</td>
-              <td>{convertedLead.converted_at ? new Date(String(convertedLead.converted_at)).toLocaleDateString() : "—"}</td>
-              <td>{convertedLead.assigned_to ? employeeNameMap[convertedLead.assigned_to] : "—"}</td>
-              <td className="space-x-2 px-3 py-2 text-right text-xs">
-                <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onProfile(convertedLead)}>
-                  Profile
-                </button>
-                {isAdmin ? (
-                  <>
-                    <button type="button" className="text-slate-400" disabled title="Connect Project Master next">
-                      Create project
-                    </button>
-                    <button type="button" className="text-slate-400" disabled title="Coming soon">
-                      Add doc
-                    </button>
-                  </>
-                ) : null}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
+      <ResponsiveDataView
+        selectAll={
+          showBulk
+            ? {
+                checked: bulkSelection!.allSelected,
+                indeterminate: bulkSelection!.someSelected,
+                onChange: bulkSelection!.onToggleAll,
+                label: "Select all",
+              }
+            : undefined
+        }
+        desktop={
+          <div className="responsive-table-wrap">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="bg-[#f1f6fc] text-[#64748b]">
+                <tr>
+                  {showBulk ? (
+                    <th className="w-10 px-3 py-2">
+                      <TableBulkCheckbox
+                        checked={bulkSelection!.allSelected}
+                        indeterminate={bulkSelection!.someSelected}
+                        disabled={!leads.length}
+                        onChange={bulkSelection!.onToggleAll}
+                        ariaLabel="Select all converted leads"
+                      />
+                    </th>
+                  ) : null}
+                  <th className="px-3 py-2 text-left">Code</th>
+                  <th className="px-3 py-2 text-left">Client</th>
+                  <th className="px-3 py-2 text-left">Company</th>
+                  <th className="px-3 py-2 text-left">Phone</th>
+                  <th className="px-3 py-2 text-left">Email</th>
+                  <th className="px-3 py-2 text-left">Services</th>
+                  <th className="px-3 py-2 text-left">Deal</th>
+                  <th className="px-3 py-2 text-left">Converted</th>
+                  <th className="px-3 py-2 text-left">Owner</th>
+                  <th className="px-3 py-2 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leads.map((convertedLead) => (
+                  <tr key={convertedLead.id} className="border-t border-[#eef2ff]">
+                    {showBulk ? (
+                      <td className="px-3 py-2">
+                        <TableBulkCheckbox
+                          checked={bulkSelection!.isSelected(convertedLead.id)}
+                          onChange={() => bulkSelection!.onToggle(convertedLead.id)}
+                          ariaLabel={`Select ${displayLeadName(convertedLead)}`}
+                        />
+                      </td>
+                    ) : null}
+                    <td className="px-3 py-2 font-mono text-xs">{convertedLead.client_code || "—"}</td>
+                    <td className="px-3 py-2 font-semibold">{displayLeadName(convertedLead)}</td>
+                    <td>{convertedLead.company_name || "—"}</td>
+                    <td className="whitespace-nowrap">{convertedLead.phone || "—"}</td>
+                    <td className="truncate max-w-[180px]">{convertedLead.email || "—"}</td>
+                    <td className="max-w-[200px] truncate text-xs">{String(convertedLead.service_interest || "—")}</td>
+                    <td>
+                      {convertedLead.proposal_amount != null
+                        ? `₹${Number(convertedLead.proposal_amount).toLocaleString()}`
+                        : "—"}
+                    </td>
+                    <td>
+                      {convertedLead.converted_at
+                        ? new Date(String(convertedLead.converted_at)).toLocaleDateString()
+                        : "—"}
+                    </td>
+                    <td>{convertedLead.assigned_to ? employeeNameMap[convertedLead.assigned_to] : "—"}</td>
+                    <td className="space-x-2 px-3 py-2 text-right text-xs">
+                      <button
+                        type="button"
+                        className="font-semibold text-blue-700 hover:underline"
+                        onClick={() => onProfile(convertedLead)}
+                      >
+                        Profile
+                      </button>
+                      {isAdmin ? (
+                        <>
+                          <button type="button" className="text-slate-400" disabled title="Connect Project Master next">
+                            Create project
+                          </button>
+                          <button type="button" className="text-slate-400" disabled title="Coming soon">
+                            Add doc
+                          </button>
+                        </>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        }
+        mobile={
+          leads.length === 0 ? (
+            <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+              No converted leads yet.
+            </p>
+          ) : (
+            leads.map((convertedLead) => (
+              <MobileRecordCard
+                key={convertedLead.id}
+                title={displayLeadName(convertedLead)}
+                subtitle={convertedLead.client_code || convertedLead.phone || undefined}
+                showSelect={showBulk}
+                selected={showBulk ? bulkSelection!.isSelected(convertedLead.id) : false}
+                onToggleSelect={showBulk ? () => bulkSelection!.onToggle(convertedLead.id) : undefined}
+                selectAriaLabel={`Select ${displayLeadName(convertedLead)}`}
+                previewFields={[
+                  { label: "Company", value: convertedLead.company_name || "—" },
+                  { label: "Phone", value: convertedLead.phone || "—" },
+                  {
+                    label: "Deal",
+                    value:
+                      convertedLead.proposal_amount != null
+                        ? `₹${Number(convertedLead.proposal_amount).toLocaleString()}`
+                        : "—",
+                  },
+                  {
+                    label: "Owner",
+                    value: convertedLead.assigned_to ? employeeNameMap[convertedLead.assigned_to] : "—",
+                  },
+                ]}
+                detailFields={[
+                  { label: "Code", value: convertedLead.client_code || "—" },
+                  { label: "Client", value: displayLeadName(convertedLead) },
+                  { label: "Company", value: convertedLead.company_name || "—" },
+                  { label: "Phone", value: convertedLead.phone || "—" },
+                  { label: "Email", value: convertedLead.email || "—" },
+                  { label: "Services", value: String(convertedLead.service_interest || "—") },
+                  {
+                    label: "Deal",
+                    value:
+                      convertedLead.proposal_amount != null
+                        ? `₹${Number(convertedLead.proposal_amount).toLocaleString()}`
+                        : "—",
+                  },
+                  {
+                    label: "Converted",
+                    value: convertedLead.converted_at
+                      ? new Date(String(convertedLead.converted_at)).toLocaleDateString()
+                      : "—",
+                  },
+                  {
+                    label: "Owner",
+                    value: convertedLead.assigned_to ? employeeNameMap[convertedLead.assigned_to] : "—",
+                  },
+                ]}
+                primaryActions={[{ label: "Profile", onClick: () => onProfile(convertedLead) }]}
+              />
+            ))
+          )
+        }
+      />
     </div>
   );
 }
@@ -3020,81 +3244,145 @@ function ProposalTrackerTable({
   const showBulk = Boolean(bulkSelection);
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
-      <div className="overflow-x-auto">
-      <table className="w-full min-w-[880px] text-sm">
-        <thead className="bg-[#f1f6fc] text-[#64748b]">
-          <tr>
-            {showBulk ? (
-              <th className="w-10 px-3 py-2">
-                <TableBulkCheckbox
-                  checked={bulkSelection!.allSelected}
-                  indeterminate={bulkSelection!.someSelected}
-                  disabled={!leads.length}
-                  onChange={bulkSelection!.onToggleAll}
-                  ariaLabel="Select all proposal leads"
-                />
-              </th>
-            ) : null}
-            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Lead</th>
-            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Company</th>
-            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Amount</th>
-            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Status</th>
-            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Sent date</th>
-            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Proposal</th>
-            <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {leads.length === 0 ? (
-            <tr>
-              <td colSpan={showBulk ? 8 : 7} className="px-6 py-12 text-center text-[#64748b]">
-                No leads match the current filters. Adjust filters on the All Leads tab or add a lead.
-              </td>
-            </tr>
+      <ResponsiveDataView
+        selectAll={
+          showBulk
+            ? {
+                checked: bulkSelection!.allSelected,
+                indeterminate: bulkSelection!.someSelected,
+                onChange: bulkSelection!.onToggleAll,
+                label: "Select all",
+              }
+            : undefined
+        }
+        desktop={
+          <div className="responsive-table-wrap">
+            <table className="w-full min-w-[880px] text-sm">
+              <thead className="bg-[#f1f6fc] text-[#64748b]">
+                <tr>
+                  {showBulk ? (
+                    <th className="w-10 px-3 py-2">
+                      <TableBulkCheckbox
+                        checked={bulkSelection!.allSelected}
+                        indeterminate={bulkSelection!.someSelected}
+                        disabled={!leads.length}
+                        onChange={bulkSelection!.onToggleAll}
+                        ariaLabel="Select all proposal leads"
+                      />
+                    </th>
+                  ) : null}
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Lead</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Company</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Amount</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Status</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Sent date</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Proposal</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leads.length === 0 ? (
+                  <tr>
+                    <td colSpan={showBulk ? 8 : 7} className="px-6 py-12 text-center text-[#64748b]">
+                      No leads match the current filters. Adjust filters on the All Leads tab or add a lead.
+                    </td>
+                  </tr>
+                ) : (
+                  leads.map((proposalLead) => (
+                    <tr key={proposalLead.id} className="border-t border-[#eef2ff]">
+                      {showBulk ? (
+                        <td className="px-3 py-2">
+                          <TableBulkCheckbox
+                            checked={bulkSelection!.isSelected(proposalLead.id)}
+                            onChange={() => bulkSelection!.onToggle(proposalLead.id)}
+                            ariaLabel={`Select ${displayLeadName(proposalLead)}`}
+                          />
+                        </td>
+                      ) : null}
+                      <td className="px-3 py-2 font-semibold text-slate-900">{displayLeadName(proposalLead) || "—"}</td>
+                      <td className="max-w-[200px] truncate px-3 py-2">{proposalLead.company_name || "—"}</td>
+                      <td className="whitespace-nowrap px-3 py-2">
+                        {proposalLead.proposal_amount != null
+                          ? `₹${Number(proposalLead.proposal_amount).toLocaleString()}`
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-2">
+                        <ProposalStatusBadge status={String(proposalLead.proposal_status)} />
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2">{proposalLead.proposal_sent_date || "—"}</td>
+                      <td className="px-3 py-2">
+                        <ProposalFileOpenCell
+                          entityType="student"
+                          entityId={proposalLead.id}
+                          filePath={proposalLead.proposal_file_path}
+                          legacyHref={proposalLead.proposal_link}
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {isAdmin ? (
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-blue-700 hover:underline"
+                            onClick={() => onEdit(proposalLead)}
+                          >
+                            Update
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-400">Admin only</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        }
+        mobile={
+          leads.length === 0 ? (
+            <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+              No leads match the current filters. Adjust filters on the All Leads tab or add a lead.
+            </p>
           ) : (
             leads.map((proposalLead) => (
-              <tr key={proposalLead.id} className="border-t border-[#eef2ff]">
-                {showBulk ? (
-                  <td className="px-3 py-2">
-                    <TableBulkCheckbox
-                      checked={bulkSelection!.isSelected(proposalLead.id)}
-                      onChange={() => bulkSelection!.onToggle(proposalLead.id)}
-                      ariaLabel={`Select ${displayLeadName(proposalLead)}`}
-                    />
-                  </td>
-                ) : null}
-                <td className="px-3 py-2 font-semibold text-slate-900">{displayLeadName(proposalLead) || "—"}</td>
-                <td className="max-w-[200px] truncate px-3 py-2">{proposalLead.company_name || "—"}</td>
-                <td className="whitespace-nowrap px-3 py-2">
-                  {proposalLead.proposal_amount != null ? `₹${Number(proposalLead.proposal_amount).toLocaleString()}` : "—"}
-                </td>
-                <td className="px-3 py-2">
-                  <ProposalStatusBadge status={String(proposalLead.proposal_status)} />
-                </td>
-                <td className="whitespace-nowrap px-3 py-2">{proposalLead.proposal_sent_date || "—"}</td>
-                <td className="px-3 py-2">
-                  <ProposalFileOpenCell
-                    entityType="student"
-                    entityId={proposalLead.id}
-                    filePath={proposalLead.proposal_file_path}
-                    legacyHref={proposalLead.proposal_link}
-                  />
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {isAdmin ? (
-                    <button type="button" className="text-xs font-semibold text-blue-700 hover:underline" onClick={() => onEdit(proposalLead)}>
-                      Update
-                    </button>
-                  ) : (
-                    <span className="text-xs text-slate-400">Admin only</span>
-                  )}
-                </td>
-              </tr>
+              <MobileRecordCard
+                key={proposalLead.id}
+                title={displayLeadName(proposalLead) || "—"}
+                subtitle={proposalLead.company_name || undefined}
+                showSelect={showBulk}
+                selected={showBulk ? bulkSelection!.isSelected(proposalLead.id) : false}
+                onToggleSelect={showBulk ? () => bulkSelection!.onToggle(proposalLead.id) : undefined}
+                selectAriaLabel={`Select ${displayLeadName(proposalLead)}`}
+                previewFields={[
+                  {
+                    label: "Amount",
+                    value:
+                      proposalLead.proposal_amount != null
+                        ? `₹${Number(proposalLead.proposal_amount).toLocaleString()}`
+                        : "—",
+                  },
+                  { label: "Status", value: proposalLead.proposal_status || "—" },
+                  { label: "Sent date", value: proposalLead.proposal_sent_date || "—" },
+                ]}
+                detailFields={[
+                  { label: "Lead", value: displayLeadName(proposalLead) || "—" },
+                  { label: "Company", value: proposalLead.company_name || "—" },
+                  {
+                    label: "Amount",
+                    value:
+                      proposalLead.proposal_amount != null
+                        ? `₹${Number(proposalLead.proposal_amount).toLocaleString()}`
+                        : "—",
+                  },
+                  { label: "Status", value: proposalLead.proposal_status || "—" },
+                  { label: "Sent date", value: proposalLead.proposal_sent_date || "—" },
+                ]}
+                primaryActions={isAdmin ? [{ label: "Update", onClick: () => onEdit(proposalLead) }] : []}
+              />
             ))
-          )}
-        </tbody>
-      </table>
-      </div>
+          )
+        }
+      />
     </div>
   );
 }
@@ -3283,53 +3571,93 @@ function ActivityTable({
         Chronological log of CRM actions for leads you can access. Rows come from <code className="rounded bg-slate-100 px-1 text-xs">lead_activities</code>{" "}
         joined to lead names below.
       </p>
-      <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
-        <table className="w-full min-w-[920px] text-sm">
-          <thead className="bg-[#f1f6fc] text-[#64748b]">
-            <tr>
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Date &amp; time</th>
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Lead / client</th>
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Activity type</th>
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Notes</th>
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Created by</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                  Loading activity…
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-[#64748b]">
-                  No activity found yet. Activities will appear when leads are created, follow-ups are added, proposals are updated, or status
-                  changes.
-                </td>
-              </tr>
-            ) : (
-              rows.map((ar) => {
-                const detail = [ar.notes, ar.old_value || ar.new_value ? `${ar.old_value ?? "?"} → ${ar.new_value ?? "?"}` : ""]
-                  .filter(Boolean)
-                  .join(" · ");
-                const by = ar.created_by ? employeeNameMap[ar.created_by] || ar.created_by.slice(0, 8) : "—";
-                return (
-                  <tr key={ar.id} className="border-t border-[#f1f5f9]">
-                    <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600">{formatDateTimeIST(String(ar.created_at))}</td>
-                    <td className="px-3 py-2 font-semibold text-slate-900">
-                      {clientMap[ar.client_id] ? displayLeadName(clientMap[ar.client_id]) || "—" : "Unknown lead"}
+      <ResponsiveDataView
+        desktop={
+          <div className="responsive-table-wrap rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+            <table className="w-full min-w-[920px] text-sm">
+              <thead className="bg-[#f1f6fc] text-[#64748b]">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Date &amp; time</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Lead / client</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Activity type</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Notes</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Created by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                      Loading activity…
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-slate-800">{ar.activity_type || "—"}</td>
-                    <td className="max-w-md px-3 py-2 text-xs text-slate-600 whitespace-pre-wrap">{detail || "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-700">{by}</td>
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center text-[#64748b]">
+                      No activity found yet. Activities will appear when leads are created, follow-ups are added, proposals are updated, or status
+                      changes.
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((ar) => {
+                    const detail = [ar.notes, ar.old_value || ar.new_value ? `${ar.old_value ?? "?"} → ${ar.new_value ?? "?"}` : ""]
+                      .filter(Boolean)
+                      .join(" · ");
+                    const by = ar.created_by ? employeeNameMap[ar.created_by] || ar.created_by.slice(0, 8) : "—";
+                    return (
+                      <tr key={ar.id} className="border-t border-[#f1f5f9]">
+                        <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600">{formatDateTimeIST(String(ar.created_at))}</td>
+                        <td className="px-3 py-2 font-semibold text-slate-900">
+                          {clientMap[ar.client_id] ? displayLeadName(clientMap[ar.client_id]) || "—" : "Unknown lead"}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 text-slate-800">{ar.activity_type || "—"}</td>
+                        <td className="max-w-md px-3 py-2 text-xs text-slate-600 whitespace-pre-wrap">{detail || "—"}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-700">{by}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        }
+        mobile={
+          loading ? (
+            <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">Loading activity…</p>
+          ) : rows.length === 0 ? (
+            <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+              No activity found yet. Activities will appear when leads are created, follow-ups are added, proposals are updated, or status
+              changes.
+            </p>
+          ) : (
+            rows.map((ar) => {
+              const detail = [ar.notes, ar.old_value || ar.new_value ? `${ar.old_value ?? "?"} → ${ar.new_value ?? "?"}` : ""]
+                .filter(Boolean)
+                .join(" · ");
+              const by = ar.created_by ? employeeNameMap[ar.created_by] || ar.created_by.slice(0, 8) : "—";
+              const leadName = clientMap[ar.client_id] ? displayLeadName(clientMap[ar.client_id]) || "—" : "Unknown lead";
+              return (
+                <MobileRecordCard
+                  key={ar.id}
+                  title={leadName}
+                  subtitle={formatDateTimeIST(String(ar.created_at))}
+                  previewFields={[
+                    { label: "Activity type", value: ar.activity_type || "—" },
+                    { label: "Created by", value: by },
+                  ]}
+                  detailFields={[
+                    { label: "Date & time", value: formatDateTimeIST(String(ar.created_at)) },
+                    { label: "Lead / client", value: leadName },
+                    { label: "Activity type", value: ar.activity_type || "—" },
+                    { label: "Notes", value: detail || "—", clamp: true },
+                    { label: "Created by", value: by },
+                  ]}
+                />
+              );
+            })
+          )
+        }
+      />
     </div>
   );
 }

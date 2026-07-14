@@ -8,6 +8,12 @@ import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
 import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
+import { MobileRecordCard } from "@/components/ui/MobileRecordCard";
+import {
+  ResponsiveDataView,
+  TABLE_CHECK_TH,
+  TABLE_CHECK_TD,
+} from "@/components/ui/ResponsiveDataView";
 import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { Input } from "@/components/ui/input";
@@ -617,28 +623,58 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
       ) : null}
 
       {activeTab === "team" && showFullTabs ? (
-        <div className="responsive-table-wrap rounded-[20px] border border-[#dbe6f3] bg-white">
-          <table className="w-full min-w-[520px] text-sm">
-            <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
-              <tr>
-                <th className="px-4 py-3 text-left">Employee</th>
-                <th className="px-4 py-3 text-left">Department</th>
-                <th className="px-4 py-3 text-left">Projects</th>
-                <th className="px-4 py-3 text-left">Workload</th>
-              </tr>
-            </thead>
-            <tbody>
-              {teamWorkload.map((row) => (
-                <tr key={row.id} className={["border-t border-[#eef2ff]", row.overload ? "bg-rose-50/80" : ""].join(" ")}>
-                  <td className="px-4 py-3 font-medium">{row.name}</td>
-                  <td className="px-4 py-3">{row.dept}</td>
-                  <td className="px-4 py-3">{row.projects}</td>
-                  <td className="px-4 py-3">{row.overload ? "High" : "Normal"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ResponsiveDataView
+          desktop={
+            <div className="responsive-table-wrap rounded-[20px] border border-[#dbe6f3] bg-white">
+              <table className="w-full min-w-[520px] text-sm">
+                <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Employee</th>
+                    <th className="px-4 py-3 text-left">Department</th>
+                    <th className="px-4 py-3 text-left">Projects</th>
+                    <th className="px-4 py-3 text-left">Workload</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teamWorkload.map((row) => (
+                    <tr key={row.id} className={["border-t border-[#eef2ff]", row.overload ? "bg-rose-50/80" : ""].join(" ")}>
+                      <td className="px-4 py-3 font-medium">{row.name}</td>
+                      <td className="px-4 py-3">{row.dept}</td>
+                      <td className="px-4 py-3">{row.projects}</td>
+                      <td className="px-4 py-3">{row.overload ? "High" : "Normal"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          }
+          mobile={
+            !teamWorkload.length ? (
+              <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+                No team members.
+              </p>
+            ) : (
+              teamWorkload.map((row) => (
+                <MobileRecordCard
+                  key={row.id}
+                  title={row.name}
+                  subtitle={row.dept}
+                  previewFields={[
+                    { label: "Projects", value: String(row.projects) },
+                    { label: "Workload", value: row.overload ? "High" : "Normal" },
+                  ]}
+                  detailFields={[
+                    { label: "Employee", value: row.name },
+                    { label: "Department", value: row.dept },
+                    { label: "Projects", value: String(row.projects) },
+                    { label: "Workload", value: row.overload ? "High" : "Normal" },
+                  ]}
+                  className={row.overload ? "border-rose-200 bg-rose-50/80" : undefined}
+                />
+              ))
+            )
+          }
+        />
       ) : null}
 
       {activeTab === "timeline" && showFullTabs ? (
@@ -665,21 +701,54 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
             <LeadSummaryCard title="Pending" value={`₹${Math.round(overview.pendingPay).toLocaleString()}`} loading={loading} />
             <LeadSummaryCard title="Overdue (delayed projects)" value={overview.delayed} loading={loading} accent="rose" />
           </div>
-          <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3] bg-white">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
-                <tr>
-                  <th className="px-4 py-3 text-left">Project</th>
-                  <th className="px-4 py-3 text-left">Client</th>
-                  <th className="px-4 py-3 text-left">Budget</th>
-                  <th className="px-4 py-3 text-left">Paid</th>
-                  <th className="px-4 py-3 text-left">Pending</th>
-                  <th className="px-4 py-3 text-left">Deadline</th>
-                  <th className="px-4 py-3 text-left">Payment status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((p) => {
+          <ResponsiveDataView
+            desktop={
+              <div className="responsive-table-wrap rounded-[20px] border border-[#dbe6f3] bg-white">
+                <table className="w-full min-w-[900px] text-sm">
+                  <thead className="bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Project</th>
+                      <th className="px-4 py-3 text-left">Client</th>
+                      <th className="px-4 py-3 text-left">Budget</th>
+                      <th className="px-4 py-3 text-left">Paid</th>
+                      <th className="px-4 py-3 text-left">Pending</th>
+                      <th className="px-4 py-3 text-left">Deadline</th>
+                      <th className="px-4 py-3 text-left">Payment status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((p) => {
+                      const bud = Number(p.budget ?? 0);
+                      const adv = Number(p.advance_paid ?? 0);
+                      const pend = Number(p.pending_amount ?? Math.max(0, bud - adv));
+                      let paySt = "Pending";
+                      if (bud <= 0) paySt = "—";
+                      else if (adv >= bud) paySt = "Paid";
+                      else if (adv > 0) paySt = "Partially Paid";
+                      if (pend > 0 && p.deadline && String(p.deadline).slice(0, 10) < today && normalizeProjectStatus(String(p.status)) !== "Completed") paySt = "Overdue";
+                      return (
+                        <tr key={p.id} className="border-t border-[#eef2ff]">
+                          <td className="px-4 py-3 font-medium">{p.project_name}</td>
+                          <td className="px-4 py-3">{p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—"}</td>
+                          <td className="px-4 py-3">₹{bud.toLocaleString()}</td>
+                          <td className="px-4 py-3">₹{adv.toLocaleString()}</td>
+                          <td className="px-4 py-3">₹{pend.toLocaleString()}</td>
+                          <td className="px-4 py-3">{p.deadline ? String(p.deadline).slice(0, 10) : "—"}</td>
+                          <td className="px-4 py-3">{paySt}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            }
+            mobile={
+              !filtered.length ? (
+                <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+                  No projects match filters.
+                </p>
+              ) : (
+                filtered.map((p) => {
                   const bud = Number(p.budget ?? 0);
                   const adv = Number(p.advance_paid ?? 0);
                   const pend = Number(p.pending_amount ?? Math.max(0, bud - adv));
@@ -688,21 +757,33 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
                   else if (adv >= bud) paySt = "Paid";
                   else if (adv > 0) paySt = "Partially Paid";
                   if (pend > 0 && p.deadline && String(p.deadline).slice(0, 10) < today && normalizeProjectStatus(String(p.status)) !== "Completed") paySt = "Overdue";
+                  const clientName = p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—";
                   return (
-                    <tr key={p.id} className="border-t border-[#eef2ff]">
-                      <td className="px-4 py-3 font-medium">{p.project_name}</td>
-                      <td className="px-4 py-3">{p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—"}</td>
-                      <td className="px-4 py-3">₹{bud.toLocaleString()}</td>
-                      <td className="px-4 py-3">₹{adv.toLocaleString()}</td>
-                      <td className="px-4 py-3">₹{pend.toLocaleString()}</td>
-                      <td className="px-4 py-3">{p.deadline ? String(p.deadline).slice(0, 10) : "—"}</td>
-                      <td className="px-4 py-3">{paySt}</td>
-                    </tr>
+                    <MobileRecordCard
+                      key={p.id}
+                      title={p.project_name}
+                      subtitle={clientName}
+                      previewFields={[
+                        { label: "Budget", value: `₹${bud.toLocaleString()}` },
+                        { label: "Pending", value: `₹${pend.toLocaleString()}` },
+                        { label: "Deadline", value: p.deadline ? String(p.deadline).slice(0, 10) : "—" },
+                        { label: "Payment", value: paySt },
+                      ]}
+                      detailFields={[
+                        { label: "Project", value: p.project_name },
+                        { label: "Client", value: clientName },
+                        { label: "Budget", value: `₹${bud.toLocaleString()}` },
+                        { label: "Paid", value: `₹${adv.toLocaleString()}` },
+                        { label: "Pending", value: `₹${pend.toLocaleString()}` },
+                        { label: "Deadline", value: p.deadline ? String(p.deadline).slice(0, 10) : "—" },
+                        { label: "Payment status", value: paySt },
+                      ]}
+                    />
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
+                })
+              )
+            }
+          />
         </div>
       ) : null}
 
@@ -823,138 +904,213 @@ function ProjectsDataTable({
 
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
-      <div className="overflow-x-auto">
-      <table className="w-full min-w-[1100px] text-sm">
-          <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
-            <tr>
-              {showSelection ? (
-                <th className="w-10 px-3 py-3">
-                  <TableBulkCheckbox
-                    checked={selection!.allSelected}
-                    indeterminate={selection!.someSelected}
-                    disabled={loading || !rows.length}
-                    onChange={selection!.onToggleAll}
-                    ariaLabel="Select all projects"
-                  />
-                </th>
-              ) : null}
-              <TableHeaderCell label="Code" className="px-4 py-3" />
-            <TableHeaderCell label="Project" className="px-4 py-3" />
-            <TableHeaderFilter
-              label="Client"
-              value={fltClient}
-              onChange={setFltClient}
-              options={clients.map((c) => ({ value: c.id, label: displayClientName(c) }))}
-              allLabel="All clients"
-              className="px-4 py-3"
-            />
-            <TableHeaderFilter
-              label="Manager"
-              value={fltManager}
-              onChange={setFltManager}
-              options={employeeOpts.map((e) => ({ value: e.id, label: e.label }))}
-              allLabel="All managers"
-              className="px-4 py-3"
-            />
-            <TableHeaderCell label="Team" className="px-4 py-3" />
-            <TableHeaderCell label="Budget" className="px-4 py-3" />
-            <TableHeaderCell label="Progress" className="px-4 py-3" />
-            <TableHeaderFilter
-              label="Status"
-              value={fltStatus}
-              onChange={setFltStatus}
-              options={["Planning", "Active", "On Hold", "In Review", "Completed", "Cancelled", "Delayed"].map((s) => ({
-                value: s,
-                label: s,
-              }))}
-              allLabel="All statuses"
-              className="px-4 py-3"
-            />
-            <TableHeaderFilter
-              label="Priority"
-              value={fltPriority}
-              onChange={setFltPriority}
-              options={["Low", "Medium", "High", "Urgent"].map((s) => ({ value: s, label: s }))}
-              allLabel="All priorities"
-              className="px-4 py-3"
-            />
-            <TableHeaderFilter
-              label="Deadline"
-              type="date"
-              value={fltDeadline}
-              onChange={setFltDeadline}
-              className="px-4 py-3"
-            />
-            <TableHeaderCell label="Actions" className="px-4 py-3" />
-          </tr>
-        </thead>
-        <tbody>
-          {loading
-            ? Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i}>
-                  <td colSpan={11} className="px-4 py-3">
-                    <div className="h-5 animate-pulse rounded bg-slate-100" />
-                  </td>
-                </tr>
-              ))
-            : paginatedRows.map((p) => {
-                const delayed = isDelayedProject(p, today);
-                const urgent = (p.priority || "") === "Urgent";
-                const tc = teamMembers.filter((t) => t.project_id === p.id).length;
-                const dl = p.deadline ? String(p.deadline).slice(0, 10) : "";
-                const near = dl && dl >= today && dl <= new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
-                return (
-                  <tr
-                    key={p.id}
-                    className={[delayed ? "bg-rose-50/90" : "", urgent ? "outline outline-1 outline-amber-300/80" : "", near ? "bg-amber-50/50" : ""].join(" ")}
-                  >
-                    {showSelection ? (
-                      <td className="px-3 py-3">
+      <ResponsiveDataView
+        selectAll={
+          showSelection
+            ? {
+                checked: selection!.allSelected,
+                indeterminate: selection!.someSelected,
+                onChange: selection!.onToggleAll,
+                label: "Select all",
+                countLabel: `${paginatedRows.filter((p) => selection!.isSelected(p.id)).length} selected`,
+              }
+            : undefined
+        }
+        desktop={
+          <div className="responsive-table-wrap">
+            <table className="w-full min-w-[1100px] text-sm">
+              <thead className="bg-[#f1f6fc] text-xs uppercase tracking-wide text-[#64748b]">
+                <tr>
+                  {showSelection ? (
+                    <th className={TABLE_CHECK_TH}>
+                      <div className="flex justify-center">
                         <TableBulkCheckbox
-                          checked={selection!.isSelected(p.id)}
-                          onChange={() => selection!.onToggle(p.id)}
-                          ariaLabel={`Select project ${p.project_name}`}
+                          checked={selection!.allSelected}
+                          indeterminate={selection!.someSelected}
+                          disabled={loading || !rows.length}
+                          onChange={selection!.onToggleAll}
+                          ariaLabel="Select all projects"
                         />
-                      </td>
-                    ) : null}
-                    <td className="px-4 py-3 font-mono text-xs">{p.project_code || "—"}</td>
-                    <td className="px-4 py-3 font-semibold text-[#0f172a]">{p.project_name}</td>
-                    <td className="max-w-[180px] truncate px-4 py-3">{p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—"}</td>
-                    <td className="px-4 py-3">{p.project_manager ? employeeNameMap[String(p.project_manager)] : "—"}</td>
-                    <td className="px-4 py-3">{tc}</td>
-                    <td className="px-4 py-3">{p.budget != null ? `₹${Number(p.budget).toLocaleString()}` : "—"}</td>
-                    <td className="px-4 py-3">{p.progress ?? 0}%</td>
-                    <td className="px-4 py-3">{normalizeProjectStatus(String(p.status))}</td>
-                    <td className="px-4 py-3">{p.priority || "—"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{dl || "—"}</td>
-                    <td className="space-x-2 whitespace-nowrap px-4 py-3 text-xs">
-                      <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onView(p)}>
-                        View
-                      </button>
-                      {canEdit ? (
-                        <button type="button" className="font-semibold text-slate-600 hover:underline" onClick={() => onEdit(p)}>
-                          Edit
-                        </button>
-                      ) : null}
-                      {isAdmin ? (
-                        <button type="button" className="font-semibold text-rose-600 hover:underline" onClick={() => onDelete(p.id)}>
-                          Delete
-                        </button>
-                      ) : null}
+                      </div>
+                    </th>
+                  ) : null}
+                  <TableHeaderCell label="Code" className="px-4 py-3" />
+                  <TableHeaderCell label="Project" className="px-4 py-3" />
+                  <TableHeaderFilter
+                    label="Client"
+                    value={fltClient}
+                    onChange={setFltClient}
+                    options={clients.map((c) => ({ value: c.id, label: displayClientName(c) }))}
+                    allLabel="All clients"
+                    className="px-4 py-3"
+                  />
+                  <TableHeaderFilter
+                    label="Manager"
+                    value={fltManager}
+                    onChange={setFltManager}
+                    options={employeeOpts.map((e) => ({ value: e.id, label: e.label }))}
+                    allLabel="All managers"
+                    className="px-4 py-3"
+                  />
+                  <TableHeaderCell label="Team" className="px-4 py-3" />
+                  <TableHeaderCell label="Budget" className="px-4 py-3" />
+                  <TableHeaderCell label="Progress" className="px-4 py-3" />
+                  <TableHeaderFilter
+                    label="Status"
+                    value={fltStatus}
+                    onChange={setFltStatus}
+                    options={["Planning", "Active", "On Hold", "In Review", "Completed", "Cancelled", "Delayed"].map((s) => ({
+                      value: s,
+                      label: s,
+                    }))}
+                    allLabel="All statuses"
+                    className="px-4 py-3"
+                  />
+                  <TableHeaderFilter
+                    label="Priority"
+                    value={fltPriority}
+                    onChange={setFltPriority}
+                    options={["Low", "Medium", "High", "Urgent"].map((s) => ({ value: s, label: s }))}
+                    allLabel="All priorities"
+                    className="px-4 py-3"
+                  />
+                  <TableHeaderFilter
+                    label="Deadline"
+                    type="date"
+                    value={fltDeadline}
+                    onChange={setFltDeadline}
+                    className="px-4 py-3"
+                  />
+                  <TableHeaderCell label="Actions" className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {loading
+                  ? Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={i}>
+                        <td colSpan={11} className="px-4 py-3">
+                          <div className="h-5 animate-pulse rounded bg-slate-100" />
+                        </td>
+                      </tr>
+                    ))
+                  : paginatedRows.map((p) => {
+                      const delayed = isDelayedProject(p, today);
+                      const urgent = (p.priority || "") === "Urgent";
+                      const tc = teamMembers.filter((t) => t.project_id === p.id).length;
+                      const dl = p.deadline ? String(p.deadline).slice(0, 10) : "";
+                      const near = dl && dl >= today && dl <= new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+                      return (
+                        <tr
+                          key={p.id}
+                          className={[delayed ? "bg-rose-50/90" : "", urgent ? "outline outline-1 outline-amber-300/80" : "", near ? "bg-amber-50/50" : ""].join(" ")}
+                        >
+                          {showSelection ? (
+                            <td className={TABLE_CHECK_TD}>
+                              <div className="flex justify-center">
+                                <TableBulkCheckbox
+                                  checked={selection!.isSelected(p.id)}
+                                  onChange={() => selection!.onToggle(p.id)}
+                                  ariaLabel={`Select project ${p.project_name}`}
+                                />
+                              </div>
+                            </td>
+                          ) : null}
+                          <td className="px-4 py-3 font-mono text-xs">{p.project_code || "—"}</td>
+                          <td className="px-4 py-3 font-semibold text-[#0f172a]">{p.project_name}</td>
+                          <td className="max-w-[180px] truncate px-4 py-3">{p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—"}</td>
+                          <td className="px-4 py-3">{p.project_manager ? employeeNameMap[String(p.project_manager)] : "—"}</td>
+                          <td className="px-4 py-3">{tc}</td>
+                          <td className="px-4 py-3">{p.budget != null ? `₹${Number(p.budget).toLocaleString()}` : "—"}</td>
+                          <td className="px-4 py-3">{p.progress ?? 0}%</td>
+                          <td className="px-4 py-3">{normalizeProjectStatus(String(p.status))}</td>
+                          <td className="px-4 py-3">{p.priority || "—"}</td>
+                          <td className="whitespace-nowrap px-4 py-3">{dl || "—"}</td>
+                          <td className="space-x-2 whitespace-nowrap px-4 py-3 text-xs">
+                            <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onView(p)}>
+                              View
+                            </button>
+                            {canEdit ? (
+                              <button type="button" className="font-semibold text-slate-600 hover:underline" onClick={() => onEdit(p)}>
+                                Edit
+                              </button>
+                            ) : null}
+                            {isAdmin ? (
+                              <button type="button" className="font-semibold text-rose-600 hover:underline" onClick={() => onDelete(p.id)}>
+                                Delete
+                              </button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                {!loading && !rows.length ? (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-10 text-center text-[#64748b]">
+                      No projects match filters.
                     </td>
                   </tr>
-                );
-              })}
-          {!loading && !rows.length ? (
-            <tr>
-              <td colSpan={11} className="px-6 py-10 text-center text-[#64748b]">
-                No projects match filters.
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
-      </div>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        }
+        mobile={
+          loading ? (
+            <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">Loading…</p>
+          ) : !paginatedRows.length ? (
+            <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+              No projects match filters.
+            </p>
+          ) : (
+            paginatedRows.map((p) => {
+              const delayed = isDelayedProject(p, today);
+              const tc = teamMembers.filter((t) => t.project_id === p.id).length;
+              const dl = p.deadline ? String(p.deadline).slice(0, 10) : "";
+              const clientName = p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—";
+              const managerName = p.project_manager ? employeeNameMap[String(p.project_manager)] : "—";
+              const primaryActions = [{ label: "View", onClick: () => onView(p) }];
+              if (canEdit) primaryActions.push({ label: "Edit", onClick: () => onEdit(p) });
+              const moreActions = isAdmin
+                ? [{ label: "Delete", destructive: true as const, onClick: () => onDelete(p.id) }]
+                : [];
+              return (
+                <MobileRecordCard
+                  key={p.id}
+                  title={p.project_name}
+                  subtitle={p.project_code || undefined}
+                  showSelect={showSelection}
+                  selected={showSelection ? selection!.isSelected(p.id) : false}
+                  onToggleSelect={showSelection ? () => selection!.onToggle(p.id) : undefined}
+                  selectAriaLabel={`Select project ${p.project_name}`}
+                  previewFields={[
+                    { label: "Client", value: clientName },
+                    { label: "Status", value: normalizeProjectStatus(String(p.status)) },
+                    { label: "Priority", value: p.priority || "—" },
+                    { label: "Deadline", value: dl || "—" },
+                    { label: "Progress", value: `${p.progress ?? 0}%` },
+                    { label: "Budget", value: p.budget != null ? `₹${Number(p.budget).toLocaleString()}` : "—" },
+                  ]}
+                  detailFields={[
+                    { label: "Code", value: p.project_code || "—" },
+                    { label: "Project", value: p.project_name },
+                    { label: "Client", value: clientName },
+                    { label: "Manager", value: managerName },
+                    { label: "Team", value: String(tc) },
+                    { label: "Budget", value: p.budget != null ? `₹${Number(p.budget).toLocaleString()}` : "—" },
+                    { label: "Progress", value: `${p.progress ?? 0}%` },
+                    { label: "Status", value: normalizeProjectStatus(String(p.status)) },
+                    { label: "Priority", value: p.priority || "—" },
+                    { label: "Deadline", value: dl || "—" },
+                  ]}
+                  primaryActions={primaryActions}
+                  moreActions={moreActions}
+                  className={delayed ? "border-rose-200 bg-rose-50/90" : undefined}
+                />
+              );
+            })
+          )
+        }
+      />
       <TablePagination
         page={page}
         totalPages={totalPages}

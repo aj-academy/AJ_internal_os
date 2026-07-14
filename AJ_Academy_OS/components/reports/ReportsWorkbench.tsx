@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TableHeaderCell, TableHeaderFilter, type TableHeaderFilterOption } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
+import { MobileRecordCard } from "@/components/ui/MobileRecordCard";
+import { ResponsiveDataView } from "@/components/ui/ResponsiveDataView";
 import { normalizeStatus } from "@/components/student-lead-master/studentMasterHelpers";
 import { TX_SELECT } from "@/components/finance/financeHelpers";
 import { PROJECT_SELECT, normalizeProjectStatus } from "@/components/project-master/projectHelpers";
@@ -905,6 +907,36 @@ export function ReportsWorkbench() {
                 </tr>
               );
             }}
+            renderMobile={(p) => {
+              const tc = perEmployeeTaskCounts[p.id] || { total: 0, done: 0 };
+              const ar = perEmployeeAttendanceRate[p.id] ?? 0;
+              const pc = perEmployeeProjects[p.id]?.size ?? 0;
+              const rating = tc.total ? Math.round((tc.done / tc.total) * 100) : "—";
+              return (
+                <MobileRecordCard
+                  key={p.id}
+                  title={p.full_name || p.email || "Employee"}
+                  subtitle={p.role || undefined}
+                  previewFields={[
+                    { label: "Department", value: p.department || "—" },
+                    { label: "Attendance %", value: `${ar}%` },
+                    { label: "Tasks", value: String(tc.total) },
+                    { label: "Status", value: p.status || "active" },
+                  ]}
+                  detailFields={[
+                    { label: "Employee", value: p.full_name || p.email },
+                    { label: "Role", value: p.role },
+                    { label: "Department", value: p.department || "—" },
+                    { label: "Attendance %", value: `${ar}%` },
+                    { label: "Tasks", value: String(tc.total) },
+                    { label: "Done", value: String(tc.done) },
+                    { label: "Projects", value: String(pc) },
+                    { label: "Status", value: p.status || "active" },
+                    { label: "Rating", value: String(rating) },
+                  ]}
+                />
+              );
+            }}
           />
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-[20px] border border-[#dbe6f3] bg-white p-4">
@@ -990,6 +1022,29 @@ export function ReportsWorkbench() {
                 </td>
                 <td className="max-w-[180px] truncate px-3 py-2 text-xs">{a.check_in_address || "—"}</td>
               </tr>
+            )}
+            renderMobile={(a) => (
+              <MobileRecordCard
+                key={a.id}
+                title={a.employee_id ? employeeNameMap[a.employee_id] || "Employee" : "Employee"}
+                subtitle={String(a.attendance_date).slice(0, 10)}
+                previewFields={[
+                  { label: "Status", value: a.status || "—" },
+                  { label: "Hours", value: minutesToHoursLabel(a.total_working_minutes) },
+                  { label: "Check-in", value: a.check_in_time ? new Date(a.check_in_time).toLocaleString() : "—" },
+                  { label: "Department", value: a.employee_id ? profiles.find((p) => p.id === a.employee_id)?.department || "—" : "—" },
+                ]}
+                detailFields={[
+                  { label: "Employee", value: a.employee_id ? employeeNameMap[a.employee_id] || "—" : "—" },
+                  { label: "Date", value: String(a.attendance_date).slice(0, 10) },
+                  { label: "Check-in", value: a.check_in_time ? new Date(a.check_in_time).toLocaleString() : "—" },
+                  { label: "Check-out", value: a.check_out_time ? new Date(a.check_out_time).toLocaleString() : "—" },
+                  { label: "Hours", value: minutesToHoursLabel(a.total_working_minutes) },
+                  { label: "Status", value: a.status || "—" },
+                  { label: "Department", value: a.employee_id ? profiles.find((p) => p.id === a.employee_id)?.department || "—" : "—" },
+                  { label: "Location", value: a.check_in_address || "—", clamp: true },
+                ]}
+              />
             )}
           />
         </div>
@@ -1105,6 +1160,28 @@ export function ReportsWorkbench() {
                 <td className="px-3 py-2">{c.budget != null ? formatInr(Number(c.budget)) : "—"}</td>
               </tr>
             )}
+            renderMobile={(c) => (
+              <MobileRecordCard
+                key={c.id}
+                title={c.name || "Client"}
+                subtitle={c.company_name || undefined}
+                previewFields={[
+                  { label: "Status", value: normalizeStatus(String(c.status)) },
+                  { label: "Source", value: c.source || "—" },
+                  { label: "Service", value: c.service_interest || "—" },
+                  { label: "Budget", value: c.budget != null ? formatInr(Number(c.budget)) : "—" },
+                ]}
+                detailFields={[
+                  { label: "Name", value: c.name },
+                  { label: "Company", value: c.company_name || "—" },
+                  { label: "Status", value: normalizeStatus(String(c.status)) },
+                  { label: "Source", value: c.source || "—" },
+                  { label: "Service", value: c.service_interest || "—" },
+                  { label: "Proposal", value: c.proposal_status || "—" },
+                  { label: "Budget", value: c.budget != null ? formatInr(Number(c.budget)) : "—" },
+                ]}
+              />
+            )}
           />
         </div>
       ) : null}
@@ -1173,6 +1250,34 @@ export function ReportsWorkbench() {
                 <td className="px-3 py-2 whitespace-nowrap">{p.deadline ? String(p.deadline).slice(0, 10) : "—"}</td>
               </tr>
             )}
+            renderMobile={(p) => {
+              const clientLabel = p.client_id
+                ? clients.find((c) => c.id === p.client_id)?.company_name || clients.find((c) => c.id === p.client_id)?.name || "—"
+                : "—";
+              return (
+                <MobileRecordCard
+                  key={p.id}
+                  title={p.project_name || "Project"}
+                  subtitle={clientLabel !== "—" ? clientLabel : undefined}
+                  previewFields={[
+                    { label: "Status", value: normalizeProjectStatus(String(p.status)) },
+                    { label: "Progress", value: `${p.progress ?? 0}%` },
+                    { label: "Manager", value: p.project_manager ? employeeNameMap[p.project_manager] || "—" : "—" },
+                    { label: "Deadline", value: p.deadline ? String(p.deadline).slice(0, 10) : "—" },
+                  ]}
+                  detailFields={[
+                    { label: "Project", value: p.project_name },
+                    { label: "Client", value: clientLabel },
+                    { label: "Manager", value: p.project_manager ? employeeNameMap[p.project_manager] || "—" : "—" },
+                    { label: "Budget", value: p.budget != null ? formatInr(Number(p.budget)) : "—" },
+                    { label: "Pending", value: formatInr(Number(p.pending_amount ?? 0)) },
+                    { label: "Progress", value: `${p.progress ?? 0}%` },
+                    { label: "Status", value: normalizeProjectStatus(String(p.status)) },
+                    { label: "Deadline", value: p.deadline ? String(p.deadline).slice(0, 10) : "—" },
+                  ]}
+                />
+              );
+            }}
           />
         </div>
       ) : null}
@@ -1242,6 +1347,27 @@ export function ReportsWorkbench() {
                 <td className="px-3 py-2">{t.status}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{t.due_date || "—"}</td>
               </tr>
+            )}
+            renderMobile={(t) => (
+              <MobileRecordCard
+                key={t.id}
+                title={`Task ${t.id.slice(0, 8)}`}
+                subtitle={employeeNameMap[t.assigned_to] || undefined}
+                previewFields={[
+                  { label: "Status", value: t.status || "—" },
+                  { label: "Priority", value: t.priority || "—" },
+                  { label: "Project", value: t.project_id ? projects.find((p) => p.id === t.project_id)?.project_name || "—" : "—" },
+                  { label: "Due date", value: t.due_date || "—" },
+                ]}
+                detailFields={[
+                  { label: "Task ID", value: t.id },
+                  { label: "Assignee", value: employeeNameMap[t.assigned_to] || "—" },
+                  { label: "Project", value: t.project_id ? projects.find((p) => p.id === t.project_id)?.project_name || "—" : "—" },
+                  { label: "Priority", value: t.priority || "—" },
+                  { label: "Status", value: t.status || "—" },
+                  { label: "Due date", value: t.due_date || "—" },
+                ]}
+              />
             )}
           />
         </div>
@@ -1534,58 +1660,81 @@ function ScrollTable<T>({
   rows,
   loading,
   renderRow,
+  renderMobile,
 }: {
   columns: ScrollTableColumn[];
   rows: T[];
   loading: boolean;
   renderRow: (row: T) => ReactNode;
+  renderMobile?: (row: T) => ReactNode;
 }) {
-  return (
+  const desktop = (
     <div className="max-h-[420px] overflow-auto rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
-      <table className="w-full min-w-[720px] text-sm">
-        <thead className="sticky top-0 bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
-          <tr>
-            {columns.map((col) => {
-              if (typeof col === "string") {
-                return <TableHeaderCell key={col} label={col} />;
-              }
-              if (col.filter) {
-                return (
-                  <TableHeaderFilter
-                    key={col.label}
-                    label={col.label}
-                    value={col.filter.value}
-                    onChange={col.filter.onChange}
-                    options={col.filter.options}
-                    allLabel={col.filter.allLabel}
-                    disabled={col.filter.disabled}
-                    type={col.filter.type}
-                  />
-                );
-              }
-              return <TableHeaderCell key={col.label} label={col.label} />;
-            })}
-          </tr>
-        </thead>
-        <tbody>
-          {loading
-            ? Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i}>
-                  <td colSpan={columns.length} className="px-3 py-2">
-                    <div className="h-4 animate-pulse rounded bg-slate-100" />
-                  </td>
-                </tr>
-              ))
-            : rows.map(renderRow)}
-          {!loading && !rows.length ? (
+      <div className="responsive-table-wrap">
+        <table className="w-full min-w-[720px] text-sm">
+          <thead className="sticky top-0 bg-[#f1f6fc] text-xs uppercase text-[#64748b]">
             <tr>
-              <td colSpan={columns.length} className="px-6 py-8 text-center text-[#64748b]">
-                No data for current filters.
-              </td>
+              {columns.map((col) => {
+                if (typeof col === "string") {
+                  return <TableHeaderCell key={col} label={col} />;
+                }
+                if (col.filter) {
+                  return (
+                    <TableHeaderFilter
+                      key={col.label}
+                      label={col.label}
+                      value={col.filter.value}
+                      onChange={col.filter.onChange}
+                      options={col.filter.options}
+                      allLabel={col.filter.allLabel}
+                      disabled={col.filter.disabled}
+                      type={col.filter.type}
+                    />
+                  );
+                }
+                return <TableHeaderCell key={col.label} label={col.label} />;
+              })}
             </tr>
-          ) : null}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {loading
+              ? Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}>
+                    <td colSpan={columns.length} className="px-3 py-2">
+                      <div className="h-4 animate-pulse rounded bg-slate-100" />
+                    </td>
+                  </tr>
+                ))
+              : rows.map(renderRow)}
+            {!loading && !rows.length ? (
+              <tr>
+                <td colSpan={columns.length} className="px-6 py-8 text-center text-[#64748b]">
+                  No data for current filters.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
     </div>
+  );
+
+  if (!renderMobile) return desktop;
+
+  return (
+    <ResponsiveDataView
+      desktop={desktop}
+      mobile={
+        loading ? (
+          <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">Loading…</p>
+        ) : !rows.length ? (
+          <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
+            No data for current filters.
+          </p>
+        ) : (
+          rows.map(renderMobile)
+        )
+      }
+    />
   );
 }

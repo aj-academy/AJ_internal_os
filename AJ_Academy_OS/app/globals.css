@@ -179,7 +179,7 @@
   table.table-freeze-cols {
     border-collapse: separate;
     border-spacing: 0;
-    --sticky-check-w: 3rem;
+    --sticky-check-w: 2.75rem;
   }
 
   table.table-freeze-cols th.sticky-col,
