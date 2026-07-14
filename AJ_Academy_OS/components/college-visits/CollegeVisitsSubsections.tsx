@@ -2,7 +2,9 @@
 
 import { Button } from "@/components/ui/button";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
+import { TablePagination } from "@/components/ui/TablePagination";
 import { formatDisplayDate } from "@/lib/datetime";
+import { usePagination } from "@/lib/usePagination";
 import {
   FINAL_STATUSES,
   MOU_STATUSES,
@@ -312,58 +314,78 @@ export function CollegeMouTrackerTable({
   canEdit: boolean;
   onEdit: (row: CollegeVisitRow) => void;
 }) {
+  const {
+    paginatedItems: pageRows,
+    page,
+    setPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    setPageSize,
+  } = usePagination(visits, 25);
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-[#64748b]">
         Track MOU progress on each college. Edits save to the college record and show in Activity Timeline.
       </p>
-      <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3]">
-        <table className="min-w-[1000px] w-full text-sm">
-          <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
-            <tr>
-              <th className="px-4 py-3 text-left">College</th>
-              <th className="px-4 py-3 text-left">MOU status</th>
-              <th className="px-4 py-3 text-left">Follow-up stage</th>
-              <th className="px-4 py-3 text-left">Final status</th>
-              <th className="px-4 py-3 text-left">Priority</th>
-              <th className="px-4 py-3 text-left">Owner</th>
-              <th className="px-4 py-3 text-left">Last outcome</th>
-              <th className="px-4 py-3 text-left">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visits.length === 0 ? (
+      <div className="overflow-hidden rounded-2xl border border-[#dbe6f3]">
+        <div className="overflow-x-auto">
+          <table className="min-w-[1000px] w-full text-sm">
+            <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-[#64748b]">
-                  No colleges to track.
-                </td>
+                <th className="px-4 py-3 text-left">College</th>
+                <th className="px-4 py-3 text-left">MOU status</th>
+                <th className="px-4 py-3 text-left">Follow-up stage</th>
+                <th className="px-4 py-3 text-left">Final status</th>
+                <th className="px-4 py-3 text-left">Priority</th>
+                <th className="px-4 py-3 text-left">Owner</th>
+                <th className="px-4 py-3 text-left">Last outcome</th>
+                <th className="px-4 py-3 text-left">Actions</th>
               </tr>
-            ) : (
-              visits.map((row) => (
-                <tr key={row.id} className="border-t border-[#eef2f7]">
-                  <td className="px-4 py-3 font-medium">{row.college_name}</td>
-                  <td className="px-4 py-3">{row.mou_signed_status}</td>
-                  <td className="px-4 py-3">{row.follow_up_stage || "-"}</td>
-                  <td className="px-4 py-3">{row.final_status}</td>
-                  <td className="px-4 py-3">{row.priority}</td>
-                  <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
-                  <td className="max-w-[14rem] truncate px-4 py-3" title={row.last_outcome_remarks ?? ""}>
-                    {row.last_outcome_remarks || "-"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {canEdit ? (
-                      <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => onEdit(row)}>
-                        Edit MOU
-                      </Button>
-                    ) : (
-                      "-"
-                    )}
+            </thead>
+            <tbody>
+              {totalItems === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-[#64748b]">
+                    No colleges to track.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                pageRows.map((row) => (
+                  <tr key={row.id} className="border-t border-[#eef2f7]">
+                    <td className="px-4 py-3 font-medium">{row.college_name}</td>
+                    <td className="px-4 py-3">{row.mou_signed_status}</td>
+                    <td className="px-4 py-3">{row.follow_up_stage || "-"}</td>
+                    <td className="px-4 py-3">{row.final_status}</td>
+                    <td className="px-4 py-3">{row.priority}</td>
+                    <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
+                    <td className="max-w-[14rem] truncate px-4 py-3" title={row.last_outcome_remarks ?? ""}>
+                      {row.last_outcome_remarks || "-"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {canEdit ? (
+                        <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => onEdit(row)}>
+                          Edit MOU
+                        </Button>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <TablePagination
+          page={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
     </div>
   );
@@ -389,89 +411,109 @@ export function CollegeProposalTrackerTable({
   canEdit: boolean;
   onEdit: (row: CollegeVisitRow) => void;
 }) {
+  const {
+    paginatedItems: pageRows,
+    page,
+    setPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    setPageSize,
+  } = usePagination(visits, 25);
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-[#64748b]">
         Save each college proposal as a shareable link and/or a PDF upload. Updates appear in Activity Timeline.
       </p>
-      <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3]">
-        <table className="min-w-[1100px] w-full text-sm">
-          <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
-            <tr>
-              <th className="px-4 py-3 text-left">College</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-left">Amount</th>
-              <th className="px-4 py-3 text-left">Sent date</th>
-              <th className="px-4 py-3 text-left">Link</th>
-              <th className="px-4 py-3 text-left">PDF</th>
-              <th className="px-4 py-3 text-left">Owner</th>
-              <th className="px-4 py-3 text-left">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visits.length === 0 ? (
+      <div className="overflow-hidden rounded-2xl border border-[#dbe6f3]">
+        <div className="overflow-x-auto">
+          <table className="min-w-[1100px] w-full text-sm">
+            <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-[#64748b]">
-                  No colleges to track.
-                </td>
+                <th className="px-4 py-3 text-left">College</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">Amount</th>
+                <th className="px-4 py-3 text-left">Sent date</th>
+                <th className="px-4 py-3 text-left">Link</th>
+                <th className="px-4 py-3 text-left">PDF</th>
+                <th className="px-4 py-3 text-left">Owner</th>
+                <th className="px-4 py-3 text-left">Actions</th>
               </tr>
-            ) : (
-              visits.map((row) => (
-                <tr key={row.id} className="border-t border-[#eef2f7]">
-                  <td className="px-4 py-3 font-medium">{row.college_name}</td>
-                  <td className="px-4 py-3">{row.proposal_status || "Not Sent"}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {row.proposal_amount != null ? `Rs ${Number(row.proposal_amount).toLocaleString()}` : "-"}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">{row.proposal_sent_date?.slice(0, 10) || "-"}</td>
-                  <td className="px-4 py-3">
-                    {row.proposal_link ? (
-                      <a
-                        href={row.proposal_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-semibold text-blue-700 hover:underline"
-                      >
-                        Open link
-                      </a>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {row.proposal_pdf_url ? (
-                      <a
-                        href={row.proposal_pdf_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-semibold text-blue-700 hover:underline"
-                      >
-                        {row.proposal_pdf_name || "Open PDF"}
-                      </a>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
-                  <td className="px-4 py-3">
-                    {canEdit ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 rounded-full px-2 text-[11px]"
-                        onClick={() => onEdit(row)}
-                      >
-                        Update proposal
-                      </Button>
-                    ) : (
-                      "-"
-                    )}
+            </thead>
+            <tbody>
+              {totalItems === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-[#64748b]">
+                    No colleges to track.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                pageRows.map((row) => (
+                  <tr key={row.id} className="border-t border-[#eef2f7]">
+                    <td className="px-4 py-3 font-medium">{row.college_name}</td>
+                    <td className="px-4 py-3">{row.proposal_status || "Not Sent"}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {row.proposal_amount != null ? `Rs ${Number(row.proposal_amount).toLocaleString()}` : "-"}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">{row.proposal_sent_date?.slice(0, 10) || "-"}</td>
+                    <td className="px-4 py-3">
+                      {row.proposal_link ? (
+                        <a
+                          href={row.proposal_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-blue-700 hover:underline"
+                        >
+                          Open link
+                        </a>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.proposal_pdf_url ? (
+                        <a
+                          href={row.proposal_pdf_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-blue-700 hover:underline"
+                        >
+                          {row.proposal_pdf_name || "Open PDF"}
+                        </a>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
+                    <td className="px-4 py-3">
+                      {canEdit ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 rounded-full px-2 text-[11px]"
+                          onClick={() => onEdit(row)}
+                        >
+                          Update proposal
+                        </Button>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <TablePagination
+          page={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
     </div>
   );
