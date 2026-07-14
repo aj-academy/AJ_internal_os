@@ -24,6 +24,7 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 5c3) tasks_employee_rls_fix.sql (employee sees tasks assigned to them — run after aj_academy_roles_patch.sql)
 5c4) tasks_linked_lead_access.sql (employee phone/WA/email on task-linked student leads + dashboard pins)
 5c5) task_notification_employee_link_fix.sql (employee task notifications → /employee/my-tasks; backfills bad links)
+5c6) employee_task_pins_section_patch.sql (pin_section on dashboard pins — lead/college/project buckets)
 
 6) task_notifications_columns.sql
 7) in_app_notifications.sql

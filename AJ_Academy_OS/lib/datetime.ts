@@ -38,32 +38,52 @@ export function formatPermissionTime(value: string | null | undefined): string {
   return `${String(hour12).padStart(2, "0")}:${String(mins).padStart(2, "0")} ${period}`;
 }
 
-export function formatDateIST(value: string | null | undefined): string {
-  if (!value) return "-";
-  const dateOnly = value.length <= 10;
-  const parsed = new Date(dateOnly ? `${value}T12:00:00` : value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString(IST_LOCALE, {
+/** Display calendar dates as dd/mm/yyyy (IST). Keep ISO (yyyy-mm-dd) for storage / date inputs. */
+export function formatDisplayDate(value: string | null | undefined, empty = "—"): string {
+  if (value == null || String(value).trim() === "") return empty;
+  const raw = String(value).trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+  const isoDay = raw.slice(0, 10);
+  const dateOnly = raw.length <= 10 || /^\d{4}-\d{2}-\d{2}/.test(raw);
+  const parsed = dateOnly ? new Date(`${isoDay}T12:00:00+05:30`) : new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  const parts = new Intl.DateTimeFormat(IST_LOCALE, {
     timeZone: IST_TIMEZONE,
+    day: "2-digit",
+    month: "2-digit",
     year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  }).formatToParts(parsed);
+  const day = parts.find((p) => p.type === "day")?.value ?? "";
+  const month = parts.find((p) => p.type === "month")?.value ?? "";
+  const year = parts.find((p) => p.type === "year")?.value ?? "";
+  if (!day || !month || !year) {
+    return parsed.toLocaleDateString(IST_LOCALE, {
+      timeZone: IST_TIMEZONE,
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  }
+  return `${day}/${month}/${year}`;
+}
+
+/** Same dd/mm/yyyy as formatDisplayDate (legacy name). */
+export function formatDateIST(value: string | null | undefined): string {
+  return formatDisplayDate(value, "-");
 }
 
 export function formatDateTimeIST(value: string | null | undefined): string {
   if (!value) return "-";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString(IST_LOCALE, {
+  const date = formatDisplayDate(value, "-");
+  const time = parsed.toLocaleTimeString(IST_LOCALE, {
     timeZone: IST_TIMEZONE,
-    year: "numeric",
-    month: "short",
-    day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hour12: true,
   });
+  return `${date}, ${time}`;
 }
 
 export function formatTimeIST(value: string | null | undefined): string {
@@ -78,7 +98,7 @@ export function formatTimeIST(value: string | null | undefined): string {
   });
 }
 
-/** Calendar date in India (IST) as YYYY-MM-DD — use for mood_date filters. */
+/** Calendar date in India (IST) as YYYY-MM-DD — DB filters / date inputs only. */
 export function todayDateIST(): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: IST_TIMEZONE,

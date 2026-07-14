@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Download, FileText, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { formatDisplayDate } from "@/lib/datetime";
 import { saveTaskCollegeSelection } from "@/lib/taskLeadPickStorage";
 import { Button } from "@/components/ui/button";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
@@ -324,30 +325,47 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   };
 
   const handleBulkAssign = async () => {
-    if (!isDbAdmin || !bulkAssignTo || visitBulk.selectedCount === 0) return;
+    if (!isDbAdmin || !bulkAssignTo || visitBulk.selectedCount === 0 || !currentUserId) return;
     const label = ownerNameMap[bulkAssignTo] || "assignee";
-    if (!confirm(`Assign ${visitBulk.selectedCount} college(s) to ${label}?`)) return;
-    const count = visitBulk.selectedCount;
+    const ids = [...visitBulk.selected];
+    if (
+      !confirm(
+        `Assign ${ids.length} college(s) to ${label} as a College Visit task?\n\nThe employee will work them under My Tasks → College Visit (not as CRM-owned College Visits ownership).`,
+      )
+    ) {
+      return;
+    }
     setSubmitting(true);
     try {
-      for (const id of visitBulk.selected) {
-        const row = visits.find((v) => v.id === id);
-        if (!row) continue;
-        const f = collegeVisitRowToForm(row);
-        f.assigned_to = bulkAssignTo;
-        const res = await fetch(`/api/college-visits/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(f),
-        });
-        if (!res.ok) {
-          const json = (await res.json()) as { error?: string };
-          throw new Error(json.error ?? "Bulk assign failed.");
-        }
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: inserted, error: insertError } = await supabase
+        .from("tasks")
+        .insert({
+          title: `College visit outreach (${ids.length})`,
+          description: `Assigned from College Visits · ${ids.length} linked college(s).`,
+          assigned_to: bulkAssignTo,
+          assigned_by: currentUserId,
+          assignment_type: "college",
+          client_ids: [],
+          college_visit_ids: ids,
+          project_id: null,
+          priority: "Medium",
+          status: "Pending",
+          progress: 0,
+          start_date: today,
+          due_date: null,
+        })
+        .select("id")
+        .single();
+      if (insertError) throw new Error(insertError.message);
+      try {
+        await supabase.rpc("create_task_assignment_notification", { p_task_id: inserted.id });
+      } catch {
+        /* optional */
       }
       visitBulk.clearSelection();
       setBulkAssignTo("");
-      setSuccess(`${count} college(s) assigned to ${label}.`);
+      setSuccess(`${ids.length} college(s) sent to ${label} as My Tasks → College Visit.`);
       await reload();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
@@ -357,7 +375,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   };
 
   const handleBulkDelete = async () => {
-    if (!isDbAdmin || visitBulk.selectedCount === 0) return;
+    if (visitBulk.selectedCount === 0) return;
     if (!confirm(`Delete ${visitBulk.selectedCount} selected college visit(s)?`)) return;
     setSubmitting(true);
     try {
@@ -588,21 +606,25 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         hint={`Showing ${pageRows.length} of ${filteredVisits.length} college(s) · page ${page}/${totalPages}`}
       />
 
-      {isDbAdmin && !pickForTask && visitBulk.selectedCount > 0 ? (
+      {!pickForTask && visitBulk.selectedCount > 0 ? (
         <BulkSelectionBar selectedCount={visitBulk.selectedCount} onClear={visitBulk.clearSelection}>
-          <select
-            className="h-8 rounded-lg border border-[#dbe6f3] bg-white px-2 text-xs"
-            value={bulkAssignTo}
-            onChange={(e) => setBulkAssignTo(e.target.value)}
-          >
-            <option value="">Assign owner…</option>
-            {ownerOptions.map((o) => (
-              <option key={o.id} value={o.id}>{o.label}</option>
-            ))}
-          </select>
-          <Button size="sm" className="h-8 rounded-full bg-[#c9a227] text-white" onClick={() => void handleBulkAssign()} disabled={!bulkAssignTo || submitting}>
-            Assign
-          </Button>
+          {isDbAdmin ? (
+            <>
+              <select
+                className="h-8 rounded-lg border border-[#dbe6f3] bg-white px-2 text-xs"
+                value={bulkAssignTo}
+                onChange={(e) => setBulkAssignTo(e.target.value)}
+              >
+                <option value="">Assign as task to…</option>
+                {ownerOptions.map((o) => (
+                  <option key={o.id} value={o.id}>{o.label}</option>
+                ))}
+              </select>
+              <Button size="sm" className="h-8 rounded-full bg-[#c9a227] text-white" onClick={() => void handleBulkAssign()} disabled={!bulkAssignTo || submitting}>
+                Assign as College Visit task
+              </Button>
+            </>
+          ) : null}
           <Button size="sm" variant="outline" className="h-8 rounded-full border-rose-200 text-rose-700" onClick={() => void handleBulkDelete()} disabled={submitting}>
             Delete
           </Button>
@@ -610,12 +632,12 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       ) : null}
 
       <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3]">
-        <table className="min-w-[3800px] w-full border-separate border-spacing-0">
-          <thead className="bg-[#f8fbff]">
+        <table className="table-freeze-cols min-w-[3800px] w-full" style={{ ["--sticky-col-2" as string]: "14rem" }}>
+          <thead className="cv-head bg-[#f8fbff]">
             <tr>
-              {pickForTask ? <TableHeaderCell label="Pick" className={`${thClass} min-w-[4.5rem]`} /> : null}
-              {isDbAdmin && !pickForTask ? (
-                <th className={`${thClass} min-w-[4.5rem]`}>
+              {pickForTask ? <TableHeaderCell label="Pick" className={`${thClass} sticky-col sticky-col-1 min-w-[4.5rem]`} /> : null}
+              {!pickForTask ? (
+                <th className={`${thClass} sticky-col sticky-col-1 min-w-[4.5rem]`}>
                   <div className="flex justify-center">
                     <TableBulkCheckbox
                       checked={visitBulk.allSelected}
@@ -626,8 +648,14 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
                   </div>
                 </th>
               ) : null}
-              <TableHeaderCell label="S.No" className={thClass} />
-              <TableHeaderCell label="College Name" className={thClass} />
+              <TableHeaderCell
+                label="S.No"
+                className={`${thClass} sticky-col ${pickForTask || !pickForTask ? "sticky-col-after-check" : "sticky-col-1"} min-w-[4.5rem]`}
+              />
+              <TableHeaderCell
+                label="College Name"
+                className={`${thClass} sticky-col sticky-col-after-check-2 min-w-[14rem]`}
+              />
               <TableHeaderCell label="Location" className={thClass} />
               <TableHeaderCell label="Contact Number" className={thClass} />
               <TableHeaderCell label="Email ID" className={thClass} />
@@ -663,7 +691,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
                 return (
                   <tr key={row.id} className="border-t border-[#eef2f7] hover:bg-[#fafcff]">
                     {pickForTask ? (
-                      <td className={`${tdClass} min-w-[4.5rem]`}>
+                      <td className={`${tdClass} sticky-col sticky-col-1 min-w-[4.5rem]`}>
                         <div className="flex justify-center">
                           <TableBulkCheckbox
                             checked={pickedCollegeIds.has(row.id)}
@@ -673,8 +701,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
                         </div>
                       </td>
                     ) : null}
-                    {isDbAdmin && !pickForTask ? (
-                      <td className={`${tdClass} min-w-[4.5rem]`}>
+                    {!pickForTask ? (
+                      <td className={`${tdClass} sticky-col sticky-col-1 min-w-[4.5rem]`}>
                         <div className="flex justify-center">
                           <TableBulkCheckbox
                             checked={visitBulk.isSelected(row.id)}
@@ -684,19 +712,19 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
                         </div>
                       </td>
                     ) : null}
-                    <td className={`${tdClass} min-w-[4.5rem]`}>{(page - 1) * pageSize + idx + 1}</td>
-                    <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate font-medium`} title={row.college_name}>{row.college_name}</td>
+                    <td className={`${tdClass} sticky-col sticky-col-after-check min-w-[4.5rem]`}>{(page - 1) * pageSize + idx + 1}</td>
+                    <td className={`${tdClass} sticky-col sticky-col-after-check-2 min-w-[14rem] max-w-[18rem] truncate font-medium`} title={row.college_name}>{row.college_name}</td>
                     <td className={tdClass}>{row.location || "—"}</td>
                     <td className={tdClass}>{row.contact_number || "—"}</td>
                     <td className={tdClass}>{row.email || "—"}</td>
                     <td className={`${tdClass} min-w-[12rem]`}>{row.connected_person_name || "—"}</td>
                     <td className={tdClass}>{row.connected_person_role || "—"}</td>
                     <td className={tdClass}>{row.visit_status}</td>
-                    <td className={tdClass}>{row.visit_date?.slice(0, 10) || "—"}</td>
+                    <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.visit_date)}</td>
                     <td className={`${tdClass} min-w-[11rem]`}>{row.mou_signed_status}</td>
                     <td className={`${tdClass} min-w-[11rem]`}>{row.follow_up_stage || "—"}</td>
-                    <td className={`${tdClass} min-w-[11rem]`}>{row.last_follow_up_date?.slice(0, 10) || "—"}</td>
-                    <td className={`${tdClass} min-w-[11rem]`}>{row.next_follow_up_date?.slice(0, 10) || "—"}</td>
+                    <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.last_follow_up_date)}</td>
+                    <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.next_follow_up_date)}</td>
                     <td className={tdClass}>{row.priority}</td>
                     <td className={`${tdClass} min-w-[11rem]`}>{row.assigned_to ? ownerNameMap[row.assigned_to] || "—" : "—"}</td>
                     <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate`} title={row.description ?? ""}>{row.description || "—"}</td>

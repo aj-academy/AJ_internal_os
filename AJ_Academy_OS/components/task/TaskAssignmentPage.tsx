@@ -21,11 +21,20 @@ import { fetchTaskActivities, logTaskActivity, parseClientIds, type TaskActivity
 import { mapClientRowToTaskLinkedLead } from "@/lib/taskLeadOutreach";
 import { TaskLeadOutreachBlock } from "@/components/task/TaskLeadOutreachBlock";
 import {
+  flattenTaskColleges,
+  flattenTaskLeads,
+  TaskSubsectionCollegesTable,
+  TaskSubsectionLeadsTable,
+} from "@/components/task/TaskSubsectionEntityTables";
+import { STUDENT_LEAD_SELECT, type CrmClientRow } from "@/components/student-lead-master/studentMasterHelpers";
+import { COLLEGE_VISIT_SELECT, type CollegeVisitRow } from "@/components/college-visits/collegeVisitsHelpers";
+import {
   consumeTaskAssignDraft,
   consumeTaskCollegeSelection,
   consumeTaskLeadSelection,
   saveTaskAssignDraft,
 } from "@/lib/taskLeadPickStorage";
+import { formatDisplayDate } from "@/lib/datetime";
 import type { TaskAssignmentType, TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
 
 type AppRole = "admin" | "employee" | "student" | "freelancer" | "mentor";
@@ -142,6 +151,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const isPortalAssignee = isAssigneeView && (isStudent || isMentor || isFreelancer);
   const [employeeTaskView, setEmployeeTaskView] = useState<EmployeeTaskView>("assigned-to-me");
   const [linkTypeFilter, setLinkTypeFilter] = useState<LinkTypeFilter>("all");
+  const [dashboardPinMode, setDashboardPinMode] = useState(false);
   const employeeDelegatedView = isEmployee && employeeTaskView === "assigned-by-me";
   const showLinkTypeTabs = isEmployee || isAdmin;
   const filterTasksByAssigner = mentorManagesTeam || employeeDelegatedView;
@@ -149,6 +159,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const [selfProfile, setSelfProfile] = useState<ProfileOption | null>(null);
   const [employees, setEmployees] = useState<ProfileOption[]>([]);
   const [rows, setRows] = useState<TaskRecord[]>([]);
+  const [linkedLeadById, setLinkedLeadById] = useState<Record<string, CrmClientRow>>({});
+  const [linkedCollegeById, setLinkedCollegeById] = useState<Record<string, CollegeVisitRow>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -492,33 +504,37 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       if (clientIds.length) {
         const { data: clients } = await supabase
           .from("clients")
-          .select("id,name,lead_name,company_name,phone,whatsapp,email,phone_called,whatsapp_sent,email_sent")
+          .select(STUDENT_LEAD_SELECT)
           .in("id", clientIds);
+        const detailMap: Record<string, ReturnType<typeof mapClientRowToTaskLinkedLead>> = {};
+        const fullMap: Record<string, CrmClientRow> = {};
         for (const c of clients ?? []) {
-          const row = c as {
-            id: string;
-            name: string | null;
-            lead_name: string | null;
-            company_name: string | null;
-            phone: string | null;
-            whatsapp: string | null;
-            email: string | null;
-            phone_called: boolean | null;
-            whatsapp_sent: boolean | null;
-            email_sent: boolean | null;
-          };
-          clientDetailMap[row.id] = mapClientRowToTaskLinkedLead(row);
-          clientLabelMap[row.id] = clientDetailMap[row.id].name;
+          const row = c as unknown as CrmClientRow;
+          fullMap[row.id] = row;
+          detailMap[row.id] = mapClientRowToTaskLinkedLead(row);
+          clientLabelMap[row.id] = detailMap[row.id].name;
         }
+        clientDetailMap = detailMap;
+        setLinkedLeadById(fullMap);
+      } else {
+        setLinkedLeadById({});
       }
       if (collegeIds.length) {
-        const { data: colleges } = await supabase.from("college_visits").select("id,college_name,location").in("id", collegeIds);
+        const { data: colleges } = await supabase
+          .from("college_visits")
+          .select(COLLEGE_VISIT_SELECT)
+          .in("id", collegeIds);
+        const fullMap: Record<string, CollegeVisitRow> = {};
         collegeLabelMap = Object.fromEntries(
-          (colleges ?? []).map((c: { id: string; college_name: string | null; location: string | null }) => [
-            c.id,
-            [c.college_name, c.location].filter(Boolean).join(" · ") || c.id.slice(0, 8),
-          ]),
+          (colleges ?? []).map((c) => {
+            const row = c as unknown as CollegeVisitRow;
+            fullMap[row.id] = row;
+            return [row.id, [row.college_name, row.location].filter(Boolean).join(" · ") || row.id.slice(0, 8)];
+          }),
         );
+        setLinkedCollegeById(fullMap);
+      } else {
+        setLinkedCollegeById({});
       }
 
       setRows(
@@ -721,6 +737,15 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     if (linkTypeFilter === "all") return rows;
     return rows.filter((t) => (t.assignment_type ?? "") === linkTypeFilter);
   }, [linkTypeFilter, rows]);
+
+  const subsectionLeadRows = useMemo(
+    () => flattenTaskLeads(filteredRows, linkedLeadById),
+    [filteredRows, linkedLeadById],
+  );
+  const subsectionCollegeRows = useMemo(
+    () => flattenTaskColleges(filteredRows, linkedCollegeById),
+    [filteredRows, linkedCollegeById],
+  );
 
   const {
     paginatedItems: paginatedRows,
@@ -1193,10 +1218,15 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    if (!canManageTasks || tasksTableMissing) return;
+    if (tasksTableMissing) return;
     const confirmed = window.confirm("Delete this task?");
     if (!confirmed) return;
-    const { error: deleteError } = await supabase.from("tasks").delete().eq("id", taskId);
+    let q = supabase.from("tasks").delete().eq("id", taskId);
+    if (!canManageTasks && currentUserId) {
+      // Employees may delete tasks they create or that are assigned to them (RLS still applies).
+      q = q.or(`assigned_to.eq.${currentUserId},assigned_by.eq.${currentUserId}`);
+    }
+    const { error: deleteError } = await q;
     if (deleteError) {
       setError(toReadableTaskError(deleteError));
       return;
@@ -1206,11 +1236,15 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   };
 
   const handleBulkDeleteTasks = async () => {
-    if (!canManageTasks || tasksTableMissing || taskSelection.selectedCount === 0) return;
+    if (tasksTableMissing || taskSelection.selectedCount === 0) return;
     const confirmed = window.confirm(`Delete ${taskSelection.selectedCount} selected task(s)?`);
     if (!confirmed) return;
     const ids = [...taskSelection.selected];
-    const { error: deleteError } = await supabase.from("tasks").delete().in("id", ids);
+    let q = supabase.from("tasks").delete().in("id", ids);
+    if (!canManageTasks && currentUserId) {
+      q = q.or(`assigned_to.eq.${currentUserId},assigned_by.eq.${currentUserId}`);
+    }
+    const { error: deleteError } = await q;
     if (deleteError) {
       setError(toReadableTaskError(deleteError));
       return;
@@ -1218,6 +1252,48 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     taskSelection.clearSelection();
     setSuccess(`${ids.length} task(s) deleted.`);
     await reload();
+  };
+
+  const handleBulkPinToDashboard = async () => {
+    if (!currentUserId || taskSelection.selectedCount === 0) return;
+    const ids = [...taskSelection.selected];
+    const section =
+      linkTypeFilter === "lead" || linkTypeFilter === "college" || linkTypeFilter === "project"
+        ? linkTypeFilter
+        : "all";
+    const rowsToInsert = ids.map((task_id) => ({
+      user_id: currentUserId,
+      task_id,
+      pin_section: section,
+    }));
+    const { error: pinError } = await supabase.from("employee_task_pins").upsert(rowsToInsert, {
+      onConflict: "user_id,task_id",
+    });
+    if (pinError) {
+      // Older DBs without pin_section column — retry without it
+      if (/pin_section|schema cache|column/i.test(pinError.message)) {
+        const { error: fallbackError } = await supabase.from("employee_task_pins").upsert(
+          ids.map((task_id) => ({ user_id: currentUserId, task_id })),
+          { onConflict: "user_id,task_id" },
+        );
+        if (fallbackError) {
+          setError(
+            /employee_task_pins/i.test(fallbackError.message)
+              ? "Run AJ_Academy_SB/tasks_linked_lead_access.sql (+ employee_task_pins_section_patch.sql) in Supabase."
+              : toReadableTaskError(fallbackError),
+          );
+          return;
+        }
+      } else {
+        setError(toReadableTaskError(pinError));
+        return;
+      }
+    }
+    const sectionLabel =
+      section === "lead" ? "Student Lead" : section === "college" ? "College Visit" : section === "project" ? "Project" : "All";
+    taskSelection.clearSelection();
+    setDashboardPinMode(false);
+    setSuccess(`${ids.length} task(s) pinned to your dashboard (${sectionLabel}).`);
   };
 
   const persistEmployeeTaskUpdate = useCallback(
@@ -1421,12 +1497,16 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       ) : null}
 
       {showLinkTypeTabs ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {LINK_TYPE_TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
-              onClick={() => setLinkTypeFilter(tab.id)}
+              onClick={() => {
+                setLinkTypeFilter(tab.id);
+                setDashboardPinMode(false);
+                taskSelection.clearSelection();
+              }}
               className={
                 linkTypeFilter === tab.id
                   ? "rounded-full bg-[#c9a227] px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
@@ -1439,11 +1519,57 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                 : ` (${rows.length})`}
             </button>
           ))}
+          {isEmployee && !employeeDelegatedView && linkTypeFilter !== "all" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={[
+                "ml-auto h-8 rounded-full border-[#c9a227] px-3 text-xs font-semibold",
+                dashboardPinMode ? "bg-[#faf3e3] text-[#92400e]" : "bg-white text-[#92400e]",
+              ].join(" ")}
+              onClick={() => {
+                setDashboardPinMode((v) => !v);
+                if (dashboardPinMode) taskSelection.clearSelection();
+                else {
+                  setSuccess(
+                    "Multi-select is on — tick tasks below, then click Pin selected to dashboard.",
+                  );
+                }
+              }}
+            >
+              {dashboardPinMode ? "Cancel dashboard pin" : "Add to my dashboard"}
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
-      {canManageTasks && taskSelection.selectedCount > 0 ? (
+      {dashboardPinMode ? (
+        <div className="rounded-xl border border-[#f0e0b0] bg-[#fffbeb] px-3 py-2 text-xs text-[#92400e]">
+          Select one or more tasks in this subsection, then pin them to your employee dashboard
+          {linkTypeFilter === "lead"
+            ? " under Student Lead"
+            : linkTypeFilter === "college"
+              ? " under College Visit"
+              : linkTypeFilter === "project"
+                ? " under Project"
+                : ""}
+          .
+        </div>
+      ) : null}
+
+      {taskSelection.selectedCount > 0 ? (
         <BulkSelectionBar selectedCount={taskSelection.selectedCount} totalCount={filteredRows.length} onClear={taskSelection.clearSelection}>
+          {(isEmployee || dashboardPinMode) && !employeeDelegatedView ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 rounded-lg bg-[#c9a227] px-3 text-xs text-white hover:bg-[#b8921f]"
+              onClick={() => void handleBulkPinToDashboard()}
+            >
+              Pin selected to dashboard
+            </Button>
+          ) : null}
           <Button
             type="button"
             size="sm"
@@ -1455,7 +1581,28 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         </BulkSelectionBar>
       ) : null}
 
+      {linkTypeFilter === "lead" ? (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-[#64748b]">
+            Student Lead subsection — columns match Student Master. Each row is a lead linked on your lead tasks.
+          </p>
+          <TaskSubsectionLeadsTable rows={subsectionLeadRows} employeeNameMap={employeeNameMap} loading={loading} />
+        </div>
+      ) : null}
+
+      {linkTypeFilter === "college" ? (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-[#64748b]">
+            College Visit subsection — columns match College Visits. Each row is a college linked on your college tasks.
+          </p>
+          <TaskSubsectionCollegesTable rows={subsectionCollegeRows} ownerNameMap={employeeNameMap} loading={loading} />
+        </div>
+      ) : null}
+
       <div className="responsive-table-wrap">
+        {linkTypeFilter === "lead" || linkTypeFilter === "college" ? (
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#94a3b8]">Task operations</p>
+        ) : null}
         <TaskTable
           tasks={paginatedRows}
           loading={loading}
@@ -1510,17 +1657,13 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             onPageChange: setTaskPage,
             onPageSizeChange: setTaskPageSize,
           }}
-          selection={
-            canManageTasks
-              ? {
-                  allSelected: taskSelection.allSelected,
-                  someSelected: taskSelection.someSelected,
-                  isSelected: taskSelection.isSelected,
-                  onToggleAll: taskSelection.toggleAll,
-                  onToggle: taskSelection.toggleOne,
-                }
-              : undefined
-          }
+          selection={{
+            allSelected: taskSelection.allSelected,
+            someSelected: taskSelection.someSelected,
+            isSelected: taskSelection.isSelected,
+            onToggleAll: taskSelection.toggleAll,
+            onToggle: taskSelection.toggleOne,
+          }}
         />
       </div>
 
@@ -1712,8 +1855,19 @@ function TaskViewPanel({
         const { error } = await supabase.from("employee_task_pins").insert({
           user_id: currentUserId,
           task_id: task.id,
+          pin_section: task.assignment_type || "all",
         });
-        if (error) throw new Error(error.message);
+        if (error) {
+          if (/pin_section|column|schema cache/i.test(error.message)) {
+            const { error: fallback } = await supabase.from("employee_task_pins").insert({
+              user_id: currentUserId,
+              task_id: task.id,
+            });
+            if (fallback) throw new Error(fallback.message);
+          } else {
+            throw new Error(error.message);
+          }
+        }
         setPinned(true);
         onSuccess?.("Added to your dashboard.");
       }
@@ -1775,11 +1929,11 @@ function TaskViewPanel({
             </div>
             <div>
               <dt className="text-[#94a3b8]">Start</dt>
-              <dd className="font-medium">{task.start_date || "—"}</dd>
+              <dd className="font-medium">{formatDisplayDate(task.start_date)}</dd>
             </div>
             <div>
               <dt className="text-[#94a3b8]">Due</dt>
-              <dd className="font-medium">{task.due_date || "—"}</dd>
+              <dd className="font-medium">{formatDisplayDate(task.due_date)}</dd>
             </div>
             <div className="col-span-2">
               <dt className="text-[#94a3b8]">Progress</dt>

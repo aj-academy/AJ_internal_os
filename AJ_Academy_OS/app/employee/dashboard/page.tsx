@@ -5,7 +5,7 @@ import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { createClient } from "@/lib/supabase/server";
 import { EmployeeTaskPreview } from "@/components/employee/EmployeeTaskPreview";
 import { RedirectMyLeaveHash } from "@/components/employee/RedirectMyLeaveHash";
-import { formatTimeIST, todayDateIST } from "@/lib/datetime";
+import { formatDisplayDate, formatTimeIST, todayDateIST } from "@/lib/datetime";
 
 export default async function EmployeeDashboardPage() {
   const { profile, user } = await getUserProfile();
@@ -106,7 +106,7 @@ export default async function EmployeeDashboardPage() {
             Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, {firstName}
           </h2>
           <p className="mt-1 text-sm text-[#64748b]">
-            {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} · One place for
+            {formatDisplayDate(new Date().toISOString())} · One place for
             attendance, tasks, and requests.
           </p>
         </div>

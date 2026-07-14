@@ -13,6 +13,7 @@ import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderF
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
+import { formatDisplayDate } from "@/lib/datetime";
 import {
   EXPENSE_CATEGORIES,
   FINANCE_TAB_LABELS,
@@ -718,7 +719,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
               <td className="px-3 py-2 font-semibold">{formatInr(Number(t.amount))}</td>
               <td className="px-3 py-2">{t.category}</td>
               <td className="px-3 py-2">{t.payment_method}</td>
-              <td className="px-3 py-2 whitespace-nowrap">{String(t.transaction_date).slice(0, 10)}</td>
+              <td className="px-3 py-2 whitespace-nowrap">{formatDisplayDate(t.transaction_date)}</td>
               <td className="px-3 py-2">{t.payment_status}</td>
               <td className="px-3 py-2">
                 <button type="button" className="text-rose-600 text-xs font-semibold hover:underline" onClick={() => void deleteTransaction(t.id)}>
@@ -745,7 +746,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
               <td className="px-3 py-2 font-mono text-xs">{t.transaction_code}</td>
               <td className="px-3 py-2">{t.category}</td>
               <td className="px-3 py-2 font-semibold">{formatInr(Number(t.amount))}</td>
-              <td className="px-3 py-2 whitespace-nowrap">{String(t.transaction_date).slice(0, 10)}</td>
+              <td className="px-3 py-2 whitespace-nowrap">{formatDisplayDate(t.transaction_date)}</td>
               <td className="px-3 py-2">{t.payment_method}</td>
               <td className="px-3 py-2">{t.created_by ? employeeMap[t.created_by] || "—" : "—"}</td>
               <td className="px-3 py-2">
@@ -834,7 +835,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                         ) : null}
                         <td className="px-3 py-2">{c.expense_type}</td>
                         <td className="px-3 py-2 font-semibold">{formatInr(Number(c.amount))}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{String(c.expense_date).slice(0, 10)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{formatDisplayDate(c.expense_date)}</td>
                         <td className="px-3 py-2">{c.approval_status}</td>
                         <td className="space-x-2 px-3 py-2">
                           {c.receipt_url ? (
@@ -903,7 +904,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                 <td className="px-3 py-2 font-medium">{proj?.project_name ?? "—"}</td>
                 <td className="px-3 py-2">{p.invoice_number || "—"}</td>
                 <td className="px-3 py-2 font-semibold">{formatInr(Number(p.amount))}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{String(p.payment_date).slice(0, 10)}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{formatDisplayDate(p.payment_date)}</td>
                 <td className="px-3 py-2">{p.payment_method}</td>
                 <td className="px-3 py-2">{p.payment_status}</td>
                 <td className="space-x-2 px-3 py-2 text-xs">
@@ -953,7 +954,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                         <td className="px-3 py-2">{p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—"}</td>
                         <td className="px-3 py-2 font-medium">{p.project_name}</td>
                         <td className="px-3 py-2 font-semibold">{formatInr(Number(p.pending_amount))}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{p.deadline ? String(p.deadline).slice(0, 10) : "—"}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{p.deadline ? formatDisplayDate(p.deadline) : "—"}</td>
                         <td className="px-3 py-2">{p.project_manager ? employeeMap[p.project_manager] || "—" : "—"}</td>
                         <td className="px-3 py-2">{overdue ? "Overdue" : "Pending"}</td>
                       </tr>
@@ -1119,7 +1120,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                     <td className="px-3 py-2">{t.transaction_type}</td>
                     <td className="px-3 py-2">{t.category}</td>
                     <td className="px-3 py-2 font-semibold">{formatInr(Number(t.amount))}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{String(t.transaction_date).slice(0, 10)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{formatDisplayDate(t.transaction_date)}</td>
                     <td className="px-3 py-2">{t.payment_method}</td>
                     <td className="px-3 py-2">{t.payment_status}</td>
                     <td className="px-3 py-2">

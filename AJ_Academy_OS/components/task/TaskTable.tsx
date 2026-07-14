@@ -5,6 +5,7 @@ import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderF
 import { ProgressBar } from "@/components/task/ProgressBar";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
+import { formatDisplayDate } from "@/lib/datetime";
 import { TaskLeadOutreachBlock } from "@/components/task/TaskLeadOutreachBlock";
 import type { createClient } from "@/lib/supabase/client";
 import type { TaskAssignmentType, TaskPriority, TaskRecord, TaskStatus } from "@/types/task";
@@ -308,11 +309,11 @@ export function TaskTable({
                       <td className="px-4 py-3.5 align-middle">
                         <Badge className={statusClassMap[task.status]}>{task.status}</Badge>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3.5 align-middle">{task.start_date || "-"}</td>
+                      <td className="whitespace-nowrap px-4 py-3.5 align-middle">{formatDisplayDate(task.start_date, "-")}</td>
                       <td
                         className={["whitespace-nowrap px-4 py-3.5 align-middle", isOverdue ? "font-semibold text-rose-700" : ""].join(" ")}
                       >
-                        {task.due_date || "-"}
+                        {formatDisplayDate(task.due_date, "-")}
                       </td>
                       <td className="px-4 py-3.5 align-middle">
                         {canManageTasks || readOnlyList ? (

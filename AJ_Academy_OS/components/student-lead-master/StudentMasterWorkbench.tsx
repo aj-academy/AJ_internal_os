@@ -47,7 +47,7 @@ import {
   studentMasterFileToMatrix,
   STUDENT_MASTER_DATA_COLUMN_COUNT,
 } from "@/components/student-lead-master/studentMasterCsv";
-import { formatDateTimeIST } from "@/lib/datetime";
+import { formatDateTimeIST, formatDisplayDate } from "@/lib/datetime";
 import { fetchInterestedPrograms, persistInterestedPrograms } from "@/lib/studentPrograms";
 import { StudentOutreachButtons } from "@/components/student-lead-master/StudentOutreachButtons";
 import { whatsAppHref } from "@/components/employee/leads/employeeLeadConfig";
@@ -258,6 +258,8 @@ function pickEmployeePayload(base: Record<string, unknown>) {
     "follow_up_date",
     "follow_up_time",
     "follow_up_type",
+    "status",
+    "priority",
     "proposal_status",
     "proposal_amount",
     "proposal_sent_date",
@@ -1071,8 +1073,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       lead_stage: lead.lead_stage ?? "",
       status: normalizeStatus(String(lead.status)),
       priority: lead.priority ?? "Warm",
-      follow_up_date: lead.follow_up_date ?? "",
-      follow_up_time: (lead.follow_up_time as string) ?? "",
+      follow_up_date: lead.follow_up_date ? String(lead.follow_up_date).slice(0, 10) : "",
+      follow_up_time: lead.follow_up_time ? String(lead.follow_up_time).slice(0, 5) : "",
       follow_up_type: lead.follow_up_type ?? "",
       fee_quoted: lead.fee_quoted != null ? String(lead.fee_quoted) : lead.proposal_amount != null ? String(lead.proposal_amount) : "",
       final_fee: lead.final_fee != null ? String(lead.final_fee) : "",
@@ -1147,10 +1149,11 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     };
 
     if (!opts.full) {
-      // Non-admin: never allow ownership / admission status changes via this path
+      // Non-admin: status/priority/follow-up allowed; never change ownership here
       return {
         ...base,
-        assigned_to: currentUserId,
+        status: v.status,
+        priority: v.priority || "Warm",
       };
     }
 
@@ -1200,8 +1203,24 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         const base = buildPayload(saveForm, { full: false }) as Record<string, unknown>;
         const limited = pickEmployeePayload(base);
         const previous = clients.find((cRow) => cRow.id === editId);
-        const up = await supabase.from("clients").update(limited).eq("id", editId).eq("assigned_to", currentUserId);
+        // RLS: assigned lead OR task-linked lead — do not re-filter by assigned_to here
+        const up = await supabase.from("clients").update(limited).eq("id", editId);
         if (up.error) throw up.error;
+
+        const prevFollow = String(previous?.follow_up_date ?? "").slice(0, 10);
+        const newFollow = String(limited.follow_up_date ?? "").slice(0, 10);
+        if (newFollow && newFollow !== prevFollow) {
+          await supabase.from("lead_followups").insert({
+            client_id: editId,
+            follow_up_date: newFollow,
+            follow_up_time: limited.follow_up_time ?? null,
+            follow_up_type: (limited.follow_up_type as string) || "Call",
+            status: "Pending",
+            notes: "Updated from lead edit form",
+            created_by: currentUserId,
+          });
+        }
+
         const prevP = {
           st: String(previous?.proposal_status ?? ""),
           am: previous?.proposal_amount != null ? String(previous.proposal_amount) : "",
@@ -1212,7 +1231,17 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
           am: String(limited.proposal_amount ?? ""),
           sd: String(limited.proposal_sent_date ?? "").slice(0, 10),
         };
-        if (previous && (prevP.st !== newP.st || prevP.am !== newP.am || prevP.sd !== newP.sd)) {
+        const prevStatus = normalizeStatus(String(previous?.status ?? ""));
+        const newStatus = normalizeStatus(String(limited.status ?? ""));
+        if (previous && prevStatus !== newStatus) {
+          await insertActivityClient(
+            supabase,
+            editId,
+            "Status Changed",
+            `${prevStatus || "—"} → ${newStatus}`,
+            currentUserId,
+          );
+        } else if (previous && (prevP.st !== newP.st || prevP.am !== newP.am || prevP.sd !== newP.sd)) {
           await insertActivityClient(
             supabase,
             editId,
@@ -1324,10 +1353,12 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   };
 
   const handleBulkDeleteLeads = async () => {
-    if (!isAdmin || leadBulk.selectedCount === 0) return;
+    if (leadBulk.selectedCount === 0) return;
     if (!confirm(`Delete ${leadBulk.selectedCount} selected lead(s) permanently?`)) return;
     const ids = [...leadBulk.selected];
-    const { error: deletionError } = await supabase.from("clients").delete().in("id", ids);
+    let q = supabase.from("clients").delete().in("id", ids);
+    if (!isAdmin && currentUserId) q = q.eq("assigned_to", currentUserId);
+    const { error: deletionError } = await q;
     if (deletionError) {
       setError(deletionError.message);
       return;
@@ -1338,23 +1369,56 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   };
 
   const handleBulkAssignLeads = async () => {
-    if (!isAdmin || leadBulk.selectedCount === 0 || !bulkAssignTo) return;
+    if (!isAdmin || leadBulk.selectedCount === 0 || !bulkAssignTo || !currentUserId) return;
     const ids = [...leadBulk.selected];
     const assignee = employeesForSelect.find((e) => e.id === bulkAssignTo);
     const label = assignee?.label || "assignee";
-    if (!confirm(`Assign ${ids.length} lead(s) to ${label}?`)) return;
-    const { error: assignError } = await supabase.from("clients").update({ assigned_to: bulkAssignTo }).in("id", ids);
-    if (assignError) {
-      setError(assignError.message);
+    if (
+      !confirm(
+        `Assign ${ids.length} lead(s) to ${label} as a Student Lead task?\n\nLeads stay in Student Master for admins. The employee will work them under My Tasks → Student Lead (not as CRM-owned Student Master rows).`,
+      )
+    ) {
       return;
+    }
+    const today = todayISO();
+    const { data: inserted, error: insertError } = await supabase
+      .from("tasks")
+      .insert({
+        title: `Student lead outreach (${ids.length} lead${ids.length === 1 ? "" : "s"})`,
+        description: `Assigned from Student Master · ${ids.length} linked lead(s).`,
+        assigned_to: bulkAssignTo,
+        assigned_by: currentUserId,
+        assignment_type: "lead",
+        client_ids: ids,
+        college_visit_ids: [],
+        project_id: null,
+        priority: "Medium",
+        status: "Pending",
+        progress: 0,
+        start_date: today,
+        due_date: null,
+      })
+      .select("id")
+      .single();
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+    // Do NOT set clients.assigned_to — ownership stays admin/counsellor; work happens via the task.
+    try {
+      await supabase.rpc("create_task_assignment_notification", { p_task_id: inserted.id });
+    } catch {
+      /* optional RPC */
     }
     leadBulk.clearSelection();
     setBulkAssignTo("");
-    setSuccess(`${ids.length} lead(s) assigned to ${label}.`);
+    setSuccess(
+      `${ids.length} lead(s) sent to ${label} as a My Tasks → Student Lead assignment (Task Assignment).`,
+    );
     await reload();
   };
 
-  const leadBulkSelectionProps = isAdmin && !pickForTask
+  const leadBulkSelectionProps = !pickForTask
     ? {
         allSelected: leadBulk.allSelected,
         someSelected: leadBulk.someSelected,
@@ -1365,7 +1429,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     : undefined;
 
   const renderLeadBulkBar =
-    isAdmin && !pickForTask && leadBulk.selectedCount > 0 ? (
+    !pickForTask && leadBulk.selectedCount > 0 ? (
       <BulkSelectionBar
         selectedCount={leadBulk.selectedCount}
         totalCount={leadsForBulk.length}
@@ -1375,27 +1439,31 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         }}
         className="mb-3"
       >
-        <select
-          value={bulkAssignTo}
-          onChange={(e) => setBulkAssignTo(e.target.value)}
-          className="h-7 rounded-lg border border-[#dbe6f3] bg-white px-2 text-xs text-[#334155]"
-        >
-          <option value="">Assign to…</option>
-          {employeesForSelect.map((emp) => (
-            <option key={emp.id} value={emp.id}>
-              {emp.label}
-            </option>
-          ))}
-        </select>
-        <Button
-          type="button"
-          size="sm"
-          disabled={!bulkAssignTo}
-          className="h-7 rounded-lg bg-[#2563eb] px-3 text-xs text-white hover:bg-[#1d4ed8] disabled:opacity-50"
-          onClick={() => void handleBulkAssignLeads()}
-        >
-          Assign selected
-        </Button>
+        {isAdmin ? (
+          <>
+            <select
+              value={bulkAssignTo}
+              onChange={(e) => setBulkAssignTo(e.target.value)}
+              className="h-7 rounded-lg border border-[#dbe6f3] bg-white px-2 text-xs text-[#334155]"
+            >
+              <option value="">Assign as task to…</option>
+              {employeesForSelect.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!bulkAssignTo}
+              className="h-7 rounded-lg bg-[#2563eb] px-3 text-xs text-white hover:bg-[#1d4ed8] disabled:opacity-50"
+              onClick={() => void handleBulkAssignLeads()}
+            >
+              Assign as Student Lead task
+            </Button>
+          </>
+        ) : null}
         <Button
           type="button"
           size="sm"
@@ -2196,7 +2264,7 @@ function FollowUpsTable({
                 <td className="px-3 py-2 font-semibold text-slate-900">{displayLeadName(cli)}</td>
                 <td className="max-w-[180px] truncate px-3 py-2">{cli.company_name || "—"}</td>
                 <td>{cli.assigned_to ? employeeNameMap[cli.assigned_to] ?? "-" : "-"}</td>
-                <td className="whitespace-nowrap px-3 py-2">{fr.follow_up_date || "—"}</td>
+                <td className="whitespace-nowrap px-3 py-2">{formatDisplayDate(fr.follow_up_date)}</td>
                 <td className="whitespace-nowrap">{fr.follow_up_time || "—"}</td>
                 <td>{fr.follow_up_type || "—"}</td>
                 <td className="max-w-[220px] truncate px-3 py-2 text-slate-600">{fr.notes || "—"}</td>
@@ -2246,7 +2314,7 @@ function PipelineBoard({
                     <div className="mt-2 space-y-1 text-xs text-slate-700">
                       {card.budget != null ? <p>Budget ₹{Number(card.budget).toLocaleString()}</p> : null}
                       <p>Priority {String(card.priority || "—")}</p>
-                      <p className="truncate">Follow-up {card.follow_up_date || "—"}</p>
+                      <p className="truncate">Follow-up {formatDisplayDate(card.follow_up_date)}</p>
                     </div>
                     {isAdmin ? (
                       <select
@@ -2393,12 +2461,12 @@ function AllLeadsTable({
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[5200px] text-sm">
+      <table className="table-freeze-cols w-full min-w-[5200px] text-sm" style={{ ["--sticky-col-2" as string]: "14rem" }}>
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
-            {pickMode ? <TableHeaderCell label="Pick" className={thCls} /> : null}
+            {pickMode ? <TableHeaderCell label="Pick" className={`${thCls} sticky-col sticky-col-1 min-w-[4.5rem]`} /> : null}
             {showBulk ? (
-              <th className="w-12 px-6 py-3.5 text-center align-middle">
+              <th className={`w-12 px-6 py-3.5 text-center align-middle sticky-col ${pickMode ? "sticky-col-after-check" : "sticky-col-1"}`}>
                 <div className="flex justify-center">
                   <TableBulkCheckbox
                     checked={bulkSelection!.allSelected}
@@ -2410,8 +2478,18 @@ function AllLeadsTable({
                 </div>
               </th>
             ) : null}
-            <TableHeaderCell label="Student Name" className={thCls} />
-            <TableHeaderCell label="Mobile Number" className={thCls} />
+            <TableHeaderCell
+              label="Student Name"
+              className={`${thCls} sticky-col ${
+                pickMode || showBulk ? "sticky-col-after-check" : "sticky-col-1"
+              } min-w-[14rem]`}
+            />
+            <TableHeaderCell
+              label="Mobile Number"
+              className={`${thCls} sticky-col ${
+                pickMode || showBulk ? "sticky-col-after-check-2" : "sticky-col-2"
+              } min-w-[11rem]`}
+            />
             <TableHeaderCell label="WhatsApp Number" className={thCls} />
             <TableHeaderCell label="Email" className={thCls} />
             <TableHeaderCell label="City" className={thCls} />
@@ -2537,7 +2615,7 @@ function AllLeadsTable({
                     ].join(" ")}
                   >
                     {pickMode ? (
-                      <td className="w-12 px-6 py-3.5 text-center align-middle">
+                      <td className="sticky-col sticky-col-1 w-12 px-6 py-3.5 text-center align-middle">
                         <div className="flex justify-center">
                           <input
                             type="checkbox"
@@ -2549,7 +2627,7 @@ function AllLeadsTable({
                       </td>
                     ) : null}
                     {showBulk ? (
-                      <td className="w-12 px-6 py-3.5 text-center align-middle">
+                      <td className={`sticky-col w-12 px-6 py-3.5 text-center align-middle ${pickMode ? "sticky-col-after-check" : "sticky-col-1"}`}>
                         <div className="flex justify-center">
                           <TableBulkCheckbox
                             checked={bulkSelection!.isSelected(lead.id)}
@@ -2559,8 +2637,18 @@ function AllLeadsTable({
                         </div>
                       </td>
                     ) : null}
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle font-semibold text-slate-900">{displayLeadName(lead) || "—"}</td>
-                    <td className="whitespace-nowrap px-6 py-3.5 text-center align-middle">
+                    <td
+                      className={`sticky-col whitespace-nowrap px-6 py-3.5 text-center align-middle font-semibold text-slate-900 min-w-[14rem] ${
+                        pickMode || showBulk ? "sticky-col-after-check" : "sticky-col-1"
+                      }`}
+                    >
+                      {displayLeadName(lead) || "—"}
+                    </td>
+                    <td
+                      className={`sticky-col whitespace-nowrap px-6 py-3.5 text-center align-middle min-w-[11rem] ${
+                        pickMode || showBulk ? "sticky-col-after-check-2" : "sticky-col-2"
+                      }`}
+                    >
                       <div className="flex justify-center">
                         <StudentOutreachButtons
                           mode="phone"
@@ -2621,7 +2709,7 @@ function AllLeadsTable({
                     </td>
                     <td className={`${tdCls} font-medium capitalize`}>{lead.priority || "—"}</td>
                     <td className={tdTrunc}>{lead.primary_objection || "—"}</td>
-                    <td className={`${tdCls} text-xs`}>{fu || "—"}</td>
+                    <td className={`${tdCls} text-xs`}>{formatDisplayDate(fu)}</td>
                     <td className={tdCls}>{formatMoney(lead.fee_quoted ?? lead.proposal_amount)}</td>
                     <td className={tdCls}>{formatMoney(lead.final_fee)}</td>
                     <td className={tdCls}>{lead.payment_status || "—"}</td>

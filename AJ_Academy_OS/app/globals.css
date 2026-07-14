@@ -174,6 +174,45 @@
     -webkit-overflow-scrolling: touch;
   }
 
+  /* Freeze leading columns while horizontally scrolling wide CRM tables */
+  table.table-freeze-cols {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  table.table-freeze-cols th.sticky-col,
+  table.table-freeze-cols td.sticky-col {
+    position: sticky;
+    z-index: 2;
+    background: #fff;
+    box-shadow: 1px 0 0 0 #e8edf5;
+  }
+
+  table.table-freeze-cols thead th.sticky-col {
+    z-index: 3;
+    background: #f1f6fc;
+  }
+
+  table.table-freeze-cols thead.cv-head th.sticky-col {
+    background: #f8fbff;
+  }
+
+  table.table-freeze-cols .sticky-col-1 {
+    left: 0;
+  }
+
+  table.table-freeze-cols .sticky-col-2 {
+    left: var(--sticky-col-2, 10.5rem);
+  }
+
+  table.table-freeze-cols .sticky-col-after-check {
+    left: 4.5rem;
+  }
+
+  table.table-freeze-cols .sticky-col-after-check-2 {
+    left: calc(4.5rem + var(--sticky-col-2, 10.5rem));
+  }
+
   .stat-cards-grid {
     @apply grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4;
   }
