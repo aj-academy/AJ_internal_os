@@ -147,8 +147,8 @@ Then hard-refresh the app and try **Add Student** again.
 
 Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / profiles), then **`crm_owner_isolation.sql`**, then **`crm_delete_fix.sql`**. Adds:
 
-- `/admin/college-visits` — **your** colleges only; bulk “Assign as College Visit task” shares work without transferring ownership
-- `/employee/college-visits` — **your** colleges only; update visits on-site
+- `/admin/college-visits` and `/employee/college-visits` — **same subsection tabs as Student Master**: Overview, All Colleges, Follow-ups, Pipeline, Converted Colleges, MOU Tracker, Activity Timeline (+ Reports / Settings for admin). Own rows only; share via College Visit tasks.
+- Pick-for-task flow uses the **All Colleges** tab (same pattern as Student Master → All Students).
 
 API (staff session): `GET/POST /api/college-visits`, `PATCH/DELETE /api/college-visits/[id]`, `GET/POST /api/college-visits/[id]/activities`. GET returns the signed-in user’s rows only.
 

@@ -1,0 +1,491 @@
+"use client";
+
+import { Button } from "@/components/ui/button";
+import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
+import { formatDisplayDate } from "@/lib/datetime";
+import {
+  FINAL_STATUSES,
+  MOU_STATUSES,
+  VISIT_STATUSES,
+} from "@/components/college-visits/collegeVisitsConfig";
+import {
+  daysSince,
+  isFollowUpDue,
+  todayISO,
+  type CollegeVisitActivityRow,
+  type CollegeVisitRow,
+} from "@/components/college-visits/collegeVisitsHelpers";
+
+function countBy(rows: CollegeVisitRow[], key: (r: CollegeVisitRow) => string) {
+  const m = new Map<string, number>();
+  for (const r of rows) {
+    const k = key(r) || "—";
+    m.set(k, (m.get(k) ?? 0) + 1);
+  }
+  return [...m.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+export function CollegeBarBlock({
+  title,
+  entries,
+  accent = "gold",
+}: {
+  title: string;
+  entries: { label: string; value: number }[];
+  accent?: "gold" | "sky" | "rose";
+}) {
+  const max = Math.max(1, ...entries.map((e) => e.value));
+  const bar =
+    accent === "sky" ? "bg-sky-400" : accent === "rose" ? "bg-rose-400" : "bg-[#c9a227]";
+  return (
+    <div className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-4">
+      <p className="text-sm font-semibold text-[#0f172a]">{title}</p>
+      <div className="mt-3 space-y-2">
+        {entries.length === 0 ? (
+          <p className="text-xs text-[#64748b]">No data yet.</p>
+        ) : (
+          entries.slice(0, 8).map((e) => (
+            <div key={e.label}>
+              <div className="mb-1 flex justify-between text-xs text-[#475569]">
+                <span className="truncate pr-2">{e.label}</span>
+                <span className="font-semibold">{e.value}</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-white">
+                <div className={`h-full ${bar}`} style={{ width: `${(e.value / max) * 100}%` }} />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function CollegeOverviewPanel({
+  visits,
+  loading,
+}: {
+  visits: CollegeVisitRow[];
+  loading: boolean;
+}) {
+  const due = visits.filter((v) => isFollowUpDue(v)).length;
+  const visited = visits.filter((v) => v.visit_status === "Visited").length;
+  const mouSigned = visits.filter((v) => v.mou_signed_status === "Signed").length;
+  const converted = visits.filter((v) => v.final_status === "Converted").length;
+  const lost = visits.filter((v) => v.final_status === "Lost" || v.final_status === "Closed - Rejected").length;
+  const today = todayISO();
+  const followToday = visits.filter((v) => (v.next_follow_up_date || "").slice(0, 10) === today).length;
+  const scheduled = visits.filter((v) => v.visit_status === "Scheduled").length;
+  const notVisited = visits.filter((v) => v.visit_status === "Not Visited").length;
+
+  const byStatus = countBy(visits, (v) => v.visit_status);
+  const byPriority = countBy(visits, (v) => v.priority);
+  const byMonth = countBy(visits, (v) => (v.created_at || "").slice(0, 7) || "—");
+
+  return (
+    <div className="space-y-4">
+      <div className="stat-cards-grid-5">
+        <LeadSummaryCard title="Total Colleges" value={visits.length} loading={loading} />
+        <LeadSummaryCard title="Not Visited" value={notVisited} loading={loading} />
+        <LeadSummaryCard title="Scheduled" value={scheduled} loading={loading} />
+        <LeadSummaryCard title="Visited" value={visited} loading={loading} />
+        <LeadSummaryCard title="MOU Signed" value={mouSigned} loading={loading} />
+        <LeadSummaryCard title="Converted" value={converted} loading={loading} />
+        <LeadSummaryCard title="Lost / Rejected" value={lost} loading={loading} />
+        <LeadSummaryCard title="Follow-ups Today" value={followToday} loading={loading} />
+        <LeadSummaryCard title="Follow-up Due" value={due} loading={loading} accent="rose" />
+      </div>
+      <div className="grid gap-4 xl:grid-cols-3">
+        <CollegeBarBlock title="Visit status breakdown" entries={byStatus} />
+        <CollegeBarBlock title="Priority mix" entries={byPriority} accent="sky" />
+        <CollegeBarBlock title="Monthly creations" entries={byMonth} accent="rose" />
+      </div>
+    </div>
+  );
+}
+
+export function CollegeFollowUpsPanel({
+  visits,
+  ownerNameMap,
+  loading,
+  onOpen,
+}: {
+  visits: CollegeVisitRow[];
+  ownerNameMap: Record<string, string>;
+  loading: boolean;
+  onOpen: (row: CollegeVisitRow) => void;
+}) {
+  const today = todayISO();
+  const withFollow = visits.filter((v) => v.next_follow_up_date);
+  const todayRows = withFollow.filter((v) => (v.next_follow_up_date || "").slice(0, 10) === today);
+  const overdue = withFollow.filter((v) => isFollowUpDue(v) && (v.next_follow_up_date || "").slice(0, 10) < today);
+  const upcoming = withFollow.filter((v) => (v.next_follow_up_date || "").slice(0, 10) > today);
+
+  const sorted = [...withFollow].sort((a, b) =>
+    String(a.next_follow_up_date).localeCompare(String(b.next_follow_up_date)),
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="stat-cards-grid">
+        <LeadSummaryCard title="Today" value={todayRows.length} loading={loading} />
+        <LeadSummaryCard title="Overdue" value={overdue.length} loading={loading} accent="rose" />
+        <LeadSummaryCard title="Upcoming" value={upcoming.length} loading={loading} />
+        <LeadSummaryCard title="With next follow-up" value={withFollow.length} loading={loading} />
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3]">
+        <table className="min-w-[960px] w-full text-sm">
+          <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
+            <tr>
+              <th className="px-4 py-3 text-left">College</th>
+              <th className="px-4 py-3 text-left">Next follow-up</th>
+              <th className="px-4 py-3 text-left">Stage</th>
+              <th className="px-4 py-3 text-left">Visit status</th>
+              <th className="px-4 py-3 text-left">Owner</th>
+              <th className="px-4 py-3 text-left">Due?</th>
+              <th className="px-4 py-3 text-left">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-10 text-center text-[#64748b]">
+                  No follow-up dates set. Add them from All Colleges → Edit.
+                </td>
+              </tr>
+            ) : (
+              sorted.map((row) => {
+                const due = isFollowUpDue(row);
+                return (
+                  <tr key={row.id} className="border-t border-[#eef2f7]">
+                    <td className="px-4 py-3 font-medium text-[#0f172a]">{row.college_name}</td>
+                    <td className="px-4 py-3">{formatDisplayDate(row.next_follow_up_date)}</td>
+                    <td className="px-4 py-3">{row.follow_up_stage || "—"}</td>
+                    <td className="px-4 py-3">{row.visit_status}</td>
+                    <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "—" : "—"}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={
+                          due
+                            ? "rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700"
+                            : "rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600"
+                        }
+                      >
+                        {due ? "Yes" : "No"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => onOpen(row)}>
+                        Open
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export function CollegePipelineBoard({
+  visits,
+  canEdit,
+  onChangeStatus,
+}: {
+  visits: CollegeVisitRow[];
+  canEdit: boolean;
+  onChangeStatus: (row: CollegeVisitRow, status: string) => void;
+}) {
+  return (
+    <div className="overflow-x-auto pb-2">
+      <div className="flex min-h-[340px] min-w-[980px] gap-3">
+        {VISIT_STATUSES.map((statusCol) => {
+          const col = visits.filter((v) => v.visit_status === statusCol);
+          return (
+            <div key={statusCol} className="min-w-[240px] flex-1 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-3">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#475569]">
+                {statusCol} · {col.length}
+              </p>
+              <div className="space-y-3">
+                {col.map((card) => (
+                  <div key={card.id} className="rounded-xl border border-white bg-white p-3 shadow-sm">
+                    <p className="font-semibold text-slate-900">{card.college_name}</p>
+                    <p className="text-xs text-slate-500">{card.location || ""}</p>
+                    <div className="mt-2 space-y-1 text-xs text-slate-700">
+                      <p>Priority {card.priority || "—"}</p>
+                      <p>MOU {card.mou_signed_status || "—"}</p>
+                      <p>Next FU {formatDisplayDate(card.next_follow_up_date)}</p>
+                    </div>
+                    {canEdit ? (
+                      <select
+                        className="mt-2 h-8 w-full rounded-lg border border-[#dbe6f3] px-2 text-xs"
+                        value={card.visit_status}
+                        onChange={(e) => onChangeStatus(card, e.target.value)}
+                      >
+                        {VISIT_STATUSES.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function CollegeConvertedTable({
+  visits,
+  ownerNameMap,
+  onOpen,
+}: {
+  visits: CollegeVisitRow[];
+  ownerNameMap: Record<string, string>;
+  onOpen: (row: CollegeVisitRow) => void;
+}) {
+  const rows = visits.filter((v) => v.final_status === "Converted" || v.mou_signed_status === "Signed");
+  return (
+    <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3]">
+      <table className="min-w-[900px] w-full text-sm">
+        <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
+          <tr>
+            <th className="px-4 py-3 text-left">College</th>
+            <th className="px-4 py-3 text-left">Location</th>
+            <th className="px-4 py-3 text-left">MOU</th>
+            <th className="px-4 py-3 text-left">Final status</th>
+            <th className="px-4 py-3 text-left">Owner</th>
+            <th className="px-4 py-3 text-left">Visit date</th>
+            <th className="px-4 py-3 text-left">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={7} className="px-4 py-10 text-center text-[#64748b]">
+                No converted / MOU-signed colleges yet.
+              </td>
+            </tr>
+          ) : (
+            rows.map((row) => (
+              <tr key={row.id} className="border-t border-[#eef2f7]">
+                <td className="px-4 py-3 font-medium">{row.college_name}</td>
+                <td className="px-4 py-3">{row.location || "—"}</td>
+                <td className="px-4 py-3">{row.mou_signed_status}</td>
+                <td className="px-4 py-3">{row.final_status}</td>
+                <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "—" : "—"}</td>
+                <td className="px-4 py-3">{formatDisplayDate(row.visit_date)}</td>
+                <td className="px-4 py-3">
+                  <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => onOpen(row)}>
+                    Open
+                  </Button>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function CollegeMouTrackerTable({
+  visits,
+  ownerNameMap,
+  canEdit,
+  onEdit,
+}: {
+  visits: CollegeVisitRow[];
+  ownerNameMap: Record<string, string>;
+  canEdit: boolean;
+  onEdit: (row: CollegeVisitRow) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-[#64748b]">
+        Track MOU progress on each college. Edits save to the college record and show in Activity Timeline.
+      </p>
+      <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3]">
+        <table className="min-w-[1000px] w-full text-sm">
+          <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
+            <tr>
+              <th className="px-4 py-3 text-left">College</th>
+              <th className="px-4 py-3 text-left">MOU status</th>
+              <th className="px-4 py-3 text-left">Follow-up stage</th>
+              <th className="px-4 py-3 text-left">Final status</th>
+              <th className="px-4 py-3 text-left">Priority</th>
+              <th className="px-4 py-3 text-left">Owner</th>
+              <th className="px-4 py-3 text-left">Last outcome</th>
+              <th className="px-4 py-3 text-left">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visits.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-10 text-center text-[#64748b]">
+                  No colleges to track.
+                </td>
+              </tr>
+            ) : (
+              visits.map((row) => (
+                <tr key={row.id} className="border-t border-[#eef2f7]">
+                  <td className="px-4 py-3 font-medium">{row.college_name}</td>
+                  <td className="px-4 py-3">{row.mou_signed_status}</td>
+                  <td className="px-4 py-3">{row.follow_up_stage || "—"}</td>
+                  <td className="px-4 py-3">{row.final_status}</td>
+                  <td className="px-4 py-3">{row.priority}</td>
+                  <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "—" : "—"}</td>
+                  <td className="max-w-[14rem] truncate px-4 py-3" title={row.last_outcome_remarks ?? ""}>
+                    {row.last_outcome_remarks || "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {canEdit ? (
+                      <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => onEdit(row)}>
+                        Edit MOU
+                      </Button>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export function CollegeActivityTimeline({
+  activities,
+  visitMap,
+  ownerNameMap,
+  loading,
+}: {
+  activities: CollegeVisitActivityRow[];
+  visitMap: Record<string, CollegeVisitRow>;
+  ownerNameMap: Record<string, string>;
+  loading: boolean;
+}) {
+  if (loading) {
+    return <p className="rounded-2xl border border-[#dbe6f3] bg-white px-4 py-10 text-center text-sm text-[#64748b]">Loading activity…</p>;
+  }
+  if (!activities.length) {
+    return (
+      <p className="rounded-2xl border border-[#dbe6f3] bg-white px-4 py-10 text-center text-sm text-[#64748b]">
+        No activity yet. Activities appear when colleges are created or updated.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      {activities.map((a) => {
+        const visit = visitMap[a.college_visit_id];
+        return (
+          <div key={a.id} className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] p-4 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-semibold text-[#0f172a]">{a.activity_type}</p>
+              <p className="text-xs text-[#64748b]">{formatDisplayDate(a.created_at)}</p>
+            </div>
+            <p className="mt-1 text-xs text-[#64748b]">
+              {visit?.college_name || a.college_visit_id.slice(0, 8)} · by{" "}
+              {a.created_by ? ownerNameMap[a.created_by] || a.created_by.slice(0, 8) : "—"}
+            </p>
+            {a.notes ? <p className="mt-2 text-[#334155]">{a.notes}</p> : null}
+            {a.old_value || a.new_value ? (
+              <p className="mt-1 text-xs text-[#64748b]">
+                {a.old_value || "—"} → {a.new_value || "—"}
+              </p>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function CollegeReportsPanel({
+  visits,
+  ownerNameMap,
+}: {
+  visits: CollegeVisitRow[];
+  ownerNameMap: Record<string, string>;
+}) {
+  const byStatus = countBy(visits, (v) => v.visit_status);
+  const byMou = countBy(visits, (v) => v.mou_signed_status);
+  const byFinal = countBy(visits, (v) => v.final_status);
+  const byOwner = countBy(visits, (v) =>
+    v.assigned_to ? ownerNameMap[v.assigned_to] || v.assigned_to.slice(0, 8) : "Unassigned",
+  );
+  const due = visits.filter((v) => isFollowUpDue(v)).length;
+  const avgScore =
+    visits.length === 0 ? 0 : Math.round(visits.reduce((s, v) => s + Number(v.lead_score || 0), 0) / visits.length);
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-[#64748b]">Metrics use the colleges visible in this workspace (your own rows).</p>
+      <div className="stat-cards-grid">
+        <LeadSummaryCard title="Total" value={visits.length} />
+        <LeadSummaryCard title="Follow-up due" value={due} accent="rose" />
+        <LeadSummaryCard title="Avg lead score" value={avgScore} />
+        <LeadSummaryCard title="Converted" value={visits.filter((v) => v.final_status === "Converted").length} />
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <CollegeBarBlock title="By visit status" entries={byStatus} />
+        <CollegeBarBlock title="By MOU status" entries={byMou} accent="sky" />
+        <CollegeBarBlock title="By final status" entries={byFinal} />
+        <CollegeBarBlock title="By owner" entries={byOwner.slice(0, 8)} accent="rose" />
+      </div>
+    </div>
+  );
+}
+
+export function CollegeSettingsPanel() {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <SettingList title="Visit statuses" items={[...VISIT_STATUSES]} />
+      <SettingList title="MOU statuses" items={[...MOU_STATUSES]} />
+      <SettingList title="Final statuses" items={[...FINAL_STATUSES]} />
+      <div className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-4 text-sm text-[#475569]">
+        <p className="font-semibold text-[#0f172a]">Notes</p>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+          <li>Each user only sees colleges they own (`assigned_to`).</li>
+          <li>Share outreach via <strong>Assign as College Visit task</strong> (My Tasks).</li>
+          <li>Import files always assign ownership to the importer.</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function SettingList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-2xl border border-[#dbe6f3] bg-white p-4">
+      <p className="text-sm font-semibold text-[#0f172a]">{title}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {items.map((item) => (
+          <span key={item} className="rounded-full border border-[#e8dcc8] bg-[#faf3e3] px-2.5 py-1 text-xs text-[#475569]">
+            {item}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Exported for potential reuse; daysSince kept available through helpers. */
+export function collegeFollowAgeLabel(row: CollegeVisitRow) {
+  const d = daysSince(row.last_follow_up_date);
+  return d == null ? "—" : `${d}d`;
+}

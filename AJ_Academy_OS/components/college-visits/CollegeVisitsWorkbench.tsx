@@ -13,7 +13,6 @@ import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
 import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
-import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { CollegeVisitFormPanel } from "@/components/college-visits/CollegeVisitFormPanel";
@@ -25,9 +24,22 @@ import {
 } from "@/components/college-visits/collegeVisitsCsv";
 import {
   COLLEGE_PRIORITIES,
+  CV_TAB_IDS,
+  CV_TAB_LABELS,
   FINAL_STATUSES,
   VISIT_STATUSES,
+  type CvTabId,
 } from "@/components/college-visits/collegeVisitsConfig";
+import {
+  CollegeActivityTimeline,
+  CollegeConvertedTable,
+  CollegeFollowUpsPanel,
+  CollegeMouTrackerTable,
+  CollegeOverviewPanel,
+  CollegePipelineBoard,
+  CollegeReportsPanel,
+  CollegeSettingsPanel,
+} from "@/components/college-visits/CollegeVisitsSubsections";
 import {
   buildCollegeVisitPayload,
   collegeVisitRowToForm,
@@ -85,6 +97,9 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [fltFinalStatus, setFltFinalStatus] = useState("");
   const [fltFollowUpDue, setFltFollowUpDue] = useState("");
   const [listScope] = useState<"mine">("mine");
+  const [activeTab, setActiveTab] = useState<CvTabId>("overview");
+  const [timelineRows, setTimelineRows] = useState<CollegeVisitActivityRow[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -139,7 +154,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const confirmCollegePick = () => {
     const labels = visits.filter((v) => pickedCollegeIds.has(v.id)).map((v) => v.college_name);
-    const pathParts = ["College Visits"];
+    const pathParts = ["College Visits", CV_TAB_LABELS[activeTab]];
     if (listScope === "mine") pathParts.push("My assigned");
     if (fltVisitStatus) pathParts.push(`Visit=${fltVisitStatus}`);
     if (fltOwner) pathParts.push(`Owner filter`);
@@ -147,7 +162,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     saveTaskCollegeSelection({
       ids: [...pickedCollegeIds],
       labels,
-      filterPath: pathParts.join(" → "),
+      filterPath: pathParts.join(" â†’ "),
     });
     router.push(decodeURIComponent(returnTo));
   };
@@ -189,6 +204,16 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   }, [currentUserId, reload]);
 
   useEffect(() => {
+    if (pickForTask) setActiveTab("all-colleges");
+  }, [pickForTask]);
+
+  useEffect(() => {
+    if (isEmployeePortal && (activeTab === "reports" || activeTab === "settings")) {
+      setActiveTab("overview");
+    }
+  }, [activeTab, isEmployeePortal]);
+
+  useEffect(() => {
     if (!viewVisit?.id) {
       setActivities([]);
       return;
@@ -199,6 +224,19 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       setActivities(json.activities ?? []);
     })();
   }, [viewVisit?.id]);
+
+  const visibleTabIds = useMemo(() => {
+    if (isEmployeePortal) return CV_TAB_IDS.filter((id) => id !== "reports" && id !== "settings");
+    return [...CV_TAB_IDS];
+  }, [isEmployeePortal]);
+
+  const visitMap = useMemo(() => {
+    const m: Record<string, CollegeVisitRow> = {};
+    visits.forEach((v) => {
+      m[v.id] = v;
+    });
+    return m;
+  }, [visits]);
 
   const filteredVisits = useMemo(() => {
     let list = [...visits];
@@ -245,6 +283,40 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   /** Select across the full filtered set (not only the current page). */
   const visitBulk = useRowSelection(filteredVisits, (v) => v.id);
 
+  useEffect(() => {
+    visitBulk.clearSelection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset selection on tab change
+  }, [activeTab, pickForTask]);
+
+  useEffect(() => {
+    if (activeTab !== "timeline" || !visits.length) {
+      if (activeTab !== "timeline") setTimelineRows([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      setTimelineLoading(true);
+      try {
+        const ids = visits.map((v) => v.id);
+        const { data, error: actErr } = await supabase
+          .from("college_visit_activities")
+          .select("id,college_visit_id,activity_type,notes,old_value,new_value,created_by,created_at")
+          .in("college_visit_id", ids)
+          .order("created_at", { ascending: false })
+          .limit(400);
+        if (actErr) throw new Error(actErr.message);
+        if (!cancelled) setTimelineRows((data as CollegeVisitActivityRow[] | null) ?? []);
+      } catch (e) {
+        if (!cancelled) setError(friendlyCollegeVisitError(e));
+      } finally {
+        if (!cancelled) setTimelineLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, visits, supabase]);
+
   const rowsForExport = useMemo(() => {
     if (visitBulk.selectedCount > 0) {
       return filteredVisits.filter((v) => visitBulk.selected.has(v.id));
@@ -252,13 +324,28 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     return filteredVisits;
   }, [filteredVisits, visitBulk.selected, visitBulk.selectedCount]);
 
-  const overview = useMemo(() => {
-    const due = visits.filter((v) => isFollowUpDue(v)).length;
-    const visited = visits.filter((v) => v.visit_status === "Visited").length;
-    const mouSigned = visits.filter((v) => v.mou_signed_status === "Signed").length;
-    const mine = visits.filter((v) => v.assigned_to === currentUserId).length;
-    return { total: visits.length, due, visited, mouSigned, mine };
-  }, [visits, currentUserId]);
+  const changePipelineStatus = async (row: CollegeVisitRow, visit_status: string) => {
+    if (!currentUserId || row.visit_status === visit_status) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const formRow = { ...collegeVisitRowToForm(row), visit_status };
+      const payload = buildCollegeVisitPayload(formRow, { userId: currentUserId, isDbAdmin });
+      const res = await fetch(`/api/college-visits/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...formRow, assigned_to: payload.assigned_to ?? "" }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Could not update visit status.");
+      setSuccess(`Visit status â†’ ${visit_status}`);
+      await reload();
+    } catch (e) {
+      setError(friendlyCollegeVisitError(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const openCreate = () => {
     setEditId(null);
@@ -330,7 +417,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     const ids = [...visitBulk.selected];
     if (
       !confirm(
-        `Assign ${ids.length} college(s) to ${label} as a College Visit task?\n\nThe employee will work them under My Tasks → College Visit (not as CRM-owned College Visits ownership).`,
+        `Assign ${ids.length} college(s) to ${label} as a College Visit task?\n\nThe employee will work them under My Tasks â†’ College Visit (not as CRM-owned College Visits ownership).`,
       )
     ) {
       return;
@@ -342,7 +429,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         .from("tasks")
         .insert({
           title: `College visit outreach (${ids.length})`,
-          description: `Assigned from College Visits · ${ids.length} linked college(s).`,
+          description: `Assigned from College Visits Â· ${ids.length} linked college(s).`,
           assigned_to: bulkAssignTo,
           assigned_by: currentUserId,
           assignment_type: "college",
@@ -365,7 +452,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       }
       visitBulk.clearSelection();
       setBulkAssignTo("");
-      setSuccess(`${ids.length} college(s) sent to ${label} as My Tasks → College Visit.`);
+      setSuccess(`${ids.length} college(s) sent to ${label} as My Tasks â†’ College Visit.`);
       await reload();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
@@ -475,73 +562,16 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const thClass =
     "min-w-[10.5rem] whitespace-nowrap px-6 py-3.5 text-center align-middle text-[11px] font-semibold uppercase tracking-wide text-[#64748b]";
   const tdClass = "min-w-[10.5rem] whitespace-nowrap px-6 py-3.5 text-center align-middle text-xs text-[#334155]";
-
-  return (
+return (
     <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">College Visits</h2>
           <p className="mt-1 text-sm text-[#64748b]">
-            Your college outreach only. Share work with others via Assign as College Visit task (My Tasks).
+            Manage college outreach like Student Master â€” Overview, All Colleges, Follow-ups, Pipeline, and more.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {!pickForTask ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 rounded-full border-[#e8dcc8]"
-                onClick={handleDownloadTemplate}
-              >
-                <FileText className="mr-1 h-4 w-4" />
-                Import template
-              </Button>
-              <input
-                ref={importFileRef}
-                type="file"
-                accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void handleImportFile(f);
-                }}
-              />
-              {isAdmin ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 rounded-full border-[#e8dcc8]"
-                  disabled={importing || schemaMissing}
-                  onClick={() => importFileRef.current?.click()}
-                >
-                  <Upload className="mr-1 h-4 w-4" />
-                  {importing ? "Importing…" : "Import"}
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 rounded-full border-[#e8dcc8]"
-                disabled={!rowsForExport.length}
-                onClick={handleExport}
-                title={
-                  visitBulk.selectedCount > 0
-                    ? "Export selected rows"
-                    : filtersActive
-                      ? "Export rows matching current table filters"
-                      : "Export all rows in the table"
-                }
-              >
-                <Download className="mr-1 h-4 w-4" />
-                {visitBulk.selectedCount > 0
-                  ? `Export selected (${rowsForExport.length})`
-                  : filtersActive
-                    ? `Export filtered (${rowsForExport.length})`
-                    : `Export${rowsForExport.length ? ` (${rowsForExport.length})` : ""}`}
-              </Button>
-            </>
-          ) : null}
           <Button variant="outline" className="h-9 rounded-full border-[#e8dcc8]" disabled={loading} onClick={() => void reload()}>
             Refresh
           </Button>
@@ -566,7 +596,9 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#c9a227] bg-[#fef3c7] px-3 py-2">
           <div>
             <p className="text-sm font-semibold text-[#92400e]">Selecting colleges for task assignment</p>
-            <p className="text-xs text-[#78350f]">{pickedCollegeIds.size} selected · use filters and check rows below</p>
+            <p className="text-xs text-[#78350f]">
+              Tab: {CV_TAB_LABELS[activeTab]} Â· {pickedCollegeIds.size} selected Â· use All Colleges filters below
+            </p>
           </div>
           <div className="flex gap-2">
             <Button type="button" variant="outline" className="rounded-full" onClick={() => router.push(decodeURIComponent(returnTo))}>
@@ -584,188 +616,314 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         </div>
       ) : null}
 
-      <div className="stat-cards-grid">
-        <LeadSummaryCard title="Total colleges" value={overview.total} loading={loading} />
-        <LeadSummaryCard title="Follow-up due" value={overview.due} loading={loading} accent="rose" />
-        <LeadSummaryCard title="Visited" value={overview.visited} loading={loading} />
-        <LeadSummaryCard title="MOU signed" value={overview.mouSigned} loading={loading} />
-        {isEmployeePortal ? <LeadSummaryCard title="Assigned to me" value={overview.mine} loading={loading} /> : null}
+      <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-2">
+        <div className="flex min-w-max gap-2">
+          {visibleTabIds.map((tabId) => (
+            <button
+              key={tabId}
+              type="button"
+              onClick={() => setActiveTab(tabId)}
+              className={
+                activeTab === tabId
+                  ? "rounded-xl bg-[#c9a227] px-3 py-2 text-sm font-semibold text-white shadow-md"
+                  : "rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[#475569] hover:bg-[#eaf1ff]"
+              }
+            >
+              {CV_TAB_LABELS[tabId]}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <TableSearchBar
-        value={searchText}
-        onChange={setSearchText}
-        placeholder="Search college, location, contact, email…"
-        showClear={filtersActive}
-        onClear={clearTableFilters}
-        hint={`Showing ${pageRows.length} of ${filteredVisits.length} college(s) · page ${page}/${totalPages}`}
-      />
+      {activeTab === "overview" ? <CollegeOverviewPanel visits={visits} loading={loading} /> : null}
 
-      {!pickForTask && visitBulk.selectedCount > 0 ? (
-        <BulkSelectionBar selectedCount={visitBulk.selectedCount} onClear={visitBulk.clearSelection}>
-          {isDbAdmin ? (
-            <>
-              <select
-                className="h-8 rounded-lg border border-[#dbe6f3] bg-white px-2 text-xs"
-                value={bulkAssignTo}
-                onChange={(e) => setBulkAssignTo(e.target.value)}
-              >
-                <option value="">Assign as task to…</option>
-                {ownerOptions.map((o) => (
-                  <option key={o.id} value={o.id}>{o.label}</option>
-                ))}
-              </select>
-              <Button size="sm" className="h-8 rounded-full bg-[#c9a227] text-white" onClick={() => void handleBulkAssign()} disabled={!bulkAssignTo || submitting}>
-                Assign as College Visit task
-              </Button>
-            </>
-          ) : null}
-          <Button size="sm" variant="outline" className="h-8 rounded-full border-rose-200 text-rose-700" onClick={() => void handleBulkDelete()} disabled={submitting}>
-            Delete
-          </Button>
-        </BulkSelectionBar>
+      {activeTab === "follow-ups" ? (
+        <CollegeFollowUpsPanel visits={filteredVisits} ownerNameMap={ownerNameMap} loading={loading} onOpen={setViewVisit} />
       ) : null}
 
-      <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3]">
-        <table
-          className="table-freeze-cols min-w-[3800px] w-full"
-          style={
-            {
-              ["--sticky-col-2" as string]: "14rem",
-              ["--sticky-check-w" as string]: "3rem",
-            } as CSSProperties
-          }
-        >
-          <thead className="cv-head bg-[#f8fbff]">
-            <tr>
-              {pickForTask ? (
-                <TableHeaderCell label="Pick" className={`${thClass} sticky-col sticky-col-1 sticky-check-col`} />
-              ) : null}
-              {!pickForTask ? (
-                <th className={`${thClass} sticky-col sticky-col-1 sticky-check-col`}>
-                  <div className="flex justify-center">
-                    <TableBulkCheckbox
-                      checked={visitBulk.allSelected}
-                      indeterminate={visitBulk.someSelected}
-                      onChange={visitBulk.toggleAll}
-                      ariaLabel="Select all colleges"
-                    />
-                  </div>
-                </th>
-              ) : null}
-              <TableHeaderCell
-                label="S.No"
-                className={`${thClass} sticky-col sticky-col-after-check min-w-[4.5rem]`}
-              />
-              <TableHeaderCell label="College Name" className={`${thClass} min-w-[14rem]`} />
-              <TableHeaderCell label="Location" className={thClass} />
-              <TableHeaderCell label="Contact Number" className={thClass} />
-              <TableHeaderCell label="Email ID" className={thClass} />
-              <TableHeaderCell label="Connected Person Name" className={thClass} />
-              <TableHeaderCell label="Role" className={thClass} />
-              <TableHeaderFilter label="Visit Status" value={fltVisitStatus} options={VISIT_STATUSES.map((s) => ({ value: s, label: s }))} onChange={setFltVisitStatus} className={thClass} />
-              <TableHeaderCell label="Visit Date" className={thClass} />
-              <TableHeaderCell label="MOU Signed Status" className={thClass} />
-              <TableHeaderCell label="Follow-up Stage" className={thClass} />
-              <TableHeaderCell label="Last Follow-up Date" className={thClass} />
-              <TableHeaderCell label="Next Follow-up Date" className={thClass} />
-              <TableHeaderFilter label="Priority" value={fltPriority} options={COLLEGE_PRIORITIES.map((p) => ({ value: p, label: p }))} onChange={setFltPriority} className={thClass} />
-              <TableHeaderFilter label="Owner" value={fltOwner} options={ownerOptions.map((o) => ({ value: o.id, label: o.label }))} onChange={setFltOwner} className={thClass} />
-              <TableHeaderCell label="Description" className={thClass} />
-              <TableHeaderCell label="Last Outcome / Remarks" className={thClass} />
-              <TableHeaderCell label="Days Since Last Follow-up" className={thClass} />
-              <TableHeaderFilter label="Follow-up Due?" value={fltFollowUpDue} options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]} onChange={setFltFollowUpDue} className={thClass} />
-              <TableHeaderCell label="Lead Score" className={thClass} />
-              <TableHeaderFilter label="Final Status" value={fltFinalStatus} options={FINAL_STATUSES.map((s) => ({ value: s, label: s }))} onChange={setFltFinalStatus} className={thClass} />
-              <TableHeaderCell label="Source / Reference" className={thClass} />
-              {!pickForTask ? <TableHeaderCell label="Actions" className={thClass} /> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={pickForTask ? (isDbAdmin ? 24 : 23) : isDbAdmin ? 24 : 23} className="px-4 py-8 text-center text-sm text-[#64748b]">Loading…</td></tr>
-            ) : pageRows.length === 0 ? (
-              <tr><td colSpan={pickForTask ? (isDbAdmin ? 24 : 23) : isDbAdmin ? 24 : 23} className="px-4 py-8 text-center text-sm text-[#64748b]">No college visits found.</td></tr>
-            ) : (
-              pageRows.map((row, idx) => {
-                const days = daysSince(row.last_follow_up_date);
-                const due = isFollowUpDue(row);
-                return (
-                  <tr key={row.id} className="border-t border-[#eef2f7] hover:bg-[#fafcff]">
-                    {pickForTask ? (
-                      <td className={`${tdClass} sticky-col sticky-col-1 sticky-check-col`}>
-                        <div className="flex justify-center">
-                          <TableBulkCheckbox
-                            checked={pickedCollegeIds.has(row.id)}
-                            onChange={() => togglePickCollege(row.id)}
-                            ariaLabel={`Pick ${row.college_name}`}
-                          />
-                        </div>
-                      </td>
-                    ) : null}
-                    {!pickForTask ? (
-                      <td className={`${tdClass} sticky-col sticky-col-1 sticky-check-col`}>
-                        <div className="flex justify-center">
-                          <TableBulkCheckbox
-                            checked={visitBulk.isSelected(row.id)}
-                            onChange={() => visitBulk.toggleOne(row.id)}
-                            ariaLabel={`Select ${row.college_name}`}
-                          />
-                        </div>
-                      </td>
-                    ) : null}
-                    <td className={`${tdClass} sticky-col sticky-col-after-check min-w-[4.5rem]`}>{(page - 1) * pageSize + idx + 1}</td>
-                    <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate font-medium`} title={row.college_name}>{row.college_name}</td>
-                    <td className={tdClass}>{row.location || "—"}</td>
-                    <td className={tdClass}>{row.contact_number || "—"}</td>
-                    <td className={tdClass}>{row.email || "—"}</td>
-                    <td className={`${tdClass} min-w-[12rem]`}>{row.connected_person_name || "—"}</td>
-                    <td className={tdClass}>{row.connected_person_role || "—"}</td>
-                    <td className={tdClass}>{row.visit_status}</td>
-                    <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.visit_date)}</td>
-                    <td className={`${tdClass} min-w-[11rem]`}>{row.mou_signed_status}</td>
-                    <td className={`${tdClass} min-w-[11rem]`}>{row.follow_up_stage || "—"}</td>
-                    <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.last_follow_up_date)}</td>
-                    <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.next_follow_up_date)}</td>
-                    <td className={tdClass}>{row.priority}</td>
-                    <td className={`${tdClass} min-w-[11rem]`}>{row.assigned_to ? ownerNameMap[row.assigned_to] || "—" : "—"}</td>
-                    <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate`} title={row.description ?? ""}>{row.description || "—"}</td>
-                    <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate`} title={row.last_outcome_remarks ?? ""}>{row.last_outcome_remarks || "—"}</td>
-                    <td className={`${tdClass} min-w-[12rem]`}>{days != null ? days : "—"}</td>
-                    <td className={tdClass}>
-                      <span className={due ? "inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700" : "inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600"}>
-                        {due ? "Yes" : "No"}
-                      </span>
-                    </td>
-                    <td className={tdClass}>{row.lead_score}</td>
-                    <td className={tdClass}>{row.final_status}</td>
-                    <td className={`${tdClass} min-w-[11rem]`}>{row.source_reference || "—"}</td>
-                    {!pickForTask ? (
-                      <td className={`${tdClass} min-w-[11rem]`}>
-                        <div className="flex flex-wrap items-center justify-center gap-2">
-                          <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => setViewVisit(row)}>Activity</Button>
-                          {isAdmin ? (
-                            <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => openEdit(row)}>Edit</Button>
-                          ) : null}
-                        </div>
-                      </td>
-                    ) : null}
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+      {activeTab === "pipeline" ? (
+        <CollegePipelineBoard visits={filteredVisits} canEdit={isAdmin} onChangeStatus={(row, s) => void changePipelineStatus(row, s)} />
+      ) : null}
 
-      <TablePagination
-        page={page}
-        totalPages={totalPages}
-        totalItems={totalItems}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
-      />
+      {activeTab === "converted" ? (
+        <CollegeConvertedTable visits={filteredVisits} ownerNameMap={ownerNameMap} onOpen={setViewVisit} />
+      ) : null}
+
+      {activeTab === "mou" ? (
+        <CollegeMouTrackerTable visits={filteredVisits} ownerNameMap={ownerNameMap} canEdit={isAdmin} onEdit={openEdit} />
+      ) : null}
+
+      {activeTab === "timeline" ? (
+        <CollegeActivityTimeline activities={timelineRows} visitMap={visitMap} ownerNameMap={ownerNameMap} loading={timelineLoading} />
+      ) : null}
+
+      {activeTab === "reports" && isDbAdmin ? <CollegeReportsPanel visits={filteredVisits} ownerNameMap={ownerNameMap} /> : null}
+      {activeTab === "settings" && isDbAdmin ? <CollegeSettingsPanel /> : null}
+
+      {activeTab === "all-colleges" ? (
+        <div className="space-y-3">
+          {!pickForTask ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button type="button" variant="outline" className="h-9 rounded-full border-[#e8dcc8]" onClick={handleDownloadTemplate}>
+                <FileText className="mr-1 h-4 w-4" />
+                Import template
+              </Button>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleImportFile(f);
+                }}
+              />
+              {isAdmin ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 rounded-full border-[#e8dcc8]"
+                  disabled={importing || schemaMissing}
+                  onClick={() => importFileRef.current?.click()}
+                >
+                  <Upload className="mr-1 h-4 w-4" />
+                  {importing ? "Importingâ€¦" : "Import"}
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-full border-[#e8dcc8]"
+                disabled={!rowsForExport.length}
+                onClick={handleExport}
+              >
+                <Download className="mr-1 h-4 w-4" />
+                {visitBulk.selectedCount > 0
+                  ? `Export selected (${rowsForExport.length})`
+                  : filtersActive
+                    ? `Export filtered (${rowsForExport.length})`
+                    : `Export${rowsForExport.length ? ` (${rowsForExport.length})` : ""}`}
+              </Button>
+            </div>
+          ) : null}
+
+          <TableSearchBar
+            value={searchText}
+            onChange={setSearchText}
+            placeholder="Search college, location, contact, emailâ€¦"
+            showClear={filtersActive}
+            onClear={clearTableFilters}
+            hint={`Showing ${pageRows.length} of ${filteredVisits.length} college(s) Â· page ${page}/${totalPages}`}
+          />
+
+          {!pickForTask && visitBulk.selectedCount > 0 ? (
+            <BulkSelectionBar selectedCount={visitBulk.selectedCount} onClear={visitBulk.clearSelection}>
+              {isDbAdmin ? (
+                <>
+                  <select
+                    className="h-8 rounded-lg border border-[#dbe6f3] bg-white px-2 text-xs"
+                    value={bulkAssignTo}
+                    onChange={(e) => setBulkAssignTo(e.target.value)}
+                  >
+                    <option value="">Assign as task toâ€¦</option>
+                    {ownerOptions.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    size="sm"
+                    className="h-8 rounded-full bg-[#c9a227] text-white"
+                    onClick={() => void handleBulkAssign()}
+                    disabled={!bulkAssignTo || submitting}
+                  >
+                    Assign as College Visit task
+                  </Button>
+                </>
+              ) : null}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 rounded-full border-rose-200 text-rose-700"
+                onClick={() => void handleBulkDelete()}
+                disabled={submitting}
+              >
+                Delete
+              </Button>
+            </BulkSelectionBar>
+          ) : null}
+
+          <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3]">
+            <table
+              className="table-freeze-cols min-w-[3800px] w-full"
+              style={
+                {
+                  ["--sticky-col-2" as string]: "14rem",
+                  ["--sticky-check-w" as string]: "3rem",
+                } as CSSProperties
+              }
+            >
+              <thead className="cv-head bg-[#f8fbff]">
+                <tr>
+                  {pickForTask ? <TableHeaderCell label="Pick" className={`${thClass} sticky-col sticky-col-1 sticky-check-col`} /> : null}
+                  {!pickForTask ? (
+                    <th className={`${thClass} sticky-col sticky-col-1 sticky-check-col`}>
+                      <div className="flex justify-center">
+                        <TableBulkCheckbox
+                          checked={visitBulk.allSelected}
+                          indeterminate={visitBulk.someSelected}
+                          onChange={visitBulk.toggleAll}
+                          ariaLabel="Select all colleges"
+                        />
+                      </div>
+                    </th>
+                  ) : null}
+                  <TableHeaderCell label="S.No" className={`${thClass} sticky-col sticky-col-after-check min-w-[4.5rem]`} />
+                  <TableHeaderCell label="College Name" className={`${thClass} min-w-[14rem]`} />
+                  <TableHeaderCell label="Location" className={thClass} />
+                  <TableHeaderCell label="Contact Number" className={thClass} />
+                  <TableHeaderCell label="Email ID" className={thClass} />
+                  <TableHeaderCell label="Connected Person Name" className={thClass} />
+                  <TableHeaderCell label="Role" className={thClass} />
+                  <TableHeaderFilter label="Visit Status" value={fltVisitStatus} options={VISIT_STATUSES.map((s) => ({ value: s, label: s }))} onChange={setFltVisitStatus} className={thClass} />
+                  <TableHeaderCell label="Visit Date" className={thClass} />
+                  <TableHeaderCell label="MOU Signed Status" className={thClass} />
+                  <TableHeaderCell label="Follow-up Stage" className={thClass} />
+                  <TableHeaderCell label="Last Follow-up Date" className={thClass} />
+                  <TableHeaderCell label="Next Follow-up Date" className={thClass} />
+                  <TableHeaderFilter label="Priority" value={fltPriority} options={COLLEGE_PRIORITIES.map((p) => ({ value: p, label: p }))} onChange={setFltPriority} className={thClass} />
+                  <TableHeaderFilter label="Owner" value={fltOwner} options={ownerOptions.map((o) => ({ value: o.id, label: o.label }))} onChange={setFltOwner} className={thClass} />
+                  <TableHeaderCell label="Description" className={thClass} />
+                  <TableHeaderCell label="Last Outcome / Remarks" className={thClass} />
+                  <TableHeaderCell label="Days Since Last Follow-up" className={thClass} />
+                  <TableHeaderFilter
+                    label="Follow-up Due?"
+                    value={fltFollowUpDue}
+                    options={[
+                      { value: "yes", label: "Yes" },
+                      { value: "no", label: "No" },
+                    ]}
+                    onChange={setFltFollowUpDue}
+                    className={thClass}
+                  />
+                  <TableHeaderCell label="Lead Score" className={thClass} />
+                  <TableHeaderFilter label="Final Status" value={fltFinalStatus} options={FINAL_STATUSES.map((s) => ({ value: s, label: s }))} onChange={setFltFinalStatus} className={thClass} />
+                  <TableHeaderCell label="Source / Reference" className={thClass} />
+                  {!pickForTask ? <TableHeaderCell label="Actions" className={thClass} /> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={24} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                      Loadingâ€¦
+                    </td>
+                  </tr>
+                ) : pageRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={24} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                      No college visits found.
+                    </td>
+                  </tr>
+                ) : (
+                  pageRows.map((row, idx) => {
+                    const days = daysSince(row.last_follow_up_date);
+                    const due = isFollowUpDue(row);
+                    return (
+                      <tr key={row.id} className="border-t border-[#eef2f7] hover:bg-[#fafcff]">
+                        {pickForTask ? (
+                          <td className={`${tdClass} sticky-col sticky-col-1 sticky-check-col`}>
+                            <div className="flex justify-center">
+                              <TableBulkCheckbox
+                                checked={pickedCollegeIds.has(row.id)}
+                                onChange={() => togglePickCollege(row.id)}
+                                ariaLabel={`Pick ${row.college_name}`}
+                              />
+                            </div>
+                          </td>
+                        ) : null}
+                        {!pickForTask ? (
+                          <td className={`${tdClass} sticky-col sticky-col-1 sticky-check-col`}>
+                            <div className="flex justify-center">
+                              <TableBulkCheckbox
+                                checked={visitBulk.isSelected(row.id)}
+                                onChange={() => visitBulk.toggleOne(row.id)}
+                                ariaLabel={`Select ${row.college_name}`}
+                              />
+                            </div>
+                          </td>
+                        ) : null}
+                        <td className={`${tdClass} sticky-col sticky-col-after-check min-w-[4.5rem]`}>{(page - 1) * pageSize + idx + 1}</td>
+                        <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate font-medium`} title={row.college_name}>
+                          {row.college_name}
+                        </td>
+                        <td className={tdClass}>{row.location || "â€”"}</td>
+                        <td className={tdClass}>{row.contact_number || "â€”"}</td>
+                        <td className={tdClass}>{row.email || "â€”"}</td>
+                        <td className={`${tdClass} min-w-[12rem]`}>{row.connected_person_name || "â€”"}</td>
+                        <td className={tdClass}>{row.connected_person_role || "â€”"}</td>
+                        <td className={tdClass}>{row.visit_status}</td>
+                        <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.visit_date)}</td>
+                        <td className={`${tdClass} min-w-[11rem]`}>{row.mou_signed_status}</td>
+                        <td className={`${tdClass} min-w-[11rem]`}>{row.follow_up_stage || "â€”"}</td>
+                        <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.last_follow_up_date)}</td>
+                        <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.next_follow_up_date)}</td>
+                        <td className={tdClass}>{row.priority}</td>
+                        <td className={`${tdClass} min-w-[11rem]`}>{row.assigned_to ? ownerNameMap[row.assigned_to] || "â€”" : "â€”"}</td>
+                        <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate`} title={row.description ?? ""}>
+                          {row.description || "â€”"}
+                        </td>
+                        <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate`} title={row.last_outcome_remarks ?? ""}>
+                          {row.last_outcome_remarks || "â€”"}
+                        </td>
+                        <td className={`${tdClass} min-w-[12rem]`}>{days != null ? days : "â€”"}</td>
+                        <td className={tdClass}>
+                          <span
+                            className={
+                              due
+                                ? "inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700"
+                                : "inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600"
+                            }
+                          >
+                            {due ? "Yes" : "No"}
+                          </span>
+                        </td>
+                        <td className={tdClass}>{row.lead_score}</td>
+                        <td className={tdClass}>{row.final_status}</td>
+                        <td className={`${tdClass} min-w-[11rem]`}>{row.source_reference || "â€”"}</td>
+                        {!pickForTask ? (
+                          <td className={`${tdClass} min-w-[11rem]`}>
+                            <div className="flex flex-wrap items-center justify-center gap-2">
+                              <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => setViewVisit(row)}>
+                                Activity
+                              </Button>
+                              {isAdmin ? (
+                                <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => openEdit(row)}>
+                                  Edit
+                                </Button>
+                              ) : null}
+                            </div>
+                          </td>
+                        ) : null}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <TablePagination
+            page={page}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        </div>
+      ) : null}
 
       <CollegeVisitFormPanel
         open={panelOpen}
@@ -786,18 +944,24 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
             <div className="flex items-center justify-between border-b px-4 py-3">
               <div>
                 <h3 className="font-semibold text-[#0f172a]">{viewVisit.college_name}</h3>
-                <p className="text-xs text-[#64748b]">{viewVisit.location || "No location"} · Owner: {viewVisit.assigned_to ? ownerNameMap[viewVisit.assigned_to] : "Unassigned"}</p>
+                <p className="text-xs text-[#64748b]">
+                  {viewVisit.location || "No location"} Â· Owner: {viewVisit.assigned_to ? ownerNameMap[viewVisit.assigned_to] : "Unassigned"}
+                </p>
               </div>
-              <button type="button" className="rounded-full border px-2 py-1 text-sm" onClick={() => setViewVisit(null)}>×</button>
+              <button type="button" className="rounded-full border px-2 py-1 text-sm" onClick={() => setViewVisit(null)}>
+                Ã—
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
               <div className="mb-3 flex gap-2">
                 {isAdmin ? (
-                  <Button size="sm" className="rounded-full bg-[#c9a227] text-white" onClick={() => openEdit(viewVisit)}>Update visit</Button>
+                  <Button size="sm" className="rounded-full bg-[#c9a227] text-white" onClick={() => openEdit(viewVisit)}>
+                    Update visit
+                  </Button>
                 ) : null}
-                {isDbAdmin ? (
-                  <Button size="sm" variant="outline" className="rounded-full border-rose-200 text-rose-700" onClick={() => void handleDelete(viewVisit.id)}>Delete</Button>
-                ) : null}
+                <Button size="sm" variant="outline" className="rounded-full border-rose-200 text-rose-700" onClick={() => void handleDelete(viewVisit.id)}>
+                  Delete
+                </Button>
               </div>
               <p className="mb-2 text-xs font-semibold uppercase text-[#94a3b8]">Activity timeline</p>
               <div className="space-y-2">
@@ -808,8 +972,10 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
                     <div key={a.id} className="rounded-lg border border-[#eef2f7] bg-[#f8fbff] p-3 text-xs">
                       <p className="font-semibold text-[#0f172a]">{a.activity_type}</p>
                       {a.notes ? <p className="mt-1 text-[#475569]">{a.notes}</p> : null}
-                      {(a.old_value || a.new_value) ? (
-                        <p className="mt-1 text-[#64748b]">{a.old_value ?? "—"} → {a.new_value ?? "—"}</p>
+                      {a.old_value || a.new_value ? (
+                        <p className="mt-1 text-[#64748b]">
+                          {a.old_value ?? "â€”"} â†’ {a.new_value ?? "â€”"}
+                        </p>
                       ) : null}
                       <p className="mt-1 text-[10px] text-[#94a3b8]">{new Date(a.created_at).toLocaleString()}</p>
                     </div>

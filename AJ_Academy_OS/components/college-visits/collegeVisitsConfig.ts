@@ -1,5 +1,31 @@
 /** Allowed / suggested values for College Visits (DB stores free text; these drive filters + forms). */
 
+export const CV_TAB_IDS = [
+  "overview",
+  "all-colleges",
+  "follow-ups",
+  "pipeline",
+  "converted",
+  "mou",
+  "timeline",
+  "reports",
+  "settings",
+] as const;
+
+export type CvTabId = (typeof CV_TAB_IDS)[number];
+
+export const CV_TAB_LABELS: Record<CvTabId, string> = {
+  overview: "Overview",
+  "all-colleges": "All Colleges",
+  "follow-ups": "Follow-ups",
+  pipeline: "Pipeline",
+  converted: "Converted Colleges",
+  mou: "MOU Tracker",
+  timeline: "Activity Timeline",
+  reports: "Reports",
+  settings: "Settings",
+};
+
 export const VISIT_STATUSES = [
   "Not Visited",
   "Scheduled",
