@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireStaffApiSession } from "@/lib/security";
-import { COLLEGE_VISIT_SELECT } from "@/components/college-visits/collegeVisitsHelpers";
+import { COLLEGE_VISIT_SELECT, COLLEGE_VISIT_SELECT_LEGACY, isMissingContactsColumn } from "@/components/college-visits/collegeVisitsHelpers";
 import { buildPayloadFromApi, mapCollegeVisitRow, parseCollegeVisitBody } from "@/lib/collegeVisitsApi";
 import { deleteOwnedCollegeVisits } from "@/lib/crmOwnedDelete";
 
@@ -29,12 +29,25 @@ export async function PATCH(request: Request, context: RouteContext) {
   const payload = buildPayloadFromApi(parsed.form, user.id, false);
 
   const supabase = await createClient();
-  const { data: prev } = await supabase.from("college_visits").select(COLLEGE_VISIT_SELECT).eq("id", id).maybeSingle();
+  let prevSelect = COLLEGE_VISIT_SELECT;
+  let { data: prev, error: prevError } = await supabase.from("college_visits").select(prevSelect).eq("id", id).maybeSingle();
+  if (prevError && isMissingContactsColumn(prevError.message)) {
+    prevSelect = COLLEGE_VISIT_SELECT_LEGACY;
+    ({ data: prev } = await supabase.from("college_visits").select(prevSelect).eq("id", id).maybeSingle());
+  }
 
   // Never transfer ownership via edit — share via College Visit tasks only.
   delete payload.assigned_to;
 
-  const { data, error } = await supabase.from("college_visits").update(payload).eq("id", id).select(COLLEGE_VISIT_SELECT).single();
+  let updatePayload: Record<string, unknown> = { ...payload };
+  let { data, error } = await supabase.from("college_visits").update(updatePayload).eq("id", id).select(COLLEGE_VISIT_SELECT).single();
+
+  if (error && isMissingContactsColumn(error.message)) {
+    const { contacts: _contacts, ...withoutContacts } = updatePayload;
+    void _contacts;
+    updatePayload = withoutContacts;
+    ({ data, error } = await supabase.from("college_visits").update(updatePayload).eq("id", id).select(COLLEGE_VISIT_SELECT_LEGACY).single());
+  }
 
   if (error || !data) {
     return NextResponse.json({ error: error?.message ?? "Could not update college visit." }, { status: 400 });

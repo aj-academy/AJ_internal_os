@@ -1,5 +1,11 @@
 import type { CollegeVisitFormValue, CollegeVisitRow } from "@/components/college-visits/collegeVisitsHelpers";
-import { buildCollegeVisitPayload } from "@/components/college-visits/collegeVisitsHelpers";
+import {
+  buildCollegeVisitPayload,
+  emptyCollegeContact,
+  normalizeCollegeContacts,
+  parseCollegeContacts,
+  resolveCollegeContacts,
+} from "@/components/college-visits/collegeVisitsHelpers";
 
 export function parseCollegeVisitBody(body: unknown): { ok: true; form: CollegeVisitFormValue } | { ok: false; error: string } {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -9,6 +15,17 @@ export function parseCollegeVisitBody(body: unknown): { ok: true; form: CollegeV
   const college_name = typeof record.college_name === "string" ? record.college_name.trim() : "";
   if (!college_name) return { ok: false, error: "college_name is required." };
 
+  const contacts =
+    record.contacts != null
+      ? normalizeCollegeContacts(parseCollegeContacts(record.contacts))
+      : resolveCollegeContacts({
+          contacts: [],
+          contact_number: String(record.contact_number ?? ""),
+          email: String(record.email ?? ""),
+          connected_person_name: String(record.connected_person_name ?? ""),
+          connected_person_role: String(record.connected_person_role ?? ""),
+        });
+
   const form: CollegeVisitFormValue = {
     college_name,
     location: String(record.location ?? ""),
@@ -16,6 +33,7 @@ export function parseCollegeVisitBody(body: unknown): { ok: true; form: CollegeV
     email: String(record.email ?? ""),
     connected_person_name: String(record.connected_person_name ?? ""),
     connected_person_role: String(record.connected_person_role ?? ""),
+    contacts: contacts.length ? contacts : [emptyCollegeContact(true)],
     visit_status: String(record.visit_status ?? "Not Visited"),
     visit_date: String(record.visit_date ?? ""),
     mou_signed_status: String(record.mou_signed_status ?? "Not Signed"),
@@ -41,7 +59,18 @@ export function parseCollegeVisitBody(body: unknown): { ok: true; form: CollegeV
 }
 
 export function mapCollegeVisitRow(row: unknown): CollegeVisitRow {
-  const r = row as Partial<CollegeVisitRow> & { id: string; college_name: string };
+  const r = row as Partial<CollegeVisitRow> & {
+    id: string;
+    college_name: string;
+    contacts?: unknown;
+  };
+  const contacts = resolveCollegeContacts({
+    contacts: r.contacts,
+    contact_number: r.contact_number,
+    email: r.email,
+    connected_person_name: r.connected_person_name,
+    connected_person_role: r.connected_person_role,
+  });
   return {
     id: r.id,
     college_name: r.college_name,
@@ -50,6 +79,7 @@ export function mapCollegeVisitRow(row: unknown): CollegeVisitRow {
     email: r.email ?? null,
     connected_person_name: r.connected_person_name ?? null,
     connected_person_role: r.connected_person_role ?? null,
+    contacts,
     visit_status: r.visit_status ?? "Not Visited",
     visit_date: r.visit_date ?? null,
     mou_signed_status: r.mou_signed_status ?? "Not Signed",

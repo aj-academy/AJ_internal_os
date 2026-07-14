@@ -7,6 +7,17 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDisplayDate } from "@/lib/datetime";
 import { saveTaskCollegeSelection } from "@/lib/taskLeadPickStorage";
 import { deleteOwnedCollegeVisits } from "@/lib/crmOwnedDelete";
+import { whatsAppHref } from "@/components/employee/leads/employeeLeadConfig";
+import { StudentOutreachButtons } from "@/components/student-lead-master/StudentOutreachButtons";
+import { WhatsAppComposeModal } from "@/components/shared/WhatsAppComposeModal";
+import { EmailComposeModal } from "@/components/shared/EmailComposeModal";
+import {
+  fetchWhatsAppTemplates,
+  formatEmailActivityNotes,
+  formatWhatsAppActivityNotes,
+  MAX_EMAIL_MESSAGE_LENGTH,
+  MAX_WHATSAPP_MESSAGE_LENGTH,
+} from "@/lib/whatsappOutreach";
 import { Button } from "@/components/ui/button";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
@@ -51,11 +62,25 @@ import {
   friendlyCollegeVisitError,
   isFollowUpDue,
   isMissingCollegeVisitsTable,
+  primaryOutreachPhone,
+  collegeOutreachTargets,
+  type CollegeOutreachTarget,
   type CollegeVisitActivityRow,
   type CollegeVisitFormValue,
   type CollegeVisitRow,
 } from "@/components/college-visits/collegeVisitsHelpers";
 import { uploadCollegeVisitProposalPdf } from "@/lib/collegeVisitProposals";
+
+type CollegeOutreachFlags = {
+  phoneCalled?: boolean;
+  whatsappSent?: boolean;
+  emailSent?: boolean;
+};
+
+type OutreachPickerState =
+  | { mode: "phone"; row: CollegeVisitRow; targets: CollegeOutreachTarget[] }
+  | { mode: "whatsapp"; row: CollegeVisitRow; targets: CollegeOutreachTarget[] }
+  | { mode: "email"; row: CollegeVisitRow; targets: CollegeOutreachTarget[] };
 
 type AppRole = "admin" | "employee";
 
@@ -124,6 +149,15 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [pickedCollegeIds, setPickedCollegeIds] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
+  const [outreachDone, setOutreachDone] = useState<Record<string, CollegeOutreachFlags>>({});
+  const [whatsAppTemplates, setWhatsAppTemplates] = useState<string[]>([]);
+  const [whatsAppComposeVisit, setWhatsAppComposeVisit] = useState<CollegeVisitRow | null>(null);
+  const [whatsAppSubmitting, setWhatsAppSubmitting] = useState(false);
+  const [emailComposeVisit, setEmailComposeVisit] = useState<CollegeVisitRow | null>(null);
+  const [emailSubmitting, setEmailSubmitting] = useState(false);
+  const [emailComposeTarget, setEmailComposeTarget] = useState<CollegeOutreachTarget | null>(null);
+  const [outreachPicker, setOutreachPicker] = useState<OutreachPickerState | null>(null);
+  const [whatsAppTargetPhone, setWhatsAppTargetPhone] = useState("");
 
   const ownerOptions = useMemo(
     () =>
@@ -209,9 +243,239 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         .or("status.is.null,status.eq.active")
         .order("full_name", { ascending: true });
       setEmployees((profiles as ProfileMini[] | null) ?? []);
+
+      try {
+        setWhatsAppTemplates(await fetchWhatsAppTemplates(supabase));
+      } catch {
+        setWhatsAppTemplates([]);
+      }
     }
     void bootstrap();
   }, [supabase]);
+
+  const logCollegeActivity = useCallback(async (visitId: string, activity_type: string, notes: string) => {
+    const res = await fetch(`/api/college-visits/${visitId}/activities`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ activity_type, notes }),
+    });
+    if (!res.ok) {
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(json.error || "Could not save outreach activity.");
+    }
+    const json = (await res.json()) as { activity?: CollegeVisitActivityRow };
+    if (json.activity) {
+      setActivities((prev) => [json.activity!, ...prev]);
+      setTimelineRows((prev) => [json.activity!, ...prev]);
+    }
+  }, []);
+
+  const markOutreach = useCallback((visitId: string, patch: CollegeOutreachFlags) => {
+    setOutreachDone((prev) => ({ ...prev, [visitId]: { ...prev[visitId], ...patch } }));
+  }, []);
+
+  const handleCollegePhoneClick = useCallback(
+    async (row: CollegeVisitRow, phoneOverride?: string) => {
+      const phone = (phoneOverride || primaryOutreachPhone(row)).trim();
+      if (!phone) {
+        setError("No contact number on this college.");
+        return;
+      }
+      setError(null);
+      setOutreachPicker(null);
+      markOutreach(row.id, { phoneCalled: true });
+      window.location.href = `tel:${phone}`;
+      try {
+        await logCollegeActivity(row.id, "Phone Call", `Called ${phone}`);
+        setSuccess("Call started and logged to activity.");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not log call.");
+      }
+    },
+    [logCollegeActivity, markOutreach],
+  );
+
+  const requestCollegePhone = useCallback(
+    (row: CollegeVisitRow) => {
+      const phoneTargets = collegeOutreachTargets(row).filter((t) => t.phone);
+      if (phoneTargets.length === 0) {
+        setError("No contact number on this college.");
+        return;
+      }
+      if (phoneTargets.length === 1) {
+        void handleCollegePhoneClick(row, phoneTargets[0].phone);
+        return;
+      }
+      setOutreachPicker({ mode: "phone", row, targets: phoneTargets });
+    },
+    [handleCollegePhoneClick],
+  );
+
+  const openCollegeWhatsAppCompose = useCallback((row: CollegeVisitRow, phoneOverride?: string) => {
+    const phone = (phoneOverride || primaryOutreachPhone(row)).trim();
+    if (!whatsAppHref(phone)) {
+      setError("No WhatsApp number on this college.");
+      return;
+    }
+    setError(null);
+    setOutreachPicker(null);
+    setWhatsAppTargetPhone(phone);
+    setWhatsAppComposeVisit(row);
+  }, []);
+
+  const requestCollegeWhatsApp = useCallback(
+    (row: CollegeVisitRow) => {
+      const phoneTargets = collegeOutreachTargets(row).filter((t) => t.phone);
+      if (phoneTargets.length === 0) {
+        setError("No WhatsApp number on this college.");
+        return;
+      }
+      if (phoneTargets.length === 1) {
+        openCollegeWhatsAppCompose(row, phoneTargets[0].phone);
+        return;
+      }
+      setOutreachPicker({ mode: "whatsapp", row, targets: phoneTargets });
+    },
+    [openCollegeWhatsAppCompose],
+  );
+
+  const handleCollegeWhatsAppSend = useCallback(
+    async (message: string) => {
+      if (!whatsAppComposeVisit) return;
+      const trimmed = message.trim();
+      if (!trimmed) {
+        setError("Enter a message before opening WhatsApp.");
+        return;
+      }
+      if (trimmed.length > MAX_WHATSAPP_MESSAGE_LENGTH) {
+        setError(`Message is too long (max ${MAX_WHATSAPP_MESSAGE_LENGTH} characters).`);
+        return;
+      }
+      const phone = (whatsAppTargetPhone || primaryOutreachPhone(whatsAppComposeVisit)).trim();
+      const wa = whatsAppHref(phone, trimmed);
+      if (!wa) {
+        setError("No WhatsApp number on this college.");
+        return;
+      }
+
+      setWhatsAppSubmitting(true);
+      setError(null);
+      markOutreach(whatsAppComposeVisit.id, { whatsappSent: true });
+      window.open(wa, "_blank", "noopener,noreferrer");
+
+      try {
+        await logCollegeActivity(
+          whatsAppComposeVisit.id,
+          "WhatsApp Message",
+          formatWhatsAppActivityNotes(trimmed),
+        );
+        setWhatsAppComposeVisit(null);
+        setWhatsAppTargetPhone("");
+        setSuccess("WhatsApp opened and message saved to activity history.");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not log WhatsApp.");
+      } finally {
+        setWhatsAppSubmitting(false);
+      }
+    },
+    [logCollegeActivity, markOutreach, whatsAppComposeVisit, whatsAppTargetPhone],
+  );
+
+  const openCollegeEmailCompose = useCallback((row: CollegeVisitRow, target?: CollegeOutreachTarget) => {
+    const email = (target?.email || row.email || "").trim();
+    if (!email) {
+      const withEmail = collegeOutreachTargets(row).find((t) => t.email.trim());
+      if (!withEmail?.email) {
+        setError("No email address on this college.");
+        return;
+      }
+      setEmailComposeTarget(withEmail);
+      setEmailComposeVisit(row);
+      setError(null);
+      setOutreachPicker(null);
+      return;
+    }
+    setError(null);
+    setOutreachPicker(null);
+    setEmailComposeTarget(target ?? { key: "primary", contactId: "", personLabel: row.connected_person_name || "Contact", role: row.connected_person_role || "", phone: "", email });
+    setEmailComposeVisit(row);
+  }, []);
+
+  const requestCollegeEmail = useCallback(
+    (row: CollegeVisitRow) => {
+      const emailTargets = collegeOutreachTargets(row).filter((t) => t.email.trim());
+      // de-dupe by email
+      const uniq: CollegeOutreachTarget[] = [];
+      const seen = new Set<string>();
+      for (const t of emailTargets) {
+        const key = t.email.trim().toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        uniq.push(t);
+      }
+      if (uniq.length === 0) {
+        setError("No email address on this college.");
+        return;
+      }
+      if (uniq.length === 1) {
+        openCollegeEmailCompose(row, uniq[0]);
+        return;
+      }
+      setOutreachPicker({ mode: "email", row, targets: uniq });
+    },
+    [openCollegeEmailCompose],
+  );
+
+  const handleCollegeEmailSend = useCallback(
+    async (message: string) => {
+      if (!emailComposeVisit) return;
+      const email = (emailComposeTarget?.email || emailComposeVisit.email || "").trim();
+      if (!email) {
+        setError("No email address on this college.");
+        return;
+      }
+      const trimmed = message.trim();
+      if (!trimmed) {
+        setError("Enter a message before sending email.");
+        return;
+      }
+      if (trimmed.length > MAX_EMAIL_MESSAGE_LENGTH) {
+        setError(`Message is too long (max ${MAX_EMAIL_MESSAGE_LENGTH} characters).`);
+        return;
+      }
+
+      setEmailSubmitting(true);
+      setError(null);
+      const subject = `AJ Academy follow-up for ${emailComposeVisit.college_name}${
+        emailComposeTarget?.personLabel ? ` (${emailComposeTarget.personLabel})` : ""
+      }`;
+
+      try {
+        const mailRes = await fetch("/api/outreach/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to: email, subject, body: trimmed }),
+        });
+        const mailPayload = (await mailRes.json().catch(() => ({}))) as { error?: string };
+        if (!mailRes.ok) {
+          setError(mailPayload.error || "Could not send email.");
+          setEmailSubmitting(false);
+          return;
+        }
+
+        markOutreach(emailComposeVisit.id, { emailSent: true });
+        await logCollegeActivity(emailComposeVisit.id, "Email", formatEmailActivityNotes(trimmed));
+        setEmailComposeVisit(null);
+        setEmailComposeTarget(null);
+        setSuccess("Email sent and logged to activity.");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not send email.");
+      } finally {
+        setEmailSubmitting(false);
+      }
+    },
+    [emailComposeTarget, emailComposeVisit, logCollegeActivity, markOutreach],
+  );
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -872,8 +1136,10 @@ return (
                   <TableHeaderCell label="S.No" className={`${thClass} sticky-col sticky-col-after-check min-w-[4.5rem]`} />
                   <TableHeaderCell label="College Name" className={`${thClass} min-w-[14rem]`} />
                   <TableHeaderCell label="Location" className={thClass} />
-                  <TableHeaderCell label="Contact Number" className={thClass} />
-                  <TableHeaderCell label="Email ID" className={thClass} />
+                  <TableHeaderCell label="Contact Number" className={`${thClass} min-w-[12rem]`} />
+                  <TableHeaderCell label="Call" className={`${thClass} min-w-[5.5rem]`} />
+                  <TableHeaderCell label="WhatsApp" className={`${thClass} min-w-[5.5rem]`} />
+                  <TableHeaderCell label="Email" className={`${thClass} min-w-[12rem]`} />
                   <TableHeaderCell label="Connected Person Name" className={thClass} />
                   <TableHeaderCell label="Role" className={thClass} />
                   <TableHeaderFilter label="Visit Status" value={fltVisitStatus} options={VISIT_STATUSES.map((s) => ({ value: s, label: s }))} onChange={setFltVisitStatus} className={thClass} />
@@ -906,13 +1172,13 @@ return (
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={24} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                    <td colSpan={26} className="px-4 py-8 text-center text-sm text-[#64748b]">
                       Loading...
                     </td>
                   </tr>
                 ) : pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={24} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                    <td colSpan={26} className="px-4 py-8 text-center text-sm text-[#64748b]">
                       No college visits found.
                     </td>
                   </tr>
@@ -920,6 +1186,10 @@ return (
                   pageRows.map((row, idx) => {
                     const days = daysSince(row.last_follow_up_date);
                     const due = isFollowUpDue(row);
+                    const phone = primaryOutreachPhone(row);
+                    const flags = outreachDone[row.id] ?? {};
+                    const person = row.connected_person_name || row.contacts?.find((c) => c.is_primary)?.name || "-";
+                    const personRole = row.connected_person_role || row.contacts?.find((c) => c.is_primary)?.role || "";
                     return (
                       <tr key={row.id} className="border-t border-[#eef2f7] hover:bg-[#fafcff]">
                         {pickForTask ? (
@@ -949,10 +1219,44 @@ return (
                           {row.college_name}
                         </td>
                         <td className={tdClass}>{row.location || "-"}</td>
-                        <td className={tdClass}>{row.contact_number || "-"}</td>
-                        <td className={tdClass}>{row.email || "-"}</td>
-                        <td className={`${tdClass} min-w-[12rem]`}>{row.connected_person_name || "-"}</td>
-                        <td className={tdClass}>{row.connected_person_role || "-"}</td>
+                        <td className={`${tdClass} min-w-[12rem]`}>{row.contact_number || "-"}</td>
+                        <td className={`${tdClass} min-w-[5.5rem]`}>
+                          <StudentOutreachButtons
+                            mode="phone"
+                            phone={phone}
+                            phoneCalled={flags.phoneCalled}
+                            onPhoneClick={() => requestCollegePhone(row)}
+                          />
+                        </td>
+                        <td className={`${tdClass} min-w-[5.5rem]`}>
+                          <StudentOutreachButtons
+                            mode="whatsapp"
+                            phone={phone}
+                            whatsapp={phone}
+                            whatsappSent={flags.whatsappSent}
+                            onWhatsAppClick={() => requestCollegeWhatsApp(row)}
+                          />
+                        </td>
+                        <td className={`${tdClass} min-w-[12rem]`}>
+                          <div className="flex flex-col items-center gap-1.5">
+                            <span className="max-w-[10rem] truncate text-xs text-[#64748b]" title={row.email ?? undefined}>
+                              {row.email || "-"}
+                            </span>
+                            <StudentOutreachButtons
+                              mode="email"
+                              email={row.email || collegeOutreachTargets(row).find((t) => t.email)?.email}
+                              emailSent={flags.emailSent}
+                              onEmailClick={() => requestCollegeEmail(row)}
+                            />
+                          </div>
+                        </td>
+                        <td className={`${tdClass} min-w-[12rem]`}>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span>{person}</span>
+                            {personRole ? <span className="text-[10px] text-[#94a3b8]">{personRole}</span> : null}
+                          </div>
+                        </td>
+                        <td className={tdClass}>{row.connected_person_role || personRole || "-"}</td>
                         <td className={tdClass}>{row.visit_status}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.visit_date)}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{row.mou_signed_status}</td>
@@ -1056,15 +1360,32 @@ return (
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
-              <div className="mb-3 flex gap-2">
+              <div className="mb-3 flex flex-wrap gap-2">
                 {isAdmin ? (
                   <Button size="sm" className="rounded-full bg-[#c9a227] text-white" onClick={() => openEdit(viewVisit)}>
                     Update visit
                   </Button>
                 ) : null}
+                <Button size="sm" variant="outline" className="h-9 rounded-full border-[#e8dcc8]" onClick={() => requestCollegePhone(viewVisit)}>
+                  Call
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 rounded-full border-[#e8dcc8]" onClick={() => requestCollegeWhatsApp(viewVisit)}>
+                  WhatsApp
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 rounded-full border-[#e8dcc8]" onClick={() => requestCollegeEmail(viewVisit)}>
+                  Email
+                </Button>
                 <Button size="sm" variant="outline" className="rounded-full border-rose-200 text-rose-700" onClick={() => void handleDelete(viewVisit.id)}>
                   Delete
                 </Button>
+              </div>
+              <div className="mb-4 space-y-1 rounded-xl border border-[#e8dcc8] bg-[#fffdf8] p-3 text-xs text-[#64748b]">
+                <p>
+                  <span className="font-semibold text-[#3d3428]">Contact:</span> {viewVisit.contact_number || "-"}
+                </p>
+                <p>
+                  <span className="font-semibold text-[#3d3428]">Email:</span> {viewVisit.email || "-"}
+                </p>
               </div>
               <p className="mb-2 text-xs font-semibold uppercase text-[#94a3b8]">Activity timeline</p>
               <div className="space-y-2">
@@ -1087,6 +1408,94 @@ return (
               </div>
             </div>
           </aside>
+        </>
+      ) : null}
+      {whatsAppComposeVisit ? (
+        <WhatsAppComposeModal
+          open={Boolean(whatsAppComposeVisit)}
+          leadName={whatsAppComposeVisit.college_name}
+          phone={whatsAppTargetPhone || primaryOutreachPhone(whatsAppComposeVisit)}
+          templates={whatsAppTemplates}
+          submitting={whatsAppSubmitting}
+          onClose={() => {
+            if (!whatsAppSubmitting) {
+              setWhatsAppComposeVisit(null);
+              setWhatsAppTargetPhone("");
+            }
+          }}
+          onSend={(message) => void handleCollegeWhatsAppSend(message)}
+        />
+      ) : null}
+
+      {emailComposeVisit ? (
+        <EmailComposeModal
+          open={Boolean(emailComposeVisit)}
+          leadName={
+            emailComposeTarget?.personLabel
+              ? `${emailComposeVisit.college_name} · ${emailComposeTarget.personLabel}`
+              : emailComposeVisit.college_name
+          }
+          email={emailComposeTarget?.email?.trim() || emailComposeVisit.email?.trim() || ""}
+          templates={[]}
+          submitting={emailSubmitting}
+          onClose={() => {
+            if (!emailSubmitting) {
+              setEmailComposeVisit(null);
+              setEmailComposeTarget(null);
+            }
+          }}
+          onSend={(message) => void handleCollegeEmailSend(message)}
+        />
+      ) : null}
+
+      {outreachPicker ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close"
+            className="fixed inset-0 z-[60] bg-slate-900/40"
+            onClick={() => setOutreachPicker(null)}
+          />
+          <div className="fixed left-1/2 top-1/2 z-[70] w-[min(100vw-2rem,24rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[#e8dcc8] bg-white p-4 shadow-xl">
+            <h3 className="text-base font-semibold text-[#3d3428]">
+              {outreachPicker.mode === "phone"
+                ? "Choose number to call"
+                : outreachPicker.mode === "whatsapp"
+                  ? "Choose WhatsApp number"
+                  : "Choose email"}
+            </h3>
+            <p className="mt-1 text-xs text-[#6b5d4d]">{outreachPicker.row.college_name}</p>
+            <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+              {outreachPicker.targets.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  className="flex w-full flex-col rounded-xl border border-[#e8dcc8] bg-[#fffdf8] px-3 py-2.5 text-left transition hover:border-[#c9a227] hover:bg-[#faf3e3]"
+                  onClick={() => {
+                    if (outreachPicker.mode === "phone") void handleCollegePhoneClick(outreachPicker.row, t.phone);
+                    else if (outreachPicker.mode === "whatsapp") openCollegeWhatsAppCompose(outreachPicker.row, t.phone);
+                    else openCollegeEmailCompose(outreachPicker.row, t);
+                  }}
+                >
+                  <span className="text-sm font-semibold text-[#3d3428]">
+                    {t.personLabel}
+                    {t.role ? ` · ${t.role}` : ""}
+                  </span>
+                  <span className="text-xs text-[#6b5d4d]">
+                    {outreachPicker.mode === "email" ? t.email : t.phone}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 w-full rounded-xl border-[#e8dcc8]"
+              onClick={() => setOutreachPicker(null)}
+            >
+              Cancel
+            </Button>
+          </div>
         </>
       ) : null}
     </section>

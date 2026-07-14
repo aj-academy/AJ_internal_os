@@ -145,7 +145,7 @@ Then hard-refresh the app and try **Add Student** again.
 
 ### College Visits
 
-Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / profiles), then **`college_visits_proposal_patch.sql`** (Proposal Tracker: link + PDF columns and `college-visit-proposals` storage bucket), then **`crm_owner_isolation.sql`**, then **`crm_delete_fix.sql`**. Adds:
+Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / profiles), then **`college_visits_proposal_patch.sql`** (Proposal Tracker: link + PDF columns and `college-visit-proposals` storage bucket), then **`college_visits_contacts_patch.sql`** (multiple contacts: name / role / alternate phones / email JSON + primary sync), then **`crm_owner_isolation.sql`**, then **`crm_delete_fix.sql`**. Adds:
 
 - `/admin/college-visits` and `/employee/college-visits` — **same subsection tabs as Student Master**: Overview, All Colleges, Follow-ups, Pipeline, Converted Colleges, MOU Tracker, **Proposal Tracker**, Activity Timeline (+ Reports / Settings for admin). Own rows only; share via College Visit tasks.
 - Proposal Tracker stores a **URL link** and/or an uploaded **PDF** per college.

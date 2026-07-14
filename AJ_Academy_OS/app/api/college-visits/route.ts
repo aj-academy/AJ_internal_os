@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireStaffApiSession } from "@/lib/security";
-import { COLLEGE_VISIT_SELECT } from "@/components/college-visits/collegeVisitsHelpers";
+import { COLLEGE_VISIT_SELECT, COLLEGE_VISIT_SELECT_LEGACY, isMissingContactsColumn } from "@/components/college-visits/collegeVisitsHelpers";
 import { buildPayloadFromApi, mapCollegeVisitRow, parseCollegeVisitBody } from "@/lib/collegeVisitsApi";
 
 export async function GET(request: Request) {
@@ -13,14 +13,23 @@ export async function GET(request: Request) {
 
   const supabase = await createClient();
   // Own College Visits only. Sharing is via task assignment (task-linked rows appear in My Tasks).
-  const q = supabase
+  let q = supabase
     .from("college_visits")
     .select(COLLEGE_VISIT_SELECT)
     .eq("assigned_to", user.id)
     .order("updated_at", { ascending: false })
     .limit(800);
 
-  const { data, error } = await q;
+  let { data, error } = await q;
+  if (error && isMissingContactsColumn(error.message)) {
+    q = supabase
+      .from("college_visits")
+      .select(COLLEGE_VISIT_SELECT_LEGACY)
+      .eq("assigned_to", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(800);
+    ({ data, error } = await q);
+  }
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
@@ -47,11 +56,22 @@ export async function POST(request: Request) {
   payload.assigned_to = user.id;
 
   const supabase = await createClient();
-  const { data, error } = await supabase
+  let insertPayload = { ...payload, created_by: user.id, assigned_to: user.id };
+  let { data, error } = await supabase
     .from("college_visits")
-    .insert({ ...payload, created_by: user.id, assigned_to: user.id })
+    .insert(insertPayload)
     .select(COLLEGE_VISIT_SELECT)
     .single();
+
+  if (error && isMissingContactsColumn(error.message)) {
+    const { contacts: _contacts, ...withoutContacts } = insertPayload as Record<string, unknown>;
+    void _contacts;
+    ({ data, error } = await supabase
+      .from("college_visits")
+      .insert(withoutContacts)
+      .select(COLLEGE_VISIT_SELECT_LEGACY)
+      .single());
+  }
 
   if (error || !data) {
     return NextResponse.json({ error: error?.message ?? "Could not create college visit." }, { status: 400 });

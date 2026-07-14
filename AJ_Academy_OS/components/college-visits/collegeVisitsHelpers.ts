@@ -6,6 +6,15 @@ import type {
   VisitStatus,
 } from "./collegeVisitsConfig";
 
+export type CollegeContact = {
+  id: string;
+  name: string;
+  role: string;
+  phones: string[];
+  email: string;
+  is_primary: boolean;
+};
+
 export type CollegeVisitRow = {
   id: string;
   college_name: string;
@@ -14,6 +23,7 @@ export type CollegeVisitRow = {
   email: string | null;
   connected_person_name: string | null;
   connected_person_role: string | null;
+  contacts: CollegeContact[];
   visit_status: string;
   visit_date: string | null;
   mou_signed_status: string;
@@ -58,6 +68,7 @@ export const COLLEGE_VISIT_SELECT = [
   "email",
   "connected_person_name",
   "connected_person_role",
+  "contacts",
   "visit_status",
   "visit_date",
   "mou_signed_status",
@@ -82,6 +93,195 @@ export const COLLEGE_VISIT_SELECT = [
   "created_at",
   "updated_at",
 ].join(",");
+
+/** Fallback when contacts column not migrated yet. */
+export const COLLEGE_VISIT_SELECT_LEGACY = COLLEGE_VISIT_SELECT.replace("contacts,", "");
+
+export function isMissingContactsColumn(msg: string) {
+  const m = msg.toLowerCase();
+  return m.includes("contacts") && (m.includes("column") || m.includes("schema cache") || m.includes("does not exist"));
+}
+
+export const MAX_COLLEGE_CONTACTS = 3;
+export const MAX_PHONES_PER_CONTACT = 3;
+
+export function newCollegeContactId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+export function emptyCollegeContact(isPrimary = false): CollegeContact {
+  return {
+    id: newCollegeContactId(),
+    name: "",
+    role: "",
+    phones: [""],
+    email: "",
+    is_primary: isPrimary,
+  };
+}
+
+function splitLegacyPhones(contact: string | null | undefined): string[] {
+  if (!contact?.trim()) return [];
+  return contact
+    .split(/[/|,;]+/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .slice(0, MAX_PHONES_PER_CONTACT);
+}
+
+export function parseCollegeContacts(raw: unknown): CollegeContact[] {
+  if (!Array.isArray(raw)) return [];
+  const list: CollegeContact[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const r = item as Record<string, unknown>;
+    const phonesRaw = Array.isArray(r.phones)
+      ? r.phones.map((p) => String(p ?? "").trim()).filter(Boolean)
+      : typeof r.phone === "string"
+        ? splitLegacyPhones(r.phone)
+        : [];
+    list.push({
+      id: typeof r.id === "string" && r.id ? r.id : newCollegeContactId(),
+      name: String(r.name ?? "").trim(),
+      role: String(r.role ?? "").trim(),
+      phones: phonesRaw.slice(0, MAX_PHONES_PER_CONTACT),
+      email: String(r.email ?? "").trim(),
+      is_primary: Boolean(r.is_primary),
+    });
+    if (list.length >= MAX_COLLEGE_CONTACTS) break;
+  }
+  return list;
+}
+
+/** Prefer JSON contacts; otherwise build one contact from legacy flat columns. */
+export function resolveCollegeContacts(row: {
+  contacts?: unknown;
+  contact_number?: string | null;
+  email?: string | null;
+  connected_person_name?: string | null;
+  connected_person_role?: string | null;
+}): CollegeContact[] {
+  const parsed = parseCollegeContacts(row.contacts);
+  if (parsed.length) return normalizeCollegeContacts(parsed);
+
+  const phones = splitLegacyPhones(row.contact_number);
+  const name = (row.connected_person_name ?? "").trim();
+  const role = (row.connected_person_role ?? "").trim();
+  const email = (row.email ?? "").trim();
+  if (!phones.length && !name && !email) return [emptyCollegeContact(true)];
+
+  return normalizeCollegeContacts([
+    {
+      id: newCollegeContactId(),
+      name,
+      role,
+      phones: phones.length ? phones : [""],
+      email,
+      is_primary: true,
+    },
+  ]);
+}
+
+export function normalizeCollegeContacts(contacts: CollegeContact[]): CollegeContact[] {
+  const cleaned = contacts
+    .slice(0, MAX_COLLEGE_CONTACTS)
+    .map((c) => ({
+      id: c.id || newCollegeContactId(),
+      name: c.name.trim(),
+      role: c.role.trim(),
+      phones: (c.phones.length ? c.phones : [""])
+        .map((p) => p.trim())
+        .filter((p, i, arr) => p || arr.length === 1)
+        .slice(0, MAX_PHONES_PER_CONTACT),
+      email: c.email.trim(),
+      is_primary: Boolean(c.is_primary),
+    }));
+
+  if (!cleaned.length) return [emptyCollegeContact(true)];
+
+  const primaryIdx = cleaned.findIndex((c) => c.is_primary);
+  return cleaned.map((c, i) => ({
+    ...c,
+    phones: c.phones.length ? c.phones : [""],
+    is_primary: primaryIdx >= 0 ? i === primaryIdx : i === 0,
+  }));
+}
+
+export function getPrimaryCollegeContact(contacts: CollegeContact[]): CollegeContact | null {
+  const list = normalizeCollegeContacts(contacts);
+  return list.find((c) => c.is_primary) ?? list[0] ?? null;
+}
+
+export function flatFieldsFromPrimary(contacts: CollegeContact[]) {
+  const primary = getPrimaryCollegeContact(contacts);
+  const phones = (primary?.phones ?? []).map((p) => p.trim()).filter(Boolean);
+  return {
+    contact_number: phones.join(" / ") || null,
+    email: primary?.email?.trim() || null,
+    connected_person_name: primary?.name?.trim() || null,
+    connected_person_role: primary?.role?.trim() || null,
+  };
+}
+
+export type CollegeOutreachTarget = {
+  key: string;
+  contactId: string;
+  personLabel: string;
+  role: string;
+  phone: string;
+  email: string;
+};
+
+/** Every phone/email target for Call / WhatsApp / Email pickers. */
+export function collegeOutreachTargets(row: CollegeVisitRow): CollegeOutreachTarget[] {
+  const contacts = resolveCollegeContacts(row);
+  const targets: CollegeOutreachTarget[] = [];
+  for (const c of contacts) {
+    const personLabel = c.name.trim() || "Contact";
+    const phones = c.phones.map((p) => p.trim()).filter(Boolean);
+    if (phones.length) {
+      phones.forEach((phone, idx) => {
+        targets.push({
+          key: `${c.id}-p-${idx}`,
+          contactId: c.id,
+          personLabel,
+          role: c.role,
+          phone,
+          email: c.email,
+        });
+      });
+    } else if (c.email.trim()) {
+      targets.push({
+        key: `${c.id}-e`,
+        contactId: c.id,
+        personLabel,
+        role: c.role,
+        phone: "",
+        email: c.email,
+      });
+    }
+  }
+  return targets;
+}
+
+/** First usable phone when Contact Number has multiples like "944… / 959…". */
+export function primaryCollegePhone(contact: string | null | undefined): string {
+  if (!contact?.trim()) return "";
+  return contact.split(/[/|,;]+/)[0]?.trim() ?? contact.trim();
+}
+
+export function primaryOutreachPhone(row: CollegeVisitRow): string {
+  const targets = collegeOutreachTargets(row).filter((t) => t.phone);
+  const primary = getPrimaryCollegeContact(resolveCollegeContacts(row));
+  if (primary) {
+    const hit = targets.find((t) => t.contactId === primary.id && t.phone);
+    if (hit) return hit.phone;
+  }
+  return targets[0]?.phone || primaryCollegePhone(row.contact_number);
+}
 
 export function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -109,9 +309,10 @@ export function friendlyCollegeVisitError(raw: unknown) {
   const msg = raw instanceof Error ? raw.message : "Unexpected error.";
   if (
     isMissingCollegeVisitsTable(msg) ||
-    (msg.includes("proposal_") && (msg.includes("column") || msg.includes("schema cache")))
+    (msg.includes("proposal_") && (msg.includes("column") || msg.includes("schema cache"))) ||
+    (msg.includes("contacts") && (msg.includes("column") || msg.includes("schema cache")))
   ) {
-    return "Database table missing or outdated. Run `college_visits_schema.sql` and `college_visits_proposal_patch.sql` from AJ_Academy_SB in Supabase SQL Editor.";
+    return "Database table missing or outdated. Run `college_visits_schema.sql`, `college_visits_proposal_patch.sql`, and `college_visits_contacts_patch.sql` from AJ_Academy_SB in Supabase SQL Editor.";
   }
   if (
     msg === "Forbidden" ||
@@ -130,6 +331,7 @@ export type CollegeVisitFormValue = {
   email: string;
   connected_person_name: string;
   connected_person_role: string;
+  contacts: CollegeContact[];
   visit_status: VisitStatus | string;
   visit_date: string;
   mou_signed_status: MouStatus | string;
@@ -159,6 +361,7 @@ export function emptyCollegeVisitForm(assignedFallback = ""): CollegeVisitFormVa
     email: "",
     connected_person_name: "",
     connected_person_role: "",
+    contacts: [emptyCollegeContact(true)],
     visit_status: "Not Visited",
     visit_date: "",
     mou_signed_status: "Not Signed",
@@ -182,13 +385,16 @@ export function emptyCollegeVisitForm(assignedFallback = ""): CollegeVisitFormVa
 }
 
 export function collegeVisitRowToForm(row: CollegeVisitRow): CollegeVisitFormValue {
+  const contacts = resolveCollegeContacts(row);
+  const flat = flatFieldsFromPrimary(contacts);
   return {
     college_name: row.college_name ?? "",
     location: row.location ?? "",
-    contact_number: row.contact_number ?? "",
-    email: row.email ?? "",
-    connected_person_name: row.connected_person_name ?? "",
-    connected_person_role: row.connected_person_role ?? "",
+    contact_number: flat.contact_number ?? "",
+    email: flat.email ?? "",
+    connected_person_name: flat.connected_person_name ?? "",
+    connected_person_role: flat.connected_person_role ?? "",
+    contacts,
     visit_status: row.visit_status ?? "Not Visited",
     visit_date: row.visit_date?.slice(0, 10) ?? "",
     mou_signed_status: row.mou_signed_status ?? "Not Signed",
@@ -215,16 +421,19 @@ export function buildCollegeVisitPayload(
   v: CollegeVisitFormValue,
   opts: { userId: string; isDbAdmin: boolean },
 ): Record<string, unknown> {
+  const contacts = normalizeCollegeContacts(v.contacts?.length ? v.contacts : [emptyCollegeContact(true)]);
+  const flat = flatFieldsFromPrimary(contacts);
   const scoreRaw = Number(v.lead_score);
   const amountRaw = Number(v.proposal_amount);
   const assignee = opts.userId;
   return {
     college_name: v.college_name.trim(),
     location: v.location.trim() || null,
-    contact_number: v.contact_number.trim() || null,
-    email: v.email.trim() || null,
-    connected_person_name: v.connected_person_name.trim() || null,
-    connected_person_role: v.connected_person_role.trim() || null,
+    contact_number: flat.contact_number,
+    email: flat.email,
+    connected_person_name: flat.connected_person_name,
+    connected_person_role: flat.connected_person_role,
+    contacts,
     visit_status: v.visit_status || "Not Visited",
     visit_date: v.visit_date || null,
     mou_signed_status: v.mou_signed_status || "Not Signed",

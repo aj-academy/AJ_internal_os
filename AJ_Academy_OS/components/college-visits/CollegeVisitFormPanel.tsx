@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,7 +12,14 @@ import {
   MOU_STATUSES,
   VISIT_STATUSES,
 } from "@/components/college-visits/collegeVisitsConfig";
-import type { CollegeVisitFormValue } from "@/components/college-visits/collegeVisitsHelpers";
+import {
+  emptyCollegeContact,
+  MAX_COLLEGE_CONTACTS,
+  MAX_PHONES_PER_CONTACT,
+  normalizeCollegeContacts,
+  type CollegeContact,
+  type CollegeVisitFormValue,
+} from "@/components/college-visits/collegeVisitsHelpers";
 
 interface OwnerOption {
   id: string;
@@ -31,6 +38,10 @@ interface CollegeVisitFormPanelProps {
   onSubmit: () => void;
 }
 
+function updateContacts(value: CollegeVisitFormValue, contacts: CollegeContact[], onChange: (v: CollegeVisitFormValue) => void) {
+  onChange({ ...value, contacts: normalizeCollegeContacts(contacts) });
+}
+
 export function CollegeVisitFormPanel({
   open,
   title,
@@ -44,10 +55,60 @@ export function CollegeVisitFormPanel({
 }: CollegeVisitFormPanelProps) {
   if (!open) return null;
 
+  const contacts = normalizeCollegeContacts(value.contacts?.length ? value.contacts : [emptyCollegeContact(true)]);
+
+  const setContact = (id: string, patch: Partial<CollegeContact>) => {
+    updateContacts(
+      value,
+      contacts.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+      onChange,
+    );
+  };
+
+  const setPrimary = (id: string) => {
+    updateContacts(
+      value,
+      contacts.map((c) => ({ ...c, is_primary: c.id === id })),
+      onChange,
+    );
+  };
+
+  const addContact = () => {
+    if (contacts.length >= MAX_COLLEGE_CONTACTS) return;
+    updateContacts(value, [...contacts, emptyCollegeContact(false)], onChange);
+  };
+
+  const removeContact = (id: string) => {
+    if (contacts.length <= 1) return;
+    const next = contacts.filter((c) => c.id !== id);
+    if (!next.some((c) => c.is_primary) && next[0]) next[0] = { ...next[0], is_primary: true };
+    updateContacts(value, next, onChange);
+  };
+
+  const setPhone = (contactId: string, phoneIdx: number, phone: string) => {
+    const c = contacts.find((x) => x.id === contactId);
+    if (!c) return;
+    const phones = [...c.phones];
+    phones[phoneIdx] = phone;
+    setContact(contactId, { phones });
+  };
+
+  const addPhone = (contactId: string) => {
+    const c = contacts.find((x) => x.id === contactId);
+    if (!c || c.phones.length >= MAX_PHONES_PER_CONTACT) return;
+    setContact(contactId, { phones: [...c.phones, ""] });
+  };
+
+  const removePhone = (contactId: string, phoneIdx: number) => {
+    const c = contacts.find((x) => x.id === contactId);
+    if (!c || c.phones.length <= 1) return;
+    setContact(contactId, { phones: c.phones.filter((_, i) => i !== phoneIdx) });
+  };
+
   return (
     <>
       <button type="button" aria-label="Close" className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px]" onClick={onClose} />
-      <aside className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white shadow-[0_16px_30px_rgba(30,64,175,0.12)] lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[560px] lg:max-w-[100vw] lg:rounded-l-[24px] lg:border-l lg:border-[#e8dcc8]">
+      <aside className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white shadow-[0_16px_30px_rgba(61,52,40,0.12)] lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[560px] lg:max-w-[100vw] lg:rounded-l-[24px] lg:border-l lg:border-[#e8dcc8]">
         <div className="flex shrink-0 items-center justify-between border-b border-[#e8edf5] px-4 py-4 sm:px-5">
           <h3 className="text-lg font-semibold text-[#0f172a]">{title}</h3>
           <button
@@ -71,31 +132,6 @@ export function CollegeVisitFormPanel({
                 <span className="font-medium text-[#334155]">Location</span>
                 <Input value={value.location} onChange={(e) => onChange({ ...value, location: e.target.value })} className="border-[#e8dcc8]" />
               </label>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <label className="grid gap-1">
-                  <span className="font-medium text-[#334155]">Contact number</span>
-                  <Input value={value.contact_number} onChange={(e) => onChange({ ...value, contact_number: e.target.value })} className="border-[#e8dcc8]" />
-                </label>
-                <label className="grid gap-1">
-                  <span className="font-medium text-[#334155]">Email ID</span>
-                  <Input type="email" value={value.email} onChange={(e) => onChange({ ...value, email: e.target.value })} className="border-[#e8dcc8]" />
-                </label>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <label className="grid gap-1">
-                  <span className="font-medium text-[#334155]">Connected person</span>
-                  <Input value={value.connected_person_name} onChange={(e) => onChange({ ...value, connected_person_name: e.target.value })} className="border-[#e8dcc8]" />
-                </label>
-                <label className="grid gap-1">
-                  <span className="font-medium text-[#334155]">Role</span>
-                  <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3" value={value.connected_person_role} onChange={(e) => onChange({ ...value, connected_person_role: e.target.value })}>
-                    <option value="">Select role</option>
-                    {CONNECTED_PERSON_ROLES.map((r) => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
               <label className="grid gap-1">
                 <span className="font-medium text-[#334155]">Description</span>
                 <textarea className="min-h-[72px] w-full rounded-lg border border-[#e8dcc8] bg-white px-3 py-2" value={value.description} onChange={(e) => onChange({ ...value, description: e.target.value })} />
@@ -104,6 +140,131 @@ export function CollegeVisitFormPanel({
                 <span className="font-medium text-[#334155]">Source / reference</span>
                 <Input value={value.source_reference} onChange={(e) => onChange({ ...value, source_reference: e.target.value })} className="border-[#e8dcc8]" />
               </label>
+            </section>
+
+            <section className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-[#94a3b8]">Contacts</p>
+                  <p className="mt-0.5 text-[11px] text-[#64748b]">
+                    Primary is used for Call / WhatsApp / Email by default. Up to {MAX_COLLEGE_CONTACTS} people.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 shrink-0 rounded-xl border-[#e8dcc8]"
+                  onClick={addContact}
+                  disabled={contacts.length >= MAX_COLLEGE_CONTACTS}
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  Add contact
+                </Button>
+              </div>
+
+              {contacts.map((contact, index) => (
+                <div
+                  key={contact.id}
+                  className="space-y-2 rounded-xl border border-[#e8dcc8] bg-[#fffdf8] p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="inline-flex items-center gap-2 text-xs font-semibold text-[#3d3428]">
+                      <input
+                        type="radio"
+                        name="primary-contact"
+                        checked={contact.is_primary}
+                        onChange={() => setPrimary(contact.id)}
+                        className="accent-[#c9a227]"
+                      />
+                      {contact.is_primary ? "Primary contact" : `Contact ${index + 1}`}
+                    </label>
+                    {contacts.length > 1 ? (
+                      <button
+                        type="button"
+                        aria-label="Remove contact"
+                        className="rounded-lg p-1.5 text-[#94a3b8] hover:bg-rose-50 hover:text-rose-600"
+                        onClick={() => removeContact(contact.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <label className="grid gap-1">
+                      <span className="font-medium text-[#334155]">Name</span>
+                      <Input
+                        value={contact.name}
+                        onChange={(e) => setContact(contact.id, { name: e.target.value })}
+                        className="border-[#e8dcc8] bg-white"
+                        placeholder="Connected person"
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="font-medium text-[#334155]">Role</span>
+                      <select
+                        className="h-10 w-full rounded-xl border border-[#e8dcc8] bg-white px-3"
+                        value={contact.role}
+                        onChange={(e) => setContact(contact.id, { role: e.target.value })}
+                      >
+                        <option value="">Select role</option>
+                        {CONNECTED_PERSON_ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-[#334155]">Phone numbers</span>
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-[#a68b2e] hover:underline disabled:opacity-40"
+                        onClick={() => addPhone(contact.id)}
+                        disabled={contact.phones.length >= MAX_PHONES_PER_CONTACT}
+                      >
+                        + Alternate number
+                      </button>
+                    </div>
+                    {contact.phones.map((phone, phoneIdx) => (
+                      <div key={`${contact.id}-phone-${phoneIdx}`} className="flex gap-2">
+                        <Input
+                          value={phone}
+                          onChange={(e) => setPhone(contact.id, phoneIdx, e.target.value)}
+                          className="border-[#e8dcc8] bg-white"
+                          placeholder={phoneIdx === 0 ? "Primary mobile" : `Alternate ${phoneIdx + 1}`}
+                          inputMode="tel"
+                        />
+                        {contact.phones.length > 1 ? (
+                          <button
+                            type="button"
+                            aria-label="Remove number"
+                            className="shrink-0 rounded-xl border border-[#e8dcc8] px-2 text-[#94a3b8] hover:bg-rose-50 hover:text-rose-600"
+                            onClick={() => removePhone(contact.id, phoneIdx)}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+
+                  <label className="grid gap-1">
+                    <span className="font-medium text-[#334155]">Email</span>
+                    <Input
+                      type="email"
+                      value={contact.email}
+                      onChange={(e) => setContact(contact.id, { email: e.target.value })}
+                      className="border-[#e8dcc8] bg-white"
+                      placeholder="optional@"
+                    />
+                  </label>
+                </div>
+              ))}
             </section>
 
             <section className="space-y-2">
@@ -244,7 +405,7 @@ export function CollegeVisitFormPanel({
               {value.proposal_pdf_url ? (
                 <p className="text-xs text-[#64748b]">
                   PDF on file:{" "}
-                  <a href={value.proposal_pdf_url} target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 hover:underline">
+                  <a href={value.proposal_pdf_url} target="_blank" rel="noopener noreferrer" className="font-semibold text-[#a68b2e] hover:underline">
                     {value.proposal_pdf_name || "Open PDF"}
                   </a>
                   {" "}(upload or replace from Proposal Tracker)
