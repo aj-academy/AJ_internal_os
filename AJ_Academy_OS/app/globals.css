@@ -178,6 +178,7 @@
   table.table-freeze-cols {
     border-collapse: separate;
     border-spacing: 0;
+    --sticky-check-w: 3rem;
   }
 
   table.table-freeze-cols th.sticky-col,
@@ -198,20 +199,52 @@
     background: #f8fbff;
   }
 
+  /* Leftmost sticky sits above the next sticky; both above scrolling cells */
   table.table-freeze-cols .sticky-col-1 {
     left: 0;
+    z-index: 4;
+  }
+
+  table.table-freeze-cols thead th.sticky-col-1 {
+    z-index: 5;
   }
 
   table.table-freeze-cols .sticky-col-2 {
-    left: var(--sticky-col-2, 10.5rem);
+    /* Overlap 1px to hide subpixel seam while scrolling */
+    left: calc(var(--sticky-col-2, 10.5rem) - 1px);
+    z-index: 3;
+  }
+
+  table.table-freeze-cols thead th.sticky-col-2 {
+    z-index: 4;
   }
 
   table.table-freeze-cols .sticky-col-after-check {
-    left: 4.5rem;
+    left: calc(var(--sticky-check-w, 3rem) - 1px);
+    z-index: 3;
+  }
+
+  table.table-freeze-cols thead th.sticky-col-after-check {
+    z-index: 4;
   }
 
   table.table-freeze-cols .sticky-col-after-check-2 {
-    left: calc(4.5rem + var(--sticky-col-2, 10.5rem));
+    left: calc(var(--sticky-check-w, 3rem) + var(--sticky-col-2, 10.5rem) - 1px);
+    z-index: 2;
+  }
+
+  table.table-freeze-cols thead th.sticky-col-after-check-2 {
+    z-index: 3;
+  }
+
+  /* Checkbox / pick column — fixed width must match --sticky-check-w */
+  table.table-freeze-cols .sticky-check-col {
+    width: var(--sticky-check-w, 3rem);
+    min-width: var(--sticky-check-w, 3rem);
+    max-width: var(--sticky-check-w, 3rem);
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    box-sizing: border-box;
   }
 
   .stat-cards-grid {

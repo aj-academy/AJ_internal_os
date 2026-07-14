@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Download, FileText, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -625,12 +625,22 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       ) : null}
 
       <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3]">
-        <table className="table-freeze-cols min-w-[3800px] w-full" style={{ ["--sticky-col-2" as string]: "14rem" }}>
+        <table
+          className="table-freeze-cols min-w-[3800px] w-full"
+          style={
+            {
+              ["--sticky-col-2" as string]: "14rem",
+              ["--sticky-check-w" as string]: "3rem",
+            } as CSSProperties
+          }
+        >
           <thead className="cv-head bg-[#f8fbff]">
             <tr>
-              {pickForTask ? <TableHeaderCell label="Pick" className={`${thClass} sticky-col sticky-col-1 min-w-[4.5rem]`} /> : null}
+              {pickForTask ? (
+                <TableHeaderCell label="Pick" className={`${thClass} sticky-col sticky-col-1 sticky-check-col`} />
+              ) : null}
               {!pickForTask ? (
-                <th className={`${thClass} sticky-col sticky-col-1 min-w-[4.5rem]`}>
+                <th className={`${thClass} sticky-col sticky-col-1 sticky-check-col`}>
                   <div className="flex justify-center">
                     <TableBulkCheckbox
                       checked={visitBulk.allSelected}
@@ -681,7 +691,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
                 return (
                   <tr key={row.id} className="border-t border-[#eef2f7] hover:bg-[#fafcff]">
                     {pickForTask ? (
-                      <td className={`${tdClass} sticky-col sticky-col-1 min-w-[4.5rem]`}>
+                      <td className={`${tdClass} sticky-col sticky-col-1 sticky-check-col`}>
                         <div className="flex justify-center">
                           <TableBulkCheckbox
                             checked={pickedCollegeIds.has(row.id)}
@@ -692,7 +702,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
                       </td>
                     ) : null}
                     {!pickForTask ? (
-                      <td className={`${tdClass} sticky-col sticky-col-1 min-w-[4.5rem]`}>
+                      <td className={`${tdClass} sticky-col sticky-col-1 sticky-check-col`}>
                         <div className="flex justify-center">
                           <TableBulkCheckbox
                             checked={visitBulk.isSelected(row.id)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Download, FileText, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -2472,12 +2472,29 @@ function AllLeadsTable({
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
       <div className="overflow-x-auto">
-      <table className="table-freeze-cols w-full min-w-[5200px] text-sm" style={{ ["--sticky-col-2" as string]: "14rem" }}>
+      <table
+        className="table-freeze-cols w-full min-w-[5200px] text-sm"
+        style={
+          {
+            ["--sticky-col-2" as string]: "14rem",
+            ["--sticky-check-w" as string]: "3rem",
+          } as CSSProperties
+        }
+      >
         <thead className="bg-[#f1f6fc] text-[#64748b]">
           <tr>
-            {pickMode ? <TableHeaderCell label="Pick" className={`${thCls} sticky-col sticky-col-1 min-w-[4.5rem]`} /> : null}
+            {pickMode ? (
+              <TableHeaderCell
+                label="Pick"
+                className={`${thCls} sticky-col sticky-col-1 sticky-check-col`}
+              />
+            ) : null}
             {showBulk ? (
-              <th className={`w-12 px-6 py-3.5 text-center align-middle sticky-col ${pickMode ? "sticky-col-after-check" : "sticky-col-1"}`}>
+              <th
+                className={`sticky-col sticky-check-col py-3.5 text-center align-middle ${
+                  pickMode ? "sticky-col-after-check" : "sticky-col-1"
+                }`}
+              >
                 <div className="flex justify-center">
                   <TableBulkCheckbox
                     checked={bulkSelection!.allSelected}
@@ -2626,7 +2643,7 @@ function AllLeadsTable({
                     ].join(" ")}
                   >
                     {pickMode ? (
-                      <td className="sticky-col sticky-col-1 w-12 px-6 py-3.5 text-center align-middle">
+                      <td className="sticky-col sticky-col-1 sticky-check-col py-3.5 text-center align-middle">
                         <div className="flex justify-center">
                           <input
                             type="checkbox"
@@ -2638,7 +2655,11 @@ function AllLeadsTable({
                       </td>
                     ) : null}
                     {showBulk ? (
-                      <td className={`sticky-col w-12 px-6 py-3.5 text-center align-middle ${pickMode ? "sticky-col-after-check" : "sticky-col-1"}`}>
+                      <td
+                        className={`sticky-col sticky-check-col py-3.5 text-center align-middle ${
+                          pickMode ? "sticky-col-after-check" : "sticky-col-1"
+                        }`}
+                      >
                         <div className="flex justify-center">
                           <TableBulkCheckbox
                             checked={bulkSelection!.isSelected(lead.id)}
