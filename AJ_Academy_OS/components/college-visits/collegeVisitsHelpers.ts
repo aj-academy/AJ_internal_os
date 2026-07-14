@@ -230,20 +230,24 @@ export function resolveCollegeContacts(row: {
   ]);
 }
 
-export function normalizeCollegeContacts(contacts: CollegeContact[]): CollegeContact[] {
+export function normalizeCollegeContacts(contacts: CollegeContact[], opts?: { keepEmptyPhones?: boolean }): CollegeContact[] {
+  const keepEmpty = Boolean(opts?.keepEmptyPhones);
   const cleaned = contacts
     .slice(0, MAX_COLLEGE_CONTACTS)
-    .map((c) => ({
-      id: c.id || newCollegeContactId(),
-      name: c.name.trim(),
-      role: c.role.trim(),
-      phones: (c.phones.length ? c.phones : [""])
-        .map((p) => p.trim())
-        .filter((p, i, arr) => p || arr.length === 1)
-        .slice(0, MAX_PHONES_PER_CONTACT),
-      email: c.email.trim(),
-      is_primary: Boolean(c.is_primary),
-    }));
+    .map((c) => {
+      let phones = (c.phones.length ? c.phones : [""]).map((p) => p.trim()).slice(0, MAX_PHONES_PER_CONTACT);
+      if (!keepEmpty) {
+        phones = phones.filter(Boolean);
+      }
+      return {
+        id: c.id || newCollegeContactId(),
+        name: c.name.trim(),
+        role: c.role.trim(),
+        phones: phones.length ? phones : [""],
+        email: c.email.trim(),
+        is_primary: Boolean(c.is_primary),
+      };
+    });
 
   if (!cleaned.length) return [emptyCollegeContact(true)];
 

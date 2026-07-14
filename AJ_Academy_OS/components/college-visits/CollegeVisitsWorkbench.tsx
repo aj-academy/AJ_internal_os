@@ -1190,7 +1190,7 @@ return (
             desktop={
           <div className="responsive-table-wrap rounded-2xl border border-[#dbe6f3]">
             <table
-              className="table-freeze-cols w-full min-w-[3200px]"
+              className="table-freeze-cols w-full min-w-[3000px]"
               style={
                 {
                   ["--sticky-col-2" as string]: "14rem",
@@ -1216,10 +1216,9 @@ return (
                   <TableHeaderCell label="S.No" className={TABLE_SNO_TH} />
                   <TableHeaderCell label="College Name" className={`${thClass} min-w-[14rem]`} />
                   <TableHeaderCell label="Location" className={thClass} />
-                  <TableHeaderCell label="Contact Number" className={`${thClass} min-w-[12rem]`} />
                   <TableHeaderCell label="Call" className={`${thClass} min-w-[5.5rem]`} />
                   <TableHeaderCell label="WhatsApp" className={`${thClass} min-w-[5.5rem]`} />
-                  <TableHeaderCell label="Email" className={`${thClass} min-w-[12rem]`} />
+                  <TableHeaderCell label="Email" className={`${thClass} min-w-[5.5rem]`} />
                   <TableHeaderCell label="Connected Person Name" className={thClass} />
                   <TableHeaderCell label="Role" className={thClass} />
                   <TableHeaderFilter label="Visit Status" value={fltVisitStatus} options={VISIT_STATUSES.map((s) => ({ value: s, label: s }))} onChange={setFltVisitStatus} className={thClass} />
@@ -1252,13 +1251,13 @@ return (
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={26} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                    <td colSpan={25} className="px-4 py-8 text-center text-sm text-[#64748b]">
                       Loading...
                     </td>
                   </tr>
                 ) : pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={26} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                    <td colSpan={25} className="px-4 py-8 text-center text-sm text-[#64748b]">
                       No college visits found.
                     </td>
                   </tr>
@@ -1299,7 +1298,6 @@ return (
                           {row.college_name}
                         </td>
                         <td className={tdClass}>{row.location || "-"}</td>
-                        <td className={`${tdClass} min-w-[12rem]`}>{row.contact_number || "-"}</td>
                         <td className={`${tdClass} min-w-[5.5rem]`}>
                           <StudentOutreachButtons
                             mode="phone"
@@ -1317,18 +1315,13 @@ return (
                             onWhatsAppClick={() => requestCollegeWhatsApp(row)}
                           />
                         </td>
-                        <td className={`${tdClass} min-w-[12rem]`}>
-                          <div className="flex flex-col items-center gap-1.5">
-                            <span className="max-w-[10rem] truncate text-xs text-[#64748b]" title={row.email ?? undefined}>
-                              {row.email || "-"}
-                            </span>
-                            <StudentOutreachButtons
-                              mode="email"
-                              email={row.email || collegeOutreachTargets(row).find((t) => t.email)?.email}
-                              emailSent={flags.emailSent}
-                              onEmailClick={() => requestCollegeEmail(row)}
-                            />
-                          </div>
+                        <td className={`${tdClass} min-w-[5.5rem]`}>
+                          <StudentOutreachButtons
+                            mode="email"
+                            email={row.email || collegeOutreachTargets(row).find((t) => t.email)?.email}
+                            emailSent={flags.emailSent}
+                            onEmailClick={() => requestCollegeEmail(row)}
+                          />
                         </td>
                         <td className={`${tdClass} min-w-[12rem]`}>
                           <div className="flex flex-col items-center gap-0.5">

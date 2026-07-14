@@ -41,7 +41,8 @@ interface CollegeVisitFormPanelProps {
 }
 
 function updateContacts(value: CollegeVisitFormValue, contacts: CollegeContact[], onChange: (v: CollegeVisitFormValue) => void) {
-  onChange({ ...value, contacts: normalizeCollegeContacts(contacts) });
+  // Keep empty phone slots while editing so "+ Alternate number" stays visible.
+  onChange({ ...value, contacts: normalizeCollegeContacts(contacts, { keepEmptyPhones: true }) });
 }
 
 export function CollegeVisitFormPanel({
@@ -58,7 +59,10 @@ export function CollegeVisitFormPanel({
 }: CollegeVisitFormPanelProps) {
   if (!open) return null;
 
-  const contacts = normalizeCollegeContacts(value.contacts?.length ? value.contacts : [emptyCollegeContact(true)]);
+  const contacts = normalizeCollegeContacts(
+    value.contacts?.length ? value.contacts : [emptyCollegeContact(true)],
+    { keepEmptyPhones: true },
+  );
 
   const setContact = (id: string, patch: Partial<CollegeContact>) => {
     updateContacts(
