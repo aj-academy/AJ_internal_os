@@ -1,11 +1,29 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireStaffApiSession } from "@/lib/security";
-import { COLLEGE_VISIT_SELECT, COLLEGE_VISIT_SELECT_LEGACY, isMissingContactsColumn } from "@/components/college-visits/collegeVisitsHelpers";
+import {
+  COLLEGE_VISIT_SELECT,
+  isMissingContactsColumn,
+  isMissingProposalFileColumn,
+  nextCollegeVisitSelect,
+} from "@/components/college-visits/collegeVisitsHelpers";
 import { buildPayloadFromApi, mapCollegeVisitRow, parseCollegeVisitBody } from "@/lib/collegeVisitsApi";
 import { deleteOwnedCollegeVisits } from "@/lib/crmOwnedDelete";
 
 type RouteContext = { params: Promise<{ id: string }> };
+
+function stripUnavailableColumns(payload: Record<string, unknown>, errorMsg: string) {
+  const next = { ...payload };
+  if (isMissingContactsColumn(errorMsg)) delete next.contacts;
+  if (isMissingProposalFileColumn(errorMsg)) {
+    delete next.proposal_file_name;
+    delete next.proposal_file_path;
+    delete next.proposal_file_type;
+    delete next.proposal_file_size;
+    delete next.proposal_uploaded_at;
+  }
+  return next;
+}
 
 export async function PATCH(request: Request, context: RouteContext) {
   const { response, user, profile } = await requireStaffApiSession();
@@ -31,22 +49,28 @@ export async function PATCH(request: Request, context: RouteContext) {
   const supabase = await createClient();
   let prevSelect = COLLEGE_VISIT_SELECT;
   let { data: prev, error: prevError } = await supabase.from("college_visits").select(prevSelect).eq("id", id).maybeSingle();
-  if (prevError && isMissingContactsColumn(prevError.message)) {
-    prevSelect = COLLEGE_VISIT_SELECT_LEGACY;
-    ({ data: prev } = await supabase.from("college_visits").select(prevSelect).eq("id", id).maybeSingle());
+  while (prevError) {
+    const fallback = nextCollegeVisitSelect(prevSelect, prevError.message);
+    if (!fallback) break;
+    prevSelect = fallback;
+    ({ data: prev, error: prevError } = await supabase.from("college_visits").select(prevSelect).eq("id", id).maybeSingle());
   }
 
   // Never transfer ownership via edit — share via College Visit tasks only.
   delete payload.assigned_to;
 
   let updatePayload: Record<string, unknown> = { ...payload };
-  let { data, error } = await supabase.from("college_visits").update(updatePayload).eq("id", id).select(COLLEGE_VISIT_SELECT).single();
+  let select = COLLEGE_VISIT_SELECT;
+  let { data, error } = await supabase.from("college_visits").update(updatePayload).eq("id", id).select(select).single();
 
-  if (error && isMissingContactsColumn(error.message)) {
-    const { contacts: _contacts, ...withoutContacts } = updatePayload;
-    void _contacts;
-    updatePayload = withoutContacts;
-    ({ data, error } = await supabase.from("college_visits").update(updatePayload).eq("id", id).select(COLLEGE_VISIT_SELECT_LEGACY).single());
+  while (error) {
+    const stripped = stripUnavailableColumns(updatePayload, error.message);
+    const fallbackSelect = nextCollegeVisitSelect(select, error.message);
+    const payloadChanged = JSON.stringify(stripped) !== JSON.stringify(updatePayload);
+    if (!fallbackSelect && !payloadChanged) break;
+    updatePayload = stripped;
+    if (fallbackSelect) select = fallbackSelect;
+    ({ data, error } = await supabase.from("college_visits").update(updatePayload).eq("id", id).select(select).single());
   }
 
   if (error || !data) {

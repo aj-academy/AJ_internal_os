@@ -104,12 +104,47 @@ export const COLLEGE_VISIT_SELECT = [
   "updated_at",
 ].join(",");
 
+const PROPOSAL_FILE_SELECT =
+  "proposal_file_name,proposal_file_path,proposal_file_type,proposal_file_size,proposal_uploaded_at,";
+
 /** Fallback when contacts column not migrated yet. */
 export const COLLEGE_VISIT_SELECT_LEGACY = COLLEGE_VISIT_SELECT.replace("contacts,", "");
+
+/** Fallback when proposals_file_upload_patch.sql not run yet. */
+export const COLLEGE_VISIT_SELECT_NO_PROPOSAL_FILES = COLLEGE_VISIT_SELECT.replace(PROPOSAL_FILE_SELECT, "");
+export const COLLEGE_VISIT_SELECT_LEGACY_NO_PROPOSAL_FILES = COLLEGE_VISIT_SELECT_LEGACY.replace(PROPOSAL_FILE_SELECT, "");
 
 export function isMissingContactsColumn(msg: string) {
   const m = msg.toLowerCase();
   return m.includes("contacts") && (m.includes("column") || m.includes("schema cache") || m.includes("does not exist"));
+}
+
+export function isMissingProposalFileColumn(msg: string) {
+  const m = msg.toLowerCase();
+  return m.includes("proposal_file_") && (m.includes("column") || m.includes("schema cache") || m.includes("does not exist"));
+}
+
+/** True only when the college_visits TABLE is missing — not when a single column is missing. */
+export function isMissingCollegeVisitsTable(msg: string) {
+  const m = msg.toLowerCase();
+  if (m.includes("column")) return false;
+  if (m.includes("proposal_file_") || m.includes("contacts")) return false;
+  return (
+    (m.includes("college_visits") && (m.includes("does not exist") || m.includes("schema cache"))) ||
+    (m.includes("could not find the table") && m.includes("college_visits"))
+  );
+}
+
+export function nextCollegeVisitSelect(current: string, errorMsg: string): string | null {
+  if (isMissingContactsColumn(errorMsg)) {
+    if (current === COLLEGE_VISIT_SELECT) return COLLEGE_VISIT_SELECT_LEGACY;
+    if (current === COLLEGE_VISIT_SELECT_NO_PROPOSAL_FILES) return COLLEGE_VISIT_SELECT_LEGACY_NO_PROPOSAL_FILES;
+  }
+  if (isMissingProposalFileColumn(errorMsg)) {
+    if (current === COLLEGE_VISIT_SELECT) return COLLEGE_VISIT_SELECT_NO_PROPOSAL_FILES;
+    if (current === COLLEGE_VISIT_SELECT_LEGACY) return COLLEGE_VISIT_SELECT_LEGACY_NO_PROPOSAL_FILES;
+  }
+  return null;
 }
 
 export const MAX_COLLEGE_CONTACTS = 3;
@@ -311,18 +346,16 @@ export function isFollowUpDue(row: CollegeVisitRow): boolean {
   return row.next_follow_up_date.slice(0, 10) <= todayISO();
 }
 
-export function isMissingCollegeVisitsTable(msg: string) {
-  return msg.includes("college_visits") && (msg.includes("does not exist") || msg.includes("schema cache"));
-}
-
 export function friendlyCollegeVisitError(raw: unknown) {
   const msg = raw instanceof Error ? raw.message : "Unexpected error.";
-  if (
-    isMissingCollegeVisitsTable(msg) ||
-    (msg.includes("proposal_") && (msg.includes("column") || msg.includes("schema cache"))) ||
-    (msg.includes("contacts") && (msg.includes("column") || msg.includes("schema cache")))
-  ) {
-    return "Database table missing or outdated. Run `college_visits_schema.sql`, `college_visits_proposal_patch.sql`, `college_visits_contacts_patch.sql`, and `proposals_file_upload_patch.sql` from AJ_Academy_SB in Supabase SQL Editor.";
+  if (isMissingCollegeVisitsTable(msg)) {
+    return "College Visits table is missing. Run `college_visits_schema.sql` from AJ_Academy_SB in Supabase SQL Editor.";
+  }
+  if (isMissingProposalFileColumn(msg) || (msg.includes("proposal_") && (msg.includes("column") || msg.includes("schema cache")))) {
+    return "Proposal file columns are missing. Run `proposals_file_upload_patch.sql` from AJ_Academy_SB in Supabase SQL Editor, then refresh.";
+  }
+  if (isMissingContactsColumn(msg)) {
+    return "Contacts column is missing. Run `college_visits_contacts_patch.sql` from AJ_Academy_SB in Supabase SQL Editor, then refresh.";
   }
   if (
     msg === "Forbidden" ||

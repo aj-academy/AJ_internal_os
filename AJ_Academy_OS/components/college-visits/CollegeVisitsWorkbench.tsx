@@ -985,8 +985,8 @@ return (
       </header>
 
       {schemaMissing ? (
-        <div className="rounded-xl border border-blue-200 bg-[#faf3e3] px-4 py-3 text-sm text-blue-900">
-          Run <strong>AJ_Academy_SB/college_visits_schema.sql</strong> in Supabase SQL Editor, then refresh.
+        <div className="rounded-xl border border-amber-200 bg-[#faf3e3] px-4 py-3 text-sm text-[#7a5c12]">
+          College Visits table is missing. Run <strong>AJ_Academy_SB/college_visits_schema.sql</strong> in Supabase SQL Editor, then refresh.
         </div>
       ) : null}
 

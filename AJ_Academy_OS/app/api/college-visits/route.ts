@@ -1,8 +1,26 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireStaffApiSession } from "@/lib/security";
-import { COLLEGE_VISIT_SELECT, COLLEGE_VISIT_SELECT_LEGACY, isMissingContactsColumn } from "@/components/college-visits/collegeVisitsHelpers";
+import {
+  COLLEGE_VISIT_SELECT,
+  isMissingContactsColumn,
+  isMissingProposalFileColumn,
+  nextCollegeVisitSelect,
+} from "@/components/college-visits/collegeVisitsHelpers";
 import { buildPayloadFromApi, mapCollegeVisitRow, parseCollegeVisitBody } from "@/lib/collegeVisitsApi";
+
+function stripUnavailableColumns(payload: Record<string, unknown>, errorMsg: string) {
+  const next = { ...payload };
+  if (isMissingContactsColumn(errorMsg)) delete next.contacts;
+  if (isMissingProposalFileColumn(errorMsg)) {
+    delete next.proposal_file_name;
+    delete next.proposal_file_path;
+    delete next.proposal_file_type;
+    delete next.proposal_file_size;
+    delete next.proposal_uploaded_at;
+  }
+  return next;
+}
 
 export async function GET(request: Request) {
   const { response, user, profile } = await requireStaffApiSession();
@@ -13,23 +31,26 @@ export async function GET(request: Request) {
 
   const supabase = await createClient();
   // Own College Visits only. Sharing is via task assignment (task-linked rows appear in My Tasks).
-  let q = supabase
+  let select = COLLEGE_VISIT_SELECT;
+  let { data, error } = await supabase
     .from("college_visits")
-    .select(COLLEGE_VISIT_SELECT)
+    .select(select)
     .eq("assigned_to", user.id)
     .order("updated_at", { ascending: false })
     .limit(800);
 
-  let { data, error } = await q;
-  if (error && isMissingContactsColumn(error.message)) {
-    q = supabase
+  while (error) {
+    const fallback = nextCollegeVisitSelect(select, error.message);
+    if (!fallback) break;
+    select = fallback;
+    ({ data, error } = await supabase
       .from("college_visits")
-      .select(COLLEGE_VISIT_SELECT_LEGACY)
+      .select(select)
       .eq("assigned_to", user.id)
       .order("updated_at", { ascending: false })
-      .limit(800);
-    ({ data, error } = await q);
+      .limit(800));
   }
+
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
@@ -56,21 +77,18 @@ export async function POST(request: Request) {
   payload.assigned_to = user.id;
 
   const supabase = await createClient();
-  let insertPayload = { ...payload, created_by: user.id, assigned_to: user.id };
-  let { data, error } = await supabase
-    .from("college_visits")
-    .insert(insertPayload)
-    .select(COLLEGE_VISIT_SELECT)
-    .single();
+  let insertPayload: Record<string, unknown> = { ...payload, created_by: user.id, assigned_to: user.id };
+  let select = COLLEGE_VISIT_SELECT;
+  let { data, error } = await supabase.from("college_visits").insert(insertPayload).select(select).single();
 
-  if (error && isMissingContactsColumn(error.message)) {
-    const { contacts: _contacts, ...withoutContacts } = insertPayload as Record<string, unknown>;
-    void _contacts;
-    ({ data, error } = await supabase
-      .from("college_visits")
-      .insert(withoutContacts)
-      .select(COLLEGE_VISIT_SELECT_LEGACY)
-      .single());
+  while (error) {
+    const stripped = stripUnavailableColumns(insertPayload, error.message);
+    const fallbackSelect = nextCollegeVisitSelect(select, error.message);
+    const payloadChanged = JSON.stringify(stripped) !== JSON.stringify(insertPayload);
+    if (!fallbackSelect && !payloadChanged) break;
+    insertPayload = stripped;
+    if (fallbackSelect) select = fallbackSelect;
+    ({ data, error } = await supabase.from("college_visits").insert(insertPayload).select(select).single());
   }
 
   if (error || !data) {
