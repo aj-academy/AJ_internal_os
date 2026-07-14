@@ -643,12 +643,9 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
               ) : null}
               <TableHeaderCell
                 label="S.No"
-                className={`${thClass} sticky-col ${pickForTask || !pickForTask ? "sticky-col-after-check" : "sticky-col-1"} min-w-[4.5rem]`}
+                className={`${thClass} sticky-col sticky-col-after-check min-w-[4.5rem]`}
               />
-              <TableHeaderCell
-                label="College Name"
-                className={`${thClass} sticky-col sticky-col-after-check-2 min-w-[14rem]`}
-              />
+              <TableHeaderCell label="College Name" className={`${thClass} min-w-[14rem]`} />
               <TableHeaderCell label="Location" className={thClass} />
               <TableHeaderCell label="Contact Number" className={thClass} />
               <TableHeaderCell label="Email ID" className={thClass} />
@@ -706,7 +703,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
                       </td>
                     ) : null}
                     <td className={`${tdClass} sticky-col sticky-col-after-check min-w-[4.5rem]`}>{(page - 1) * pageSize + idx + 1}</td>
-                    <td className={`${tdClass} sticky-col sticky-col-after-check-2 min-w-[14rem] max-w-[18rem] truncate font-medium`} title={row.college_name}>{row.college_name}</td>
+                    <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate font-medium`} title={row.college_name}>{row.college_name}</td>
                     <td className={tdClass}>{row.location || "—"}</td>
                     <td className={tdClass}>{row.contact_number || "—"}</td>
                     <td className={tdClass}>{row.email || "—"}</td>

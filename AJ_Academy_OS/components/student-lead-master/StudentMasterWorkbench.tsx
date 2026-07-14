@@ -2497,9 +2497,9 @@ function AllLeadsTable({
             />
             <TableHeaderCell
               label="Mobile Number"
-              className={`${thCls} sticky-col ${
-                pickMode || showBulk ? "sticky-col-after-check-2" : "sticky-col-2"
-              } min-w-[11rem]`}
+              className={`${thCls} min-w-[11rem] ${
+                pickMode || showBulk ? "" : "sticky-col sticky-col-2"
+              }`}
             />
             <TableHeaderCell label="WhatsApp Number" className={thCls} />
             <TableHeaderCell label="Email" className={thCls} />
@@ -2656,8 +2656,8 @@ function AllLeadsTable({
                       {displayLeadName(lead) || "—"}
                     </td>
                     <td
-                      className={`sticky-col whitespace-nowrap px-6 py-3.5 text-center align-middle min-w-[11rem] ${
-                        pickMode || showBulk ? "sticky-col-after-check-2" : "sticky-col-2"
+                      className={`whitespace-nowrap px-6 py-3.5 text-center align-middle min-w-[11rem] ${
+                        pickMode || showBulk ? "" : "sticky-col sticky-col-2"
                       }`}
                     >
                       <div className="flex justify-center">
