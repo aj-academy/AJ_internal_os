@@ -7,6 +7,7 @@ export const CV_TAB_IDS = [
   "pipeline",
   "converted",
   "mou",
+  "proposal",
   "timeline",
   "reports",
   "settings",
@@ -21,10 +22,22 @@ export const CV_TAB_LABELS: Record<CvTabId, string> = {
   pipeline: "Pipeline",
   converted: "Converted Colleges",
   mou: "MOU Tracker",
+  proposal: "Proposal Tracker",
   timeline: "Activity Timeline",
   reports: "Reports",
   settings: "Settings",
 };
+
+export const CV_PROPOSAL_STATUSES = [
+  "Not Sent",
+  "Drafted",
+  "Sent",
+  "Accepted",
+  "Rejected",
+  "Revision Needed",
+] as const;
+
+export type CvProposalStatus = (typeof CV_PROPOSAL_STATUSES)[number];
 
 export const VISIT_STATUSES = [
   "Not Visited",

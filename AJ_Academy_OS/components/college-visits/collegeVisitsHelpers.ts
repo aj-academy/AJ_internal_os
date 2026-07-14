@@ -28,6 +28,12 @@ export type CollegeVisitRow = {
   lead_score: number;
   final_status: string;
   source_reference: string | null;
+  proposal_status: string;
+  proposal_amount: number | null;
+  proposal_sent_date: string | null;
+  proposal_link: string | null;
+  proposal_pdf_url: string | null;
+  proposal_pdf_name: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -66,6 +72,12 @@ export const COLLEGE_VISIT_SELECT = [
   "lead_score",
   "final_status",
   "source_reference",
+  "proposal_status",
+  "proposal_amount",
+  "proposal_sent_date",
+  "proposal_link",
+  "proposal_pdf_url",
+  "proposal_pdf_name",
   "created_by",
   "created_at",
   "updated_at",
@@ -95,8 +107,11 @@ export function isMissingCollegeVisitsTable(msg: string) {
 
 export function friendlyCollegeVisitError(raw: unknown) {
   const msg = raw instanceof Error ? raw.message : "Unexpected error.";
-  if (isMissingCollegeVisitsTable(msg)) {
-    return "Database table missing. Run `college_visits_schema.sql` from AJ_Academy_SB in Supabase SQL Editor.";
+  if (
+    isMissingCollegeVisitsTable(msg) ||
+    (msg.includes("proposal_") && (msg.includes("column") || msg.includes("schema cache")))
+  ) {
+    return "Database table missing or outdated. Run `college_visits_schema.sql` and `college_visits_proposal_patch.sql` from AJ_Academy_SB in Supabase SQL Editor.";
   }
   if (
     msg === "Forbidden" ||
@@ -128,6 +143,12 @@ export type CollegeVisitFormValue = {
   lead_score: string;
   final_status: FinalStatus | string;
   source_reference: string;
+  proposal_status: string;
+  proposal_amount: string;
+  proposal_sent_date: string;
+  proposal_link: string;
+  proposal_pdf_url: string;
+  proposal_pdf_name: string;
 };
 
 export function emptyCollegeVisitForm(assignedFallback = ""): CollegeVisitFormValue {
@@ -151,6 +172,12 @@ export function emptyCollegeVisitForm(assignedFallback = ""): CollegeVisitFormVa
     lead_score: "0",
     final_status: "Open",
     source_reference: "",
+    proposal_status: "Not Sent",
+    proposal_amount: "",
+    proposal_sent_date: "",
+    proposal_link: "",
+    proposal_pdf_url: "",
+    proposal_pdf_name: "",
   };
 }
 
@@ -175,6 +202,12 @@ export function collegeVisitRowToForm(row: CollegeVisitRow): CollegeVisitFormVal
     lead_score: String(row.lead_score ?? 0),
     final_status: row.final_status ?? "Open",
     source_reference: row.source_reference ?? "",
+    proposal_status: row.proposal_status ?? "Not Sent",
+    proposal_amount: row.proposal_amount != null ? String(row.proposal_amount) : "",
+    proposal_sent_date: row.proposal_sent_date?.slice(0, 10) ?? "",
+    proposal_link: row.proposal_link ?? "",
+    proposal_pdf_url: row.proposal_pdf_url ?? "",
+    proposal_pdf_name: row.proposal_pdf_name ?? "",
   };
 }
 
@@ -183,6 +216,7 @@ export function buildCollegeVisitPayload(
   opts: { userId: string; isDbAdmin: boolean },
 ): Record<string, unknown> {
   const scoreRaw = Number(v.lead_score);
+  const amountRaw = Number(v.proposal_amount);
   const assignee = opts.userId;
   return {
     college_name: v.college_name.trim(),
@@ -205,5 +239,11 @@ export function buildCollegeVisitPayload(
     lead_score: Number.isFinite(scoreRaw) ? Math.min(100, Math.max(0, Math.round(scoreRaw))) : 0,
     final_status: v.final_status || "Open",
     source_reference: v.source_reference.trim() || null,
+    proposal_status: v.proposal_status || "Not Sent",
+    proposal_amount: Number.isFinite(amountRaw) && v.proposal_amount.trim() !== "" ? amountRaw : null,
+    proposal_sent_date: v.proposal_sent_date || null,
+    proposal_link: v.proposal_link.trim() || null,
+    proposal_pdf_url: v.proposal_pdf_url.trim() || null,
+    proposal_pdf_name: v.proposal_pdf_name.trim() || null,
   };
 }

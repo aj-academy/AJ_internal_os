@@ -37,8 +37,11 @@ import {
   CollegeMouTrackerTable,
   CollegeOverviewPanel,
   CollegePipelineBoard,
+  CollegeProposalEditModal,
+  CollegeProposalTrackerTable,
   CollegeReportsPanel,
   CollegeSettingsPanel,
+  type CollegeProposalDraft,
 } from "@/components/college-visits/CollegeVisitsSubsections";
 import {
   buildCollegeVisitPayload,
@@ -52,6 +55,7 @@ import {
   type CollegeVisitFormValue,
   type CollegeVisitRow,
 } from "@/components/college-visits/collegeVisitsHelpers";
+import { uploadCollegeVisitProposalPdf } from "@/lib/collegeVisitProposals";
 
 type AppRole = "admin" | "employee";
 
@@ -105,6 +109,17 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<CollegeVisitFormValue>(() => emptyCollegeVisitForm());
   const [viewVisit, setViewVisit] = useState<CollegeVisitRow | null>(null);
+  const [proposalRow, setProposalRow] = useState<CollegeVisitRow | null>(null);
+  const [proposalDraft, setProposalDraft] = useState<CollegeProposalDraft>({
+    status: "Not Sent",
+    amount: "",
+    sent_date: "",
+    proposal_link: "",
+    proposal_pdf_url: "",
+    proposal_pdf_name: "",
+  });
+  const [proposalSubmitting, setProposalSubmitting] = useState(false);
+  const [proposalUploading, setProposalUploading] = useState(false);
   const [bulkAssignTo, setBulkAssignTo] = useState("");
   const [pickedCollegeIds, setPickedCollegeIds] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
@@ -162,7 +177,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     saveTaskCollegeSelection({
       ids: [...pickedCollegeIds],
       labels,
-      filterPath: pathParts.join(" â†’ "),
+      filterPath: pathParts.join(" -> "),
     });
     router.push(decodeURIComponent(returnTo));
   };
@@ -338,7 +353,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Could not update visit status.");
-      setSuccess(`Visit status â†’ ${visit_status}`);
+      setSuccess(`Visit status -> ${visit_status}`);
       await reload();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
@@ -360,6 +375,72 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setForm(collegeVisitRowToForm(row));
     setPanelOpen(true);
     setViewVisit(null);
+  };
+
+  const openProposalModal = (row: CollegeVisitRow) => {
+    setProposalRow(row);
+    setProposalDraft({
+      status: row.proposal_status || "Not Sent",
+      amount: row.proposal_amount != null ? String(row.proposal_amount) : "",
+      sent_date: row.proposal_sent_date?.slice(0, 10) ?? "",
+      proposal_link: row.proposal_link ?? "",
+      proposal_pdf_url: row.proposal_pdf_url ?? "",
+      proposal_pdf_name: row.proposal_pdf_name ?? "",
+    });
+    setError(null);
+    setSuccess(null);
+  };
+
+  const handleProposalPdfPick = async (file: File | null) => {
+    if (!file || !proposalRow || !currentUserId) return;
+    setProposalUploading(true);
+    setError(null);
+    try {
+      const uploaded = await uploadCollegeVisitProposalPdf(supabase, currentUserId, proposalRow.id, file);
+      setProposalDraft((d) => ({
+        ...d,
+        proposal_pdf_url: uploaded.url,
+        proposal_pdf_name: uploaded.name,
+      }));
+      setSuccess("PDF uploaded. Click Save to keep it on this college.");
+    } catch (e) {
+      setError(friendlyCollegeVisitError(e));
+    } finally {
+      setProposalUploading(false);
+    }
+  };
+
+  const handleProposalSave = async () => {
+    if (!proposalRow || !currentUserId) return;
+    setProposalSubmitting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const base = collegeVisitRowToForm(proposalRow);
+      const formRow: CollegeVisitFormValue = {
+        ...base,
+        proposal_status: proposalDraft.status || "Not Sent",
+        proposal_amount: proposalDraft.amount,
+        proposal_sent_date: proposalDraft.sent_date,
+        proposal_link: proposalDraft.proposal_link,
+        proposal_pdf_url: proposalDraft.proposal_pdf_url,
+        proposal_pdf_name: proposalDraft.proposal_pdf_name,
+      };
+      const res = await fetch(`/api/college-visits/${proposalRow.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formRow),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Could not save proposal.");
+      setSuccess("Proposal updated.");
+      setProposalRow(null);
+      await reload();
+    } catch (e) {
+      setError(friendlyCollegeVisitError(e));
+    } finally {
+      setProposalSubmitting(false);
+    }
   };
 
   const handleSave = async () => {
@@ -417,7 +498,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     const ids = [...visitBulk.selected];
     if (
       !confirm(
-        `Assign ${ids.length} college(s) to ${label} as a College Visit task?\n\nThe employee will work them under My Tasks â†’ College Visit (not as CRM-owned College Visits ownership).`,
+        `Assign ${ids.length} college(s) to ${label} as a College Visit task?\n\nThe employee will work them under My Tasks -> College Visit (not as CRM-owned College Visits ownership).`,
       )
     ) {
       return;
@@ -429,7 +510,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         .from("tasks")
         .insert({
           title: `College visit outreach (${ids.length})`,
-          description: `Assigned from College Visits Â· ${ids.length} linked college(s).`,
+          description: `Assigned from College Visits | ${ids.length} linked college(s).`,
           assigned_to: bulkAssignTo,
           assigned_by: currentUserId,
           assignment_type: "college",
@@ -452,7 +533,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       }
       visitBulk.clearSelection();
       setBulkAssignTo("");
-      setSuccess(`${ids.length} college(s) sent to ${label} as My Tasks â†’ College Visit.`);
+      setSuccess(`${ids.length} college(s) sent to ${label} as My Tasks -> College Visit.`);
       await reload();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
@@ -568,7 +649,7 @@ return (
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">College Visits</h2>
           <p className="mt-1 text-sm text-[#64748b]">
-            Manage college outreach like Student Master â€” Overview, All Colleges, Follow-ups, Pipeline, and more.
+            Manage college outreach like Student Master - Overview, All Colleges, Follow-ups, Pipeline, Proposal Tracker, and more.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -597,7 +678,7 @@ return (
           <div>
             <p className="text-sm font-semibold text-[#92400e]">Selecting colleges for task assignment</p>
             <p className="text-xs text-[#78350f]">
-              Tab: {CV_TAB_LABELS[activeTab]} Â· {pickedCollegeIds.size} selected Â· use All Colleges filters below
+              Tab: {CV_TAB_LABELS[activeTab]} | {pickedCollegeIds.size} selected | use All Colleges filters below
             </p>
           </div>
           <div className="flex gap-2">
@@ -653,6 +734,15 @@ return (
         <CollegeMouTrackerTable visits={filteredVisits} ownerNameMap={ownerNameMap} canEdit={isAdmin} onEdit={openEdit} />
       ) : null}
 
+      {activeTab === "proposal" ? (
+        <CollegeProposalTrackerTable
+          visits={filteredVisits}
+          ownerNameMap={ownerNameMap}
+          canEdit={isAdmin}
+          onEdit={openProposalModal}
+        />
+      ) : null}
+
       {activeTab === "timeline" ? (
         <CollegeActivityTimeline activities={timelineRows} visitMap={visitMap} ownerNameMap={ownerNameMap} loading={timelineLoading} />
       ) : null}
@@ -687,7 +777,7 @@ return (
                   onClick={() => importFileRef.current?.click()}
                 >
                   <Upload className="mr-1 h-4 w-4" />
-                  {importing ? "Importingâ€¦" : "Import"}
+                  {importing ? "Importing..." : "Import"}
                 </Button>
               ) : null}
               <Button
@@ -710,10 +800,10 @@ return (
           <TableSearchBar
             value={searchText}
             onChange={setSearchText}
-            placeholder="Search college, location, contact, emailâ€¦"
+            placeholder="Search college, location, contact, email..."
             showClear={filtersActive}
             onClear={clearTableFilters}
-            hint={`Showing ${pageRows.length} of ${filteredVisits.length} college(s) Â· page ${page}/${totalPages}`}
+            hint={`Showing ${pageRows.length} of ${filteredVisits.length} college(s) | page ${page}/${totalPages}`}
           />
 
           {!pickForTask && visitBulk.selectedCount > 0 ? (
@@ -725,7 +815,7 @@ return (
                     value={bulkAssignTo}
                     onChange={(e) => setBulkAssignTo(e.target.value)}
                   >
-                    <option value="">Assign as task toâ€¦</option>
+                    <option value="">Assign as task to...</option>
                     {ownerOptions.map((o) => (
                       <option key={o.id} value={o.id}>
                         {o.label}
@@ -817,7 +907,7 @@ return (
                 {loading ? (
                   <tr>
                     <td colSpan={24} className="px-4 py-8 text-center text-sm text-[#64748b]">
-                      Loadingâ€¦
+                      Loading...
                     </td>
                   </tr>
                 ) : pageRows.length === 0 ? (
@@ -858,26 +948,26 @@ return (
                         <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate font-medium`} title={row.college_name}>
                           {row.college_name}
                         </td>
-                        <td className={tdClass}>{row.location || "â€”"}</td>
-                        <td className={tdClass}>{row.contact_number || "â€”"}</td>
-                        <td className={tdClass}>{row.email || "â€”"}</td>
-                        <td className={`${tdClass} min-w-[12rem]`}>{row.connected_person_name || "â€”"}</td>
-                        <td className={tdClass}>{row.connected_person_role || "â€”"}</td>
+                        <td className={tdClass}>{row.location || "-"}</td>
+                        <td className={tdClass}>{row.contact_number || "-"}</td>
+                        <td className={tdClass}>{row.email || "-"}</td>
+                        <td className={`${tdClass} min-w-[12rem]`}>{row.connected_person_name || "-"}</td>
+                        <td className={tdClass}>{row.connected_person_role || "-"}</td>
                         <td className={tdClass}>{row.visit_status}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.visit_date)}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{row.mou_signed_status}</td>
-                        <td className={`${tdClass} min-w-[11rem]`}>{row.follow_up_stage || "â€”"}</td>
+                        <td className={`${tdClass} min-w-[11rem]`}>{row.follow_up_stage || "-"}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.last_follow_up_date)}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.next_follow_up_date)}</td>
                         <td className={tdClass}>{row.priority}</td>
-                        <td className={`${tdClass} min-w-[11rem]`}>{row.assigned_to ? ownerNameMap[row.assigned_to] || "â€”" : "â€”"}</td>
+                        <td className={`${tdClass} min-w-[11rem]`}>{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
                         <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate`} title={row.description ?? ""}>
-                          {row.description || "â€”"}
+                          {row.description || "-"}
                         </td>
                         <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate`} title={row.last_outcome_remarks ?? ""}>
-                          {row.last_outcome_remarks || "â€”"}
+                          {row.last_outcome_remarks || "-"}
                         </td>
-                        <td className={`${tdClass} min-w-[12rem]`}>{days != null ? days : "â€”"}</td>
+                        <td className={`${tdClass} min-w-[12rem]`}>{days != null ? days : "-"}</td>
                         <td className={tdClass}>
                           <span
                             className={
@@ -891,7 +981,7 @@ return (
                         </td>
                         <td className={tdClass}>{row.lead_score}</td>
                         <td className={tdClass}>{row.final_status}</td>
-                        <td className={`${tdClass} min-w-[11rem]`}>{row.source_reference || "â€”"}</td>
+                        <td className={`${tdClass} min-w-[11rem]`}>{row.source_reference || "-"}</td>
                         {!pickForTask ? (
                           <td className={`${tdClass} min-w-[11rem]`}>
                             <div className="flex flex-wrap items-center justify-center gap-2">
@@ -937,6 +1027,19 @@ return (
         onSubmit={() => void handleSave()}
       />
 
+      {proposalRow ? (
+        <CollegeProposalEditModal
+          row={proposalRow}
+          draft={proposalDraft}
+          setDraft={setProposalDraft}
+          onClose={() => setProposalRow(null)}
+          onSave={() => void handleProposalSave()}
+          submitting={proposalSubmitting}
+          uploading={proposalUploading}
+          onPickPdf={(file) => void handleProposalPdfPick(file)}
+        />
+      ) : null}
+
       {viewVisit ? (
         <>
           <button type="button" aria-label="Close" className="fixed inset-0 z-40 bg-slate-900/40" onClick={() => setViewVisit(null)} />
@@ -945,11 +1048,11 @@ return (
               <div>
                 <h3 className="font-semibold text-[#0f172a]">{viewVisit.college_name}</h3>
                 <p className="text-xs text-[#64748b]">
-                  {viewVisit.location || "No location"} Â· Owner: {viewVisit.assigned_to ? ownerNameMap[viewVisit.assigned_to] : "Unassigned"}
+                  {viewVisit.location || "No location"} | Owner: {viewVisit.assigned_to ? ownerNameMap[viewVisit.assigned_to] : "Unassigned"}
                 </p>
               </div>
               <button type="button" className="rounded-full border px-2 py-1 text-sm" onClick={() => setViewVisit(null)}>
-                Ã—
+                x
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
@@ -974,7 +1077,7 @@ return (
                       {a.notes ? <p className="mt-1 text-[#475569]">{a.notes}</p> : null}
                       {a.old_value || a.new_value ? (
                         <p className="mt-1 text-[#64748b]">
-                          {a.old_value ?? "â€”"} â†’ {a.new_value ?? "â€”"}
+                          {a.old_value ?? "-"} {"->"} {a.new_value ?? "-"}
                         </p>
                       ) : null}
                       <p className="mt-1 text-[10px] text-[#94a3b8]">{new Date(a.created_at).toLocaleString()}</p>

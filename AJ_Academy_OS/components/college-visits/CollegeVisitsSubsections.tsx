@@ -6,7 +6,9 @@ import { formatDisplayDate } from "@/lib/datetime";
 import {
   FINAL_STATUSES,
   MOU_STATUSES,
+  CV_PROPOSAL_STATUSES,
   VISIT_STATUSES,
+  type CvProposalStatus,
 } from "@/components/college-visits/collegeVisitsConfig";
 import {
   daysSince,
@@ -19,7 +21,7 @@ import {
 function countBy(rows: CollegeVisitRow[], key: (r: CollegeVisitRow) => string) {
   const m = new Map<string, number>();
   for (const r of rows) {
-    const k = key(r) || "—";
+    const k = key(r) || "-";
     m.set(k, (m.get(k) ?? 0) + 1);
   }
   return [...m.entries()]
@@ -82,7 +84,7 @@ export function CollegeOverviewPanel({
 
   const byStatus = countBy(visits, (v) => v.visit_status);
   const byPriority = countBy(visits, (v) => v.priority);
-  const byMonth = countBy(visits, (v) => (v.created_at || "").slice(0, 7) || "—");
+  const byMonth = countBy(visits, (v) => (v.created_at || "").slice(0, 7) || "-");
 
   return (
     <div className="space-y-4">
@@ -152,7 +154,7 @@ export function CollegeFollowUpsPanel({
             {sorted.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-10 text-center text-[#64748b]">
-                  No follow-up dates set. Add them from All Colleges → Edit.
+                  No follow-ups due. Add next dates from All Colleges {"->"} Edit.
                 </td>
               </tr>
             ) : (
@@ -162,9 +164,9 @@ export function CollegeFollowUpsPanel({
                   <tr key={row.id} className="border-t border-[#eef2f7]">
                     <td className="px-4 py-3 font-medium text-[#0f172a]">{row.college_name}</td>
                     <td className="px-4 py-3">{formatDisplayDate(row.next_follow_up_date)}</td>
-                    <td className="px-4 py-3">{row.follow_up_stage || "—"}</td>
+                    <td className="px-4 py-3">{row.follow_up_stage || "-"}</td>
                     <td className="px-4 py-3">{row.visit_status}</td>
-                    <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "—" : "—"}</td>
+                    <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
                     <td className="px-4 py-3">
                       <span
                         className={
@@ -209,7 +211,7 @@ export function CollegePipelineBoard({
           return (
             <div key={statusCol} className="min-w-[240px] flex-1 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-3">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#475569]">
-                {statusCol} · {col.length}
+                {statusCol} | {col.length}
               </p>
               <div className="space-y-3">
                 {col.map((card) => (
@@ -217,8 +219,8 @@ export function CollegePipelineBoard({
                     <p className="font-semibold text-slate-900">{card.college_name}</p>
                     <p className="text-xs text-slate-500">{card.location || ""}</p>
                     <div className="mt-2 space-y-1 text-xs text-slate-700">
-                      <p>Priority {card.priority || "—"}</p>
-                      <p>MOU {card.mou_signed_status || "—"}</p>
+                      <p>Priority {card.priority || "-"}</p>
+                      <p>MOU {card.mou_signed_status || "-"}</p>
                       <p>Next FU {formatDisplayDate(card.next_follow_up_date)}</p>
                     </div>
                     {canEdit ? (
@@ -280,10 +282,10 @@ export function CollegeConvertedTable({
             rows.map((row) => (
               <tr key={row.id} className="border-t border-[#eef2f7]">
                 <td className="px-4 py-3 font-medium">{row.college_name}</td>
-                <td className="px-4 py-3">{row.location || "—"}</td>
+                <td className="px-4 py-3">{row.location || "-"}</td>
                 <td className="px-4 py-3">{row.mou_signed_status}</td>
                 <td className="px-4 py-3">{row.final_status}</td>
-                <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "—" : "—"}</td>
+                <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
                 <td className="px-4 py-3">{formatDisplayDate(row.visit_date)}</td>
                 <td className="px-4 py-3">
                   <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => onOpen(row)}>
@@ -341,12 +343,12 @@ export function CollegeMouTrackerTable({
                 <tr key={row.id} className="border-t border-[#eef2f7]">
                   <td className="px-4 py-3 font-medium">{row.college_name}</td>
                   <td className="px-4 py-3">{row.mou_signed_status}</td>
-                  <td className="px-4 py-3">{row.follow_up_stage || "—"}</td>
+                  <td className="px-4 py-3">{row.follow_up_stage || "-"}</td>
                   <td className="px-4 py-3">{row.final_status}</td>
                   <td className="px-4 py-3">{row.priority}</td>
-                  <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "—" : "—"}</td>
+                  <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
                   <td className="max-w-[14rem] truncate px-4 py-3" title={row.last_outcome_remarks ?? ""}>
-                    {row.last_outcome_remarks || "—"}
+                    {row.last_outcome_remarks || "-"}
                   </td>
                   <td className="px-4 py-3">
                     {canEdit ? (
@@ -354,7 +356,7 @@ export function CollegeMouTrackerTable({
                         Edit MOU
                       </Button>
                     ) : (
-                      "—"
+                      "-"
                     )}
                   </td>
                 </tr>
@@ -364,6 +366,224 @@ export function CollegeMouTrackerTable({
         </table>
       </div>
     </div>
+  );
+}
+
+export type CollegeProposalDraft = {
+  status: CvProposalStatus | string;
+  amount: string;
+  sent_date: string;
+  proposal_link: string;
+  proposal_pdf_url: string;
+  proposal_pdf_name: string;
+};
+
+export function CollegeProposalTrackerTable({
+  visits,
+  ownerNameMap,
+  canEdit,
+  onEdit,
+}: {
+  visits: CollegeVisitRow[];
+  ownerNameMap: Record<string, string>;
+  canEdit: boolean;
+  onEdit: (row: CollegeVisitRow) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-[#64748b]">
+        Save each college proposal as a shareable link and/or a PDF upload. Updates appear in Activity Timeline.
+      </p>
+      <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3]">
+        <table className="min-w-[1100px] w-full text-sm">
+          <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
+            <tr>
+              <th className="px-4 py-3 text-left">College</th>
+              <th className="px-4 py-3 text-left">Status</th>
+              <th className="px-4 py-3 text-left">Amount</th>
+              <th className="px-4 py-3 text-left">Sent date</th>
+              <th className="px-4 py-3 text-left">Link</th>
+              <th className="px-4 py-3 text-left">PDF</th>
+              <th className="px-4 py-3 text-left">Owner</th>
+              <th className="px-4 py-3 text-left">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visits.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-10 text-center text-[#64748b]">
+                  No colleges to track.
+                </td>
+              </tr>
+            ) : (
+              visits.map((row) => (
+                <tr key={row.id} className="border-t border-[#eef2f7]">
+                  <td className="px-4 py-3 font-medium">{row.college_name}</td>
+                  <td className="px-4 py-3">{row.proposal_status || "Not Sent"}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {row.proposal_amount != null ? `Rs ${Number(row.proposal_amount).toLocaleString()}` : "-"}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">{row.proposal_sent_date?.slice(0, 10) || "-"}</td>
+                  <td className="px-4 py-3">
+                    {row.proposal_link ? (
+                      <a
+                        href={row.proposal_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold text-blue-700 hover:underline"
+                      >
+                        Open link
+                      </a>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {row.proposal_pdf_url ? (
+                      <a
+                        href={row.proposal_pdf_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold text-blue-700 hover:underline"
+                      >
+                        {row.proposal_pdf_name || "Open PDF"}
+                      </a>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                  <td className="px-4 py-3">{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
+                  <td className="px-4 py-3">
+                    {canEdit ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 rounded-full px-2 text-[11px]"
+                        onClick={() => onEdit(row)}
+                      >
+                        Update proposal
+                      </Button>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export function CollegeProposalEditModal({
+  row,
+  draft,
+  setDraft,
+  onClose,
+  onSave,
+  submitting,
+  uploading,
+  onPickPdf,
+}: {
+  row: CollegeVisitRow;
+  draft: CollegeProposalDraft;
+  setDraft: (updater: (d: CollegeProposalDraft) => CollegeProposalDraft) => void;
+  onClose: () => void;
+  onSave: () => void;
+  submitting: boolean;
+  uploading: boolean;
+  onPickPdf: (file: File | null) => void;
+}) {
+  return (
+    <>
+      <button type="button" aria-label="Close" className="fixed inset-0 z-[60] bg-slate-900/40" onClick={onClose} />
+      <div className="fixed left-4 right-4 top-[8%] z-[61] mx-auto max-h-[85vh] max-w-lg overflow-y-auto rounded-[20px] border border-[#e8dcc8] bg-white p-6 shadow-2xl sm:left-auto sm:right-10">
+        <h4 className="text-lg font-semibold text-[#0f172a]">Update proposal</h4>
+        <p className="mt-1 text-xs text-[#64748b]">
+          {row.college_name} | {row.location || "No location"}
+        </p>
+        <div className="mt-4 space-y-3 text-sm">
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-[#64748b]">Proposal status</span>
+            <select
+              className="rounded-lg border border-[#dbe6f3] bg-white px-3 py-2"
+              value={draft.status}
+              onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value }))}
+            >
+              {CV_PROPOSAL_STATUSES.map((st) => (
+                <option key={st} value={st}>
+                  {st}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-[#64748b]">Proposal amount</span>
+            <input
+              className="h-9 rounded-lg border border-[#dbe6f3] bg-white px-3"
+              value={draft.amount}
+              onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value }))}
+              placeholder="Optional"
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-[#64748b]">Sent date</span>
+            <input
+              type="date"
+              className="h-9 rounded-lg border border-[#dbe6f3] bg-white px-3"
+              value={draft.sent_date}
+              onChange={(e) => setDraft((d) => ({ ...d, sent_date: e.target.value }))}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-[#64748b]">Proposal link (URL)</span>
+            <input
+              className="h-9 rounded-lg border border-[#dbe6f3] bg-white px-3"
+              value={draft.proposal_link}
+              onChange={(e) => setDraft((d) => ({ ...d, proposal_link: e.target.value }))}
+              placeholder="https://..."
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-xs font-medium text-[#64748b]">Proposal PDF</span>
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              className="block w-full text-xs"
+              disabled={uploading || submitting}
+              onChange={(e) => onPickPdf(e.target.files?.[0] ?? null)}
+            />
+            {draft.proposal_pdf_url ? (
+              <a
+                href={draft.proposal_pdf_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-semibold text-blue-700 hover:underline"
+              >
+                {draft.proposal_pdf_name || "Current PDF"}
+              </a>
+            ) : (
+              <span className="text-xs text-[#64748b]">No PDF uploaded yet.</span>
+            )}
+          </label>
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={submitting || uploading}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            className="rounded-full bg-[#c9a227] text-white"
+            disabled={submitting || uploading}
+            onClick={onSave}
+          >
+            {uploading ? "Uploading..." : submitting ? "Saving..." : "Save"}
+          </Button>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -379,7 +599,7 @@ export function CollegeActivityTimeline({
   loading: boolean;
 }) {
   if (loading) {
-    return <p className="rounded-2xl border border-[#dbe6f3] bg-white px-4 py-10 text-center text-sm text-[#64748b]">Loading activity…</p>;
+    return <p className="rounded-2xl border border-[#dbe6f3] bg-white px-4 py-10 text-center text-sm text-[#64748b]">Loading activity...</p>;
   }
   if (!activities.length) {
     return (
@@ -399,13 +619,13 @@ export function CollegeActivityTimeline({
               <p className="text-xs text-[#64748b]">{formatDisplayDate(a.created_at)}</p>
             </div>
             <p className="mt-1 text-xs text-[#64748b]">
-              {visit?.college_name || a.college_visit_id.slice(0, 8)} · by{" "}
-              {a.created_by ? ownerNameMap[a.created_by] || a.created_by.slice(0, 8) : "—"}
+              {visit?.college_name || a.college_visit_id.slice(0, 8)} | by{" "}
+              {a.created_by ? ownerNameMap[a.created_by] || a.created_by.slice(0, 8) : "-"}
             </p>
             {a.notes ? <p className="mt-2 text-[#334155]">{a.notes}</p> : null}
             {a.old_value || a.new_value ? (
               <p className="mt-1 text-xs text-[#64748b]">
-                {a.old_value || "—"} → {a.new_value || "—"}
+                {a.old_value || "-"} {"->"} {a.new_value || "-"}
               </p>
             ) : null}
           </div>
@@ -456,6 +676,7 @@ export function CollegeSettingsPanel() {
     <div className="grid gap-4 md:grid-cols-2">
       <SettingList title="Visit statuses" items={[...VISIT_STATUSES]} />
       <SettingList title="MOU statuses" items={[...MOU_STATUSES]} />
+      <SettingList title="Proposal statuses" items={[...CV_PROPOSAL_STATUSES]} />
       <SettingList title="Final statuses" items={[...FINAL_STATUSES]} />
       <div className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-4 text-sm text-[#475569]">
         <p className="font-semibold text-[#0f172a]">Notes</p>
@@ -463,6 +684,7 @@ export function CollegeSettingsPanel() {
           <li>Each user only sees colleges they own (`assigned_to`).</li>
           <li>Share outreach via <strong>Assign as College Visit task</strong> (My Tasks).</li>
           <li>Import files always assign ownership to the importer.</li>
+          <li>Proposal Tracker stores a URL link and/or a PDF in Storage.</li>
         </ul>
       </div>
     </div>
@@ -487,5 +709,5 @@ function SettingList({ title, items }: { title: string; items: string[] }) {
 /** Exported for potential reuse; daysSince kept available through helpers. */
 export function collegeFollowAgeLabel(row: CollegeVisitRow) {
   const d = daysSince(row.last_follow_up_date);
-  return d == null ? "—" : `${d}d`;
+  return d == null ? "-" : `${d}d`;
 }

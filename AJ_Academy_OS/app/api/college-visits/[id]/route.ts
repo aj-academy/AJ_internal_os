@@ -60,6 +60,23 @@ export async function PATCH(request: Request, context: RouteContext) {
       created_by: user.id,
     });
   }
+  const proposalTouched =
+    prevRow &&
+    (String(prevRow.proposal_status ?? "") !== String(payload.proposal_status ?? "") ||
+      String(prevRow.proposal_link ?? "") !== String(payload.proposal_link ?? "") ||
+      String(prevRow.proposal_pdf_url ?? "") !== String(payload.proposal_pdf_url ?? "") ||
+      String(prevRow.proposal_amount ?? "") !== String(payload.proposal_amount ?? "") ||
+      String(prevRow.proposal_sent_date ?? "").slice(0, 10) !== String(payload.proposal_sent_date ?? "").slice(0, 10));
+  if (proposalTouched) {
+    activities.push({
+      college_visit_id: id,
+      activity_type: "Proposal Updated",
+      old_value: String(prevRow.proposal_status ?? "Not Sent"),
+      new_value: String(payload.proposal_status ?? "Not Sent"),
+      notes: [payload.proposal_link ? "link" : null, payload.proposal_pdf_url ? "pdf" : null].filter(Boolean).join("+") || null,
+      created_by: user.id,
+    });
+  }
   if (activities.length) {
     await supabase.from("college_visit_activities").insert(activities);
   } else {

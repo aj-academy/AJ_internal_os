@@ -1,10 +1,12 @@
 "use client";
 
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   COLLEGE_PRIORITIES,
   CONNECTED_PERSON_ROLES,
+  CV_PROPOSAL_STATUSES,
   FINAL_STATUSES,
   FOLLOW_UP_STAGES,
   MOU_STATUSES,
@@ -54,7 +56,7 @@ export function CollegeVisitFormPanel({
             onClick={onClose}
             className="touch-target flex items-center justify-center rounded-full border border-[#e8dcc8] bg-white p-2 text-[#3d3428] shadow-sm transition hover:bg-[#faf3e3]"
           >
-            <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">×</span>
+            <X className="h-4 w-4" strokeWidth={2.5} />
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
@@ -193,6 +195,64 @@ export function CollegeVisitFormPanel({
                 </label>
               ) : null}
             </section>
+
+            <section className="space-y-2">
+              <p className="text-xs font-semibold uppercase text-[#94a3b8]">Proposal</p>
+              <label className="grid gap-1">
+                <span className="font-medium text-[#334155]">Proposal status</span>
+                <select
+                  className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3"
+                  value={value.proposal_status}
+                  onChange={(e) => onChange({ ...value, proposal_status: e.target.value })}
+                >
+                  {CV_PROPOSAL_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="grid gap-1">
+                  <span className="font-medium text-[#334155]">Proposal amount</span>
+                  <Input
+                    value={value.proposal_amount}
+                    onChange={(e) => onChange({ ...value, proposal_amount: e.target.value })}
+                    className="border-[#e8dcc8]"
+                    placeholder="Optional"
+                  />
+                </label>
+                <label className="grid gap-1">
+                  <span className="font-medium text-[#334155]">Sent date</span>
+                  <Input
+                    type="date"
+                    value={value.proposal_sent_date}
+                    onChange={(e) => onChange({ ...value, proposal_sent_date: e.target.value })}
+                    className="border-[#e8dcc8]"
+                  />
+                </label>
+              </div>
+              <label className="grid gap-1">
+                <span className="font-medium text-[#334155]">Proposal link (URL)</span>
+                <Input
+                  value={value.proposal_link}
+                  onChange={(e) => onChange({ ...value, proposal_link: e.target.value })}
+                  className="border-[#e8dcc8]"
+                  placeholder="https://..."
+                />
+              </label>
+              {value.proposal_pdf_url ? (
+                <p className="text-xs text-[#64748b]">
+                  PDF on file:{" "}
+                  <a href={value.proposal_pdf_url} target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 hover:underline">
+                    {value.proposal_pdf_name || "Open PDF"}
+                  </a>
+                  {" "}(upload or replace from Proposal Tracker)
+                </p>
+              ) : (
+                <p className="text-xs text-[#64748b]">Upload a proposal PDF from the Proposal Tracker tab.</p>
+              )}
+            </section>
           </div>
         </div>
         <div className="flex shrink-0 gap-2 border-t border-[#e8edf5] px-4 py-4 sm:px-5">
@@ -200,7 +260,7 @@ export function CollegeVisitFormPanel({
             Cancel
           </Button>
           <Button type="button" className="flex-1 rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]" onClick={onSubmit} disabled={submitting || !value.college_name.trim()}>
-            {submitting ? "Saving…" : "Save"}
+            {submitting ? "Saving..." : "Save"}
           </Button>
         </div>
       </aside>

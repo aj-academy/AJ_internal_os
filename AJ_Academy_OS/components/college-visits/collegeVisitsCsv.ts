@@ -31,6 +31,12 @@ export const COLLEGE_VISIT_CSV_HEADERS = [
   "Lead Score",
   "Final Status",
   "Source / Reference",
+  "Proposal Status",
+  "Proposal Amount",
+  "Proposal Sent Date",
+  "Proposal Link",
+  "Proposal PDF URL",
+  "Proposal PDF Name",
 ] as const;
 
 export type CollegeVisitCsvHeader = (typeof COLLEGE_VISIT_CSV_HEADERS)[number];
@@ -96,6 +102,18 @@ const HEADER_ALIASES: Record<string, CollegeVisitCsvHeader> = {
   "source / reference": "Source / Reference",
   source: "Source / Reference",
   source_reference: "Source / Reference",
+  "proposal status": "Proposal Status",
+  proposal_status: "Proposal Status",
+  "proposal amount": "Proposal Amount",
+  proposal_amount: "Proposal Amount",
+  "proposal sent date": "Proposal Sent Date",
+  proposal_sent_date: "Proposal Sent Date",
+  "proposal link": "Proposal Link",
+  proposal_link: "Proposal Link",
+  "proposal pdf url": "Proposal PDF URL",
+  proposal_pdf_url: "Proposal PDF URL",
+  "proposal pdf name": "Proposal PDF Name",
+  proposal_pdf_name: "Proposal PDF Name",
 };
 
 function stripBom(s: string) {
@@ -243,6 +261,12 @@ export function collegeVisitRowToCsvCells(
     row.lead_score ?? 0,
     row.final_status ?? "",
     row.source_reference ?? "",
+    row.proposal_status ?? "",
+    row.proposal_amount != null ? row.proposal_amount : "",
+    row.proposal_sent_date?.slice(0, 10) ?? "",
+    row.proposal_link ?? "",
+    row.proposal_pdf_url ?? "",
+    row.proposal_pdf_name ?? "",
   ];
 }
 
@@ -270,6 +294,12 @@ export function buildCollegeVisitImportTemplateCsv() {
     "0",
     "Open",
     "Referral",
+    "Not Sent",
+    "",
+    "",
+    "",
+    "",
+    "",
   ];
   return buildCsv([...COLLEGE_VISIT_CSV_HEADERS], [sample]);
 }
@@ -364,6 +394,12 @@ export function parseCollegeVisitMatrix(
       lead_score: cell(cells, idx, "Lead Score") || "0",
       final_status: cell(cells, idx, "Final Status") || "Open",
       source_reference: cell(cells, idx, "Source / Reference"),
+      proposal_status: cell(cells, idx, "Proposal Status") || "Not Sent",
+      proposal_amount: cell(cells, idx, "Proposal Amount"),
+      proposal_sent_date: cell(cells, idx, "Proposal Sent Date"),
+      proposal_link: cell(cells, idx, "Proposal Link"),
+      proposal_pdf_url: cell(cells, idx, "Proposal PDF URL"),
+      proposal_pdf_name: cell(cells, idx, "Proposal PDF Name"),
     });
   }
 

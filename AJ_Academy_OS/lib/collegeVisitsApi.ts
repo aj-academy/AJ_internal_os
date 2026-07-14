@@ -29,13 +29,51 @@ export function parseCollegeVisitBody(body: unknown): { ok: true; form: CollegeV
     lead_score: String(record.lead_score ?? "0"),
     final_status: String(record.final_status ?? "Open"),
     source_reference: String(record.source_reference ?? ""),
+    proposal_status: String(record.proposal_status ?? "Not Sent"),
+    proposal_amount: String(record.proposal_amount ?? ""),
+    proposal_sent_date: String(record.proposal_sent_date ?? ""),
+    proposal_link: String(record.proposal_link ?? ""),
+    proposal_pdf_url: String(record.proposal_pdf_url ?? ""),
+    proposal_pdf_name: String(record.proposal_pdf_name ?? ""),
   };
 
   return { ok: true, form };
 }
 
 export function mapCollegeVisitRow(row: unknown): CollegeVisitRow {
-  return row as CollegeVisitRow;
+  const r = row as Partial<CollegeVisitRow> & { id: string; college_name: string };
+  return {
+    id: r.id,
+    college_name: r.college_name,
+    location: r.location ?? null,
+    contact_number: r.contact_number ?? null,
+    email: r.email ?? null,
+    connected_person_name: r.connected_person_name ?? null,
+    connected_person_role: r.connected_person_role ?? null,
+    visit_status: r.visit_status ?? "Not Visited",
+    visit_date: r.visit_date ?? null,
+    mou_signed_status: r.mou_signed_status ?? "Not Signed",
+    follow_up_stage: r.follow_up_stage ?? null,
+    last_follow_up_date: r.last_follow_up_date ?? null,
+    next_follow_up_date: r.next_follow_up_date ?? null,
+    priority: r.priority ?? "Warm",
+    assigned_to: r.assigned_to ?? null,
+    assigned_by: r.assigned_by ?? null,
+    description: r.description ?? null,
+    last_outcome_remarks: r.last_outcome_remarks ?? null,
+    lead_score: r.lead_score ?? 0,
+    final_status: r.final_status ?? "Open",
+    source_reference: r.source_reference ?? null,
+    proposal_status: r.proposal_status ?? "Not Sent",
+    proposal_amount: r.proposal_amount ?? null,
+    proposal_sent_date: r.proposal_sent_date ?? null,
+    proposal_link: r.proposal_link ?? null,
+    proposal_pdf_url: r.proposal_pdf_url ?? null,
+    proposal_pdf_name: r.proposal_pdf_name ?? null,
+    created_by: r.created_by ?? null,
+    created_at: r.created_at ?? "",
+    updated_at: r.updated_at ?? "",
+  };
 }
 
 export function buildPayloadFromApi(
