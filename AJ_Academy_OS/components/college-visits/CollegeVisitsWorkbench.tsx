@@ -1323,12 +1323,7 @@ return (
                             onEmailClick={() => requestCollegeEmail(row)}
                           />
                         </td>
-                        <td className={`${tdClass} min-w-[12rem]`}>
-                          <div className="flex flex-col items-center gap-0.5">
-                            <span>{person}</span>
-                            {personRole ? <span className="text-[10px] text-[#94a3b8]">{personRole}</span> : null}
-                          </div>
-                        </td>
+                        <td className={`${tdClass} min-w-[12rem]`}>{person}</td>
                         <td className={tdClass}>{row.connected_person_role || personRole || "-"}</td>
                         <td className={tdClass}>{row.visit_status}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.visit_date)}</td>
