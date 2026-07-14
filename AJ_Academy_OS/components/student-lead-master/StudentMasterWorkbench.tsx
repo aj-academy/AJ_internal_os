@@ -13,6 +13,7 @@ import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
 import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { saveTaskLeadSelection } from "@/lib/taskLeadPickStorage";
+import { deleteOwnedClients } from "@/lib/crmOwnedDelete";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { LeadStatusBadge, ProposalStatusBadge } from "@/components/student-lead-master/LeadStatusBadge";
@@ -1341,17 +1342,15 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   };
 
   const handleDeleteLead = async (id: string) => {
-    if (!isAdmin) return;
+    if (!isAdmin || !currentUserId) return;
     if (!confirm("Delete this lead permanently?")) return;
-    const { data: deletedCount, error: deletionError } = await supabase.rpc("delete_owned_clients", {
-      p_ids: [id],
-    });
+    const { deleted, error: deletionError } = await deleteOwnedClients(supabase, [id], currentUserId);
     if (deletionError) {
-      setError(deletionError.message);
+      setError(deletionError);
       return;
     }
-    if (!deletedCount) {
-      setError("Could not delete this lead (you can only delete your own Student Master rows).");
+    if (!deleted) {
+      setError("Could not delete this lead (you can only delete your own Student Master rows). Run AJ_Academy_SB/crm_delete_fix.sql in Supabase if deletes keep failing.");
       return;
     }
     setSuccess("Deleted.");
@@ -1359,23 +1358,24 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   };
 
   const handleBulkDeleteLeads = async () => {
-    if (leadBulk.selectedCount === 0) return;
+    if (leadBulk.selectedCount === 0 || !currentUserId) return;
     if (!confirm(`Delete ${leadBulk.selectedCount} selected lead(s) permanently?`)) return;
     const ids = [...leadBulk.selected];
-    const { data: deletedCount, error: deletionError } = await supabase.rpc("delete_owned_clients", {
-      p_ids: ids,
-    });
+    const { deleted, error: deletionError } = await deleteOwnedClients(supabase, ids, currentUserId);
     if (deletionError) {
-      setError(deletionError.message);
+      setError(deletionError);
       return;
     }
-    const n = Number(deletedCount ?? 0);
-    if (n === 0) {
-      setError("No leads were deleted. You can only delete your own Student Master rows.");
+    if (!deleted) {
+      setError("No leads were deleted. You can only delete your own Student Master rows. Run AJ_Academy_SB/crm_delete_fix.sql in Supabase if needed.");
       return;
     }
     leadBulk.clearSelection();
-    setSuccess(n === ids.length ? `${n} lead(s) deleted.` : `${n} of ${ids.length} lead(s) deleted (others were not yours).`);
+    setSuccess(
+      deleted === ids.length
+        ? `${deleted} lead(s) deleted.`
+        : `${deleted} of ${ids.length} lead(s) deleted (others were not yours).`,
+    );
     await reload();
   };
 

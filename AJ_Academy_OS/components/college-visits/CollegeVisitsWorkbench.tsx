@@ -6,6 +6,7 @@ import { Download, FileText, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatDisplayDate } from "@/lib/datetime";
 import { saveTaskCollegeSelection } from "@/lib/taskLeadPickStorage";
+import { deleteOwnedCollegeVisits } from "@/lib/crmOwnedDelete";
 import { Button } from "@/components/ui/button";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
@@ -374,22 +375,23 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   };
 
   const handleBulkDelete = async () => {
-    if (visitBulk.selectedCount === 0) return;
+    if (visitBulk.selectedCount === 0 || !currentUserId) return;
     if (!confirm(`Delete ${visitBulk.selectedCount} selected college visit(s)?`)) return;
     setSubmitting(true);
     try {
       const ids = [...visitBulk.selected];
-      const { data: deletedCount, error: rpcError } = await supabase.rpc("delete_owned_college_visits", {
-        p_ids: ids,
-      });
-      if (rpcError) throw new Error(rpcError.message);
-      const n = Number(deletedCount ?? 0);
-      if (n === 0) throw new Error("No college visits were deleted. You can only delete your own rows.");
+      const { deleted, error: deleteError } = await deleteOwnedCollegeVisits(supabase, ids, currentUserId);
+      if (deleteError) throw new Error(deleteError);
+      if (!deleted) {
+        throw new Error(
+          "No college visits were deleted. You can only delete your own rows. Run AJ_Academy_SB/crm_delete_fix.sql in Supabase if needed.",
+        );
+      }
       visitBulk.clearSelection();
       setSuccess(
-        n === ids.length
-          ? `${n} college visit(s) deleted.`
-          : `${n} of ${ids.length} deleted (others were not yours).`,
+        deleted === ids.length
+          ? `${deleted} college visit(s) deleted.`
+          : `${deleted} of ${ids.length} deleted (others were not yours).`,
       );
       await reload();
     } catch (e) {

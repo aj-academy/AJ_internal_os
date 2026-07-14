@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireStaffApiSession } from "@/lib/security";
 import { COLLEGE_VISIT_SELECT } from "@/components/college-visits/collegeVisitsHelpers";
 import { buildPayloadFromApi, mapCollegeVisitRow, parseCollegeVisitBody } from "@/lib/collegeVisitsApi";
+import { deleteOwnedCollegeVisits } from "@/lib/crmOwnedDelete";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -81,16 +82,14 @@ export async function DELETE(_request: Request, context: RouteContext) {
   if (!id) return NextResponse.json({ error: "Missing id." }, { status: 400 });
 
   const supabase = await createClient();
-  const { data: deletedCount, error } = await supabase.rpc("delete_owned_college_visits", {
-    p_ids: [id],
-  });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  if (!deletedCount) {
+  const { deleted, error } = await deleteOwnedCollegeVisits(supabase, [id], user.id);
+  if (error) return NextResponse.json({ error }, { status: 400 });
+  if (!deleted) {
     return NextResponse.json(
-      { error: "Could not delete this college visit (you can only delete your own rows)." },
+      { error: "Could not delete this college visit (you can only delete your own rows). Run AJ_Academy_SB/crm_delete_fix.sql in Supabase if needed." },
       { status: 403 },
     );
   }
 
-  return NextResponse.json({ ok: true, deleted: deletedCount });
+  return NextResponse.json({ ok: true, deleted });
 }
