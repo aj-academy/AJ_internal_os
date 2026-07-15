@@ -32,7 +32,7 @@ import {
   todayDateIST,
   validateReminderForm,
 } from "@/lib/reminders/reminderHelpers";
-import { playReminderChimeOnce, unlockReminderAudio } from "@/lib/reminders/reminderSound";
+import { playReminderChimeOnce, stopReminderRing, unlockReminderAudio } from "@/lib/reminders/reminderSound";
 
 type ProfileMini = { id: string; full_name: string | null; email: string | null };
 
@@ -243,6 +243,7 @@ export function RemindersWorkbench({
       return;
     }
     setSuccess(action === "complete" ? "Marked complete." : action === "snooze" ? "Snoozed." : "Rescheduled.");
+    if (action === "snooze" || action === "complete") stopReminderRing();
     await load();
   };
 
@@ -408,7 +409,11 @@ export function RemindersWorkbench({
           onEnableBrowser={enableBrowserNotifications}
           onEnablePush={enablePush}
           onTestSound={() =>
-            playReminderChimeOnce({ notificationId: `test-${Date.now()}`, volume: settings?.sound_volume ?? 80 })
+            playReminderChimeOnce({
+              notificationId: `test-${Date.now()}`,
+              volume: settings?.sound_volume ?? 80,
+              durationMs: 60_000,
+            })
           }
         />
       ) : null}
@@ -1069,7 +1074,8 @@ function SettingsPanel({
       </div>
       <div className="flex flex-wrap gap-2 pt-2">
         <Button className="rounded-full bg-[#c9a227] text-white" onClick={() => onSave(local)}>Save settings</Button>
-        <Button variant="outline" className="rounded-full border-[#e8dcc8]" onClick={onTestSound}>Test sound</Button>
+        <Button variant="outline" className="rounded-full border-[#e8dcc8]" onClick={onTestSound}>Test sound (1 min)</Button>
+        <Button variant="outline" className="rounded-full border-[#e8dcc8]" onClick={() => stopReminderRing()}>Stop sound</Button>
         <Button variant="outline" className="rounded-full border-[#e8dcc8]" onClick={onEnableBrowser}>Enable notifications</Button>
         <Button variant="outline" className="rounded-full border-[#e8dcc8]" onClick={onEnablePush}>Enable push</Button>
       </div>

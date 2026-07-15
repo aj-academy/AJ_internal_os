@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import type { ReminderNotificationRow, ReminderUserSettings } from "@/types/reminders";
 import {
   isInQuietHours,
+  isReminderSnoozed,
   playReminderChimeOnce,
   showReminderBrowserNotification,
+  stopReminderRing,
   unlockReminderAudio,
 } from "@/lib/reminders/reminderSound";
 
-const POLL_MS = 20_000;
+const POLL_MS = 15_000;
 const BROWSER_SHOWN_KEY = "aj-reminder-browser-shown";
 
 function wasBrowserShown(id: string): boolean {
@@ -39,13 +41,14 @@ function markBrowserShown(id: string) {
 }
 
 /**
- * Global reminder due watcher — popup + chime + browser notification while
- * staff is signed in on any admin/employee page (not only Reminders).
+ * Global reminder due watcher — popup + continuous 1‑minute ring + browser
+ * notification while staff is signed in on any admin/employee page.
  */
 export function ReminderAlertsWatcher() {
   const [settings, setSettings] = useState<ReminderUserSettings | null>(null);
   const [due, setDue] = useState<ReminderNotificationRow[]>([]);
   const handledSound = useRef<Set<string>>(new Set());
+  const busy = useRef(false);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -82,16 +85,24 @@ export function ReminderAlertsWatcher() {
     return () => {
       window.removeEventListener("pointerdown", unlock);
       clearInterval(t);
+      stopReminderRing();
     };
   }, [loadSettings, loadDue]);
 
-  const top = due[0];
+  const top = due.find((n) => {
+    if (n.reminder && (n.reminder.status === "Completed" || n.reminder.status === "Cancelled")) return false;
+    if (isReminderSnoozed(n.reminder?.snooze_until)) return false;
+    return true;
+  });
+
   const quiet =
     settings && isInQuietHours(settings.quiet_hours_start, settings.quiet_hours_end);
 
   useEffect(() => {
-    if (!top || !settings || quiet) return;
-    if (top.reminder && (top.reminder.status === "Completed" || top.reminder.status === "Cancelled")) return;
+    if (!top || !settings || quiet) {
+      if (!top) stopReminderRing();
+      return;
+    }
 
     if (settings.sound_enabled && top.reminder?.sound_enabled !== false && !handledSound.current.has(top.id)) {
       const played = playReminderChimeOnce({
@@ -126,37 +137,58 @@ export function ReminderAlertsWatcher() {
   }, [top, settings, quiet]);
 
   const dismiss = async () => {
-    if (!top) return;
-    await fetch("/api/reminders/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: top.id, action: "dismiss" }),
-    });
-    await loadDue();
+    if (!top || busy.current) return;
+    busy.current = true;
+    stopReminderRing();
+    try {
+      await fetch("/api/reminders/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: top.id, action: "dismiss" }),
+      });
+      setDue((prev) => prev.filter((n) => n.id !== top.id));
+      await loadDue();
+    } finally {
+      busy.current = false;
+    }
   };
 
   const complete = async () => {
-    if (!top) return;
-    await fetch(`/api/reminders/${top.reminder_id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "complete" }),
-    });
-    await dismiss();
+    if (!top || busy.current) return;
+    busy.current = true;
+    stopReminderRing();
+    try {
+      await fetch(`/api/reminders/${top.reminder_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "complete" }),
+      });
+      setDue((prev) => prev.filter((n) => n.reminder_id !== top.reminder_id));
+      await loadDue();
+    } finally {
+      busy.current = false;
+    }
   };
 
   const snooze = async (minutes: number) => {
-    if (!top) return;
-    await fetch(`/api/reminders/${top.reminder_id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "snooze", snooze_minutes: minutes }),
-    });
-    await dismiss();
+    if (!top || busy.current) return;
+    busy.current = true;
+    stopReminderRing();
+    // Optimistic hide so popup vanishes immediately
+    setDue((prev) => prev.filter((n) => n.reminder_id !== top.reminder_id));
+    try {
+      await fetch(`/api/reminders/${top.reminder_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "snooze", snooze_minutes: minutes }),
+      });
+      await loadDue();
+    } finally {
+      busy.current = false;
+    }
   };
 
   if (!top || quiet || settings?.popup_enabled === false) return null;
-  if (top.reminder && (top.reminder.status === "Completed" || top.reminder.status === "Cancelled")) return null;
 
   const href =
     top.link_path ||

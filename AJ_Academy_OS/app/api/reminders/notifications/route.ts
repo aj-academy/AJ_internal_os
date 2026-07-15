@@ -52,10 +52,18 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({
-    notifications: (data ?? []).map((n) => ({
-      ...n,
-      reminder: reminderMap[n.reminder_id as string] ?? null,
-    })),
+    notifications: (data ?? [])
+      .map((n) => ({
+        ...n,
+        reminder: reminderMap[n.reminder_id as string] ?? null,
+      }))
+      .filter((n) => {
+        const rem = n.reminder;
+        if (!rem) return true;
+        if (rem.status === "Completed" || rem.status === "Cancelled") return false;
+        if (rem.snooze_until && new Date(rem.snooze_until).getTime() > Date.now()) return false;
+        return true;
+      }),
     schemaMissing: false,
   });
 }

@@ -1,9 +1,16 @@
-/** Reminder chime — Web Audio (no asset file). Separate from in-app task bell. */
+/** Reminder ring — Web Audio (no asset file). Separate from in-app task bell. */
 
 const TAB_LOCK_KEY = "aj-reminder-sound-lock";
 const PLAYED_KEY = "aj-reminder-sound-played";
 
+/** Continuous ring duration (ms) */
+export const REMINDER_RING_DURATION_MS = 60_000;
+/** Gap between ding-dong pairs while ringing */
+const RING_INTERVAL_MS = 1_800;
+
 let sharedCtx: AudioContext | null = null;
+let ringTimer: ReturnType<typeof setInterval> | null = null;
+let ringDeadline = 0;
 
 function getAudioCtx(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -90,7 +97,6 @@ function playChimeTones(volume: number): boolean {
       osc.stop(ctx.currentTime + start + duration);
     };
 
-    // Distinct “ding-dong” from the task bell tones
     tone(988, 0, 0.14);
     tone(1318.5, 0.16, 0.22);
     return true;
@@ -99,10 +105,25 @@ function playChimeTones(volume: number): boolean {
   }
 }
 
+/** Stop any continuous reminder ring immediately */
+export function stopReminderRing(): void {
+  if (ringTimer) {
+    clearInterval(ringTimer);
+    ringTimer = null;
+  }
+  ringDeadline = 0;
+}
+
+/**
+ * Continuous ring for up to 1 minute (ding-dong every ~1.8s).
+ * Call stopReminderRing() on snooze / dismiss / complete.
+ */
 export function playReminderChimeOnce(opts: {
   notificationId: string;
   volume?: number;
   enabled?: boolean;
+  /** Override duration for Test sound (default 60s) */
+  durationMs?: number;
 }): boolean {
   if (typeof window === "undefined") return false;
   if (opts.enabled === false) return false;
@@ -112,9 +133,28 @@ export function playReminderChimeOnce(opts: {
   const volume = Math.min(1, Math.max(0, (opts.volume ?? 80) / 100));
   if (volume <= 0) return false;
 
+  stopReminderRing();
+
   const ok = playChimeTones(volume);
-  if (ok) markPlayed(opts.notificationId);
-  return ok;
+  if (!ok) return false;
+
+  markPlayed(opts.notificationId);
+  const duration = opts.durationMs ?? REMINDER_RING_DURATION_MS;
+  ringDeadline = Date.now() + duration;
+
+  ringTimer = setInterval(() => {
+    if (Date.now() >= ringDeadline) {
+      stopReminderRing();
+      return;
+    }
+    playChimeTones(volume);
+  }, RING_INTERVAL_MS);
+
+  return true;
+}
+
+export function isReminderRinging(): boolean {
+  return ringTimer != null;
 }
 
 export function showReminderBrowserNotification(opts: {
@@ -162,4 +202,9 @@ export function isInQuietHours(
   const e = end.slice(0, 5);
   if (s <= e) return cur >= s && cur < e;
   return cur >= s || cur < e;
+}
+
+export function isReminderSnoozed(snoozeUntil: string | null | undefined, now = new Date()): boolean {
+  if (!snoozeUntil) return false;
+  return new Date(snoozeUntil).getTime() > now.getTime();
 }

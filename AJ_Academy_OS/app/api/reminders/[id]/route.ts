@@ -84,6 +84,11 @@ export async function PATCH(request: Request, ctx: Ctx) {
       .update({ status: "cancelled" })
       .eq("reminder_id", id)
       .eq("status", "pending");
+    await supabase
+      .from("aj_reminder_notifications")
+      .update({ dismissed_at: new Date().toISOString() })
+      .eq("reminder_id", id)
+      .is("dismissed_at", null);
     await supabase.from("aj_reminder_activity_logs").insert({
       reminder_id: id,
       actor_id: user.id,
@@ -98,6 +103,12 @@ export async function PATCH(request: Request, ctx: Ctx) {
     const until = new Date(Date.now() + mins * 60_000).toISOString();
     const { error } = await supabase.from("aj_reminders").update({ snooze_until: until }).eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    // Hide current due popup(s) until the snooze alert fires again
+    await supabase
+      .from("aj_reminder_notifications")
+      .update({ dismissed_at: new Date().toISOString() })
+      .eq("reminder_id", id)
+      .is("dismissed_at", null);
     const idem = `${id}:snooze:${until}`;
     await supabase.from("aj_reminder_alerts").upsert(
       {
