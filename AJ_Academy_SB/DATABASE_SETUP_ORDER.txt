@@ -25,8 +25,8 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 5c4) tasks_linked_lead_access.sql (employee phone/WA/email on task-linked student leads + dashboard pins)
 5c5) task_notification_employee_link_fix.sql (employee task notifications → /employee/my-tasks; backfills bad links)
 5c6) employee_task_pins_section_patch.sql (pin_section on dashboard pins — lead/college/project buckets)
-5c7) crm_owner_isolation.sql (Student Master + College Visits: each user sees only their own rows; share via tasks — run AFTER employee_student_master_rls + tasks_linked_lead_access + college_visits_schema; re-run after security_rls_access_fix.sql)
-5c8) crm_delete_fix.sql (owned-row delete RPCs + employee delete policies — fixes silent/blocked CRM deletes; run after crm_owner_isolation.sql)
+5c7) crm_owner_isolation.sql (Student Master + College Visits: employees see own rows only; admin sees all for activity tracking; share via tasks — run AFTER employee_student_master_rls + tasks_linked_lead_access + college_visits_schema; re-run after security_rls_access_fix.sql)
+5c8) crm_delete_fix.sql (owned-row delete RPCs + employee delete policies; admin can delete any — fixes silent/blocked CRM deletes; run after crm_owner_isolation.sql)
 
 6) task_notifications_columns.sql
 7) in_app_notifications.sql
@@ -52,8 +52,8 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 10k1) college_visits_proposal_patch.sql (Proposal Tracker columns + college-visit-proposals storage — after college_visits_schema.sql)
 10k1b) college_visits_contacts_patch.sql (multiple contacts JSON: name/role/phones/email — after college_visits_schema.sql)
 10k1c) proposals_file_upload_patch.sql (Student Master + College Visits proposal file columns + private `proposals` storage bucket — after proposal + contacts patches)
-10k2) crm_owner_isolation.sql (per-user SM + CV isolation for admin too — share only via tasks; re-run after security_rls_access_fix.sql)
-10k3) crm_delete_fix.sql (delete_owned_clients / delete_owned_college_visits RPCs — after crm_owner_isolation.sql)
+10k2) crm_owner_isolation.sql (employee own-only SM + CV; admin tracking SELECT/ALL — re-run after security_rls_access_fix.sql)
+10k3) crm_delete_fix.sql (delete_owned_clients / delete_owned_college_visits RPCs; admin bypass — after crm_owner_isolation.sql)
 10e) system_settings_rls_fix.sql (admin can save departments / settings — run if RLS error on delete)
 11) attendance_delete_grants.sql (optional — admin delete attendance)
 11b) remove_leave_requests_module.sql (optional — drops leave_requests; use permission_requests only)

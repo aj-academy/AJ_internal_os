@@ -73,7 +73,7 @@ begin
 
   delete from public.clients
   where id = any(p_ids)
-    and assigned_to = auth.uid();
+    and (assigned_to = auth.uid() or public.is_admin());
 
   get diagnostics n = row_count;
   return n;
@@ -98,7 +98,11 @@ begin
 
   delete from public.college_visits
   where id = any(p_ids)
-    and (assigned_to = auth.uid() or created_by = auth.uid());
+    and (
+      public.is_admin()
+      or assigned_to = auth.uid()
+      or created_by = auth.uid()
+    );
 
   get diagnostics n = row_count;
   return n;
@@ -108,6 +112,6 @@ $$;
 grant execute on function public.delete_owned_college_visits(uuid[]) to authenticated;
 
 comment on function public.delete_owned_clients(uuid[]) is
-  'Deletes Student Master rows owned by the caller (assigned_to). Bypasses child RLS so cascades succeed.';
+  'Deletes Student Master rows owned by the caller, or any rows when caller is admin. Bypasses child RLS so cascades succeed.';
 comment on function public.delete_owned_college_visits(uuid[]) is
-  'Deletes College Visit rows owned by the caller. Bypasses child activity RLS so cascades succeed.';
+  'Deletes College Visit rows owned by the caller, or any rows when caller is admin. Bypasses child activity RLS so cascades succeed.';

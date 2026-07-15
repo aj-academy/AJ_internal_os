@@ -15,6 +15,7 @@ export async function deleteOwnedClients(
   supabase: SupabaseClient,
   ids: string[],
   currentUserId: string,
+  opts?: { isAdmin?: boolean },
 ): Promise<{ deleted: number; error: string | null }> {
   if (!ids.length) return { deleted: 0, error: null };
 
@@ -26,12 +27,9 @@ export async function deleteOwnedClients(
     return { deleted: 0, error: rpc.error.message };
   }
 
-  const { data, error } = await supabase
-    .from("clients")
-    .delete()
-    .in("id", ids)
-    .eq("assigned_to", currentUserId)
-    .select("id");
+  let q = supabase.from("clients").delete().in("id", ids);
+  if (!opts?.isAdmin) q = q.eq("assigned_to", currentUserId);
+  const { data, error } = await q.select("id");
   if (error) return { deleted: 0, error: error.message };
   return { deleted: data?.length ?? 0, error: null };
 }
@@ -40,6 +38,7 @@ export async function deleteOwnedCollegeVisits(
   supabase: SupabaseClient,
   ids: string[],
   currentUserId: string,
+  opts?: { isAdmin?: boolean },
 ): Promise<{ deleted: number; error: string | null }> {
   if (!ids.length) return { deleted: 0, error: null };
 
@@ -51,12 +50,9 @@ export async function deleteOwnedCollegeVisits(
     return { deleted: 0, error: rpc.error.message };
   }
 
-  const { data, error } = await supabase
-    .from("college_visits")
-    .delete()
-    .in("id", ids)
-    .or(`assigned_to.eq.${currentUserId},created_by.eq.${currentUserId}`)
-    .select("id");
+  let q = supabase.from("college_visits").delete().in("id", ids);
+  if (!opts?.isAdmin) q = q.or(`assigned_to.eq.${currentUserId},created_by.eq.${currentUserId}`);
+  const { data, error } = await q.select("id");
   if (error) return { deleted: 0, error: error.message };
   return { deleted: data?.length ?? 0, error: null };
 }

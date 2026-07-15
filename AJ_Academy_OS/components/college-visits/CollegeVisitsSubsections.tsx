@@ -842,7 +842,9 @@ export function CollegeReportsPanel({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-[#64748b]">Metrics use the colleges visible in this workspace (your own rows).</p>
+      <p className="text-sm text-[#64748b]">
+        Metrics use colleges visible in this workspace (admin: all employees; employee: own rows).
+      </p>
       <div className="stat-cards-grid">
         <LeadSummaryCard title="Total" value={visits.length} />
         <LeadSummaryCard title="Follow-up due" value={due} accent="rose" />
@@ -869,9 +871,9 @@ export function CollegeSettingsPanel() {
       <div className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-4 text-sm text-[#475569]">
         <p className="font-semibold text-[#0f172a]">Notes</p>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
-          <li>Each user only sees colleges they own (`assigned_to`).</li>
-          <li>Share outreach via <strong>Assign as College Visit task</strong> (My Tasks).</li>
-          <li>Import files always assign ownership to the importer.</li>
+          <li>Admin sees every employee&apos;s colleges for activity tracking; employees only see their own.</li>
+          <li>Share outreach via <strong>Assign as College Visit task</strong> (My Tasks) without opening full CRM.</li>
+          <li>Import / create always owns the row as the signed-in user.</li>
           <li>Proposal Tracker stores a URL link and/or a PDF in Storage.</li>
         </ul>
       </div>

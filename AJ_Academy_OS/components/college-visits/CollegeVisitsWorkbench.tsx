@@ -878,11 +878,15 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setSubmitting(true);
     try {
       const ids = [...visitBulk.selected];
-      const { deleted, error: deleteError } = await deleteOwnedCollegeVisits(supabase, ids, currentUserId);
+      const { deleted, error: deleteError } = await deleteOwnedCollegeVisits(supabase, ids, currentUserId, {
+        isAdmin: isDbAdmin,
+      });
       if (deleteError) throw new Error(deleteError);
       if (!deleted) {
         throw new Error(
-          "No college visits were deleted. You can only delete your own rows. Run AJ_Academy_SB/crm_delete_fix.sql in Supabase if needed.",
+          isDbAdmin
+            ? "No college visits were deleted. Re-run AJ_Academy_SB/crm_owner_isolation.sql and crm_delete_fix.sql in Supabase if needed."
+            : "No college visits were deleted. You can only delete your own rows. Run AJ_Academy_SB/crm_delete_fix.sql in Supabase if needed.",
         );
       }
       visitBulk.clearSelection();
@@ -979,7 +983,9 @@ return (
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">College Visits</h2>
           <p className="mt-1 text-sm text-[#64748b]">
-            Manage college outreach like Student Master - Overview, All Colleges, Follow-ups, Pipeline, Proposal Tracker, and more.
+            {isDbAdmin
+              ? "Track every employee's college outreach. Filter by Owner to review one person. Employees only see their own rows."
+              : "Your college outreach only - Overview, All Colleges, Follow-ups, Pipeline, Proposal Tracker, and more."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

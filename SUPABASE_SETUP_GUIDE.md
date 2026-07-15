@@ -127,17 +127,17 @@ Employees use `/employee/*` for attendance, **My Tasks** (assign tasks with lead
 
 After Student Master SQL is applied, run **`employee_student_master_rls.sql`** so employees can select/update/insert **only leads assigned to them** (`assigned_to = auth.uid()`). Re-run this script if an older version granted blanket CRM access to all leads.
 
-Then run **`crm_owner_isolation.sql`** so **admins also only see their own** Student Master and College Visits rows. Sharing with other users is via **Assign as Student Lead / College Visit task** (task-linked access), not by browsing another user’s CRM. Re-run `crm_owner_isolation.sql` after `security_rls_access_fix.sql` (that fix restores admin-all on clients).
+Then run **`crm_owner_isolation.sql`** so **employees only see their own** Student Master / College Visits rows, while **admins see every employee’s CRM** for activity tracking. Employees still cannot browse each other’s leads/colleges. Task-linked access remains for sharing specific rows via My Tasks. Re-run `crm_owner_isolation.sql` after `security_rls_access_fix.sql` if policies drift.
 
-Then run **`crm_delete_fix.sql`** so deletes work (owned-row RPCs + cascade-safe employee delete policies). Without it, deletes often look successful but remove **0 rows** because child-table RLS blocks cascades.
+Then run **`crm_delete_fix.sql`** so deletes work (owned-row RPCs + cascade-safe employee delete policies; admin can delete any row). Without it, deletes often look successful but remove **0 rows** because child-table RLS blocks cascades.
 
 If an employee sees **Forbidden** when saving a student, run (in order):
 
 1. `student_lead_master_schema.sql` + `student_lead_master_aux_schema.sql` (if not already applied)
 2. `security_rls_access_fix.sql`
 3. **`employee_student_master_rls.sql`** — assigned-only employee CRM (create with self as assignee)
-4. **`crm_owner_isolation.sql`** — owner isolation for admin + college visits
-5. **`crm_delete_fix.sql`** — owned deletes actually remove rows (RPC + cascade policies)
+4. **`crm_owner_isolation.sql`** — employee own-only; admin sees all for tracking
+5. **`crm_delete_fix.sql`** — deletes actually remove rows (RPC + cascade policies)
 
 Then hard-refresh the app and try **Add Student** again.
 
@@ -147,13 +147,13 @@ Then hard-refresh the app and try **Add Student** again.
 
 Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / profiles), then **`college_visits_proposal_patch.sql`** (Proposal Tracker: link + PDF columns and `college-visit-proposals` storage bucket), then **`college_visits_contacts_patch.sql`** (multiple contacts: name / role / alternate phones / email JSON + primary sync), then **`proposals_file_upload_patch.sql`** (unified private `proposals` bucket + file columns on `clients` and `college_visits` for PDF/DOC/DOCX upload on Add/Edit), then **`crm_owner_isolation.sql`**, then **`crm_delete_fix.sql`**. Adds:
 
-- `/admin/college-visits` and `/employee/college-visits` — **same subsection tabs as Student Master**: Overview, All Colleges, Follow-ups, Pipeline, Converted Colleges, MOU Tracker, **Proposal Tracker**, Activity Timeline (+ Reports / Settings for admin). Own rows only; share via College Visit tasks.
+- `/admin/college-visits` and `/employee/college-visits` — **same subsection tabs as Student Master**: Overview, All Colleges, Follow-ups, Pipeline, Converted Colleges, MOU Tracker, **Proposal Tracker**, Activity Timeline (+ Reports / Settings for admin). **Admin sees all employees’ colleges**; **employees see only their own**. Share via College Visit tasks without opening another employee’s full CRM.
 - Proposal Tracker / Add·Edit forms upload **PDF, DOC, or DOCX** (max 10 MB) into the private `proposals` bucket; legacy URL/PDF fields remain readable.
 - Pick-for-task flow uses the **All Colleges** tab (same pattern as Student Master → All Students).
 
 **Student Master proposals:** Same file upload (Add + Edit + Proposal Tracker) after `proposals_file_upload_patch.sql`. Paths: `students/{client_id}/…` and `colleges/{college_visit_id}/…`. APIs: `POST /api/proposals/upload`, `/signed-url`, `/remove` (staff session + service role).
 
-API (staff session): `GET/POST /api/college-visits`, `PATCH/DELETE /api/college-visits/[id]`, `GET/POST /api/college-visits/[id]/activities`. GET returns the signed-in user’s rows only.
+API (staff session): `GET/POST /api/college-visits`, `PATCH/DELETE /api/college-visits/[id]`, `GET/POST /api/college-visits/[id]/activities`. GET returns **all rows for admin**, else the signed-in employee’s own rows.
 
 **Task assignment:** In Assign Task, choose **Colleges** → open College Visits table to pick rows (same flow as Student Master leads). Run `tasks_college_link_patch.sql` after `college_visits_schema.sql`.
 

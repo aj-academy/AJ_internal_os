@@ -129,18 +129,25 @@ export async function PATCH(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  const { response, user } = await requireStaffApiSession();
+  const { response, user, profile } = await requireStaffApiSession();
   if (response || !user) return response!;
 
   const { id } = await context.params;
   if (!id) return NextResponse.json({ error: "Missing id." }, { status: 400 });
 
+  const role = profile?.role?.trim().toLowerCase() ?? "";
+  const isAdmin = role === "admin" || role === "super_admin";
+
   const supabase = await createClient();
-  const { deleted, error } = await deleteOwnedCollegeVisits(supabase, [id], user.id);
+  const { deleted, error } = await deleteOwnedCollegeVisits(supabase, [id], user.id, { isAdmin });
   if (error) return NextResponse.json({ error }, { status: 400 });
   if (!deleted) {
     return NextResponse.json(
-      { error: "Could not delete this college visit (you can only delete your own rows). Run AJ_Academy_SB/crm_delete_fix.sql in Supabase if needed." },
+      {
+        error: isAdmin
+          ? "Could not delete this college visit. Re-run AJ_Academy_SB/crm_delete_fix.sql in Supabase if needed."
+          : "Could not delete this college visit (you can only delete your own rows). Run AJ_Academy_SB/crm_delete_fix.sql in Supabase if needed.",
+      },
       { status: 403 },
     );
   }

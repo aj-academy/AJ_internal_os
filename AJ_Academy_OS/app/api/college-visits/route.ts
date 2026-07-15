@@ -27,28 +27,25 @@ export async function GET(request: Request) {
   if (response || !user) return response!;
 
   void request;
-  void profile;
+
+  const role = profile?.role?.trim().toLowerCase() ?? "";
+  const isAdmin = role === "admin" || role === "super_admin";
+  const limit = isAdmin ? 2000 : 800;
 
   const supabase = await createClient();
-  // Own College Visits only. Sharing is via task assignment (task-linked rows appear in My Tasks).
+  // Admin: all employees' colleges (tracking). Employee: own assigned_to only.
   let select = COLLEGE_VISIT_SELECT;
-  let { data, error } = await supabase
-    .from("college_visits")
-    .select(select)
-    .eq("assigned_to", user.id)
-    .order("updated_at", { ascending: false })
-    .limit(800);
+  let q = supabase.from("college_visits").select(select).order("updated_at", { ascending: false }).limit(limit);
+  if (!isAdmin) q = q.eq("assigned_to", user.id);
+  let { data, error } = await q;
 
   while (error) {
     const fallback = nextCollegeVisitSelect(select, error.message);
     if (!fallback) break;
     select = fallback;
-    ({ data, error } = await supabase
-      .from("college_visits")
-      .select(select)
-      .eq("assigned_to", user.id)
-      .order("updated_at", { ascending: false })
-      .limit(800));
+    let retry = supabase.from("college_visits").select(select).order("updated_at", { ascending: false }).limit(limit);
+    if (!isAdmin) retry = retry.eq("assigned_to", user.id);
+    ({ data, error } = await retry);
   }
 
   if (error) {

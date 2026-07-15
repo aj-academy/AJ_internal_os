@@ -409,19 +409,6 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     proposal_link: null,
   });
 
-  const [overview, setOverview] = useState({
-    total: 0,
-    newLeads: 0,
-    contacted: 0,
-    interested: 0,
-    proposalSent: 0,
-    converted: 0,
-    lost: 0,
-    followToday: 0,
-    overdue: 0,
-    revenuePotential: 0,
-  });
-
   const employeeNameMap = useMemo(() => {
     const map: Record<string, string> = {};
     employees.forEach((employee) => {
@@ -445,12 +432,16 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
 
   const buildClientsBaseQuery = useCallback(
     (select = STUDENT_LEAD_SELECT) => {
-      let q = supabase.from("clients").select(select).order("updated_at", { ascending: false }).limit(300);
-      // Own CRM only (admin + employee). Share via tasks — not by browsing others' leads.
-      if (currentUserId) q = q.eq("assigned_to", currentUserId);
+      // Admin: all employee leads (activity tracking). Employee: own assigned_to only.
+      let q = supabase
+        .from("clients")
+        .select(select)
+        .order("updated_at", { ascending: false })
+        .limit(isAdmin ? 1200 : 300);
+      if (!isAdmin && currentUserId) q = q.eq("assigned_to", currentUserId);
       return q.returns<CrmClientRow[]>();
     },
-    [currentUserId, supabase],
+    [currentUserId, isAdmin, supabase],
   );
 
   const loadClientsDataset = useCallback(async () => {
@@ -461,93 +452,6 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     if (loadError) throw new Error(loadError.message);
     setClients(data ?? []);
   }, [buildClientsBaseQuery]);
-
-  const loadOverviewCounts = useCallback(async () => {
-    async function counted(status?: string) {
-      let qb = supabase.from("clients").select("id", { count: "exact", head: true });
-      if (currentUserId) qb = qb.eq("assigned_to", currentUserId);
-      if (status) qb = qb.eq("status", status);
-      return qb;
-    }
-
-    const [
-      totalRes,
-      newRes,
-      newLegacyRes,
-      contactedRes,
-      interestedRes,
-      feeDiscussedRes,
-      convertedRes,
-      admittedRes,
-      lostRes,
-      todayRes,
-    ] = await Promise.all([
-      counted(),
-      counted("New"),
-      counted("New Lead"),
-      counted("Contacted"),
-      counted("Interested"),
-      counted("Fee Discussed"),
-      counted("Converted"),
-      counted("Admitted"),
-      counted("Lost"),
-      (async () => {
-        const td = todayISO();
-        let q = supabase.from("clients").select("id", { count: "exact", head: true }).eq("follow_up_date", td);
-        if (currentUserId) q = q.eq("assigned_to", currentUserId);
-        return q;
-      })(),
-    ]);
-
-    const errs = [
-      totalRes.error,
-      newRes.error,
-      newLegacyRes.error,
-      contactedRes.error,
-      interestedRes.error,
-      feeDiscussedRes.error,
-      convertedRes.error,
-      admittedRes.error,
-      lostRes.error,
-      todayRes.error,
-    ].find(Boolean);
-    if (errs) throw new Error(errs.message);
-
-    const todayStr = todayISO();
-    let overdueQ = supabase
-      .from("clients")
-      .select("id", { count: "exact", head: true })
-      .not("follow_up_date", "is", null)
-      .lt("follow_up_date", todayStr)
-      .not("status", "in", "(Converted,Admitted,Lost,Not Interested)");
-    if (currentUserId) overdueQ = overdueQ.eq("assigned_to", currentUserId);
-    const overdueRes = await overdueQ;
-
-    let revenueSum = 0;
-    if (isAdmin && currentUserId) {
-      const rv = await supabase
-        .from("clients")
-        .select("budget")
-        .eq("assigned_to", currentUserId)
-        .not("budget", "is", null)
-        .not("status", "in", "(Converted,Admitted,Lost,Not Interested)");
-      revenueSum =
-        rv.data?.reduce((acc, row: { budget?: number | string | null }) => acc + Number(row.budget ?? 0), 0) ?? 0;
-    }
-
-    setOverview({
-      total: totalRes.count ?? 0,
-      newLeads: (newRes.count ?? 0) + (newLegacyRes.count ?? 0),
-      contacted: contactedRes.count ?? 0,
-      interested: interestedRes.count ?? 0,
-      proposalSent: feeDiscussedRes.count ?? 0,
-      converted: (convertedRes.count ?? 0) + (admittedRes.count ?? 0),
-      lost: lostRes.count ?? 0,
-      followToday: todayRes.count ?? 0,
-      overdue: overdueRes.count ?? 0,
-      revenuePotential: revenueSum,
-    });
-  }, [currentUserId, isAdmin, supabase]);
 
   const reload = useCallback(async () => {
     if (!currentUserId) return;
@@ -560,13 +464,13 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       setWhatsAppTemplates(templates);
       const emailTpls = await fetchEmailTemplates(supabase);
       setEmailTemplates(emailTpls);
-      await Promise.all([loadOverviewCounts(), loadClientsDataset()]);
+      await Promise.all([loadClientsDataset()]);
     } catch (e) {
       setError(friendlyError(e));
     } finally {
       setLoading(false);
     }
-  }, [currentUserId, loadClientsDataset, loadOverviewCounts, supabase]);
+  }, [currentUserId, loadClientsDataset, supabase]);
 
   /** Refresh clients + follow-ups + activities + overview without full-page loading spinner. */
   const silentRefreshCrm = useCallback(async () => {
@@ -588,12 +492,11 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         setFollowRows(follows);
         setActivityRows(activities);
       }
-      await loadOverviewCounts();
     } catch (e) {
       setError(friendlyError(e));
       logDevSupabase("silentRefreshCrm", e);
     }
-  }, [buildClientsBaseQuery, currentUserId, loadOverviewCounts, supabase]);
+  }, [buildClientsBaseQuery, currentUserId, supabase]);
 
   useEffect(() => {
     void loadEmployees();
@@ -696,6 +599,65 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     fltStatus,
     searchText,
   ]);
+
+  const overview = useMemo(() => {
+    const todayStr = todayISO();
+    const closedStatuses = new Set(["Converted", "Admitted", "Lost", "Not Interested"]);
+    let newLeads = 0;
+    let contacted = 0;
+    let interested = 0;
+    let proposalSent = 0;
+    let converted = 0;
+    let lost = 0;
+    let followToday = 0;
+    let overdue = 0;
+    let revenuePotential = 0;
+    for (const c of clients) {
+      const st = normalizeStatus(String(c.status));
+      if (st === "New" || st === "New Lead") newLeads += 1;
+      if (st === "Contacted") contacted += 1;
+      if (st === "Interested") interested += 1;
+      if (st === "Fee Discussed") proposalSent += 1;
+      if (st === "Converted" || st === "Admitted") converted += 1;
+      if (st === "Lost" || st === "Not Interested") lost += 1;
+      const fu = (c.follow_up_date || "").slice(0, 10);
+      if (fu === todayStr) followToday += 1;
+      if (fu && fu < todayStr && !closedStatuses.has(st)) overdue += 1;
+      if (isAdmin && c.budget != null && !closedStatuses.has(st)) {
+        revenuePotential += Number(c.budget) || 0;
+      }
+    }
+    return {
+      total: clients.length,
+      newLeads,
+      contacted,
+      interested,
+      proposalSent,
+      converted,
+      lost,
+      followToday,
+      overdue,
+      revenuePotential,
+    };
+  }, [clients, isAdmin]);
+
+  const filteredClientIds = useMemo(() => new Set(filteredClients.map((c) => c.id)), [filteredClients]);
+
+  const clientMap = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
+  const clientMapFiltered = useMemo(
+    () => Object.fromEntries(filteredClients.map((c) => [c.id, c])),
+    [filteredClients],
+  );
+
+  const followRowsFiltered = useMemo(
+    () => followRows.filter((f) => filteredClientIds.has(f.client_id)),
+    [followRows, filteredClientIds],
+  );
+
+  const activityRowsFiltered = useMemo(
+    () => activityRows.filter((a) => filteredClientIds.has(a.client_id)),
+    [activityRows, filteredClientIds],
+  );
 
   const {
     paginatedItems: paginatedClients,
@@ -813,7 +775,6 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     setFltAdmissionStatus("");
   };
 
-  const clientMap = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
   const degreeOptions = useMemo(() => {
     const set = new Set<string>();
     clients.forEach((c) => {
@@ -827,7 +788,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     const src: Record<string, number> = {};
     const pipe: Record<string, number> = {};
     const monthBucket: Record<string, number> = {};
-    filteredClients.forEach((c) => {
+    clients.forEach((c) => {
       const so = String(c.source || "Unknown");
       src[so] = (src[so] || 0) + 1;
       const st = normalizeStatus(String(c.status));
@@ -843,9 +804,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       pipe: Object.entries(pipe),
       months: monthsSorted,
     };
-  }, [filteredClients]);
-
-  const followRowsScoped = followRows.filter((f) => clientMap[f.client_id]);
+  }, [clients]);
 
   const patchClientLocal = useCallback((id: string, patch: Partial<CrmClientRow>) => {
     setClients((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -1405,7 +1364,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const handleDeleteLead = async (id: string) => {
     if (!isAdmin || !currentUserId) return;
     if (!confirm("Delete this lead permanently?")) return;
-    const { deleted, error: deletionError } = await deleteOwnedClients(supabase, [id], currentUserId);
+    const { deleted, error: deletionError } = await deleteOwnedClients(supabase, [id], currentUserId, { isAdmin });
     if (deletionError) {
       setError(deletionError);
       return;
@@ -1422,7 +1381,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     if (leadBulk.selectedCount === 0 || !currentUserId) return;
     if (!confirm(`Delete ${leadBulk.selectedCount} selected lead(s) permanently?`)) return;
     const ids = [...leadBulk.selected];
-    const { deleted, error: deletionError } = await deleteOwnedClients(supabase, ids, currentUserId);
+    const { deleted, error: deletionError } = await deleteOwnedClients(supabase, ids, currentUserId, { isAdmin });
     if (deletionError) {
       setError(deletionError);
       return;
@@ -1803,7 +1762,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     }
   };
 
-  const todayFollowUps = followRowsScoped.filter((f) => f.follow_up_date === todayISO());
+  const todayFollowUps = followRowsFiltered.filter((f) => f.follow_up_date === todayISO());
 
   const handleDownloadStudentTemplate = () => {
     downloadStudentMasterImportTemplate();
@@ -1875,7 +1834,11 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">Student Master</h2>
-          <p className="mt-1 text-sm text-[#64748b]">Manage student leads, counselling follow-ups, fees and admissions.</p>
+          <p className="mt-1 text-sm text-[#64748b]">
+            {isAdmin
+              ? "Track every employee's student leads. Use the Owner / Assignee filter to review one person. Employees only see their own leads."
+              : "Your assigned student leads only — counselling follow-ups, fees and admissions."}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -1902,7 +1865,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
           <div>
             <p className="text-sm font-semibold text-[#92400e]">Selecting leads for task assignment</p>
             <p className="text-xs text-[#78350f]">
-              Tab: {tabLabels[activeTab]} · {pickedLeadIds.size} selected · use any sub-category tab above
+              Tab: {tabLabels[activeTab]} | {pickedLeadIds.size} selected | use All Leads filters below
             </p>
           </div>
           <div className="flex gap-2">
@@ -2113,14 +2076,14 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         </div>
       ) : null}
 
-      {["pipeline", "converted", "proposal"].includes(activeTab) ? (
+      {["follow-ups", "pipeline", "converted", "proposal"].includes(activeTab) ? (
         <TableSearchBar
           value={searchText}
           onChange={setSearchText}
-          placeholder="Search name, email, phone, company…"
+          placeholder="Search name, email, phone, company..."
           showClear={filtersActive}
           onClear={clearTableFilters}
-          hint={`Showing ${filteredClients.length} of ${clients.length} lead(s)`}
+          hint={`Showing ${filteredClients.length} of ${clients.length} lead(s) | use All Leads tab for column filters`}
         />
       ) : null}
 
@@ -2129,16 +2092,16 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
           <div className="stat-cards-grid">
             <LeadSummaryCard title="Today" value={todayFollowUps.length} loading={loading} />
             <LeadSummaryCard title="Overdue snapshot" value={overview.overdue} loading={loading} accent="rose" />
-            <LeadSummaryCard title="Rows tracked" value={followRowsScoped.length} loading={loading} />
+            <LeadSummaryCard title="Rows tracked" value={followRowsFiltered.length} loading={loading} />
             <LeadSummaryCard
               title="Completed"
-              value={followRowsScoped.filter((followRowEntry) => followRowEntry.status === "Completed").length}
+              value={followRowsFiltered.filter((followRowEntry) => followRowEntry.status === "Completed").length}
               loading={loading}
             />
           </div>
           <FollowUpsTable
-            rows={followRowsScoped}
-            clientMap={clientMap}
+            rows={followRowsFiltered}
+            clientMap={clientMapFiltered}
             employeeNameMap={employeeNameMap}
             isAdmin={isAdmin}
             currentUserId={currentUserId}
@@ -2148,17 +2111,14 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       )}
 
       {activeTab === "pipeline" && (
-        <PipelineBoard leads={filteredClients} isAdmin={isAdmin} onChangeStatus={(r, ns) => void changePipelineStatus(r, ns)} />
+        <PipelineBoard leads={filteredClients} isAdmin={canWriteOwnLeads} onChangeStatus={(r, ns) => void changePipelineStatus(r, ns)} />
       )}
 
       {activeTab === "converted" && (
         <>
           {renderLeadBulkBar}
         <ConvertedTable
-          leads={filteredClients.filter((leadEntry) => {
-            const st = normalizeStatus(String(leadEntry.status));
-            return st === "Converted" || st === "Admitted";
-          })}
+          leads={filteredClients}
           employeeNameMap={employeeNameMap}
           isAdmin={isAdmin}
           onProfile={setProfileLead}
@@ -2173,7 +2133,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
           <p className="text-sm text-[#64748b]">
             Track proposal status and upload PDF/DOC files. Changes save to the lead and appear in Activity Timeline.
           </p>
-          <ProposalTrackerTable leads={filteredClients} isAdmin={isAdmin} onEdit={(leadRow) => openProposalModal(leadRow)} bulkSelection={leadBulkSelectionProps} />
+          <ProposalTrackerTable leads={filteredClients} isAdmin={canWriteOwnLeads} onEdit={(leadRow) => openProposalModal(leadRow)} bulkSelection={leadBulkSelectionProps} />
           {proposalModalLead ? (
             <ProposalEditModal
               lead={proposalModalLead}
@@ -2197,19 +2157,19 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       )}
 
       {activeTab === "timeline" && (
-        <ActivityTable rows={activityRows} clientMap={clientMap} employeeNameMap={employeeNameMap} loading={loading} />
+        <ActivityTable rows={activityRowsFiltered} clientMap={clientMapFiltered} employeeNameMap={employeeNameMap} loading={loading} />
       )}
 
-      {activeTab === "reports" && (
+      {activeTab === "reports" && isDbAdmin ? (
         <ReportsPanel
           leads={filteredClients}
-          followRows={followRowsScoped}
+          followRows={followRowsFiltered}
           isAdmin={isAdmin}
           employeeNameMap={employeeNameMap}
         />
-      )}
+      ) : null}
 
-      {activeTab === "settings" && <CrmSettingsPanel />}
+      {activeTab === "settings" && isDbAdmin ? <CrmSettingsPanel /> : null}
 
       {panelOpen && (
         <>
@@ -2372,26 +2332,26 @@ function FollowUpsTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e8edf5]">
-              {rows.length === 0 ? (
+              {visibleRows.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-6 py-12 text-center text-[#64748b]">
-                    No follow-ups loaded yet. Add one from All Leads → Follow-up, or ensure follow-up rows exist for your visible leads.
+                    No follow-ups for the current filters. Add one from All Leads, or adjust search / Owner filter on All Leads.
                   </td>
                 </tr>
               ) : null}
-              {rows.map((fr) => {
+              {visibleRows.map((fr) => {
                 const cli = clientMap[fr.client_id];
                 if (!cli) return null;
                 const canTouch = isAdmin || cli.assigned_to === currentUserId;
                 return (
                   <tr key={fr.id}>
                     <td className="px-3 py-2 font-semibold text-slate-900">{displayLeadName(cli)}</td>
-                    <td className="max-w-[180px] truncate px-3 py-2">{cli.company_name || "—"}</td>
+                    <td className="max-w-[180px] truncate px-3 py-2">{cli.company_name || "-"}</td>
                     <td>{cli.assigned_to ? employeeNameMap[cli.assigned_to] ?? "-" : "-"}</td>
                     <td className="whitespace-nowrap px-3 py-2">{formatDisplayDate(fr.follow_up_date)}</td>
-                    <td className="whitespace-nowrap">{fr.follow_up_time || "—"}</td>
-                    <td>{fr.follow_up_type || "—"}</td>
-                    <td className="max-w-[220px] truncate px-3 py-2 text-slate-600">{fr.notes || "—"}</td>
+                    <td className="whitespace-nowrap">{fr.follow_up_time || "-"}</td>
+                    <td>{fr.follow_up_type || "-"}</td>
+                    <td className="max-w-[220px] truncate px-3 py-2 text-slate-600">{fr.notes || "-"}</td>
                     <td>{fr.status || "Pending"}</td>
                     <td className="px-3 py-2 text-right">
                       {canTouch && fr.status !== "Completed" ? (
@@ -2399,7 +2359,7 @@ function FollowUpsTable({
                           Done
                         </button>
                       ) : (
-                        "—"
+                        "-"
                       )}
                     </td>
                   </tr>
@@ -2412,7 +2372,7 @@ function FollowUpsTable({
       mobile={
         visibleRows.length === 0 ? (
           <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
-            No follow-ups loaded yet. Add one from All Leads → Follow-up, or ensure follow-up rows exist for your visible leads.
+            No follow-ups for the current filters. Add one from All Leads, or adjust search / Owner filter on All Leads.
           </p>
         ) : (
           visibleRows.map((fr) => {
@@ -2424,20 +2384,20 @@ function FollowUpsTable({
                 title={displayLeadName(cli)}
                 subtitle={cli.company_name || undefined}
                 previewFields={[
-                  { label: "Date", value: formatDisplayDate(fr.follow_up_date) || "—" },
-                  { label: "Type", value: fr.follow_up_type || "—" },
+                  { label: "Date", value: formatDisplayDate(fr.follow_up_date) || "-" },
+                  { label: "Type", value: fr.follow_up_type || "-" },
                   { label: "Status", value: fr.status || "Pending" },
-                  { label: "Owner", value: cli.assigned_to ? employeeNameMap[cli.assigned_to] ?? "—" : "—" },
+                  { label: "Owner", value: cli.assigned_to ? employeeNameMap[cli.assigned_to] ?? "-" : "-" },
                 ]}
                 detailFields={[
                   { label: "Lead", value: displayLeadName(cli) },
-                  { label: "Company", value: cli.company_name || "—" },
-                  { label: "Owner", value: cli.assigned_to ? employeeNameMap[cli.assigned_to] ?? "—" : "—" },
-                  { label: "Date", value: formatDisplayDate(fr.follow_up_date) || "—" },
-                  { label: "Time", value: fr.follow_up_time || "—" },
-                  { label: "Type", value: fr.follow_up_type || "—" },
+                  { label: "Company", value: cli.company_name || "-" },
+                  { label: "Owner", value: cli.assigned_to ? employeeNameMap[cli.assigned_to] ?? "-" : "-" },
+                  { label: "Date", value: formatDisplayDate(fr.follow_up_date) || "-" },
+                  { label: "Time", value: fr.follow_up_time || "-" },
+                  { label: "Type", value: fr.follow_up_type || "-" },
                   { label: "Status", value: fr.status || "Pending" },
-                  { label: "Notes", value: fr.notes || "—", clamp: true },
+                  { label: "Notes", value: fr.notes || "-", clamp: true },
                 ]}
                 primaryActions={
                   canTouch && fr.status !== "Completed"
@@ -3063,6 +3023,23 @@ function ConvertedTable({
     onToggle: (id: string) => void;
   };
 }) {
+  const rows = useMemo(
+    () =>
+      leads.filter((leadEntry) => {
+        const st = normalizeStatus(String(leadEntry.status));
+        return st === "Converted" || st === "Admitted";
+      }),
+    [leads],
+  );
+  const {
+    paginatedItems: pageRows,
+    page,
+    setPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    setPageSize,
+  } = usePagination(rows, 25);
   const showBulk = Boolean(bulkSelection);
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white">
@@ -3087,7 +3064,7 @@ function ConvertedTable({
                       <TableBulkCheckbox
                         checked={bulkSelection!.allSelected}
                         indeterminate={bulkSelection!.someSelected}
-                        disabled={!leads.length}
+                        disabled={!rows.length}
                         onChange={bulkSelection!.onToggleAll}
                         ariaLabel="Select all converted leads"
                       />
@@ -3106,7 +3083,7 @@ function ConvertedTable({
                 </tr>
               </thead>
               <tbody>
-                {leads.map((convertedLead) => (
+                {pageRows.map((convertedLead) => (
                   <tr key={convertedLead.id} className="border-t border-[#eef2ff]">
                     {showBulk ? (
                       <td className="px-3 py-2">
@@ -3160,12 +3137,12 @@ function ConvertedTable({
           </div>
         }
         mobile={
-          leads.length === 0 ? (
+          totalItems === 0 ? (
             <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
-              No converted leads yet.
+              No converted / admitted leads for the current filters.
             </p>
           ) : (
-            leads.map((convertedLead) => (
+            pageRows.map((convertedLead) => (
               <MobileRecordCard
                 key={convertedLead.id}
                 title={displayLeadName(convertedLead)}
@@ -3220,6 +3197,14 @@ function ConvertedTable({
           )
         }
       />
+      <TablePagination
+        page={page}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
     </div>
   );
 }
@@ -3241,6 +3226,15 @@ function ProposalTrackerTable({
     onToggle: (id: string) => void;
   };
 }) {
+  const {
+    paginatedItems: pageRows,
+    page,
+    setPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    setPageSize,
+  } = usePagination(leads, 25);
   const showBulk = Boolean(bulkSelection);
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
@@ -3265,7 +3259,7 @@ function ProposalTrackerTable({
                       <TableBulkCheckbox
                         checked={bulkSelection!.allSelected}
                         indeterminate={bulkSelection!.someSelected}
-                        disabled={!leads.length}
+                        disabled={!totalItems}
                         onChange={bulkSelection!.onToggleAll}
                         ariaLabel="Select all proposal leads"
                       />
@@ -3281,14 +3275,14 @@ function ProposalTrackerTable({
                 </tr>
               </thead>
               <tbody>
-                {leads.length === 0 ? (
+                {totalItems === 0 ? (
                   <tr>
                     <td colSpan={showBulk ? 8 : 7} className="px-6 py-12 text-center text-[#64748b]">
                       No leads match the current filters. Adjust filters on the All Leads tab or add a lead.
                     </td>
                   </tr>
                 ) : (
-                  leads.map((proposalLead) => (
+                  pageRows.map((proposalLead) => (
                     <tr key={proposalLead.id} className="border-t border-[#eef2ff]">
                       {showBulk ? (
                         <td className="px-3 py-2">
@@ -3328,7 +3322,7 @@ function ProposalTrackerTable({
                             Update
                           </button>
                         ) : (
-                          <span className="text-xs text-slate-400">Admin only</span>
+                          <span className="text-xs text-slate-400">Read only</span>
                         )}
                       </td>
                     </tr>
@@ -3339,12 +3333,12 @@ function ProposalTrackerTable({
           </div>
         }
         mobile={
-          leads.length === 0 ? (
+          totalItems === 0 ? (
             <p className="rounded-2xl border border-[#e8dcc8] bg-white px-4 py-8 text-center text-sm text-[#64748b]">
               No leads match the current filters. Adjust filters on the All Leads tab or add a lead.
             </p>
           ) : (
-            leads.map((proposalLead) => (
+            pageRows.map((proposalLead) => (
               <MobileRecordCard
                 key={proposalLead.id}
                 title={displayLeadName(proposalLead) || "—"}
@@ -3382,6 +3376,14 @@ function ProposalTrackerTable({
             ))
           )
         }
+      />
+      <TablePagination
+        page={page}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
       />
     </div>
   );
