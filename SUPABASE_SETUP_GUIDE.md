@@ -199,9 +199,18 @@ Run **`finance_schema.sql`**, then **`reimbursement_schema_patch.sql`**, then **
 
 Run **`task_completion_attachments.sql`** so students can upload files when marking tasks complete; assigners see them in task view + get `create_task_completed_notification`.
 
-### Portfolio (admin + student)
+### Reminders & Calendar (additive)
 
-Run **`portfolio_schema.sql`**. Admin: **Portfolio** in sidebar — upload HTML/PDF template, set active. Students: **My Portfolio** — fill `{{placeholders}}`, download HTML or Save as PDF (includes AJ Academy credits).
+Run **`aj_reminders_schema.sql`** after `schema.sql` / profiles helpers (`is_admin`). Creates **only** `aj_reminders*` tables + RLS — **does not alter** Student Master, College Visits, Tasks, Finance, Attendance, or `profiles` columns.
+
+- Admin: `/admin/reminders` · Employee: `/employee/reminders`
+- Dashboard widget: Today’s Reminders (read-only counts + quick snooze/complete)
+- Alerts processor: `POST /api/reminders/cron/process-alerts` with `Authorization: Bearer $CRON_SECRET` (Vercel Cron in `vercel.json` every minute)
+- Optional Web Push: set `REMINDER_VAPID_PUBLIC_KEY`, `REMINDER_VAPID_PRIVATE_KEY`, `NEXT_PUBLIC_REMINDER_VAPID_PUBLIC_KEY`, install `web-push` if sending pushes
+- Rollback: **`aj_reminders_rollback.sql`** (drops only `aj_reminder*` objects)
+
+**Env (new only):** `CRON_SECRET`, optional VAPID keys above.
+
 
 ### Student Master (admin)
 

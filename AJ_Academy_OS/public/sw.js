@@ -130,3 +130,37 @@ self.addEventListener("message", (event) => {
     self.skipWaiting();
   }
 });
+
+/* Additive: Web Push for Reminders & Calendar (does not change fetch/cache behaviour) */
+self.addEventListener("push", (event) => {
+  let payload = { title: "Reminder", body: "", url: "/employee/reminders" };
+  try {
+    if (event.data) payload = { ...payload, ...event.data.json() };
+  } catch {
+    /* ignore */
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title || "Reminder", {
+      body: payload.body || "",
+      icon: "/icons/icon-192x192.png?v=3",
+      badge: "/icons/icon-192x192.png?v=3",
+      data: { url: payload.url || "/employee/reminders" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || "/employee/reminders";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ("focus" in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    }),
+  );
+});

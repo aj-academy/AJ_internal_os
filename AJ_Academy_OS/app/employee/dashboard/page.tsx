@@ -4,6 +4,7 @@ import { CalendarClock, CalendarDays, ClipboardList, Shield } from "lucide-react
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { createClient } from "@/lib/supabase/server";
 import { EmployeeTaskPreview } from "@/components/employee/EmployeeTaskPreview";
+import { TodaysRemindersWidget } from "@/components/reminders/TodaysRemindersWidget";
 import { RedirectMyLeaveHash } from "@/components/employee/RedirectMyLeaveHash";
 import { formatDisplayDate, formatTimeIST, todayDateIST } from "@/lib/datetime";
 
@@ -173,6 +174,8 @@ export default async function EmployeeDashboardPage() {
           ))}
         </div>
       </div>
+
+      <TodaysRemindersWidget href="/employee/reminders" />
 
       <EmployeeTaskPreview />
     </section>

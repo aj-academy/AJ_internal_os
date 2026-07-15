@@ -5,6 +5,7 @@ const adminSidebarItems = [
   { label: "Dashboard", href: "/admin/dashboard" },
   { label: "Attendance System", href: "/admin/attendance" },
   { label: "Counselling", href: "/admin/counselling" },
+  { label: "Reminders & Calendar", href: "/admin/reminders" },
   { label: "User Master", href: "/admin/employee-master" },
   { label: "Student Master", href: "/admin/student-master" },
   { label: "College Visits", href: "/admin/college-visits" },

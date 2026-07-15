@@ -34,6 +34,7 @@ import { fetchOrEmpty, formatBatchAccessWarning, type SupabaseQueryError } from 
 import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 import { AttendanceSelfieThumb } from "@/components/attendance/AttendanceSelfieThumb";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { TodaysRemindersWidget } from "@/components/reminders/TodaysRemindersWidget";
 import { Button } from "@/components/ui/button";
 
 type DateFilter = "today" | "week" | "month" | "year";
@@ -527,6 +528,8 @@ export default function AdminDashboardPage() {
           <StatCard key={item.title} title={item.title} value={loading ? "…" : item.value} trend={item.trendVal} description={item.description} icon={item.icon} />
         ))}
       </div>
+
+      <TodaysRemindersWidget href="/admin/reminders" />
 
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="rounded-[20px] border border-[#e8dcc8] bg-white p-4 shadow-sm">
