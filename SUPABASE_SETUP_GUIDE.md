@@ -205,7 +205,10 @@ Run **`aj_reminders_schema.sql`** after `schema.sql` / profiles helpers (`is_adm
 
 - Admin: `/admin/reminders` · Employee: `/employee/reminders`
 - Dashboard widget: Today’s Reminders (read-only counts + quick snooze/complete)
-- Alerts processor: `POST /api/reminders/cron/process-alerts` with `Authorization: Bearer $CRON_SECRET` (Vercel Cron in `vercel.json` every minute)
+- Alerts processor: `POST /api/reminders/cron/process-alerts` with `Authorization: Bearer $CRON_SECRET`
+  - `vercel.json` schedules **once daily** (`0 4 * * *` UTC) so Hobby-plan deploys succeed (Hobby forbids denser cron).
+  - For frequent processing on Hobby, point an external cron (e.g. every 1–5 min) at the same URL with the Bearer secret.
+  - Pro plan can change the schedule to `*/5 * * * *` if desired.
 - Optional Web Push: set `REMINDER_VAPID_PUBLIC_KEY`, `REMINDER_VAPID_PRIVATE_KEY`, `NEXT_PUBLIC_REMINDER_VAPID_PUBLIC_KEY`, install `web-push` if sending pushes
 - Rollback: **`aj_reminders_rollback.sql`** (drops only `aj_reminder*` objects)
 

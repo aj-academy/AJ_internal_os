@@ -23,12 +23,15 @@ Set env:
 CRON_SECRET=long-random-string
 ```
 
-Vercel Cron hits `/api/reminders/cron/process-alerts` every minute (`vercel.json`).  
-Locally you can call:
+Vercel Cron hits `/api/reminders/cron/process-alerts` once daily (`0 4 * * *` UTC) so **Hobby** deploys succeed.
+
+For near-real-time alerts on Hobby, use an external scheduler every 1–5 minutes:
 
 ```bash
-curl -X POST -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/reminders/cron/process-alerts
+curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://YOUR-APP.vercel.app/api/reminders/cron/process-alerts
 ```
+
+On **Pro**, you may change `vercel.json` to `*/5 * * * *`.
 
 ## 4. Optional Web Push
 
