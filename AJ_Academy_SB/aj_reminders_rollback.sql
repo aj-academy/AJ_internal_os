@@ -34,4 +34,6 @@ drop table if exists public.aj_reminder_user_settings;
 drop table if exists public.aj_reminders;
 
 drop function if exists public.aj_reminder_user_can_access(uuid);
+drop function if exists public.aj_reminder_is_assignee(uuid);
+drop function if exists public.aj_reminder_is_creator(uuid);
 drop function if exists public.aj_reminder_set_updated_at();

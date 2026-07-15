@@ -1,12 +1,31 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApiSession } from "@/lib/security";
 import { isMissingRemindersTable, mapReminderRow } from "@/lib/reminders/reminderHelpers";
+import { processDueReminderAlerts } from "@/lib/reminders/processDueAlerts";
 
-/** Pending in-app reminder notifications for the signed-in user (popup feed). */
-export async function GET() {
+/**
+ * Pending in-app reminder notifications for the signed-in user (popup feed).
+ * By default also processes any due alerts so sound/popup work without waiting
+ * for the daily Vercel cron (Hobby plan runs once/day only).
+ */
+export async function GET(request: Request) {
   const { response, user } = await requireStaffApiSession();
   if (response || !user) return response!;
+
+  const url = new URL(request.url);
+  const skipProcess = url.searchParams.get("process") === "0";
+
+  if (!skipProcess) {
+    try {
+      const admin = createAdminClient();
+      await processDueReminderAlerts(admin);
+    } catch {
+      /* service role missing in some local setups — cron still handles it */
+    }
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("aj_reminder_notifications")

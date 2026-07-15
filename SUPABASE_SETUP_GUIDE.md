@@ -204,13 +204,15 @@ Run **`task_completion_attachments.sql`** so students can upload files when mark
 
 ### Reminders & Calendar (additive)
 
-Run **`aj_reminders_schema.sql`** after `schema.sql` / profiles helpers (`is_admin`). Creates **only** `aj_reminders*` tables + RLS — **does not alter** Student Master, College Visits, Tasks, Finance, Attendance, or `profiles` columns.
+Run **`aj_reminders_schema.sql`** after `schema.sql` / profiles helpers (`is_admin`). Creates **only** `aj_reminders*` tables + RLS — **does not alter** Student Master, College Visits, Tasks, Finance, Attendance, or `profiles` columns. If reminder save fails with `infinite recursion detected in policy for relation "aj_reminders"`, run **`aj_reminders_rls_recursion_fix.sql`** (safe to re-run; does not touch CRM).
 
 - Admin: `/admin/reminders` · Employee: `/employee/reminders`
 - Dashboard widget: Today’s Reminders (read-only counts + quick snooze/complete)
+- While any admin/employee page is open, due alerts are processed on poll (~20s) so sound/popup do not wait for the daily Hobby cron
+- In-app popup + Web Audio chime + optional browser notifications (enable in Reminders → Settings)
 - Alerts processor: `POST /api/reminders/cron/process-alerts` with `Authorization: Bearer $CRON_SECRET`
   - `vercel.json` schedules **once daily** (`0 4 * * *` UTC) so Hobby-plan deploys succeed (Hobby forbids denser cron).
-  - For frequent processing on Hobby, point an external cron (e.g. every 1–5 min) at the same URL with the Bearer secret.
+  - For frequent processing when no one is logged in, point an external cron (e.g. every 1–5 min) at the same URL with the Bearer secret.
   - Pro plan can change the schedule to `*/5 * * * *` if desired.
 - Optional Web Push: set `REMINDER_VAPID_PUBLIC_KEY`, `REMINDER_VAPID_PRIVATE_KEY`, `NEXT_PUBLIC_REMINDER_VAPID_PUBLIC_KEY`, install `web-push` if sending pushes
 - Rollback: **`aj_reminders_rollback.sql`** (drops only `aj_reminder*` objects)
