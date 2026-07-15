@@ -4,7 +4,20 @@
 -- Run after employee_student_master_rls.sql + tasks_assignment_link_patch.sql + tasks_employee_rls_fix.sql.
 -- Safe to re-run.
 
--- Robust membership check: client id present in tasks.client_ids JSON array (string elements)
+-- Helper: does tasks.client_ids JSON array contain this UUID (string or json scalar)?
+create or replace function public.task_client_ids_contain(p_client_ids jsonb, p_client_id uuid)
+returns boolean
+language sql
+immutable
+as $$
+  select exists (
+    select 1
+    from jsonb_array_elements(coalesce(p_client_ids, '[]'::jsonb)) as e(val)
+    where lower(btrim(both '"' from e.val::text)) = lower(p_client_id::text)
+       or lower(coalesce(e.val #>> '{}', '')) = lower(p_client_id::text)
+  );
+$$;
+
 create or replace function public.task_links_client(p_client_id uuid)
 returns boolean
 language sql
@@ -17,34 +30,43 @@ as $$
     select 1
     from public.tasks t
     where (t.assigned_to = auth.uid() or t.assigned_by = auth.uid())
-      and exists (
-        select 1
-        from jsonb_array_elements_text(coalesce(t.client_ids, '[]'::jsonb)) as elem(val)
-        where lower(btrim(elem.val)) = lower(p_client_id::text)
-      )
+      and public.task_client_ids_contain(t.client_ids, p_client_id)
   );
 $$;
 
+grant execute on function public.task_client_ids_contain(jsonb, uuid) to authenticated;
 grant execute on function public.task_links_client(uuid) to authenticated;
 
 comment on function public.task_links_client(uuid) is
   'True when the current user is assignee or assigner of a task whose client_ids includes this client id.';
 
--- SECURITY DEFINER loader so My Tasks always gets real Student Master rows for linked leads
+-- SECURITY DEFINER loader — uses invoker uid once; does not nest auth.uid() through another definer call only
 create or replace function public.get_my_task_linked_clients(p_ids uuid[])
 returns setof public.clients
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 set row_security = off
 as $$
+declare
+  uid uuid := auth.uid();
+begin
+  if uid is null or p_ids is null or cardinality(p_ids) = 0 then
+    return;
+  end if;
+
+  return query
   select c.*
   from public.clients c
-  where p_ids is not null
-    and cardinality(p_ids) > 0
-    and c.id = any (p_ids)
-    and public.task_links_client(c.id);
+  where c.id = any (p_ids)
+    and exists (
+      select 1
+      from public.tasks t
+      where (t.assigned_to = uid or t.assigned_by = uid)
+        and public.task_client_ids_contain(t.client_ids, c.id)
+    );
+end;
 $$;
 
 grant execute on function public.get_my_task_linked_clients(uuid[]) to authenticated;
@@ -97,7 +119,6 @@ create table if not exists public.employee_task_pins (
   primary key (user_id, task_id)
 );
 
--- Older DBs created without pin_section
 alter table public.employee_task_pins
   add column if not exists pin_section text;
 

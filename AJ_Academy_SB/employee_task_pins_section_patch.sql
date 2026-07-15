@@ -1,6 +1,7 @@
 -- Fix: Pin selected to dashboard for assigned Student Lead / College / Project tasks.
 -- Run after tasks_linked_lead_access.sql (or when pin button appears to do nothing).
 -- Safe to re-run.
+-- App may also pin via /api/tasks/pins (service role) as a fallback.
 
 alter table public.employee_task_pins
   add column if not exists pin_section text;

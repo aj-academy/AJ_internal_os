@@ -19,7 +19,7 @@ type PinnedTask = TaskRecord & {
   linked_summary?: string;
 };
 
-const SECTION_ORDER: { id: TaskAssignmentType | "all" | "other"; label: string; hrefSuffix: string }[] = [
+const SECTION_ORDER: { id: TaskAssignmentType | "other"; label: string; hrefSuffix: string }[] = [
   { id: "lead", label: "Student Lead", hrefSuffix: "?section=lead" },
   { id: "college", label: "College Visit", hrefSuffix: "?section=college" },
   { id: "project", label: "Project", hrefSuffix: "?section=project" },
@@ -29,28 +29,16 @@ const SECTION_ORDER: { id: TaskAssignmentType | "all" | "other"; label: string; 
 const TASK_PIN_SELECT =
   "id,title,description,assigned_to,priority,status,start_date,due_date,progress,project_id,assignment_type,client_ids,college_visit_ids,created_at,updated_at";
 
+/** Bucket from pin_section first, then task.assignment_type. */
 function sectionOf(task: PinnedTask): (typeof SECTION_ORDER)[number]["id"] {
-  const fromPin = (task.pin_section || "").trim();
+  const fromPin = (task.pin_section || "").trim().toLowerCase();
   if (fromPin === "lead" || fromPin === "college" || fromPin === "project") return fromPin;
-  if (fromPin === "all") {
-    const t = task.assignment_type;
-    if (t === "lead" || t === "college" || t === "project") return t;
-    return "other";
-  }
-  const t = task.assignment_type;
+  const t = (task.assignment_type || "").trim().toLowerCase();
   if (t === "lead" || t === "college" || t === "project") return t;
   return "other";
 }
 
 function parseIdList(raw: unknown): string[] {
-  if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
-  if (typeof raw === "string") {
-    try {
-      return parseClientIds(JSON.parse(raw));
-    } catch {
-      return parseClientIds(raw);
-    }
-  }
   return parseClientIds(raw);
 }
 
@@ -71,30 +59,30 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
       }
 
       const pinMeta: { task_id: string; pin_section: string | null }[] = [];
+      let pinRows: { task_id: string; pin_section?: string | null }[] = [];
       const pinsWithSection = await supabase
         .from("employee_task_pins")
         .select("task_id,pinned_at,pin_section")
         .eq("user_id", user.id)
         .order("pinned_at", { ascending: false })
-        .limit(24);
-      const pinsFallback =
-        pinsWithSection.error && /pin_section|column|schema cache/i.test(pinsWithSection.error.message)
-          ? await supabase
-              .from("employee_task_pins")
-              .select("task_id,pinned_at")
-              .eq("user_id", user.id)
-              .order("pinned_at", { ascending: false })
-              .limit(24)
-          : null;
-      if (pinsWithSection.error && !pinsFallback) {
-        console.warn("employee_task_pins load:", pinsWithSection.error.message);
+        .limit(40);
+      if (pinsWithSection.error && /pin_section|column|schema cache/i.test(pinsWithSection.error.message)) {
+        const fb = await supabase
+          .from("employee_task_pins")
+          .select("task_id,pinned_at")
+          .eq("user_id", user.id)
+          .order("pinned_at", { ascending: false })
+          .limit(40);
+        pinRows = (fb.data ?? []) as typeof pinRows;
+      } else {
+        pinRows = (pinsWithSection.data ?? []) as typeof pinRows;
       }
-      const pinRows = pinsFallback?.data ?? pinsWithSection.data ?? [];
+
       for (const p of pinRows) {
         if (p.task_id) {
           pinMeta.push({
-            task_id: p.task_id as string,
-            pin_section: "pin_section" in p ? ((p as { pin_section?: string | null }).pin_section ?? null) : null,
+            task_id: p.task_id,
+            pin_section: p.pin_section ?? null,
           });
         }
       }
@@ -126,7 +114,13 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
         const byId = Object.fromEntries((pinnedRows ?? []).map((t) => [t.id, t]));
         for (const id of pinnedIds) {
           if (byId[id]) {
-            pinnedTasks.push({ ...byId[id], pinned: true, pin_section: pinSectionById[id] });
+            // Prefer stored pin_section; if missing, use assignment_type so buckets still work
+            const stored = pinSectionById[id];
+            const section =
+              stored && stored.trim()
+                ? stored
+                : byId[id].assignment_type || "all";
+            pinnedTasks.push({ ...byId[id], pinned: true, pin_section: section });
           }
         }
       }
@@ -143,9 +137,8 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
       const mergedBase: PinnedTask[] = [
         ...pinnedTasks,
         ...recent.map((t) => ({ ...t, pinned: false, pin_section: t.assignment_type ?? null })),
-      ].slice(0, 16);
+      ].slice(0, 24);
 
-      // Hydrate linked labels for section tables
       const clientIds = [...new Set(mergedBase.flatMap((t) => parseIdList(t.client_ids)))];
       const collegeIds = [...new Set(mergedBase.flatMap((t) => parseIdList(t.college_visit_ids)))];
       const projectIds = [...new Set(mergedBase.map((t) => t.project_id).filter(Boolean) as string[])];
@@ -154,22 +147,51 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
       const collegeLabel: Record<string, string> = {};
       const projectLabel: Record<string, string> = {};
 
-      if (clientIds.length) {
+      if (clientIds.length || collegeIds.length) {
+        try {
+          const res = await fetch("/api/tasks/linked-crm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ clientIds, collegeIds }),
+          });
+          if (res.ok) {
+            const json = (await res.json()) as {
+              clients?: { id: string; lead_name?: string | null; name?: string | null }[];
+              colleges?: { id: string; college_name?: string | null; location?: string | null }[];
+            };
+            for (const c of json.clients ?? []) {
+              clientLabel[c.id] = c.lead_name?.trim() || c.name?.trim() || c.id.slice(0, 8);
+            }
+            for (const c of json.colleges ?? []) {
+              collegeLabel[c.id] =
+                [c.college_name, c.location].filter(Boolean).join(" · ") || c.id.slice(0, 8);
+            }
+          }
+        } catch {
+          /* fall through to direct selects */
+        }
+      }
+
+      if (clientIds.some((id) => !clientLabel[id])) {
         const { data: clients } = await supabase.from("clients").select("id,lead_name,name").in("id", clientIds);
         for (const c of clients ?? []) {
           const row = c as { id: string; lead_name?: string | null; name?: string | null };
-          clientLabel[row.id] = row.lead_name?.trim() || row.name?.trim() || row.id.slice(0, 8);
+          if (!clientLabel[row.id]) {
+            clientLabel[row.id] = row.lead_name?.trim() || row.name?.trim() || row.id.slice(0, 8);
+          }
         }
       }
-      if (collegeIds.length) {
+      if (collegeIds.some((id) => !collegeLabel[id])) {
         const { data: colleges } = await supabase
           .from("college_visits")
           .select("id,college_name,location")
           .in("id", collegeIds);
         for (const c of colleges ?? []) {
           const row = c as { id: string; college_name?: string | null; location?: string | null };
-          collegeLabel[row.id] =
-            [row.college_name, row.location].filter(Boolean).join(" · ") || row.id.slice(0, 8);
+          if (!collegeLabel[row.id]) {
+            collegeLabel[row.id] =
+              [row.college_name, row.location].filter(Boolean).join(" · ") || row.id.slice(0, 8);
+          }
         }
       }
       if (projectIds.length) {
@@ -227,11 +249,12 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
   const grouped = useMemo(() => {
     const pinnedOnly = rows.filter((r) => r.pinned);
     const recentOnly = rows.filter((r) => !r.pinned);
+    // Always render lead/college/project buckets that have pins (never a single dump)
     const buckets = SECTION_ORDER.map((s) => ({
       ...s,
       items: pinnedOnly.filter((t) => sectionOf(t) === s.id),
     })).filter((b) => b.items.length > 0);
-    return { buckets, recentOnly };
+    return { buckets, recentOnly, pinnedCount: pinnedOnly.length };
   }, [rows]);
 
   const th = "px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-[#64748b]";
@@ -242,11 +265,11 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">My tasks</p>
-          <h3 className="mt-1 text-lg font-semibold text-[#0f172a]">Dashboard pins & recent work</h3>
+          <h3 className="mt-1 text-lg font-semibold text-[#0f172a]">Dashboard pins by section</h3>
           <p className="mt-1 text-sm text-[#64748b]">
             {receiveOnly
               ? "Tasks assigned to you by admins, mentors, or freelancers."
-              : "Pins from My Tasks subsections (Student Lead / College Visit / Project), plus recent work."}
+              : "Pinned tasks appear under Student Lead / College Visit / Project tables (from My Tasks Pin selected)."}
           </p>
         </div>
         <Link
@@ -269,15 +292,26 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
               <p className="mt-1">
                 {receiveOnly
                   ? "When someone assigns you work, it will show here and on My Tasks."
-                  : "Open My Tasks -> pick a subsection -> multi-select rows -> Pin selected to dashboard."}
+                  : "Open My Tasks -> Student Lead / College Visit / Project -> select rows -> Pin selected to dashboard."}
               </p>
             </div>
           </div>
         ) : (
           <>
+            {grouped.pinnedCount === 0 ? (
+              <div className="rounded-xl border border-dashed border-[#e8dcc8] bg-[#fffbeb] px-4 py-3 text-xs text-[#92400e]">
+                No pins yet. From My Tasks, open a subsection, select tasks, then click Pin selected to dashboard.
+              </div>
+            ) : null}
             {grouped.buckets.map((bucket) => {
               const linkedCol =
-                bucket.id === "lead" ? "Student Lead(s)" : bucket.id === "college" ? "College(s)" : bucket.id === "project" ? "Project" : "Linked";
+                bucket.id === "lead"
+                  ? "Student Lead(s)"
+                  : bucket.id === "college"
+                    ? "College(s)"
+                    : bucket.id === "project"
+                      ? "Project"
+                      : "Linked";
               return (
                 <div key={bucket.id} className="overflow-hidden rounded-xl border border-[#e8edf5]">
                   <div className="flex items-center justify-between gap-2 border-b border-[#e8edf5] bg-[#f8fbff] px-4 py-2">

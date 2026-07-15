@@ -20,7 +20,7 @@ export async function logTaskActivity(
     notes?: string | null;
     metadata?: Record<string, unknown>;
   },
-) {
+): Promise<{ error: string | null }> {
   const { error } = await supabase.from("task_activities").insert({
     task_id: input.taskId,
     actor_id: input.actorId,
@@ -28,7 +28,11 @@ export async function logTaskActivity(
     notes: input.notes ?? null,
     metadata: input.metadata ?? {},
   });
-  if (error) console.warn("logTaskActivity:", error.message);
+  if (error) {
+    console.warn("logTaskActivity:", error.message);
+    return { error: error.message };
+  }
+  return { error: null };
 }
 
 export async function fetchTaskActivities(
@@ -62,6 +66,20 @@ export async function fetchTaskActivities(
 }
 
 export function parseClientIds(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((id): id is string => typeof id === "string" && id.length > 0);
+  if (Array.isArray(raw)) {
+    return raw
+      .map((id) => String(id ?? "").trim())
+      .filter((id) => id.length > 0);
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      return parseClientIds(JSON.parse(raw));
+    } catch {
+      return raw
+        .split(/[,\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+  }
+  return [];
 }

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -12,6 +12,7 @@ import { TaskForm, type TaskFormValue } from "@/components/task/TaskForm";
 import { TaskTable } from "@/components/task/TaskTable";
 import { TaskCompleteDialog } from "@/components/task/TaskCompleteDialog";
 import { TaskAttachmentUpload } from "@/components/task/TaskAttachmentUpload";
+import { TaskViewPanel } from "@/components/task/TaskViewPanel";
 import type { AssigneeProfile } from "@/components/task/TaskAssigneePicker";
 import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
@@ -216,7 +217,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     setProjectOptions(
       (data ?? []).map((row: { id: string; project_name: string | null; project_code: string | null }) => ({
         id: row.id,
-        label: [row.project_code, row.project_name].filter(Boolean).join(" · ") || row.id.slice(0, 8),
+        label: [row.project_code, row.project_name].filter(Boolean).join(" Â· ") || row.id.slice(0, 8),
       })),
     );
   }, [supabase]);
@@ -501,35 +502,83 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         projectLabelMap = Object.fromEntries(
           (projects ?? []).map((p: { id: string; project_name: string | null; project_code: string | null }) => [
             p.id,
-            [p.project_code, p.project_name].filter(Boolean).join(" · ") || p.id.slice(0, 8),
+            [p.project_code, p.project_name].filter(Boolean).join(" Â· ") || p.id.slice(0, 8),
           ]),
         );
       }
-      if (clientIds.length) {
+      if (clientIds.length || collegeIds.length) {
+        try {
+          const linkedRes = await fetch("/api/tasks/linked-crm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ clientIds, collegeIds }),
+          });
+          if (linkedRes.ok) {
+            const linkedJson = (await linkedRes.json()) as {
+              clients?: CrmClientRow[];
+              colleges?: CollegeVisitRow[];
+            };
+            if (clientIds.length) {
+              const detailMap: Record<string, ReturnType<typeof mapClientRowToTaskLinkedLead>> = {};
+              const fullMap: Record<string, CrmClientRow> = {};
+              for (const row of linkedJson.clients ?? []) {
+                fullMap[row.id] = row;
+                detailMap[row.id] = mapClientRowToTaskLinkedLead(row);
+                clientLabelMap[row.id] = detailMap[row.id].name;
+              }
+              clientDetailMap = detailMap;
+              setLinkedLeadById(fullMap);
+            } else {
+              setLinkedLeadById({});
+            }
+            if (collegeIds.length) {
+              const fullMap: Record<string, CollegeVisitRow> = {};
+              collegeLabelMap = Object.fromEntries(
+                (linkedJson.colleges ?? []).map((row) => {
+                  fullMap[row.id] = row;
+                  return [
+                    row.id,
+                    [row.college_name, row.location].filter(Boolean).join(" Â· ") || row.id.slice(0, 8),
+                  ];
+                }),
+              );
+              setLinkedCollegeById(fullMap);
+            } else {
+              setLinkedCollegeById({});
+            }
+          } else {
+            console.warn("My Tasks: linked-crm API", await linkedRes.text());
+          }
+        } catch (e) {
+          console.warn("My Tasks: linked-crm fetch failed", e);
+        }
+      }
+
+      // Fallbacks if API returned nothing / unavailable (RPC + direct select)
+      const missingClientIds = clientIds.filter((id) => !clientDetailMap[id]);
+      if (missingClientIds.length) {
         let clients: unknown[] | null = null;
         let clientsErr: { message: string } | null = null;
 
-        // Prefer RPC (security definer) so assignees always get real Student Master rows
-        const rpc = await supabase.rpc("get_my_task_linked_clients", { p_ids: clientIds });
-        if (!rpc.error && rpc.data) {
+        const rpc = await supabase.rpc("get_my_task_linked_clients", { p_ids: missingClientIds });
+        if (!rpc.error && Array.isArray(rpc.data) && rpc.data.length > 0) {
           clients = rpc.data as unknown[];
         } else {
           let clientSelect = STUDENT_LEAD_SELECT;
-          let res = await supabase.from("clients").select(clientSelect).in("id", clientIds);
+          let res = await supabase.from("clients").select(clientSelect).in("id", missingClientIds);
           if (res.error && isMissingStudentProposalFileColumn(res.error.message)) {
             clientSelect = STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES;
-            res = await supabase.from("clients").select(clientSelect).in("id", clientIds);
+            res = await supabase.from("clients").select(clientSelect).in("id", missingClientIds);
           }
           clients = res.data;
           clientsErr = res.error;
-          // If RLS returned empty (no error) but we requested IDs, try contact-only select as last resort
           if (!clientsErr && !(clients ?? []).length) {
             const minimal = await supabase
               .from("clients")
               .select(
                 "id,lead_name,name,phone,whatsapp,email,city,status,priority,assigned_to,phone_called,whatsapp_sent,email_sent",
               )
-              .in("id", clientIds);
+              .in("id", missingClientIds);
             if (!minimal.error && (minimal.data ?? []).length) {
               clients = minimal.data;
             }
@@ -539,7 +588,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         if (clientsErr) {
           console.warn("My Tasks: could not load linked student leads", clientsErr.message);
         }
-        const detailMap: Record<string, ReturnType<typeof mapClientRowToTaskLinkedLead>> = {};
+        const detailMap = { ...clientDetailMap };
         const fullMap: Record<string, CrmClientRow> = {};
         for (const c of clients ?? []) {
           const row = c as unknown as CrmClientRow;
@@ -548,18 +597,17 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           clientLabelMap[row.id] = detailMap[row.id].name;
         }
         clientDetailMap = detailMap;
-        setLinkedLeadById(fullMap);
-        const missing = clientIds.filter((id) => !fullMap[id]);
-        if (missing.length) {
+        setLinkedLeadById((prev) => ({ ...prev, ...fullMap }));
+        if (missingClientIds.some((id) => !detailMap[id])) {
           console.warn(
-            "My Tasks: linked leads not readable (run AJ_Academy_SB/tasks_linked_lead_access.sql):",
-            missing.slice(0, 5),
+            "My Tasks: some linked leads still missing â€” re-run AJ_Academy_SB/tasks_linked_lead_access.sql and ensure SUPABASE_SERVICE_ROLE_KEY is set.",
           );
         }
-      } else {
+      } else if (!clientIds.length) {
         setLinkedLeadById({});
       }
-      if (collegeIds.length) {
+
+      if (collegeIds.length && !Object.keys(collegeLabelMap).length) {
         let collegeSelect = COLLEGE_VISIT_SELECT;
         let { data: colleges, error: collegesErr } = await supabase
           .from("college_visits")
@@ -582,11 +630,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           (colleges ?? []).map((c) => {
             const row = c as unknown as CollegeVisitRow;
             fullMap[row.id] = row;
-            return [row.id, [row.college_name, row.location].filter(Boolean).join(" · ") || row.id.slice(0, 8)];
+            return [row.id, [row.college_name, row.location].filter(Boolean).join(" Â· ") || row.id.slice(0, 8)];
           }),
         );
         setLinkedCollegeById(fullMap);
-      } else {
+      } else if (!collegeIds.length) {
         setLinkedCollegeById({});
       }
 
@@ -754,7 +802,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       employees.map((employee) => {
         const name = employee.full_name || employee.email || "Unnamed";
         const dept = employee.department?.trim();
-        const label = dept ? `${name} — ${dept}` : name;
+        const label = dept ? `${name} â€” ${dept}` : name;
         return { id: employee.id, label };
       }),
     [employees],
@@ -916,14 +964,14 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     setSelectedLeadLabels(task.linked_lead_labels ?? []);
     setLeadSelectionPath(
       task.assignment_type === "lead" && task.linked_lead_labels?.length
-        ? `Task Assignment → Assignee → Leads → ${task.linked_lead_labels.length} selected`
+        ? `Task Assignment â†’ Assignee â†’ Leads â†’ ${task.linked_lead_labels.length} selected`
         : "",
     );
     setSelectedCollegeVisitIds(task.college_visit_ids ?? []);
     setSelectedCollegeLabels(task.linked_college_labels ?? []);
     setCollegeSelectionPath(
       task.assignment_type === "college" && task.linked_college_labels?.length
-        ? `Task Assignment → Assignee → Colleges → ${task.linked_college_labels.length} selected`
+        ? `Task Assignment â†’ Assignee â†’ Colleges â†’ ${task.linked_college_labels.length} selected`
         : "",
     );
     setPendingAttachmentFiles([]);
@@ -1473,13 +1521,13 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       }
       if (currentUserId) {
         const notes: string[] = [];
-        if (prior && prior.status !== status) notes.push(`Status → ${status}`);
-        if (prior && prior.progress !== progress) notes.push(`Progress → ${progress}%`);
+        if (prior && prior.status !== status) notes.push(`Status â†’ ${status}`);
+        if (prior && prior.progress !== progress) notes.push(`Progress â†’ ${progress}%`);
         await logTaskActivity(supabase, {
           taskId,
           actorId: currentUserId,
           activityType: "progress_update",
-          notes: notes.join(" · ") || "Task updated.",
+          notes: notes.join(" Â· ") || "Task updated.",
           metadata: { status, progress },
         });
       }
@@ -1565,7 +1613,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           </h2>
           <p className="mt-1 text-sm text-[#64748b]">
             {isStudent
-              ? "Work assigned to you by admins, mentors, or freelancers. Update progress and mark tasks complete — you cannot assign tasks to others."
+              ? "Work assigned to you by admins, mentors, or freelancers. Update progress and mark tasks complete â€” you cannot assign tasks to others."
               : isPortalAssignee && !isEmployee
                 ? "Work assigned to you by admins. Update progress and mark tasks complete."
               : isEmployee
@@ -1623,10 +1671,10 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       <TableSearchBar
         value={searchText}
         onChange={setSearchText}
-        placeholder="Search task title…"
+        placeholder="Search task titleâ€¦"
         showClear={filtersActive}
         onClear={clearTableFilters}
-        hint={`Showing ${paginatedRows.length} of ${filteredRows.length} task(s)${linkTypeFilter !== "all" ? ` · ${LINK_TYPE_TABS.find((t) => t.id === linkTypeFilter)?.label ?? ""}` : ""}`}
+        hint={`Showing ${paginatedRows.length} of ${filteredRows.length} task(s)${linkTypeFilter !== "all" ? ` Â· ${LINK_TYPE_TABS.find((t) => t.id === linkTypeFilter)?.label ?? ""}` : ""}`}
       />
 
       {isEmployee ? (
@@ -1657,8 +1705,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           </div>
           <p className="text-sm text-[#64748b]">
             {employeeDelegatedView
-              ? `Work you delegated — track status and activity (read-only). (${filteredRows.length} shown)`
-              : `Work assigned to you — call/WhatsApp/email linked student leads, update progress, and open View / Activity. (${filteredRows.length} shown)`}
+              ? `Work you delegated â€” track status and activity (read-only). (${filteredRows.length} shown)`
+              : `Work assigned to you â€” call/WhatsApp/email linked student leads, update progress, and open View / Activity. (${filteredRows.length} shown)`}
           </p>
         </div>
       ) : null}
@@ -1839,7 +1887,16 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           employeeNameMap={employeeNameMap}
           supabase={supabase}
           currentUserId={currentUserId}
+          linkedLeadRows={
+            (viewTask.client_ids ?? [])
+              .map((id) => linkedLeadById[id])
+              .filter(Boolean) as CrmClientRow[]
+          }
+          canEdit={!employeeDelegatedView}
           onClose={() => setViewTask(null)}
+          onSaved={() => {
+            void reload();
+          }}
           onLeadOutreachUpdated={() => void reload()}
           onError={setError}
           onSuccess={setSuccess}
@@ -1863,7 +1920,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                 aria-label="Close"
                 className="touch-target flex items-center justify-center rounded-full border border-[#e8dcc8] bg-white p-2 text-[#3d3428] shadow-sm transition hover:bg-[#faf3e3] active:scale-95"
               >
-                <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">×</span>
+                <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">Ã—</span>
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
@@ -1899,10 +1956,10 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                 assigneeLockedToSelf={false}
                 assigneeHelperText={
                   isEmployee
-                    ? "Pick category → department → person. Employees show name and department."
+                    ? "Pick category â†’ department â†’ person. Employees show name and department."
                     : departmentAssigner
                     ? "Only active students in your department are listed."
-                    : "Pick Student, Freelancer, Mentor, or Employee — then department and person."
+                    : "Pick Student, Freelancer, Mentor, or Employee â€” then department and person."
                 }
                 submitting={submitting}
                 onChange={(next) => {
@@ -1934,330 +1991,6 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         </>
       ) : null}
     </section>
-  );
-}
-
-function TaskViewPanel({
-  task,
-  employeeNameMap,
-  supabase,
-  currentUserId,
-  onClose,
-  onLeadOutreachUpdated,
-  onError,
-  onSuccess,
-}: {
-  task: TaskRecord;
-  employeeNameMap: Record<string, string>;
-  supabase: ReturnType<typeof createClient>;
-  currentUserId: string;
-  onClose: () => void;
-  onLeadOutreachUpdated?: () => void;
-  onError?: (msg: string) => void;
-  onSuccess?: (msg: string) => void;
-}) {
-  const [activities, setActivities] = useState<TaskActivityRow[]>([]);
-  const [activitiesLoading, setActivitiesLoading] = useState(true);
-  const [pinned, setPinned] = useState(false);
-  const [pinBusy, setPinBusy] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setActivitiesLoading(true);
-      try {
-        const rows = await fetchTaskActivities(supabase, task.id);
-        if (!cancelled) setActivities(rows);
-      } catch {
-        if (!cancelled) setActivities([]);
-      } finally {
-        if (!cancelled) setActivitiesLoading(false);
-      }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [supabase, task.id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      if (!currentUserId) return;
-      const { data } = await supabase
-        .from("employee_task_pins")
-        .select("task_id")
-        .eq("user_id", currentUserId)
-        .eq("task_id", task.id)
-        .maybeSingle();
-      if (!cancelled) setPinned(Boolean(data));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentUserId, supabase, task.id]);
-
-  const togglePin = async () => {
-    if (!currentUserId || pinBusy) return;
-    setPinBusy(true);
-    try {
-      if (pinned) {
-        const { error } = await supabase
-          .from("employee_task_pins")
-          .delete()
-          .eq("user_id", currentUserId)
-          .eq("task_id", task.id);
-        if (error) throw new Error(error.message);
-        setPinned(false);
-        onSuccess?.("Removed from your dashboard.");
-      } else {
-        const section =
-          task.assignment_type === "lead" || task.assignment_type === "college" || task.assignment_type === "project"
-            ? task.assignment_type
-            : "all";
-        const { data: pinnedCount, error: rpcError } = await supabase.rpc("upsert_my_task_pins", {
-          p_task_ids: [task.id],
-          p_pin_section: section,
-        });
-        if (!rpcError) {
-          const n = typeof pinnedCount === "number" ? pinnedCount : Number(pinnedCount) || 0;
-          if (n <= 0) {
-            throw new Error(
-              "Could not pin this task. Run AJ_Academy_SB/employee_task_pins_section_patch.sql if pinning keeps failing.",
-            );
-          }
-          setPinned(true);
-          onSuccess?.("Added to your dashboard.");
-          return;
-        }
-        if (!/upsert_my_task_pins|function|schema cache|could not find/i.test(rpcError.message)) {
-          throw new Error(rpcError.message);
-        }
-
-        const { error } = await supabase.from("employee_task_pins").insert({
-          user_id: currentUserId,
-          task_id: task.id,
-          pin_section: section,
-          pinned_at: new Date().toISOString(),
-        });
-        if (error) {
-          if (/pin_section|column|schema cache/i.test(error.message)) {
-            const { error: fallback } = await supabase.from("employee_task_pins").insert({
-              user_id: currentUserId,
-              task_id: task.id,
-            });
-            if (fallback) throw new Error(fallback.message);
-          } else if (/duplicate|unique/i.test(error.message)) {
-            const { error: up } = await supabase
-              .from("employee_task_pins")
-              .update({
-                pin_section: section,
-                pinned_at: new Date().toISOString(),
-              })
-              .eq("user_id", currentUserId)
-              .eq("task_id", task.id);
-            if (up && /pin_section|column|schema cache/i.test(up.message)) {
-              const { error: up2 } = await supabase
-                .from("employee_task_pins")
-                .update({ pinned_at: new Date().toISOString() })
-                .eq("user_id", currentUserId)
-                .eq("task_id", task.id);
-              if (up2) throw new Error(up2.message);
-            } else if (up) {
-              throw new Error(up.message);
-            }
-          } else {
-            throw new Error(error.message);
-          }
-        }
-        setPinned(true);
-        onSuccess?.("Added to your dashboard.");
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (
-        msg.toLowerCase().includes("employee_task_pins") ||
-        msg.toLowerCase().includes("schema cache") ||
-        msg.toLowerCase().includes("permission") ||
-        msg.toLowerCase().includes("policy")
-      ) {
-        onError?.(
-          "Run AJ_Academy_SB/employee_task_pins_section_patch.sql in Supabase to enable dashboard pins.",
-        );
-      } else {
-        onError?.(msg);
-      }
-    } finally {
-      setPinBusy(false);
-    }
-  };
-
-  return (
-    <>
-      <button type="button" aria-label="Close" className="fixed inset-0 z-[60] bg-slate-900/40" onClick={onClose} />
-      <div className="fixed inset-y-6 right-4 z-[61] mx-auto flex w-full max-w-md flex-col overflow-hidden rounded-[24px] border border-[#e8dcc8] bg-white shadow-2xl sm:right-10">
-        <div className="flex items-start justify-between border-b border-[#e8edf5] px-5 py-4">
-          <div>
-            <h3 className="text-lg font-semibold text-[#0f172a]">{task.title}</h3>
-            <p className="mt-1 text-xs text-[#64748b]">
-              Assigned to{" "}
-              {(task.assigned_to && employeeNameMap[task.assigned_to]) || task.assignee_name || "—"}
-            </p>
-            {task.assigner_display_name ? (
-              <p className="mt-0.5 text-xs text-[#64748b]">Assigned by {task.assigner_display_name}</p>
-            ) : null}
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <button type="button" className="text-sm text-[#64748b]" onClick={onClose}>
-              Close
-            </button>
-            <button
-              type="button"
-              disabled={pinBusy}
-              onClick={() => void togglePin()}
-              className="rounded-full border border-[#e8dcc8] px-3 py-1 text-xs font-semibold text-[#0f172a] hover:bg-[#f8fbff] disabled:opacity-50"
-              title="Pin this task on your employee dashboard for handover follow-up"
-            >
-              {pinned ? "Remove from dashboard" : "Add to my dashboard"}
-            </button>
-          </div>
-        </div>
-        <div className="space-y-3 overflow-y-auto px-5 py-4 text-sm text-[#334155]">
-          <div>
-            <p className="text-xs font-semibold uppercase text-[#94a3b8]">Description</p>
-            <p className="mt-1 whitespace-pre-wrap">{task.description?.trim() ? task.description : "—"}</p>
-          </div>
-          <dl className="grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <dt className="text-[#94a3b8]">Status</dt>
-              <dd className="font-medium">{task.status}</dd>
-            </div>
-            <div>
-              <dt className="text-[#94a3b8]">Priority</dt>
-              <dd className="font-medium">{task.priority}</dd>
-            </div>
-            <div>
-              <dt className="text-[#94a3b8]">Start</dt>
-              <dd className="font-medium">{formatDisplayDate(task.start_date)}</dd>
-            </div>
-            <div>
-              <dt className="text-[#94a3b8]">Due</dt>
-              <dd className="font-medium">{formatDisplayDate(task.due_date)}</dd>
-            </div>
-            <div className="col-span-2">
-              <dt className="text-[#94a3b8]">Progress</dt>
-              <dd className="font-medium">{task.progress}%</dd>
-            </div>
-            {task.status === "Completed" && task.completion_summary?.trim() ? (
-              <div className="col-span-2">
-                <dt className="text-[#94a3b8]">Completion summary</dt>
-                <dd className="mt-1 whitespace-pre-wrap font-medium">{task.completion_summary}</dd>
-              </div>
-            ) : null}
-            <div className="col-span-2">
-              <dt className="text-[#94a3b8]">Linked to</dt>
-              <dd className="mt-1 font-medium">
-                {task.assignment_type === "project" && task.project_label ? (
-                  <span>Project · {task.project_label}</span>
-                ) : task.assignment_type === "lead" && task.linked_lead_labels?.length ? (
-                  <div className="mt-2 space-y-2">
-                    {task.linked_leads?.length && currentUserId ? (
-                      <TaskLeadOutreachBlock
-                        taskId={task.id}
-                        leads={task.linked_leads}
-                        supabase={supabase}
-                        userId={currentUserId}
-                        onUpdated={() => {
-                          onLeadOutreachUpdated?.();
-                          void fetchTaskActivities(supabase, task.id).then(setActivities);
-                        }}
-                        onError={onError}
-                        onSuccess={onSuccess}
-                      />
-                    ) : (
-                      <ul className="mt-1 list-inside list-disc space-y-0.5">
-                        {task.linked_lead_labels.map((label) => (
-                          <li key={label}>{label}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ) : task.assignment_type === "college" && task.linked_college_labels?.length ? (
-                  <ul className="mt-1 list-inside list-disc space-y-0.5">
-                    {task.linked_college_labels.map((label) => (
-                      <li key={label}>{label}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  "—"
-                )}
-              </dd>
-            </div>
-          </dl>
-          {task.completion_attachment_urls?.length ? (
-            <div>
-              <p className="text-xs font-semibold uppercase text-[#94a3b8]">Completion files</p>
-              <ul className="mt-2 space-y-1">
-                {task.completion_attachment_urls.map((a) => (
-                  <li key={a.url}>
-                    <a
-                      href={a.url}
-                      download={a.name}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium text-emerald-700 underline"
-                    >
-                      Download {a.name}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {task.attachment_urls?.length ? (
-            <div>
-              <p className="text-xs font-semibold uppercase text-[#94a3b8]">Attachments</p>
-              <ul className="mt-2 space-y-1">
-                {task.attachment_urls.map((a) => (
-                  <li key={a.url}>
-                    <a
-                      href={a.url}
-                      download={a.name}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium text-[#a68b2e] underline"
-                    >
-                      Download {a.name}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          <div>
-            <p className="text-xs font-semibold uppercase text-[#94a3b8]">Activity & progress</p>
-            {activitiesLoading ? (
-              <p className="mt-2 text-xs text-[#64748b]">Loading activity…</p>
-            ) : activities.length ? (
-              <ul className="mt-2 space-y-2">
-                {activities.map((a) => (
-                  <li key={a.id} className="rounded-lg border border-[#e8edf5] bg-[#f8fbff] px-3 py-2 text-xs">
-                    <p className="font-medium text-[#0f172a]">
-                      {a.activity_type.replace(/_/g, " ")}
-                      {a.actor_name ? ` · ${a.actor_name}` : ""}
-                    </p>
-                    {a.notes ? <p className="mt-1 text-[#475569]">{a.notes}</p> : null}
-                    <p className="mt-1 text-[#94a3b8]">{new Date(a.created_at).toLocaleString("en-IN")}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-2 text-xs text-[#64748b]">No activity logged yet.</p>
-            )}
-          </div>
-        </div>
-      </div>
-    </>
   );
 }
 
