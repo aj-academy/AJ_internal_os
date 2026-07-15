@@ -1925,7 +1925,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       {linkTypeFilter === "college" ? (
         <div className="space-y-2">
           <p className="text-xs font-medium text-[#64748b]">
-            College Visit tasks - one row per linked college. View opens the College Visits edit form; Activity opens history separately. Pin selected saves colleges into College Visits.
+            College Visit tasks - columns match College Visits. View / Edit open the college form; Activity opens history. Pin selected saves into College Visits.
           </p>
           <TaskSubsectionCollegesTable
             rows={subsectionCollegeRows}
@@ -1933,6 +1933,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             loading={loading}
             onViewCollege={(_task, college, collegeLoaded) => openCollegeEdit(college, collegeLoaded)}
             onActivityCollege={(_task, college) => void openCollegeActivity(college)}
+            onEditCollege={(_task, college, collegeLoaded) => openCollegeEdit(college, collegeLoaded)}
             selection={{
               allSelected: taskSelection.allSelected,
               someSelected: taskSelection.someSelected,

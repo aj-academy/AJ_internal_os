@@ -120,11 +120,11 @@ export const TABLE_CHECK_TH =
 export const TABLE_CHECK_TD =
   "sticky-col sticky-col-1 sticky-check-col w-11 min-w-11 max-w-11 px-2 py-3 text-center align-middle";
 
-/** Narrow S.No column (~60–70px). */
+/** Narrow S.No column — width must match --sticky-col-2 used with sticky-col-after-check-2. */
 export const TABLE_SNO_TH =
-  "sticky-col sticky-col-after-check w-16 min-w-[4rem] max-w-[4.5rem] whitespace-nowrap px-2 py-3 text-center align-middle text-[11px] font-semibold uppercase tracking-wide text-[#64748b]";
+  "sticky-col sticky-col-after-check w-[4.25rem] min-w-[4.25rem] max-w-[4.25rem] whitespace-nowrap px-2 py-3 text-center align-middle text-[11px] font-semibold uppercase tracking-wide text-[#64748b]";
 export const TABLE_SNO_TD =
-  "sticky-col sticky-col-after-check w-16 min-w-[4rem] max-w-[4.5rem] whitespace-nowrap px-2 py-3 text-center align-middle text-xs text-[#334155]";
+  "sticky-col sticky-col-after-check w-[4.25rem] min-w-[4.25rem] max-w-[4.25rem] whitespace-nowrap px-2 py-3 text-center align-middle text-xs text-[#334155]";
 
 /** Standard data header/cell — apply min-width only to content columns. */
 export const TABLE_DATA_TH =

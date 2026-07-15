@@ -188,16 +188,19 @@
     z-index: 2;
     background: #fff;
     border-right: none;
-    box-shadow: none;
+    /* Cover subpixel gaps so scrolling cells never show through sticky seams */
+    box-shadow: 4px 0 0 0 #fff;
   }
 
   table.table-freeze-cols thead th.sticky-col {
     z-index: 3;
     background: #f1f6fc;
+    box-shadow: 4px 0 0 0 #f1f6fc;
   }
 
   table.table-freeze-cols thead.cv-head th.sticky-col {
     background: #f8fbff;
+    box-shadow: 4px 0 0 0 #f8fbff;
   }
 
   /* Leftmost sticky sits above the next sticky; both above scrolling cells */
@@ -211,8 +214,8 @@
   }
 
   table.table-freeze-cols .sticky-col-2 {
-    /* Overlap 1px to hide subpixel seam while scrolling */
-    left: calc(var(--sticky-col-2, 10.5rem) - 1px);
+    /* --sticky-col-2 must equal the *width* of sticky-col-1 */
+    left: calc(var(--sticky-col-2, 10.5rem) - 2px);
     z-index: 3;
   }
 
@@ -221,7 +224,7 @@
   }
 
   table.table-freeze-cols .sticky-col-after-check {
-    left: calc(var(--sticky-check-w, 3rem) - 1px);
+    left: calc(var(--sticky-check-w, 3rem) - 2px);
     z-index: 3;
   }
 
@@ -230,13 +233,18 @@
   }
 
   table.table-freeze-cols .sticky-col-after-check-2 {
-    left: calc(var(--sticky-check-w, 3rem) + var(--sticky-col-2, 10.5rem) - 1px);
+    left: calc(var(--sticky-check-w, 3rem) + var(--sticky-col-2, 10.5rem) - 2px);
     z-index: 3;
-    box-shadow: 6px 0 8px -6px rgba(15, 23, 42, 0.12);
+    box-shadow: 6px 0 8px -6px rgba(15, 23, 42, 0.14), 4px 0 0 0 #fff;
   }
 
   table.table-freeze-cols thead th.sticky-col-after-check-2 {
     z-index: 4;
+    box-shadow: 6px 0 8px -6px rgba(15, 23, 42, 0.14), 4px 0 0 0 #f8fbff;
+  }
+
+  table.table-freeze-cols thead:not(.cv-head) th.sticky-col-after-check-2 {
+    box-shadow: 6px 0 8px -6px rgba(15, 23, 42, 0.14), 4px 0 0 0 #f1f6fc;
   }
 
   /* Checkbox / pick column — fixed width must match --sticky-check-w */

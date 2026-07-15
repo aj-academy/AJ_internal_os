@@ -11,6 +11,7 @@ import { whatsAppHref } from "@/components/employee/leads/employeeLeadConfig";
 import { StudentOutreachButtons } from "@/components/student-lead-master/StudentOutreachButtons";
 import { WhatsAppComposeModal } from "@/components/shared/WhatsAppComposeModal";
 import { EmailComposeModal } from "@/components/shared/EmailComposeModal";
+import { LeadActivityModal, type LeadActivityItem } from "@/components/shared/LeadActivityModal";
 import {
   fetchWhatsAppTemplates,
   formatEmailActivityNotes,
@@ -153,6 +154,9 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<CollegeVisitFormValue>(() => emptyCollegeVisitForm());
   const [viewVisit, setViewVisit] = useState<CollegeVisitRow | null>(null);
+  const [activityVisit, setActivityVisit] = useState<CollegeVisitRow | null>(null);
+  const [activityModalRows, setActivityModalRows] = useState<LeadActivityItem[]>([]);
+  const [activityModalLoading, setActivityModalLoading] = useState(false);
   const [proposalRow, setProposalRow] = useState<CollegeVisitRow | null>(null);
   const [proposalDraft, setProposalDraft] = useState<CollegeProposalDraft>({
     status: "Not Sent",
@@ -531,6 +535,36 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       setActiveTab("overview");
     }
   }, [activeTab, isEmployeePortal]);
+
+  const openCollegeActivity = async (row: CollegeVisitRow) => {
+    setActivityVisit(row);
+    setActivityModalLoading(true);
+    setActivityModalRows([]);
+    try {
+      const res = await fetch(`/api/college-visits/${row.id}/activities`);
+      const json = (await res.json()) as { activities?: CollegeVisitActivityRow[]; error?: string };
+      if (!res.ok) {
+        setError(json.error || "Could not load activity.");
+        setActivityModalRows([]);
+      } else {
+        setActivityModalRows(
+          (json.activities ?? []).map((a) => ({
+            id: a.id,
+            activity_type: a.activity_type ?? null,
+            notes: a.notes ?? null,
+            old_value: a.old_value ?? null,
+            new_value: a.new_value ?? null,
+            created_at: a.created_at,
+            created_by: a.created_by ?? null,
+          })),
+        );
+      }
+    } catch {
+      setError("Could not load activity.");
+    } finally {
+      setActivityModalLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!viewVisit?.id) {
@@ -1468,16 +1502,32 @@ return (
                         <td className={tdClass}>{row.final_status}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{row.source_reference || "-"}</td>
                         {!pickForTask ? (
-                          <td className={`${tdClass} min-w-[11rem]`}>
-                            <div className="flex flex-wrap items-center justify-center gap-2">
-                              <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => setViewVisit(row)}>
+                          <td className={`${tdClass} min-w-[14rem]`}>
+                            <div className="flex flex-wrap items-center justify-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 rounded-full px-2 text-[11px]"
+                                onClick={() => setViewVisit(row)}
+                              >
+                                View
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 rounded-full px-2 text-[11px]"
+                                onClick={() => void openCollegeActivity(row)}
+                              >
                                 Activity
                               </Button>
-                              {isAdmin ? (
-                                <Button size="sm" variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => openEdit(row)}>
-                                  Edit
-                                </Button>
-                              ) : null}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 rounded-full px-2 text-[11px]"
+                                onClick={() => openEdit(row)}
+                              >
+                                Edit
+                              </Button>
                             </div>
                           </td>
                         ) : null}
@@ -1559,14 +1609,14 @@ return (
                           ? []
                           : [
                               { label: "View", onClick: () => setViewVisit(row) },
-                              ...(isAdmin ? [{ label: "Edit", onClick: () => openEdit(row) }] : []),
+                              { label: "Edit", onClick: () => openEdit(row) },
                             ]
                       }
                       moreActions={
                         pickForTask
                           ? []
                           : [
-                              { label: "Activity", onClick: () => setViewVisit(row) },
+                              { label: "Activity", onClick: () => void openCollegeActivity(row) },
                               ...(contacts.length > 1
                                 ? contacts.map((c) => ({
                                     label: `Use: ${contactRoleSelectLabel(c)}`,
@@ -1665,11 +1715,17 @@ return (
             </div>
             <div className="flex-1 overflow-y-auto p-4">
               <div className="mb-3 flex flex-wrap gap-2">
-                {isAdmin ? (
-                  <Button size="sm" className="rounded-full bg-[#c9a227] text-white" onClick={() => openEdit(viewVisit)}>
-                    Update visit
-                  </Button>
-                ) : null}
+                <Button size="sm" className="rounded-full bg-[#c9a227] text-white" onClick={() => openEdit(viewVisit)}>
+                  Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 rounded-full border-[#e8dcc8]"
+                  onClick={() => void openCollegeActivity(viewVisit)}
+                >
+                  Activity
+                </Button>
                 <Button size="sm" variant="outline" className="h-9 rounded-full border-[#e8dcc8]" onClick={() => requestCollegePhone(viewVisit)}>
                   Call
                 </Button>
@@ -1679,41 +1735,50 @@ return (
                 <Button size="sm" variant="outline" className="h-9 rounded-full border-[#e8dcc8]" onClick={() => requestCollegeEmail(viewVisit)}>
                   Email
                 </Button>
-                <Button size="sm" variant="outline" className="rounded-full border-rose-200 text-rose-700" onClick={() => void handleDelete(viewVisit.id)}>
-                  Delete
-                </Button>
+                {isDbAdmin ? (
+                  <Button size="sm" variant="outline" className="rounded-full border-rose-200 text-rose-700" onClick={() => void handleDelete(viewVisit.id)}>
+                    Delete
+                  </Button>
+                ) : null}
               </div>
               <div className="mb-4 space-y-1 rounded-xl border border-[#e8dcc8] bg-[#fffdf8] p-3 text-xs text-[#64748b]">
+                <p>
+                  <span className="font-semibold text-[#3d3428]">Visit status:</span> {viewVisit.visit_status || "-"}
+                </p>
                 <p>
                   <span className="font-semibold text-[#3d3428]">Contact:</span> {viewVisit.contact_number || "-"}
                 </p>
                 <p>
                   <span className="font-semibold text-[#3d3428]">Email:</span> {viewVisit.email || "-"}
                 </p>
+                <p>
+                  <span className="font-semibold text-[#3d3428]">Person:</span> {viewVisit.connected_person_name || "-"}
+                  {viewVisit.connected_person_role ? ` (${viewVisit.connected_person_role})` : ""}
+                </p>
+                <p>
+                  <span className="font-semibold text-[#3d3428]">Follow-up:</span>{" "}
+                  {formatDisplayDate(viewVisit.next_follow_up_date) || "-"}
+                </p>
               </div>
-              <p className="mb-2 text-xs font-semibold uppercase text-[#94a3b8]">Activity timeline</p>
-              <div className="space-y-2">
-                {activities.length === 0 ? (
-                  <p className="text-sm text-[#64748b]">No activity yet.</p>
-                ) : (
-                  activities.map((a) => (
-                    <div key={a.id} className="rounded-lg border border-[#eef2f7] bg-[#f8fbff] p-3 text-xs">
-                      <p className="font-semibold text-[#0f172a]">{a.activity_type}</p>
-                      {a.notes ? <p className="mt-1 text-[#475569]">{a.notes}</p> : null}
-                      {a.old_value || a.new_value ? (
-                        <p className="mt-1 text-[#64748b]">
-                          {a.old_value ?? "-"} {"->"} {a.new_value ?? "-"}
-                        </p>
-                      ) : null}
-                      <p className="mt-1 text-[10px] text-[#94a3b8]">{new Date(a.created_at).toLocaleString()}</p>
-                    </div>
-                  ))
-                )}
-              </div>
+              <p className="mb-2 text-xs text-[#64748b]">
+                Open <span className="font-semibold text-[#3d3428]">Activity</span> for the full timeline, or{" "}
+                <span className="font-semibold text-[#3d3428]">Edit</span> to update the college form.
+              </p>
             </div>
           </aside>
         </>
       ) : null}
+
+      <LeadActivityModal
+        open={!!activityVisit}
+        title={activityVisit?.college_name || "College activity"}
+        subtitle="From college_visit_activities"
+        loading={activityModalLoading}
+        activities={activityModalRows}
+        employeeNameMap={ownerNameMap}
+        onClose={() => setActivityVisit(null)}
+      />
+
       {whatsAppComposeVisit ? (
         <WhatsAppComposeModal
           open={Boolean(whatsAppComposeVisit)}
