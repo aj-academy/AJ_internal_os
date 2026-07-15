@@ -201,8 +201,17 @@ export function parseCollegeContacts(raw: unknown): CollegeContact[] {
   return list;
 }
 
+function splitSlashList(raw: string | null | undefined): string[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(/\s*\/\s*/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
 /** Prefer JSON contacts; otherwise build one contact from legacy flat columns. */
 export function resolveCollegeContacts(row: {
+  id?: string;
   contacts?: unknown;
   contact_number?: string | null;
   email?: string | null;
@@ -230,8 +239,16 @@ export function resolveCollegeContacts(row: {
         };
       }
     }
+    // If only one JSON contact but name/role were typed as "A / B / C", expand for Role dropdown + outreach.
+    if (normalized.length === 1) {
+      const expanded = expandSlashSeparatedContacts(normalized[0], row);
+      if (expanded) return expanded;
+    }
     return normalized;
   }
+
+  const slashExpanded = expandSlashSeparatedContacts(null, row);
+  if (slashExpanded) return slashExpanded;
 
   const phones = splitLegacyPhones(row.contact_number);
   const name = (row.connected_person_name ?? "").trim();
@@ -249,6 +266,60 @@ export function resolveCollegeContacts(row: {
       is_primary: true,
     },
   ]);
+}
+
+/** Turn "Name1 / Name2" + "Role1 / Role2" legacy strings into separate contacts for the Role dropdown. */
+function expandSlashSeparatedContacts(
+  base: CollegeContact | null,
+  row: {
+    id?: string;
+    contact_number?: string | null;
+    email?: string | null;
+    connected_person_name?: string | null;
+    connected_person_role?: string | null;
+  },
+): CollegeContact[] | null {
+  const names = splitSlashList(row.connected_person_name || base?.name || "");
+  const roles = splitSlashList(row.connected_person_role || base?.role || "");
+  if (names.length <= 1 && roles.length <= 1) return null;
+
+  const count = Math.max(names.length, roles.length);
+  const legacyPhones = splitLegacyPhones(row.contact_number);
+  const basePhones = (base?.phones ?? []).map((p) => p.trim()).filter(Boolean);
+  const phones = legacyPhones.length ? legacyPhones : basePhones;
+  const email = (row.email ?? base?.email ?? "").trim();
+  const visitKey = row.id || "row";
+
+  return normalizeCollegeContacts(
+    Array.from({ length: count }, (_, i) => ({
+      // Stable ids so Role dropdown selection survives re-renders.
+      id: base?.id && i === 0 ? base.id : `legacy-${visitKey}-${i}`,
+      name: names[i] || "",
+      role: roles[i] || "",
+      // Prefer phone-per-person when counts match; otherwise keep numbers on the first contact.
+      phones:
+        phones.length === count
+          ? [phones[i] || ""]
+          : i === 0
+            ? phones.length
+              ? phones
+              : [""]
+            : [""],
+      email: i === 0 ? email : "",
+      is_primary: i === 0,
+    })),
+  );
+}
+
+export function collegeContactsForRow(row: CollegeVisitRow): CollegeContact[] {
+  return resolveCollegeContacts(row);
+}
+
+export function contactRoleSelectLabel(c: CollegeContact): string {
+  const role = c.role.trim();
+  const name = c.name.trim();
+  if (role && name) return `${role} · ${name}`;
+  return role || name || "Contact";
 }
 
 export function normalizeCollegeContacts(contacts: CollegeContact[], opts?: { keepEmptyPhones?: boolean }): CollegeContact[] {
@@ -283,6 +354,19 @@ export function normalizeCollegeContacts(contacts: CollegeContact[], opts?: { ke
 export function getPrimaryCollegeContact(contacts: CollegeContact[]): CollegeContact | null {
   const list = normalizeCollegeContacts(contacts);
   return list.find((c) => c.is_primary) ?? list[0] ?? null;
+}
+
+export function selectedCollegeContact(
+  row: CollegeVisitRow,
+  selectedContactId?: string | null,
+): CollegeContact | null {
+  const contacts = resolveCollegeContacts(row);
+  if (!contacts.length) return null;
+  if (selectedContactId) {
+    const match = contacts.find((c) => c.id === selectedContactId);
+    if (match) return match;
+  }
+  return getPrimaryCollegeContact(contacts);
 }
 
 export function flatFieldsFromPrimary(contacts: CollegeContact[]) {
@@ -353,6 +437,17 @@ export function collegeEmailTargets(row: CollegeVisitRow): CollegeOutreachTarget
     uniq.push(t);
   }
   return uniq;
+}
+
+export function collegeOutreachTargetsForContact(
+  row: CollegeVisitRow,
+  contactId: string | null | undefined,
+  channel: "phone" | "email",
+): CollegeOutreachTarget[] {
+  const all = channel === "phone" ? collegePhoneTargets(row) : collegeEmailTargets(row);
+  if (!contactId) return all;
+  // Stick to the Role dropdown selection — do not fall back to other contacts.
+  return all.filter((t) => t.contactId === contactId);
 }
 
 /** Show picker when more than one contact option exists (by person or by number). */

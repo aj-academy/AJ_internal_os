@@ -74,9 +74,11 @@ import {
   isMissingCollegeVisitsTable,
   primaryOutreachPhone,
   collegeOutreachTargets,
-  collegePhoneTargets,
-  collegeEmailTargets,
+  collegeOutreachTargetsForContact,
   collegeOutreachTargetLabel,
+  collegeContactsForRow,
+  contactRoleSelectLabel,
+  selectedCollegeContact,
   shouldShowCollegeOutreachPicker,
   anyCollegeOutreachPhone,
   anyCollegeOutreachEmail,
@@ -185,6 +187,22 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [emailComposeTarget, setEmailComposeTarget] = useState<CollegeOutreachTarget | null>(null);
   const [outreachPicker, setOutreachPicker] = useState<OutreachPickerState | null>(null);
   const [whatsAppTargetPhone, setWhatsAppTargetPhone] = useState("");
+  /** Role-column selection: which contact Call / WhatsApp / Email should use. */
+  const [selectedOutreachContactByVisit, setSelectedOutreachContactByVisit] = useState<Record<string, string>>({});
+
+  const setVisitOutreachContact = useCallback((visitId: string, contactId: string) => {
+    setSelectedOutreachContactByVisit((prev) => ({ ...prev, [visitId]: contactId }));
+  }, []);
+
+  const outreachContactIdFor = useCallback(
+    (row: CollegeVisitRow) => {
+      const contacts = collegeContactsForRow(row);
+      const saved = selectedOutreachContactByVisit[row.id];
+      if (saved && contacts.some((c) => c.id === saved)) return saved;
+      return selectedCollegeContact(row)?.id ?? contacts[0]?.id ?? "";
+    },
+    [selectedOutreachContactByVisit],
+  );
 
   const ownerOptions = useMemo(
     () =>
@@ -325,18 +343,19 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const requestCollegePhone = useCallback(
     (row: CollegeVisitRow) => {
-      const phoneTargets = collegePhoneTargets(row);
+      const contactId = outreachContactIdFor(row);
+      const phoneTargets = collegeOutreachTargetsForContact(row, contactId, "phone");
       if (phoneTargets.length === 0) {
-        setError("No contact number on this college. Add a phone on at least one contact.");
+        setError("No contact number for the selected role. Add a phone on that contact, or pick another role.");
         return;
       }
       if (!shouldShowCollegeOutreachPicker(phoneTargets)) {
-        void handleCollegePhoneClick(row, phoneTargets[0].phone);
+        void handleCollegePhoneClick(row, phoneTargets[0].phone, collegeOutreachTargetLabel(phoneTargets[0]));
         return;
       }
       setOutreachPicker({ mode: "phone", row, targets: phoneTargets });
     },
-    [handleCollegePhoneClick],
+    [handleCollegePhoneClick, outreachContactIdFor],
   );
 
   const openCollegeWhatsAppCompose = useCallback((row: CollegeVisitRow, phoneOverride?: string) => {
@@ -353,9 +372,10 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const requestCollegeWhatsApp = useCallback(
     (row: CollegeVisitRow) => {
-      const phoneTargets = collegePhoneTargets(row);
+      const contactId = outreachContactIdFor(row);
+      const phoneTargets = collegeOutreachTargetsForContact(row, contactId, "phone");
       if (phoneTargets.length === 0) {
-        setError("No WhatsApp number on this college. Add a phone on at least one contact.");
+        setError("No WhatsApp number for the selected role. Add a phone on that contact, or pick another role.");
         return;
       }
       if (!shouldShowCollegeOutreachPicker(phoneTargets)) {
@@ -364,7 +384,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       }
       setOutreachPicker({ mode: "whatsapp", row, targets: phoneTargets });
     },
-    [openCollegeWhatsAppCompose],
+    [openCollegeWhatsAppCompose, outreachContactIdFor],
   );
 
   const handleCollegeWhatsAppSend = useCallback(
@@ -431,9 +451,10 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const requestCollegeEmail = useCallback(
     (row: CollegeVisitRow) => {
-      const uniq = collegeEmailTargets(row);
+      const contactId = outreachContactIdFor(row);
+      const uniq = collegeOutreachTargetsForContact(row, contactId, "email");
       if (uniq.length === 0) {
-        setError("No email address on this college. Add an email on at least one contact.");
+        setError("No email for the selected role. Add an email on that contact, or pick another role.");
         return;
       }
       if (!shouldShowCollegeOutreachPicker(uniq)) {
@@ -442,7 +463,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       }
       setOutreachPicker({ mode: "email", row, targets: uniq });
     },
-    [openCollegeEmailCompose],
+    [openCollegeEmailCompose, outreachContactIdFor],
   );
 
   const handleCollegeEmailSend = useCallback(
@@ -1327,11 +1348,13 @@ return (
                   pageRows.map((row, idx) => {
                     const days = daysSince(row.last_follow_up_date);
                     const due = isFollowUpDue(row);
+                    const contacts = collegeContactsForRow(row);
+                    const selectedContact = selectedCollegeContact(row, outreachContactIdFor(row));
                     const phone = anyCollegeOutreachPhone(row);
                     const email = anyCollegeOutreachEmail(row);
                     const flags = outreachDone[row.id] ?? {};
-                    const person = row.connected_person_name || row.contacts?.find((c) => c.is_primary)?.name || "-";
-                    const personRole = row.connected_person_role || row.contacts?.find((c) => c.is_primary)?.role || "";
+                    const person = selectedContact?.name?.trim() || row.connected_person_name || "-";
+                    const personRole = selectedContact?.role?.trim() || row.connected_person_role || "";
                     return (
                       <tr key={row.id} className="border-t border-[#eef2f7] hover:bg-[#fafcff]">
                         {pickForTask ? (
@@ -1390,7 +1413,25 @@ return (
                           />
                         </td>
                         <td className={`${tdClass} min-w-[12rem]`}>{person}</td>
-                        <td className={tdClass}>{row.connected_person_role || personRole || "-"}</td>
+                        <td className={`${tdClass} min-w-[14rem]`}>
+                          {contacts.length > 1 ? (
+                            <select
+                              className="w-full max-w-[16rem] rounded-md border border-[#e2e8f0] bg-white px-2 py-1.5 text-xs text-[#0f172a] outline-none focus:border-[#c4a35a] focus:ring-1 focus:ring-[#c4a35a]/40"
+                              value={selectedContact?.id || contacts[0]?.id || ""}
+                              onChange={(e) => setVisitOutreachContact(row.id, e.target.value)}
+                              aria-label={`Select contact role for ${row.college_name}`}
+                              title="Choose who Call / WhatsApp / Email should use"
+                            >
+                              {contacts.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {contactRoleSelectLabel(c)}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            personRole || "-"
+                          )}
+                        </td>
                         <td className={tdClass}>{row.visit_status}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.visit_date)}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{row.mou_signed_status}</td>
@@ -1451,8 +1492,10 @@ return (
                 pageRows.map((row, idx) => {
                   const days = daysSince(row.last_follow_up_date);
                   const due = isFollowUpDue(row);
-                  const person = row.connected_person_name || row.contacts?.find((c) => c.is_primary)?.name || "—";
-                  const personRole = row.connected_person_role || row.contacts?.find((c) => c.is_primary)?.role || "";
+                  const contacts = collegeContactsForRow(row);
+                  const selectedContact = selectedCollegeContact(row, outreachContactIdFor(row));
+                  const person = selectedContact?.name?.trim() || row.connected_person_name || "—";
+                  const personRole = selectedContact?.role?.trim() || row.connected_person_role || "";
                   return (
                     <MobileRecordCard
                       key={row.id}
@@ -1465,6 +1508,13 @@ return (
                       previewFields={[
                         { label: "Location", value: dash(row.location) },
                         { label: "Contact person", value: person },
+                        {
+                          label: "Role",
+                          value:
+                            contacts.length > 1
+                              ? contactRoleSelectLabel(selectedContact || contacts[0])
+                              : dash(personRole || row.connected_person_role),
+                        },
                         { label: "Follow-up stage", value: dash(row.follow_up_stage) },
                         { label: "Next follow-up", value: formatDisplayDate(row.next_follow_up_date) || "—" },
                         { label: "Final status", value: dash(row.final_status) },
@@ -1511,6 +1561,12 @@ return (
                           ? []
                           : [
                               { label: "Activity", onClick: () => setViewVisit(row) },
+                              ...(contacts.length > 1
+                                ? contacts.map((c) => ({
+                                    label: `Use: ${contactRoleSelectLabel(c)}`,
+                                    onClick: () => setVisitOutreachContact(row.id, c.id),
+                                  }))
+                                : []),
                               { label: "Call", onClick: () => requestCollegePhone(row) },
                               { label: "WhatsApp", onClick: () => requestCollegeWhatsApp(row) },
                               { label: "Email", onClick: () => requestCollegeEmail(row) },
@@ -1707,7 +1763,8 @@ return (
                   : "Choose email contact"}
             </h3>
             <p className="mt-1 text-xs text-[#6b5d4d]">
-              {outreachPicker.row.college_name} · pick Principal, Placement Officer, or any saved contact
+              {outreachPicker.row.college_name} · numbers for the role selected in the Role column
+              (or pick another if this person has multiple numbers)
             </p>
             <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
               {outreachPicker.targets.map((t) => (
