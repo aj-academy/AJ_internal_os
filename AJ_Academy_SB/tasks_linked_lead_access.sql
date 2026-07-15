@@ -73,8 +73,13 @@ create table if not exists public.employee_task_pins (
   user_id uuid not null references public.profiles (id) on delete cascade,
   task_id uuid not null references public.tasks (id) on delete cascade,
   pinned_at timestamptz not null default now(),
+  pin_section text,
   primary key (user_id, task_id)
 );
+
+-- Older DBs created without pin_section
+alter table public.employee_task_pins
+  add column if not exists pin_section text;
 
 create index if not exists employee_task_pins_user_idx on public.employee_task_pins (user_id, pinned_at desc);
 
@@ -93,4 +98,5 @@ with check (
   )
 );
 
-grant select, insert, delete on public.employee_task_pins to authenticated;
+-- UPDATE required for upsert (re-pin / change section) and pinned_at refresh
+grant select, insert, update, delete on public.employee_task_pins to authenticated;

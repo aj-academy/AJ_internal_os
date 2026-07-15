@@ -1,6 +1,9 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { TableHeaderCell } from "@/components/ui/TableHeaderFilter";
+import { TablePagination } from "@/components/ui/TablePagination";
+import { usePagination } from "@/lib/usePagination";
 import { STUDENT_MASTER_CSV_HEADERS } from "@/components/student-lead-master/studentMasterCsv";
 import { displayLeadName, type CrmClientRow } from "@/components/student-lead-master/studentMasterHelpers";
 import { COLLEGE_VISIT_CSV_HEADERS } from "@/components/college-visits/collegeVisitsCsv";
@@ -12,13 +15,73 @@ export type TaskLeadFlatRow = {
   key: string;
   task: TaskRecord;
   lead: CrmClientRow;
+  leadLoaded: boolean;
 };
 
 export type TaskCollegeFlatRow = {
   key: string;
   task: TaskRecord;
   college: CollegeVisitRow;
+  collegeLoaded: boolean;
 };
+
+function placeholderLead(id: string): CrmClientRow {
+  return {
+    id,
+    name: null,
+    lead_name: `Lead ${id.slice(0, 8)}...`,
+    client_code: null,
+    company_name: null,
+    email: null,
+    phone: null,
+    whatsapp: null,
+    city: null,
+    status: null,
+    priority: null,
+    assigned_to: null,
+  } as CrmClientRow;
+}
+
+function placeholderCollege(id: string): CollegeVisitRow {
+  return {
+    id,
+    college_name: `College ${id.slice(0, 8)}...`,
+    location: null,
+    contact_number: null,
+    email: null,
+    connected_person_name: null,
+    connected_person_role: null,
+    contacts: [],
+    visit_status: "-",
+    visit_date: null,
+    mou_signed_status: "-",
+    follow_up_stage: null,
+    last_follow_up_date: null,
+    next_follow_up_date: null,
+    priority: "-",
+    assigned_to: null,
+    assigned_by: null,
+    description: null,
+    last_outcome_remarks: null,
+    lead_score: 0,
+    final_status: "-",
+    source_reference: null,
+    proposal_status: "Not Sent",
+    proposal_amount: null,
+    proposal_sent_date: null,
+    proposal_link: null,
+    proposal_pdf_url: null,
+    proposal_pdf_name: null,
+    proposal_file_name: null,
+    proposal_file_path: null,
+    proposal_file_type: null,
+    proposal_file_size: null,
+    proposal_uploaded_at: null,
+    created_by: null,
+    created_at: "",
+    updated_at: "",
+  };
+}
 
 export function flattenTaskLeads(
   tasks: TaskRecord[],
@@ -27,10 +90,24 @@ export function flattenTaskLeads(
   const out: TaskLeadFlatRow[] = [];
   for (const task of tasks) {
     if ((task.assignment_type ?? "") !== "lead") continue;
-    for (const id of task.client_ids ?? []) {
+    const ids = task.client_ids ?? [];
+    if (!ids.length) {
+      out.push({
+        key: `${task.id}:none`,
+        task,
+        lead: placeholderLead(task.id),
+        leadLoaded: false,
+      });
+      continue;
+    }
+    for (const id of ids) {
       const lead = leadById[id];
-      if (!lead) continue;
-      out.push({ key: `${task.id}:${id}`, task, lead });
+      out.push({
+        key: `${task.id}:${id}`,
+        task,
+        lead: lead ?? placeholderLead(id),
+        leadLoaded: Boolean(lead),
+      });
     }
   }
   return out;
@@ -43,10 +120,24 @@ export function flattenTaskColleges(
   const out: TaskCollegeFlatRow[] = [];
   for (const task of tasks) {
     if ((task.assignment_type ?? "") !== "college") continue;
-    for (const id of task.college_visit_ids ?? []) {
+    const ids = task.college_visit_ids ?? [];
+    if (!ids.length) {
+      out.push({
+        key: `${task.id}:none`,
+        task,
+        college: placeholderCollege(task.id),
+        collegeLoaded: false,
+      });
+      continue;
+    }
+    for (const id of ids) {
       const college = collegeById[id];
-      if (!college) continue;
-      out.push({ key: `${task.id}:${id}`, task, college });
+      out.push({
+        key: `${task.id}:${id}`,
+        task,
+        college: college ?? placeholderCollege(id),
+        collegeLoaded: Boolean(college),
+      });
     }
   }
   return out;
@@ -61,54 +152,111 @@ function LeadStatusBadge({ status }: { status: string | null | undefined }) {
   );
 }
 
-/** Student Master–shaped grid for My Tasks → Student Lead subsection. */
+type SubsectionSelection = {
+  isSelected: (taskId: string) => boolean;
+  onToggle: (taskId: string) => void;
+  allSelected: boolean;
+  someSelected: boolean;
+  onToggleAll: () => void;
+};
+
+/** Single Student Master-shaped grid for My Tasks -> Student Lead (includes task + View/Activity). */
 export function TaskSubsectionLeadsTable({
   rows,
   employeeNameMap,
   loading,
+  onViewTask,
+  selection,
 }: {
   rows: TaskLeadFlatRow[];
   employeeNameMap: Record<string, string>;
   loading?: boolean;
+  onViewTask: (task: TaskRecord) => void;
+  selection?: SubsectionSelection;
 }) {
-  const th = "min-w-[10.5rem] whitespace-nowrap px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-[#64748b]";
+  const {
+    paginatedItems: pageRows,
+    page,
+    setPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    setPageSize,
+  } = usePagination(rows, 25);
+
+  const th =
+    "min-w-[10.5rem] whitespace-nowrap px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-[#64748b]";
   const td = "whitespace-nowrap px-4 py-3 text-center text-xs text-[#334155]";
   const tdTrunc = `${td} max-w-[160px] truncate`;
+  const colSpan = STUDENT_MASTER_CSV_HEADERS.length + 5 + (selection ? 1 : 0);
 
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
       <div className="overflow-x-auto">
-        <table className="table-freeze-cols w-full min-w-[5200px] text-sm" style={{ ["--sticky-col-2" as string]: "11rem" }}>
+        <table className="table-freeze-cols w-full min-w-[5600px] text-sm" style={{ ["--sticky-col-2" as string]: "11rem" }}>
           <thead className="bg-[#f1f6fc]">
             <tr>
+              {selection ? (
+                <th className={`${th} w-10 min-w-[2.5rem]`}>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[#1e3a5f]"
+                    checked={selection.allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = selection.someSelected && !selection.allSelected;
+                    }}
+                    onChange={selection.onToggleAll}
+                    aria-label="Select all tasks"
+                  />
+                </th>
+              ) : null}
               <TableHeaderCell label="Task" className={`${th} sticky-col sticky-col-1 min-w-[12rem]`} />
               <TableHeaderCell label="Task Status" className={`${th} sticky-col sticky-col-2 min-w-[9rem]`} />
+              <TableHeaderCell label="Progress" className={th} />
+              <TableHeaderCell label="Assigned by" className={th} />
               {STUDENT_MASTER_CSV_HEADERS.map((h) => (
                 <TableHeaderCell key={h} label={h} className={th} />
               ))}
+              <TableHeaderCell label="Actions" className={th} />
             </tr>
           </thead>
           <tbody className="divide-y divide-[#e8edf5]">
             {loading ? (
               <tr>
-                <td colSpan={STUDENT_MASTER_CSV_HEADERS.length + 2} className="px-4 py-8 text-center text-sm text-[#64748b]">
-                  Loading linked leads…
+                <td colSpan={colSpan} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                  Loading linked leads...
                 </td>
               </tr>
             ) : !rows.length ? (
               <tr>
-                <td colSpan={STUDENT_MASTER_CSV_HEADERS.length + 2} className="px-4 py-8 text-center text-sm text-[#64748b]">
-                  No student leads linked on these tasks yet.
+                <td colSpan={colSpan} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                  No student-lead tasks here. Assign a task with linked leads (or switch ownership tabs).
                 </td>
               </tr>
             ) : (
-              rows.map(({ key, task, lead }) => (
+              pageRows.map(({ key, task, lead, leadLoaded }) => (
                 <tr key={key} className="hover:bg-[#fafcff]">
+                  {selection ? (
+                    <td className={td}>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-[#1e3a5f]"
+                        checked={selection.isSelected(task.id)}
+                        onChange={() => selection.onToggle(task.id)}
+                        aria-label={`Select task ${task.title}`}
+                      />
+                    </td>
+                  ) : null}
                   <td className={`${tdTrunc} sticky-col sticky-col-1 font-medium text-[#0f172a]`} title={task.title}>
                     {task.title}
                   </td>
                   <td className={`${td} sticky-col sticky-col-2`}>{task.status}</td>
-                  <td className={`${td} font-semibold`}>{displayLeadName(lead)}</td>
+                  <td className={td}>{task.progress}%</td>
+                  <td className={td}>{task.assigner_display_name || "—"}</td>
+                  <td className={`${td} font-semibold`} title={leadLoaded ? undefined : "Lead CRM row not loaded (permissions or schema)"}>
+                    {displayLeadName(lead)}
+                    {!leadLoaded ? <span className="ml-1 text-[10px] text-amber-700">(limited)</span> : null}
+                  </td>
                   <td className={td}>{lead.phone || "—"}</td>
                   <td className={td}>{lead.whatsapp || "—"}</td>
                   <td className={tdTrunc}>{lead.email || "—"}</td>
@@ -145,69 +293,138 @@ export function TaskSubsectionLeadsTable({
                   <td className={td}>{lead.final_fee != null ? String(lead.final_fee) : "—"}</td>
                   <td className={td}>{lead.payment_status || "—"}</td>
                   <td className={td}>{lead.admission_status || "—"}</td>
+                  <td className={td}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 rounded-full px-2 text-[11px]"
+                      onClick={() => onViewTask(task)}
+                    >
+                      View / Activity
+                    </Button>
+                  </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
       </div>
+      <TablePagination
+        page={page}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
     </div>
   );
 }
 
-/** College Visits–shaped grid for My Tasks → College Visit subsection. */
+/** Single College Visits-shaped grid for My Tasks -> College Visit (includes task + View/Activity). */
 export function TaskSubsectionCollegesTable({
   rows,
   ownerNameMap,
   loading,
+  onViewTask,
+  selection,
 }: {
   rows: TaskCollegeFlatRow[];
   ownerNameMap: Record<string, string>;
   loading?: boolean;
+  onViewTask: (task: TaskRecord) => void;
+  selection?: SubsectionSelection;
 }) {
+  const {
+    paginatedItems: pageRows,
+    page,
+    setPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    setPageSize,
+  } = usePagination(rows, 25);
+
   const th =
     "min-w-[10.5rem] whitespace-nowrap px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-[#64748b]";
   const td = "whitespace-nowrap px-4 py-3 text-center text-xs text-[#334155]";
+  const colSpan = COLLEGE_VISIT_CSV_HEADERS.length + 5 + (selection ? 1 : 0);
 
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
       <div className="overflow-x-auto">
-        <table className="table-freeze-cols w-full min-w-[3800px] text-sm" style={{ ["--sticky-col-2" as string]: "14rem" }}>
+        <table className="table-freeze-cols w-full min-w-[4200px] text-sm" style={{ ["--sticky-col-2" as string]: "14rem" }}>
           <thead className="cv-head bg-[#f8fbff]">
             <tr>
+              {selection ? (
+                <th className={`${th} w-10 min-w-[2.5rem]`}>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[#1e3a5f]"
+                    checked={selection.allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = selection.someSelected && !selection.allSelected;
+                    }}
+                    onChange={selection.onToggleAll}
+                    aria-label="Select all tasks"
+                  />
+                </th>
+              ) : null}
               <TableHeaderCell label="Task" className={`${th} sticky-col sticky-col-1 min-w-[12rem]`} />
               <TableHeaderCell label="Task Status" className={`${th} sticky-col sticky-col-2 min-w-[9rem]`} />
+              <TableHeaderCell label="Progress" className={th} />
+              <TableHeaderCell label="Assigned by" className={th} />
               {COLLEGE_VISIT_CSV_HEADERS.map((h) => (
                 <TableHeaderCell key={h} label={h} className={th} />
               ))}
+              <TableHeaderCell label="Actions" className={th} />
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={COLLEGE_VISIT_CSV_HEADERS.length + 2} className="px-4 py-8 text-center text-sm text-[#64748b]">
-                  Loading linked colleges…
+                <td colSpan={colSpan} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                  Loading linked colleges...
                 </td>
               </tr>
             ) : !rows.length ? (
               <tr>
-                <td colSpan={COLLEGE_VISIT_CSV_HEADERS.length + 2} className="px-4 py-8 text-center text-sm text-[#64748b]">
-                  No colleges linked on these tasks yet.
+                <td colSpan={colSpan} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                  No college-visit tasks here. Assign a task with linked colleges (or switch ownership tabs).
                 </td>
               </tr>
             ) : (
-              rows.map(({ key, task, college }, idx) => {
+              pageRows.map(({ key, task, college, collegeLoaded }, idx) => {
                 const days = daysSince(college.last_follow_up_date);
                 const due = isFollowUpDue(college);
+                const globalIdx = (page - 1) * pageSize + idx + 1;
                 return (
                   <tr key={key} className="border-t border-[#eef2f7] hover:bg-[#fafcff]">
+                    {selection ? (
+                      <td className={td}>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-[#1e3a5f]"
+                          checked={selection.isSelected(task.id)}
+                          onChange={() => selection.onToggle(task.id)}
+                          aria-label={`Select task ${task.title}`}
+                        />
+                      </td>
+                    ) : null}
                     <td className={`${td} sticky-col sticky-col-1 max-w-[12rem] truncate font-medium`} title={task.title}>
                       {task.title}
                     </td>
                     <td className={`${td} sticky-col sticky-col-2`}>{task.status}</td>
-                    <td className={td}>{idx + 1}</td>
-                    <td className={`${td} max-w-[14rem] truncate font-medium`} title={college.college_name}>
+                    <td className={td}>{task.progress}%</td>
+                    <td className={td}>{task.assigner_display_name || "—"}</td>
+                    <td className={td}>{globalIdx}</td>
+                    <td
+                      className={`${td} max-w-[14rem] truncate font-medium`}
+                      title={collegeLoaded ? college.college_name : "College CRM row not loaded (permissions or schema)"}
+                    >
                       {college.college_name}
+                      {!collegeLoaded ? <span className="ml-1 text-[10px] text-amber-700">(limited)</span> : null}
                     </td>
                     <td className={td}>{college.location || "—"}</td>
                     <td className={td}>{college.contact_number || "—"}</td>
@@ -229,6 +446,23 @@ export function TaskSubsectionCollegesTable({
                     <td className={td}>{college.lead_score}</td>
                     <td className={td}>{college.final_status}</td>
                     <td className={td}>{college.source_reference || "—"}</td>
+                    <td className={td}>{college.proposal_status || "—"}</td>
+                    <td className={td}>{college.proposal_amount != null ? String(college.proposal_amount) : "—"}</td>
+                    <td className={td}>{formatDisplayDate(college.proposal_sent_date)}</td>
+                    <td className={td}>{college.proposal_link || "—"}</td>
+                    <td className={td}>{college.proposal_pdf_url || "—"}</td>
+                    <td className={td}>{college.proposal_pdf_name || "—"}</td>
+                    <td className={td}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 rounded-full px-2 text-[11px]"
+                        onClick={() => onViewTask(task)}
+                      >
+                        View / Activity
+                      </Button>
+                    </td>
                   </tr>
                 );
               })
@@ -236,6 +470,14 @@ export function TaskSubsectionCollegesTable({
           </tbody>
         </table>
       </div>
+      <TablePagination
+        page={page}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
     </div>
   );
 }

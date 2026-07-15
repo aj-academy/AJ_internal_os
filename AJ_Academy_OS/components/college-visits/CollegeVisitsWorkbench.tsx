@@ -557,6 +557,12 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     return list;
   }, [visits, searchText, fltVisitStatus, fltPriority, fltOwner, fltFinalStatus, fltFollowUpDue]);
 
+  /** Admin employee tracker: owner only (ignores search/column filters) for Overview cards. */
+  const trackerVisits = useMemo(() => {
+    if (!isDbAdmin || !fltOwner) return visits;
+    return visits.filter((v) => (v.assigned_to ?? "") === fltOwner);
+  }, [visits, fltOwner, isDbAdmin]);
+
   const filtersActive = Boolean(
     searchText.trim() || fltVisitStatus || fltPriority || fltOwner || fltFinalStatus || fltFollowUpDue,
   );
@@ -589,15 +595,16 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   }, [activeTab, pickForTask]);
 
   useEffect(() => {
-    if (activeTab !== "timeline" || !visits.length) {
+    if (activeTab !== "timeline" || !filteredVisits.length) {
       if (activeTab !== "timeline") setTimelineRows([]);
+      else if (!filteredVisits.length) setTimelineRows([]);
       return;
     }
     let cancelled = false;
     void (async () => {
       setTimelineLoading(true);
       try {
-        const ids = visits.map((v) => v.id);
+        const ids = filteredVisits.map((v) => v.id);
         const { data, error: actErr } = await supabase
           .from("college_visit_activities")
           .select("id,college_visit_id,activity_type,notes,old_value,new_value,created_by,created_at")
@@ -615,7 +622,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     return () => {
       cancelled = true;
     };
-  }, [activeTab, visits, supabase]);
+  }, [activeTab, filteredVisits, supabase]);
 
   const rowsForExport = useMemo(() => {
     if (visitBulk.selectedCount > 0) {
@@ -1052,7 +1059,46 @@ return (
         </div>
       </div>
 
-      {activeTab === "overview" ? <CollegeOverviewPanel visits={visits} loading={loading} /> : null}
+      {isDbAdmin ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] px-4 py-3">
+          <label className="text-xs font-semibold uppercase tracking-wide text-[#64748b]" htmlFor="cv-employee-tracker">
+            Employee
+          </label>
+          <select
+            id="cv-employee-tracker"
+            className="h-9 min-w-[12rem] rounded-lg border border-[#dbe6f3] bg-white px-3 text-sm text-[#334155]"
+            value={fltOwner}
+            onChange={(e) => setFltOwner(e.target.value)}
+          >
+            <option value="">All employees</option>
+            {ownerOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          {fltOwner ? (
+            <>
+              <span className="text-xs text-[#64748b]">
+                Showing colleges &amp; activity for{" "}
+                <strong className="text-[#0f172a]">{ownerNameMap[fltOwner] || "selected employee"}</strong>
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 rounded-full border-[#e8dcc8] px-3 text-xs"
+                onClick={() => setFltOwner("")}
+              >
+                Show all
+              </Button>
+            </>
+          ) : (
+            <span className="text-xs text-[#64748b]">Showing every employee&apos;s colleges (select one to track activity).</span>
+          )}
+        </div>
+      ) : null}
+
+      {activeTab === "overview" ? <CollegeOverviewPanel visits={trackerVisits} loading={loading} /> : null}
 
       {activeTab === "follow-ups" ? (
         <CollegeFollowUpsPanel visits={filteredVisits} ownerNameMap={ownerNameMap} loading={loading} onOpen={setViewVisit} />
@@ -1234,7 +1280,15 @@ return (
                   <TableHeaderCell label="Last Follow-up Date" className={thClass} />
                   <TableHeaderCell label="Next Follow-up Date" className={thClass} />
                   <TableHeaderFilter label="Priority" value={fltPriority} options={COLLEGE_PRIORITIES.map((p) => ({ value: p, label: p }))} onChange={setFltPriority} className={thClass} />
-                  <TableHeaderFilter label="Owner" value={fltOwner} options={ownerOptions.map((o) => ({ value: o.id, label: o.label }))} onChange={setFltOwner} className={thClass} />
+                  <TableHeaderFilter
+                    label="Owner"
+                    value={fltOwner}
+                    options={ownerOptions.map((o) => ({ value: o.id, label: o.label }))}
+                    onChange={setFltOwner}
+                    allLabel="All employees"
+                    disabled={!isDbAdmin}
+                    className={thClass}
+                  />
                   <TableHeaderCell label="Description" className={thClass} />
                   <TableHeaderCell label="Last Outcome / Remarks" className={thClass} />
                   <TableHeaderCell label="Days Since Last Follow-up" className={thClass} />

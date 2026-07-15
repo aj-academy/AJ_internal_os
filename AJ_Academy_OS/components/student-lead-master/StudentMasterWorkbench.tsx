@@ -603,6 +603,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const overview = useMemo(() => {
     const todayStr = todayISO();
     const closedStatuses = new Set(["Converted", "Admitted", "Lost", "Not Interested"]);
+    const scope =
+      isAdmin && fltAssigned ? clients.filter((c) => (c.assigned_to || "") === fltAssigned) : clients;
     let newLeads = 0;
     let contacted = 0;
     let interested = 0;
@@ -612,7 +614,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     let followToday = 0;
     let overdue = 0;
     let revenuePotential = 0;
-    for (const c of clients) {
+    for (const c of scope) {
       const st = normalizeStatus(String(c.status));
       if (st === "New" || st === "New Lead") newLeads += 1;
       if (st === "Contacted") contacted += 1;
@@ -628,7 +630,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       }
     }
     return {
-      total: clients.length,
+      total: scope.length,
       newLeads,
       contacted,
       interested,
@@ -639,7 +641,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       overdue,
       revenuePotential,
     };
-  }, [clients, isAdmin]);
+  }, [clients, fltAssigned, isAdmin]);
 
   const filteredClientIds = useMemo(() => new Set(filteredClients.map((c) => c.id)), [filteredClients]);
 
@@ -788,7 +790,9 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     const src: Record<string, number> = {};
     const pipe: Record<string, number> = {};
     const monthBucket: Record<string, number> = {};
-    clients.forEach((c) => {
+    const scope =
+      isAdmin && fltAssigned ? clients.filter((c) => (c.assigned_to || "") === fltAssigned) : clients;
+    scope.forEach((c) => {
       const so = String(c.source || "Unknown");
       src[so] = (src[so] || 0) + 1;
       const st = normalizeStatus(String(c.status));
@@ -804,7 +808,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       pipe: Object.entries(pipe),
       months: monthsSorted,
     };
-  }, [clients]);
+  }, [clients, fltAssigned, isAdmin]);
 
   const patchClientLocal = useCallback((id: string, patch: Partial<CrmClientRow>) => {
     setClients((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -1903,6 +1907,45 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         </div>
       </div>
 
+      {isAdmin ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] px-4 py-3">
+          <label className="text-xs font-semibold uppercase tracking-wide text-[#64748b]" htmlFor="sm-employee-tracker">
+            Employee
+          </label>
+          <select
+            id="sm-employee-tracker"
+            className="h-9 min-w-[12rem] rounded-lg border border-[#dbe6f3] bg-white px-3 text-sm text-[#334155]"
+            value={fltAssigned}
+            onChange={(e) => setFltAssigned(e.target.value)}
+          >
+            <option value="">All employees</option>
+            {employeesForSelect.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.label}
+              </option>
+            ))}
+          </select>
+          {fltAssigned ? (
+            <>
+              <span className="text-xs text-[#64748b]">
+                Showing leads &amp; activity for{" "}
+                <strong className="text-[#0f172a]">{employeeNameMap[fltAssigned] || "selected employee"}</strong>
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 rounded-full border-[#e8dcc8] px-3 text-xs"
+                onClick={() => setFltAssigned("")}
+              >
+                Show all
+              </Button>
+            </>
+          ) : (
+            <span className="text-xs text-[#64748b]">Showing every employee&apos;s leads (select one to track activity).</span>
+          )}
+        </div>
+      ) : null}
+
       {activeTab === "overview" && (
         <>
           <div className="stat-cards-grid-5">
@@ -2686,7 +2729,7 @@ function AllLeadsTable({
                     value={fltAssigned}
                     onChange={setFltAssigned}
                     options={employeeOptions.map((e) => ({ value: e.id, label: e.label }))}
-                    allLabel="All counsellors"
+                    allLabel="All employees"
                     disabled={!isAdmin}
                     className={thCls}
                   />

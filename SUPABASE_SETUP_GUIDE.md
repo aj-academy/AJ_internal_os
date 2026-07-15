@@ -163,7 +163,7 @@ API (staff session): `GET/POST /api/college-visits`, `PATCH/DELETE /api/college-
 
 **Employee task notification opens wrong page / dashboard?** Run **`task_notification_employee_link_fix.sql`**. Older installs linked employees to `/student/my-tasks` (blocked by the student layout). The app also remaps those links client-side; the SQL fixes new notifications and backfills old ones.
 
-**Dashboard pins by Student Lead / College Visit / Project?** Run **`employee_task_pins_section_patch.sql`** after `tasks_linked_lead_access.sql`. In My Tasks, open a subsection → **Add to my dashboard** → multi-select → **Pin selected to dashboard**.
+**Dashboard pins by Student Lead / College Visit / Project?** Run **`employee_task_pins_section_patch.sql`** after `tasks_linked_lead_access.sql` (adds `pin_section` + **UPDATE** grant for upsert). In My Tasks, open a subsection → **Add to my dashboard** → multi-select → **Pin selected to dashboard**. Pins store `pin_section` (`lead` | `college` | `project` | `all`) and appear in matching tables on the employee dashboard.
 
 My Tasks (employee) uses ownership tabs (**Assigned to me** / **Tasks I assigned**) plus type tabs (**Student Lead** / **College Visit** / **Project**) so columns match the link type. Phone / WhatsApp / email and **View / Activity** work on student-lead tasks for the assignee and the person who assigned the task.
 
