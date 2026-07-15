@@ -210,7 +210,28 @@ export function resolveCollegeContacts(row: {
   connected_person_role?: string | null;
 }): CollegeContact[] {
   const parsed = parseCollegeContacts(row.contacts);
-  if (parsed.length) return normalizeCollegeContacts(parsed);
+  if (parsed.length) {
+    const normalized = normalizeCollegeContacts(parsed);
+    // If legacy contact_number still holds "A / B" but JSON only kept the primary, restore alternates for edit/outreach.
+    const legacyPhones = splitLegacyPhones(row.contact_number);
+    if (legacyPhones.length > 1) {
+      const primaryIdx = normalized.findIndex((c) => c.is_primary);
+      const idx = primaryIdx >= 0 ? primaryIdx : 0;
+      const primary = normalized[idx];
+      if (primary) {
+        const merged: string[] = [];
+        for (const p of [...primary.phones, ...legacyPhones]) {
+          const t = p.trim();
+          if (t && !merged.includes(t)) merged.push(t);
+        }
+        normalized[idx] = {
+          ...primary,
+          phones: merged.slice(0, MAX_PHONES_PER_CONTACT),
+        };
+      }
+    }
+    return normalized;
+  }
 
   const phones = splitLegacyPhones(row.contact_number);
   const name = (row.connected_person_name ?? "").trim();

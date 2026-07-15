@@ -17,7 +17,7 @@ import {
   emptyCollegeContact,
   MAX_COLLEGE_CONTACTS,
   MAX_PHONES_PER_CONTACT,
-  normalizeCollegeContacts,
+  newCollegeContactId,
   type CollegeContact,
   type CollegeVisitFormValue,
 } from "@/components/college-visits/collegeVisitsHelpers";
@@ -40,9 +40,30 @@ interface CollegeVisitFormPanelProps {
   proposalUploadSlot?: ReactNode;
 }
 
+function ensureFormContacts(contacts: CollegeContact[]): CollegeContact[] {
+  const list = (contacts?.length ? contacts : [emptyCollegeContact(true)])
+    .slice(0, MAX_COLLEGE_CONTACTS)
+    .map((c) => ({
+      id: c.id || newCollegeContactId(),
+      name: c.name ?? "",
+      role: c.role ?? "",
+      // Keep blank alternate slots while editing — never strip empties here.
+      phones: (c.phones?.length ? [...c.phones] : [""]).slice(0, MAX_PHONES_PER_CONTACT),
+      email: c.email ?? "",
+      is_primary: Boolean(c.is_primary),
+    }));
+
+  if (!list.length) return [emptyCollegeContact(true)];
+  const primaryIdx = list.findIndex((c) => c.is_primary);
+  return list.map((c, i) => ({
+    ...c,
+    phones: c.phones.length ? c.phones : [""],
+    is_primary: primaryIdx >= 0 ? i === primaryIdx : i === 0,
+  }));
+}
+
 function updateContacts(value: CollegeVisitFormValue, contacts: CollegeContact[], onChange: (v: CollegeVisitFormValue) => void) {
-  // Keep empty phone slots while editing so "+ Alternate number" stays visible.
-  onChange({ ...value, contacts: normalizeCollegeContacts(contacts, { keepEmptyPhones: true }) });
+  onChange({ ...value, contacts: ensureFormContacts(contacts) });
 }
 
 export function CollegeVisitFormPanel({
@@ -59,10 +80,7 @@ export function CollegeVisitFormPanel({
 }: CollegeVisitFormPanelProps) {
   if (!open) return null;
 
-  const contacts = normalizeCollegeContacts(
-    value.contacts?.length ? value.contacts : [emptyCollegeContact(true)],
-    { keepEmptyPhones: true },
-  );
+  const contacts = ensureFormContacts(value.contacts);
 
   const setContact = (id: string, patch: Partial<CollegeContact>) => {
     updateContacts(
@@ -96,6 +114,7 @@ export function CollegeVisitFormPanel({
     const c = contacts.find((x) => x.id === contactId);
     if (!c) return;
     const phones = [...c.phones];
+    while (phones.length <= phoneIdx) phones.push("");
     phones[phoneIdx] = phone;
     setContact(contactId, { phones });
   };
@@ -226,15 +245,22 @@ export function CollegeVisitFormPanel({
                   </div>
 
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="font-medium text-[#334155]">Phone numbers</span>
                       <button
                         type="button"
-                        className="text-xs font-semibold text-[#a68b2e] hover:underline disabled:opacity-40"
-                        onClick={() => addPhone(contact.id)}
-                        disabled={contact.phones.length >= MAX_PHONES_PER_CONTACT}
+                        className="shrink-0 text-xs font-semibold text-[#a68b2e] hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          addPhone(contact.id);
+                        }}
+                        disabled={contact.phones.length >= MAX_PHONES_PER_CONTACT || submitting}
                       >
                         + Alternate number
+                        {contact.phones.length >= MAX_PHONES_PER_CONTACT
+                          ? ` (max ${MAX_PHONES_PER_CONTACT})`
+                          : ""}
                       </button>
                     </div>
                     {contact.phones.map((phone, phoneIdx) => (
@@ -245,19 +271,28 @@ export function CollegeVisitFormPanel({
                           className="border-[#e8dcc8] bg-white"
                           placeholder={phoneIdx === 0 ? "Primary mobile" : `Alternate ${phoneIdx + 1}`}
                           inputMode="tel"
+                          disabled={submitting}
                         />
                         {contact.phones.length > 1 ? (
                           <button
                             type="button"
                             aria-label="Remove number"
                             className="shrink-0 rounded-xl border border-[#e8dcc8] px-2 text-[#94a3b8] hover:bg-rose-50 hover:text-rose-600"
-                            onClick={() => removePhone(contact.id, phoneIdx)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              removePhone(contact.id, phoneIdx);
+                            }}
+                            disabled={submitting}
                           >
                             <X className="h-4 w-4" />
                           </button>
                         ) : null}
                       </div>
                     ))}
+                    <p className="text-[11px] text-[#94a3b8]">
+                      Add up to {MAX_PHONES_PER_CONTACT} numbers per contact. Call / WhatsApp will let you pick which one.
+                    </p>
                   </div>
 
                   <label className="grid gap-1">
