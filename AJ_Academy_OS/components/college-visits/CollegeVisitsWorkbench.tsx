@@ -74,6 +74,12 @@ import {
   isMissingCollegeVisitsTable,
   primaryOutreachPhone,
   collegeOutreachTargets,
+  collegePhoneTargets,
+  collegeEmailTargets,
+  collegeOutreachTargetLabel,
+  shouldShowCollegeOutreachPicker,
+  anyCollegeOutreachPhone,
+  anyCollegeOutreachEmail,
   type CollegeOutreachTarget,
   type CollegeVisitActivityRow,
   type CollegeVisitFormValue,
@@ -296,7 +302,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   }, []);
 
   const handleCollegePhoneClick = useCallback(
-    async (row: CollegeVisitRow, phoneOverride?: string) => {
+    async (row: CollegeVisitRow, phoneOverride?: string, targetLabel?: string) => {
       const phone = (phoneOverride || primaryOutreachPhone(row)).trim();
       if (!phone) {
         setError("No contact number on this college.");
@@ -307,7 +313,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       markOutreach(row.id, { phoneCalled: true });
       window.location.href = `tel:${phone}`;
       try {
-        await logCollegeActivity(row.id, "Phone Call", `Called ${phone}`);
+        const who = targetLabel?.trim() ? ` (${targetLabel.trim()})` : "";
+        await logCollegeActivity(row.id, "Phone Call", `Called ${phone}${who}`);
         setSuccess("Call started and logged to activity.");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not log call.");
@@ -318,12 +325,12 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const requestCollegePhone = useCallback(
     (row: CollegeVisitRow) => {
-      const phoneTargets = collegeOutreachTargets(row).filter((t) => t.phone);
+      const phoneTargets = collegePhoneTargets(row);
       if (phoneTargets.length === 0) {
-        setError("No contact number on this college.");
+        setError("No contact number on this college. Add a phone on at least one contact.");
         return;
       }
-      if (phoneTargets.length === 1) {
+      if (!shouldShowCollegeOutreachPicker(phoneTargets)) {
         void handleCollegePhoneClick(row, phoneTargets[0].phone);
         return;
       }
@@ -346,12 +353,12 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const requestCollegeWhatsApp = useCallback(
     (row: CollegeVisitRow) => {
-      const phoneTargets = collegeOutreachTargets(row).filter((t) => t.phone);
+      const phoneTargets = collegePhoneTargets(row);
       if (phoneTargets.length === 0) {
-        setError("No WhatsApp number on this college.");
+        setError("No WhatsApp number on this college. Add a phone on at least one contact.");
         return;
       }
-      if (phoneTargets.length === 1) {
+      if (!shouldShowCollegeOutreachPicker(phoneTargets)) {
         openCollegeWhatsAppCompose(row, phoneTargets[0].phone);
         return;
       }
@@ -424,21 +431,12 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const requestCollegeEmail = useCallback(
     (row: CollegeVisitRow) => {
-      const emailTargets = collegeOutreachTargets(row).filter((t) => t.email.trim());
-      // de-dupe by email
-      const uniq: CollegeOutreachTarget[] = [];
-      const seen = new Set<string>();
-      for (const t of emailTargets) {
-        const key = t.email.trim().toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        uniq.push(t);
-      }
+      const uniq = collegeEmailTargets(row);
       if (uniq.length === 0) {
-        setError("No email address on this college.");
+        setError("No email address on this college. Add an email on at least one contact.");
         return;
       }
-      if (uniq.length === 1) {
+      if (!shouldShowCollegeOutreachPicker(uniq)) {
         openCollegeEmailCompose(row, uniq[0]);
         return;
       }
@@ -1325,7 +1323,8 @@ return (
                   pageRows.map((row, idx) => {
                     const days = daysSince(row.last_follow_up_date);
                     const due = isFollowUpDue(row);
-                    const phone = primaryOutreachPhone(row);
+                    const phone = anyCollegeOutreachPhone(row);
+                    const email = anyCollegeOutreachEmail(row);
                     const flags = outreachDone[row.id] ?? {};
                     const person = row.connected_person_name || row.contacts?.find((c) => c.is_primary)?.name || "-";
                     const personRole = row.connected_person_role || row.contacts?.find((c) => c.is_primary)?.role || "";
@@ -1378,7 +1377,7 @@ return (
                         <td className={`${tdClass} min-w-[5.5rem]`}>
                           <StudentOutreachButtons
                             mode="email"
-                            email={row.email || collegeOutreachTargets(row).find((t) => t.email)?.email}
+                            email={email}
                             emailSent={flags.emailSent}
                             onEmailClick={() => requestCollegeEmail(row)}
                           />
@@ -1695,12 +1694,14 @@ return (
           <div className="fixed left-1/2 top-1/2 z-[70] w-[min(100vw-2rem,24rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[#e8dcc8] bg-white p-4 shadow-xl">
             <h3 className="text-base font-semibold text-[#3d3428]">
               {outreachPicker.mode === "phone"
-                ? "Choose number to call"
+                ? "Choose who to call"
                 : outreachPicker.mode === "whatsapp"
-                  ? "Choose WhatsApp number"
-                  : "Choose email"}
+                  ? "Choose WhatsApp contact"
+                  : "Choose email contact"}
             </h3>
-            <p className="mt-1 text-xs text-[#6b5d4d]">{outreachPicker.row.college_name}</p>
+            <p className="mt-1 text-xs text-[#6b5d4d]">
+              {outreachPicker.row.college_name} · pick Principal, Placement Officer, or any saved contact
+            </p>
             <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
               {outreachPicker.targets.map((t) => (
                 <button
@@ -1708,15 +1709,16 @@ return (
                   type="button"
                   className="flex w-full flex-col rounded-xl border border-[#e8dcc8] bg-[#fffdf8] px-3 py-2.5 text-left transition hover:border-[#c9a227] hover:bg-[#faf3e3]"
                   onClick={() => {
-                    if (outreachPicker.mode === "phone") void handleCollegePhoneClick(outreachPicker.row, t.phone);
+                    const label = collegeOutreachTargetLabel(t);
+                    if (outreachPicker.mode === "phone") void handleCollegePhoneClick(outreachPicker.row, t.phone, label);
                     else if (outreachPicker.mode === "whatsapp") openCollegeWhatsAppCompose(outreachPicker.row, t.phone);
                     else openCollegeEmailCompose(outreachPicker.row, t);
                   }}
                 >
-                  <span className="text-sm font-semibold text-[#3d3428]">
-                    {t.personLabel}
-                    {t.role ? ` · ${t.role}` : ""}
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-[#a68b2e]">
+                    {t.role?.trim() || "Contact"}
                   </span>
+                  <span className="text-sm font-semibold text-[#3d3428]">{t.personLabel || "Unnamed"}</span>
                   <span className="text-xs text-[#6b5d4d]">
                     {outreachPicker.mode === "email" ? t.email : t.phone}
                   </span>

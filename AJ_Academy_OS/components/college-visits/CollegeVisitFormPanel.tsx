@@ -173,7 +173,7 @@ export function CollegeVisitFormPanel({
                 <div>
                   <p className="text-xs font-semibold uppercase text-[#94a3b8]">Contacts</p>
                   <p className="mt-0.5 text-[11px] text-[#64748b]">
-                    Primary is used for Call / WhatsApp / Email by default. Up to {MAX_COLLEGE_CONTACTS} people.
+                    Add Principal, Placement Officer, etc. Put a phone/email on each person — Call / WhatsApp / Email will ask who to contact.
                   </p>
                 </div>
                 <Button

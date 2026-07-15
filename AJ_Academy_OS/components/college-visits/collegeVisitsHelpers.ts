@@ -337,6 +337,39 @@ export function collegeOutreachTargets(row: CollegeVisitRow): CollegeOutreachTar
   return targets;
 }
 
+export function collegePhoneTargets(row: CollegeVisitRow): CollegeOutreachTarget[] {
+  return collegeOutreachTargets(row).filter((t) => Boolean(t.phone.trim()));
+}
+
+export function collegeEmailTargets(row: CollegeVisitRow): CollegeOutreachTarget[] {
+  const emailTargets = collegeOutreachTargets(row).filter((t) => t.email.trim());
+  const uniq: CollegeOutreachTarget[] = [];
+  const seen = new Set<string>();
+  for (const t of emailTargets) {
+    // Keep one option per contact+email so different people with the same email still appear once each by contact.
+    const key = `${t.contactId}:${t.email.trim().toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    uniq.push(t);
+  }
+  return uniq;
+}
+
+/** Show picker when more than one contact option exists (by person or by number). */
+export function shouldShowCollegeOutreachPicker(targets: CollegeOutreachTarget[]): boolean {
+  if (targets.length <= 1) return false;
+  const contactIds = new Set(targets.map((t) => t.contactId));
+  return contactIds.size > 1 || targets.length > 1;
+}
+
+/** Label for picker rows: Role first, then name. */
+export function collegeOutreachTargetLabel(t: CollegeOutreachTarget): string {
+  const role = t.role.trim();
+  const name = t.personLabel.trim() || "Contact";
+  if (role && name) return `${role} · ${name}`;
+  return role || name;
+}
+
 /** First usable phone when Contact Number has multiples like "944… / 959…". */
 export function primaryCollegePhone(contact: string | null | undefined): string {
   if (!contact?.trim()) return "";
@@ -344,13 +377,21 @@ export function primaryCollegePhone(contact: string | null | undefined): string 
 }
 
 export function primaryOutreachPhone(row: CollegeVisitRow): string {
-  const targets = collegeOutreachTargets(row).filter((t) => t.phone);
+  const targets = collegePhoneTargets(row);
   const primary = getPrimaryCollegeContact(resolveCollegeContacts(row));
   if (primary) {
     const hit = targets.find((t) => t.contactId === primary.id && t.phone);
     if (hit) return hit.phone;
   }
   return targets[0]?.phone || primaryCollegePhone(row.contact_number);
+}
+
+export function anyCollegeOutreachPhone(row: CollegeVisitRow): string {
+  return collegePhoneTargets(row)[0]?.phone || primaryOutreachPhone(row);
+}
+
+export function anyCollegeOutreachEmail(row: CollegeVisitRow): string {
+  return collegeEmailTargets(row)[0]?.email?.trim() || (row.email ?? "").trim();
 }
 
 export function todayISO() {
