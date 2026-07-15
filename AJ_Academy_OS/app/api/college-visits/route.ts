@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   const limit = isAdmin ? 2000 : 800;
 
   const supabase = await createClient();
-  // Admin: all employees' colleges (tracking). Employee: own assigned_to only.
+  // Admin: all employees' colleges (tracking). Employee: own assigned_to only (+ CRM pins merged below).
   let select = COLLEGE_VISIT_SELECT;
   let q = supabase.from("college_visits").select(select).order("updated_at", { ascending: false }).limit(limit);
   if (!isAdmin) q = q.eq("assigned_to", user.id);
@@ -52,7 +52,58 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  return NextResponse.json({ visits: (data ?? []).map((r) => mapCollegeVisitRow(r)) });
+  let visits = (data ?? []).map((r) => mapCollegeVisitRow(r));
+  const pinIds: string[] = [];
+
+  if (!isAdmin) {
+    try {
+      const { data: rpcIds, error: pinRpcErr } = await supabase.rpc("get_my_crm_pin_ids", {
+        p_entity_type: "college",
+      });
+      if (!pinRpcErr && Array.isArray(rpcIds)) {
+        pinIds.push(...(rpcIds as string[]));
+      } else {
+        const { data: pinRows } = await supabase
+          .from("employee_crm_pins")
+          .select("entity_id")
+          .eq("user_id", user.id)
+          .eq("entity_type", "college");
+        for (const r of pinRows ?? []) {
+          if (r.entity_id) pinIds.push(String(r.entity_id));
+        }
+      }
+    } catch {
+      /* pins optional until SQL deployed */
+    }
+
+    const ownedIds = new Set(visits.map((v) => v.id));
+    const missing = [...new Set(pinIds)].filter((id) => !ownedIds.has(id));
+    if (missing.length) {
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/admin");
+        const admin = createAdminClient();
+        let pinSelect = COLLEGE_VISIT_SELECT;
+        let { data: pinData, error: pinErr } = await admin
+          .from("college_visits")
+          .select(pinSelect)
+          .in("id", missing);
+        while (pinErr) {
+          const fallback = nextCollegeVisitSelect(pinSelect, pinErr.message);
+          if (!fallback) break;
+          pinSelect = fallback;
+          ({ data: pinData, error: pinErr } = await admin.from("college_visits").select(pinSelect).in("id", missing));
+        }
+        if (!pinErr && pinData?.length) {
+          visits = [...visits, ...pinData.map((r) => mapCollegeVisitRow(r))];
+          visits.sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")));
+        }
+      } catch {
+        /* service role missing — owned rows still returned */
+      }
+    }
+  }
+
+  return NextResponse.json({ visits, pinIds: [...new Set(pinIds)] });
 }
 
 export async function POST(request: Request) {

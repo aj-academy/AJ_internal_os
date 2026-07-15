@@ -20,8 +20,6 @@ type PinnedTask = TaskRecord & {
 };
 
 const SECTION_ORDER: { id: TaskAssignmentType | "other"; label: string; hrefSuffix: string }[] = [
-  { id: "lead", label: "Student Lead", hrefSuffix: "?section=lead" },
-  { id: "college", label: "College Visit", hrefSuffix: "?section=college" },
   { id: "project", label: "Project", hrefSuffix: "?section=project" },
   { id: "other", label: "Other", hrefSuffix: "" },
 ];
@@ -29,13 +27,20 @@ const SECTION_ORDER: { id: TaskAssignmentType | "other"; label: string; hrefSuff
 const TASK_PIN_SELECT =
   "id,title,description,assigned_to,priority,status,start_date,due_date,progress,project_id,assignment_type,client_ids,college_visit_ids,created_at,updated_at";
 
-/** Bucket from pin_section first, then task.assignment_type. */
+/** Dashboard only shows project (and other) task pins — lead/college pins go to Student Master / College Visits. */
 function sectionOf(task: PinnedTask): (typeof SECTION_ORDER)[number]["id"] {
   const fromPin = (task.pin_section || "").trim().toLowerCase();
-  if (fromPin === "lead" || fromPin === "college" || fromPin === "project") return fromPin;
+  if (fromPin === "project") return "project";
+  if (fromPin === "lead" || fromPin === "college") return "other"; // filtered out below
   const t = (task.assignment_type || "").trim().toLowerCase();
-  if (t === "lead" || t === "college" || t === "project") return t;
+  if (t === "project") return "project";
+  if (t === "lead" || t === "college") return "other";
   return "other";
+}
+
+function isCrmWorkspacePin(task: PinnedTask): boolean {
+  const s = (task.pin_section || task.assignment_type || "").trim().toLowerCase();
+  return s === "lead" || s === "college";
 }
 
 function parseIdList(raw: unknown): string[] {
@@ -247,9 +252,9 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
   }, [load, supabase]);
 
   const grouped = useMemo(() => {
-    const pinnedOnly = rows.filter((r) => r.pinned);
+    const pinnedOnly = rows.filter((r) => r.pinned && !isCrmWorkspacePin(r));
     const recentOnly = rows.filter((r) => !r.pinned);
-    // Always render lead/college/project buckets that have pins (never a single dump)
+    // Project (and misc) dashboard pins only — Student Lead / College Visit pin to CRM modules
     const buckets = SECTION_ORDER.map((s) => ({
       ...s,
       items: pinnedOnly.filter((t) => sectionOf(t) === s.id),
@@ -265,11 +270,11 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">My tasks</p>
-          <h3 className="mt-1 text-lg font-semibold text-[#0f172a]">Dashboard pins by section</h3>
+          <h3 className="mt-1 text-lg font-semibold text-[#0f172a]">Dashboard pins</h3>
           <p className="mt-1 text-sm text-[#64748b]">
             {receiveOnly
               ? "Tasks assigned to you by admins, mentors, or freelancers."
-              : "Pinned tasks appear under Student Lead / College Visit / Project tables (from My Tasks Pin selected)."}
+              : "Project task pins appear here. Student Lead / College Visit pins save into Student Master and College Visits instead."}
           </p>
         </div>
         <Link
@@ -292,7 +297,7 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
               <p className="mt-1">
                 {receiveOnly
                   ? "When someone assigns you work, it will show here and on My Tasks."
-                  : "Open My Tasks -> Student Lead / College Visit / Project -> select rows -> Pin selected to dashboard."}
+                  : "Open My Tasks → Project to pin project tasks here. Pin Student Lead / College Visit rows into Student Master / College Visits."}
               </p>
             </div>
           </div>
@@ -300,18 +305,11 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
           <>
             {grouped.pinnedCount === 0 ? (
               <div className="rounded-xl border border-dashed border-[#e8dcc8] bg-[#fffbeb] px-4 py-3 text-xs text-[#92400e]">
-                No pins yet. From My Tasks, open a subsection, select tasks, then click Pin selected to dashboard.
+                No project pins yet. From My Tasks → Project, select tasks and Pin selected to dashboard. Student Lead / College Visit pins go to those CRM sections.
               </div>
             ) : null}
             {grouped.buckets.map((bucket) => {
-              const linkedCol =
-                bucket.id === "lead"
-                  ? "Student Lead(s)"
-                  : bucket.id === "college"
-                    ? "College(s)"
-                    : bucket.id === "project"
-                      ? "Project"
-                      : "Linked";
+              const linkedCol = bucket.id === "project" ? "Project" : "Linked";
               return (
                 <div key={bucket.id} className="overflow-hidden rounded-xl border border-[#e8edf5]">
                   <div className="flex items-center justify-between gap-2 border-b border-[#e8edf5] bg-[#f8fbff] px-4 py-2">

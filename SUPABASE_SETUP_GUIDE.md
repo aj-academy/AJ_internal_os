@@ -164,8 +164,11 @@ API (staff session): `GET/POST /api/college-visits`, `PATCH/DELETE /api/college-
 
 **Employee task notification opens wrong page / dashboard?** Run **`task_notification_employee_link_fix.sql`**. Older installs linked employees to `/student/my-tasks` (blocked by the student layout). The app also remaps those links client-side; the SQL fixes new notifications and backfills old ones.
 
-**Dashboard pins by Student Lead / College Visit / Project?** Re-run **`employee_task_pins_section_patch.sql`** after `tasks_linked_lead_access.sql` (adds `pin_section`, `can_pin_employee_task`, and **`upsert_my_task_pins` RPC** — fixes Pin selected when nested RLS blocked upserts). My Tasks also has **`/api/tasks/pins`** as a service-role fallback. Multi-select → **Pin selected to dashboard**. Pins appear under matching section tables on the employee dashboard.
-My Tasks (employee) uses ownership tabs (**Assigned to me** / **Tasks I assigned**) plus type tabs (**Student Lead** / **College Visit** / **Project**) so columns match the link type. Phone / WhatsApp / email and **View / Activity** work on student-lead tasks for the assignee and the person who assigned the task.
+**Pin Student Lead / College Visit into CRM (not Dashboard)?** Run **`employee_crm_pins.sql`** after `tasks_linked_lead_access.sql` + `crm_owner_isolation.sql`. From My Tasks → Student Lead / College Visit, multi-select → **Pin selected to Student Master / College Visits**. That stores entity pins in `employee_crm_pins` and merges them into employee **Student Master → All Students** / **College Visits** (via `/api/tasks/crm-pins`). **Project** tasks still use **`employee_task_pins_section_patch.sql`** + **Pin selected to dashboard** (Dashboard → My tasks). View opens the same Edit student / Edit college form as CRM; Activity opens separately.
+
+**Project dashboard pins?** Re-run **`employee_task_pins_section_patch.sql`** after `tasks_linked_lead_access.sql` (adds `pin_section`, `can_pin_employee_task`, and **`upsert_my_task_pins` RPC**). My Tasks also has **`/api/tasks/pins`** as a service-role fallback.
+
+My Tasks (employee) uses ownership tabs (**Assigned to me** / **Tasks I assigned**) plus type tabs (**Student Lead** / **College Visit** / **Project**) so columns match the link type. Phone / WhatsApp / email work on student-lead tasks; **View** opens the CRM edit form and **Activity** opens history separately.
 
 ### Student portal (same modules as employee)
 

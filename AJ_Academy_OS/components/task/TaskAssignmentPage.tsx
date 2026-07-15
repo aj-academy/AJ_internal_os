@@ -27,12 +27,24 @@ import {
   TaskSubsectionCollegesTable,
   TaskSubsectionLeadsTable,
 } from "@/components/task/TaskSubsectionEntityTables";
-import { STUDENT_LEAD_SELECT, STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES, isMissingStudentProposalFileColumn, type CrmClientRow } from "@/components/student-lead-master/studentMasterHelpers";
+import { displayLeadName, STUDENT_LEAD_SELECT, STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES, isMissingStudentProposalFileColumn, type CrmClientRow } from "@/components/student-lead-master/studentMasterHelpers";
+import { StudentLeadFormPanel, type StudentLeadFormValue } from "@/components/student-lead-master/StudentLeadFormPanel";
+import {
+  buildEmployeeLeadUpdatePayload,
+  crmClientRowToStudentForm,
+  emptyStudentLeadForm,
+} from "@/components/student-lead-master/studentLeadFormMap";
+import { LeadActivityModal, type LeadActivityItem } from "@/components/shared/LeadActivityModal";
+import { CollegeVisitFormPanel } from "@/components/college-visits/CollegeVisitFormPanel";
 import {
   COLLEGE_VISIT_SELECT,
+  collegeVisitRowToForm,
+  emptyCollegeVisitForm,
   nextCollegeVisitSelect,
+  type CollegeVisitFormValue,
   type CollegeVisitRow,
 } from "@/components/college-visits/collegeVisitsHelpers";
+import { fetchInterestedPrograms } from "@/lib/studentPrograms";
 import {
   consumeTaskAssignDraft,
   consumeTaskCollegeSelection,
@@ -176,6 +188,19 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<TaskFormValue>(initialForm);
   const [viewTask, setViewTask] = useState<TaskRecord | null>(null);
+  const [editLeadId, setEditLeadId] = useState<string | null>(null);
+  const [editLeadForm, setEditLeadForm] = useState<StudentLeadFormValue>(() => emptyStudentLeadForm());
+  const [editLeadSubmitting, setEditLeadSubmitting] = useState(false);
+  const [programOptions, setProgramOptions] = useState<string[]>([]);
+  const [activityLead, setActivityLead] = useState<CrmClientRow | null>(null);
+  const [activityLeadRows, setActivityLeadRows] = useState<LeadActivityItem[]>([]);
+  const [activityLeadLoading, setActivityLeadLoading] = useState(false);
+  const [editCollegeId, setEditCollegeId] = useState<string | null>(null);
+  const [editCollegeForm, setEditCollegeForm] = useState<CollegeVisitFormValue>(() => emptyCollegeVisitForm());
+  const [editCollegeSubmitting, setEditCollegeSubmitting] = useState(false);
+  const [activityCollege, setActivityCollege] = useState<CollegeVisitRow | null>(null);
+  const [activityCollegeRows, setActivityCollegeRows] = useState<LeadActivityItem[]>([]);
+  const [activityCollegeLoading, setActivityCollegeLoading] = useState(false);
   const [completeTask, setCompleteTask] = useState<TaskRecord | null>(null);
   const [completeSubmitting, setCompleteSubmitting] = useState(false);
   const [projectOptions, setProjectOptions] = useState<{ id: string; label: string }[]>([]);
@@ -1371,9 +1396,9 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     await reload();
   };
 
-  const handleBulkPinToDashboard = async () => {
+  const handleBulkPinSelected = async () => {
     if (taskSelection.selectedCount === 0) {
-      setError("Select at least one task row, then click Pin selected to dashboard.");
+      setError("Select at least one task row, then click Pin selected.");
       return;
     }
     if (!currentUserId) {
@@ -1382,7 +1407,6 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     }
     const ids = [...taskSelection.selected];
     const taskById = Object.fromEntries(rows.map((t) => [t.id, t]));
-    /** Prefer active subsection; otherwise each task's assignment_type so buckets stay correct. */
     const sectionFor = (taskId: string): string => {
       if (linkTypeFilter === "lead" || linkTypeFilter === "college" || linkTypeFilter === "project") {
         return linkTypeFilter;
@@ -1391,118 +1415,94 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       if (t === "lead" || t === "college" || t === "project") return t;
       return "all";
     };
-    // One section for the bulk RPC (usually the active subsection). Mixed All-tab pins use first task's type.
-    const primarySection = sectionFor(ids[0] ?? "");
-    const sectionsUsed = [...new Set(ids.map((id) => sectionFor(id)))];
+
+    const leadIds = ids.filter((id) => sectionFor(id) === "lead");
+    const collegeIds = ids.filter((id) => sectionFor(id) === "college");
+    const projectIds = ids.filter((id) => sectionFor(id) === "project" || sectionFor(id) === "all");
 
     setPinBusy(true);
     setError(null);
     setSuccess(null);
     try {
-      // Prefer RPC (bypasses nested RLS failures on employee_task_pins upsert).
-      const { data: pinnedCount, error: rpcError } = await supabase.rpc("upsert_my_task_pins", {
-        p_task_ids: ids,
-        p_pin_section: primarySection,
-      });
+      const messages: string[] = [];
 
-      if (!rpcError) {
-        // If mixed sections on All tab, re-pin remaining groups so each keeps its bucket.
-        if (sectionsUsed.length > 1) {
-          for (const section of sectionsUsed) {
-            if (section === primarySection) continue;
-            const groupIds = ids.filter((id) => sectionFor(id) === section);
-            if (!groupIds.length) continue;
-            const { error: groupErr } = await supabase.rpc("upsert_my_task_pins", {
-              p_task_ids: groupIds,
-              p_pin_section: section,
-            });
-            if (groupErr) {
-              // Non-fatal: primary group already pinned
-              console.warn("pin section group:", groupErr.message);
-            }
-          }
-        }
-
-        const n = typeof pinnedCount === "number" ? pinnedCount : Number(pinnedCount) || ids.length;
+      const pinCrm = async (taskIds: string[], entityType: "lead" | "college") => {
+        const res = await fetch("/api/tasks/crm-pins", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ taskIds, entityType }),
+        });
+        const json = (await res.json()) as {
+          pinned?: number;
+          destination?: string;
+          error?: string;
+          warning?: string;
+        };
+        if (!res.ok) throw new Error(json.error || "Could not pin CRM records.");
+        const n = json.pinned ?? 0;
         if (n <= 0) {
-          setError(
-            "Could not pin these tasks. You can only pin work assigned to you (or that you assigned). Re-run AJ_Academy_SB/employee_task_pins_section_patch.sql if this keeps failing.",
+          throw new Error(
+            entityType === "lead"
+              ? "No linked student leads on the selected tasks."
+              : "No linked colleges on the selected tasks.",
           );
-          return;
         }
-        const sectionLabel = sectionsUsed
-          .map((s) =>
-            s === "lead" ? "Student Lead" : s === "college" ? "College Visit" : s === "project" ? "Project" : "All",
-          )
-          .join(", ");
-        taskSelection.clearSelection();
-        setSuccess(
-          `${n} task(s) pinned to your dashboard (${sectionLabel}). Open Dashboard → My tasks to see them.`,
+        messages.push(
+          `${n} ${entityType === "lead" ? "student lead(s)" : "college(s)"} saved to ${json.destination ?? (entityType === "lead" ? "Student Master → All Students" : "College Visits")}.`,
         );
-        if (typeof window !== "undefined") {
-          window.scrollTo({ top: 0, behavior: "smooth" });
+        if (json.warning) messages.push(json.warning);
+      };
+
+      if (leadIds.length) await pinCrm(leadIds, "lead");
+      if (collegeIds.length) await pinCrm(collegeIds, "college");
+
+      if (projectIds.length) {
+        const { data: pinnedCount, error: rpcError } = await supabase.rpc("upsert_my_task_pins", {
+          p_task_ids: projectIds,
+          p_pin_section: "project",
+        });
+        if (rpcError && !/upsert_my_task_pins|function|schema cache|could not find/i.test(rpcError.message)) {
+          throw new Error(
+            /permission|denied|policy|rls/i.test(rpcError.message)
+              ? "Pin blocked by database permissions. Run AJ_Academy_SB/employee_task_pins_section_patch.sql in Supabase."
+              : toReadableTaskError(rpcError),
+          );
         }
-        return;
-      }
-
-      // Fallback when RPC not deployed yet — direct upsert with clear errors
-      if (!/upsert_my_task_pins|function|schema cache|could not find/i.test(rpcError.message)) {
-        setError(
-          /permission|denied|policy|rls/i.test(rpcError.message)
-            ? "Pin blocked by database permissions. Run AJ_Academy_SB/employee_task_pins_section_patch.sql in Supabase SQL Editor, then try again."
-            : toReadableTaskError(rpcError),
-        );
-        return;
-      }
-
-      const now = new Date().toISOString();
-      const rowsToInsert = ids.map((task_id) => ({
-        user_id: currentUserId,
-        task_id,
-        pin_section: sectionFor(task_id),
-        pinned_at: now,
-      }));
-      const { error: pinError } = await supabase.from("employee_task_pins").upsert(rowsToInsert, {
-        onConflict: "user_id,task_id",
-      });
-      if (pinError) {
-        if (/pin_section|schema cache|column|permission|denied|update|policy/i.test(pinError.message)) {
-          // Try insert-only rows that are missing
-          let inserted = 0;
-          for (const row of rowsToInsert) {
-            const { error: insErr } = await supabase.from("employee_task_pins").insert({
-              user_id: row.user_id,
-              task_id: row.task_id,
-              pinned_at: row.pinned_at,
-            });
-            if (!insErr) inserted += 1;
-            else if (/duplicate|unique/i.test(insErr.message)) inserted += 1;
-          }
-          if (inserted === 0) {
-            setError(
-              "Run AJ_Academy_SB/employee_task_pins_section_patch.sql in Supabase (adds pin helpers + upsert_my_task_pins), then try again.",
+        if (rpcError) {
+          const now = new Date().toISOString();
+          const { error: pinError } = await supabase.from("employee_task_pins").upsert(
+            projectIds.map((task_id) => ({
+              user_id: currentUserId,
+              task_id,
+              pin_section: "project",
+              pinned_at: now,
+            })),
+            { onConflict: "user_id,task_id" },
+          );
+          if (pinError) {
+            throw new Error(
+              /pin_section|schema|permission|denied|policy/i.test(pinError.message)
+                ? "Run AJ_Academy_SB/employee_task_pins_section_patch.sql in Supabase, then try again."
+                : toReadableTaskError(pinError),
             );
-            return;
           }
-          setSuccess(
-            `${inserted} task(s) pinned. Re-run employee_task_pins_section_patch.sql so dashboard sections (Student Lead / College Visit / Project) save correctly.`,
-          );
-          taskSelection.clearSelection();
-          if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-          return;
+          messages.push(`${projectIds.length} project task(s) pinned to Dashboard → My tasks.`);
+        } else {
+          const n = typeof pinnedCount === "number" ? pinnedCount : Number(pinnedCount) || projectIds.length;
+          if (n <= 0) {
+            throw new Error("Could not pin project tasks to the dashboard.");
+          }
+          messages.push(`${n} project task(s) pinned to Dashboard → My tasks.`);
         }
-        setError(toReadableTaskError(pinError));
+      }
+
+      if (!messages.length) {
+        setError("Select Student Lead, College Visit, or Project tasks to pin.");
         return;
       }
-      const sectionLabel = sectionsUsed
-        .map((s) =>
-          s === "lead" ? "Student Lead" : s === "college" ? "College Visit" : s === "project" ? "Project" : "All",
-        )
-        .join(", ");
+
       taskSelection.clearSelection();
-      setSuccess(
-        `${ids.length} task(s) pinned to your dashboard (${sectionLabel}). Open Dashboard → My tasks to see them.`,
-      );
+      setSuccess(messages.join(" "));
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
       setError(toReadableTaskError(e));
@@ -1510,6 +1510,141 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       setPinBusy(false);
     }
   };
+
+  const openLeadEdit = (lead: CrmClientRow, leadLoaded: boolean) => {
+    if (!leadLoaded) {
+      setError("Lead details are not loaded yet. Refresh My Tasks and try View again.");
+      return;
+    }
+    setViewTask(null);
+    setEditCollegeId(null);
+    setEditLeadId(lead.id);
+    setEditLeadForm(crmClientRowToStudentForm(lead));
+    void fetchInterestedPrograms(supabase).then(setProgramOptions).catch(() => setProgramOptions([]));
+  };
+
+  const openLeadActivity = async (lead: CrmClientRow) => {
+    setActivityLead(lead);
+    setActivityLeadLoading(true);
+    setActivityLeadRows([]);
+    const { data, error: actError } = await supabase
+      .from("lead_activities")
+      .select("id,client_id,activity_type,notes,old_value,new_value,created_at,created_by")
+      .eq("client_id", lead.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (actError) setError(actError.message);
+    else setActivityLeadRows((data ?? []) as LeadActivityItem[]);
+    setActivityLeadLoading(false);
+  };
+
+  const saveLeadEdit = async () => {
+    if (!editLeadId || !currentUserId) return;
+    setEditLeadSubmitting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const payload = buildEmployeeLeadUpdatePayload(editLeadForm);
+      const { error: upError } = await supabase.from("clients").update(payload).eq("id", editLeadId);
+      if (upError) throw upError;
+      setLinkedLeadById((prev) => {
+        const prior = prev[editLeadId];
+        if (!prior) return prev;
+        return {
+          ...prev,
+          [editLeadId]: {
+            ...prior,
+            ...payload,
+            lead_name: editLeadForm.lead_name.trim() || prior.lead_name,
+          } as CrmClientRow,
+        };
+      });
+      setSuccess("Student lead updated.");
+      setEditLeadId(null);
+      await reload();
+    } catch (e) {
+      setError(toReadableTaskError(e));
+    } finally {
+      setEditLeadSubmitting(false);
+    }
+  };
+
+  const openCollegeEdit = (college: CollegeVisitRow, collegeLoaded: boolean) => {
+    if (!collegeLoaded) {
+      setError("College details are not loaded yet. Refresh My Tasks and try View again.");
+      return;
+    }
+    setViewTask(null);
+    setEditLeadId(null);
+    setEditCollegeId(college.id);
+    setEditCollegeForm(collegeVisitRowToForm(college));
+  };
+
+  const openCollegeActivity = async (college: CollegeVisitRow) => {
+    setActivityCollege(college);
+    setActivityCollegeLoading(true);
+    setActivityCollegeRows([]);
+    const res = await fetch(`/api/college-visits/${college.id}/activities`);
+    const json = (await res.json().catch(() => ({}))) as {
+      activities?: { id: string; activity_type?: string | null; notes?: string | null; created_at: string; created_by?: string | null; old_value?: string | null; new_value?: string | null }[];
+      error?: string;
+    };
+    if (!res.ok) {
+      setError(json.error || "Could not load college activity.");
+      setActivityCollegeRows([]);
+    } else {
+      setActivityCollegeRows(
+        (json.activities ?? []).map((a) => ({
+          id: a.id,
+          activity_type: a.activity_type ?? null,
+          notes: a.notes ?? null,
+          old_value: a.old_value ?? null,
+          new_value: a.new_value ?? null,
+          created_at: a.created_at,
+          created_by: a.created_by ?? null,
+        })),
+      );
+    }
+    setActivityCollegeLoading(false);
+  };
+
+  const saveCollegeEdit = async () => {
+    if (!editCollegeId || !currentUserId) return;
+    if (!editCollegeForm.college_name.trim()) {
+      setError("College name is required.");
+      return;
+    }
+    setEditCollegeSubmitting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(`/api/college-visits/${editCollegeId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editCollegeForm),
+      });
+      const json = (await res.json()) as { visit?: CollegeVisitRow; error?: string };
+      if (!res.ok) throw new Error(json.error || "Could not update college visit.");
+      if (json.visit) {
+        setLinkedCollegeById((prev) => ({ ...prev, [editCollegeId]: json.visit! }));
+      }
+      setSuccess("College visit updated.");
+      setEditCollegeId(null);
+      await reload();
+    } catch (e) {
+      setError(toReadableTaskError(e));
+    } finally {
+      setEditCollegeSubmitting(false);
+    }
+  };
+
+  const pinButtonLabel = (() => {
+    if (pinBusy) return "Pinning...";
+    if (linkTypeFilter === "lead") return "Pin selected to Student Master";
+    if (linkTypeFilter === "college") return "Pin selected to College Visits";
+    if (linkTypeFilter === "project") return "Pin selected to dashboard";
+    return "Pin selected";
+  })();
 
   const persistEmployeeTaskUpdate = useCallback(
     async (taskId: string, status: TaskStatus, progress: number, prior?: TaskRecord) => {
@@ -1744,9 +1879,9 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
               size="sm"
               disabled={pinBusy}
               className="h-7 rounded-lg bg-[#c9a227] px-3 text-xs text-white hover:bg-[#b8921f] disabled:opacity-60"
-              onClick={() => void handleBulkPinToDashboard()}
+              onClick={() => void handleBulkPinSelected()}
             >
-              {pinBusy ? "Pinning..." : "Pin selected to dashboard"}
+              {pinButtonLabel}
             </Button>
           ) : null}
           <Button
@@ -1763,13 +1898,14 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       {linkTypeFilter === "lead" ? (
         <div className="space-y-2">
           <p className="text-xs font-medium text-[#64748b]">
-            Student Lead tasks - one row per linked lead (Student Master columns). Use View / Activity for outreach and progress.
+            Student Lead tasks - one row per linked lead. View opens the Student Master edit form; Activity opens history separately. Pin selected saves leads into Student Master → All Students.
           </p>
           <TaskSubsectionLeadsTable
             rows={subsectionLeadRows}
             employeeNameMap={employeeNameMap}
             loading={loading}
-            onViewTask={(task) => setViewTask(task)}
+            onViewLead={(_task, lead, leadLoaded) => openLeadEdit(lead, leadLoaded)}
+            onActivityLead={(_task, lead) => void openLeadActivity(lead)}
             currentUserId={currentUserId}
             supabase={supabase}
             onOutreachUpdated={() => void reload()}
@@ -1789,13 +1925,14 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       {linkTypeFilter === "college" ? (
         <div className="space-y-2">
           <p className="text-xs font-medium text-[#64748b]">
-            College Visit tasks - one row per linked college (College Visits columns). Use View / Activity for progress and history.
+            College Visit tasks - one row per linked college. View opens the College Visits edit form; Activity opens history separately. Pin selected saves colleges into College Visits.
           </p>
           <TaskSubsectionCollegesTable
             rows={subsectionCollegeRows}
             ownerNameMap={employeeNameMap}
             loading={loading}
-            onViewTask={(task) => setViewTask(task)}
+            onViewCollege={(_task, college, collegeLoaded) => openCollegeEdit(college, collegeLoaded)}
+            onActivityCollege={(_task, college) => void openCollegeActivity(college)}
             selection={{
               allSelected: taskSelection.allSelected,
               someSelected: taskSelection.someSelected,
@@ -1902,6 +2039,51 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           onSuccess={setSuccess}
         />
       ) : null}
+
+      <StudentLeadFormPanel
+        open={!!editLeadId}
+        title="Edit student"
+        value={editLeadForm}
+        programOptions={programOptions}
+        employees={Object.entries(employeeNameMap).map(([id, label]) => ({ id, label }))}
+        canAssign={false}
+        submitting={editLeadSubmitting}
+        onChange={setEditLeadForm}
+        onClose={() => !editLeadSubmitting && setEditLeadId(null)}
+        onSubmit={() => void saveLeadEdit()}
+      />
+
+      <LeadActivityModal
+        open={!!activityLead}
+        title={activityLead ? displayLeadName(activityLead) || "Lead activity" : "Lead activity"}
+        subtitle="From lead_activities"
+        loading={activityLeadLoading}
+        activities={activityLeadRows}
+        employeeNameMap={employeeNameMap}
+        onClose={() => setActivityLead(null)}
+      />
+
+      <CollegeVisitFormPanel
+        open={!!editCollegeId}
+        title="Edit college visit"
+        value={editCollegeForm}
+        owners={Object.entries(employeeNameMap).map(([id, label]) => ({ id, label }))}
+        submitting={editCollegeSubmitting}
+        canAssign={false}
+        onChange={setEditCollegeForm}
+        onClose={() => !editCollegeSubmitting && setEditCollegeId(null)}
+        onSubmit={() => void saveCollegeEdit()}
+      />
+
+      <LeadActivityModal
+        open={!!activityCollege}
+        title={activityCollege?.college_name || "College activity"}
+        subtitle="From college_visit_activities"
+        loading={activityCollegeLoading}
+        activities={activityCollegeRows}
+        employeeNameMap={employeeNameMap}
+        onClose={() => setActivityCollege(null)}
+      />
 
       {panelOpen ? (
         <>

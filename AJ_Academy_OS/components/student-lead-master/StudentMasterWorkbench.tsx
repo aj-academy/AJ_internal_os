@@ -429,6 +429,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
 
   const importFileRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  /** Leads pinned from My Tasks (employee CRM workspace, not ownership transfer). */
+  const [crmPinIds, setCrmPinIds] = useState<Set<string>>(() => new Set());
 
   const buildClientsBaseQuery = useCallback(
     (select = STUDENT_LEAD_SELECT) => {
@@ -444,14 +446,42 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     [currentUserId, isAdmin, supabase],
   );
 
+  const mergePinnedLeads = useCallback(
+    async (owned: CrmClientRow[]): Promise<{ merged: CrmClientRow[]; pinIds: Set<string> }> => {
+      if (isAdmin) return { merged: owned, pinIds: new Set() };
+      try {
+        const res = await fetch("/api/tasks/crm-pins?type=lead&full=1");
+        const json = (await res.json()) as { ids?: string[]; clients?: CrmClientRow[]; error?: string };
+        if (!res.ok) {
+          // Pins table may not exist yet — keep owned rows only
+          return { merged: owned, pinIds: new Set() };
+        }
+        const pinIds = new Set((json.ids ?? []).map(String));
+        const byId = new Map(owned.map((c) => [c.id, c]));
+        for (const row of json.clients ?? []) {
+          if (row?.id && !byId.has(row.id)) byId.set(row.id, row);
+        }
+        const merged = [...byId.values()].sort((a, b) =>
+          String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")),
+        );
+        return { merged, pinIds };
+      } catch {
+        return { merged: owned, pinIds: new Set() };
+      }
+    },
+    [isAdmin],
+  );
+
   const loadClientsDataset = useCallback(async () => {
     let { data, error: loadError } = await buildClientsBaseQuery();
     if (loadError && isMissingStudentProposalFileColumn(loadError.message)) {
       ({ data, error: loadError } = await buildClientsBaseQuery(STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES));
     }
     if (loadError) throw new Error(loadError.message);
-    setClients(data ?? []);
-  }, [buildClientsBaseQuery]);
+    const { merged, pinIds } = await mergePinnedLeads(data ?? []);
+    setCrmPinIds(pinIds);
+    setClients(merged);
+  }, [buildClientsBaseQuery, mergePinnedLeads]);
 
   const reload = useCallback(async () => {
     if (!currentUserId) return;
@@ -481,7 +511,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         ({ data, error: loadError } = await buildClientsBaseQuery(STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES));
       }
       if (loadError) throw new Error(loadError.message);
-      const next = data ?? [];
+      const { merged: next, pinIds } = await mergePinnedLeads(data ?? []);
+      setCrmPinIds(pinIds);
       setClients(next);
       const ids = next.map((c) => c.id);
       if (!ids.length) {
@@ -496,7 +527,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       setError(friendlyError(e));
       logDevSupabase("silentRefreshCrm", e);
     }
-  }, [buildClientsBaseQuery, currentUserId, supabase]);
+  }, [buildClientsBaseQuery, currentUserId, mergePinnedLeads, supabase]);
 
   useEffect(() => {
     void loadEmployees();
@@ -816,8 +847,13 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   }, []);
 
   const canContactLead = useCallback(
-    (lead: CrmClientRow) => isAdmin || lead.assigned_to === currentUserId,
-    [currentUserId, isAdmin],
+    (lead: CrmClientRow) => isAdmin || lead.assigned_to === currentUserId || crmPinIds.has(lead.id),
+    [crmPinIds, currentUserId, isAdmin],
+  );
+
+  const canEditLead = useCallback(
+    (lead: CrmClientRow) => isAdmin || lead.assigned_to === currentUserId || crmPinIds.has(lead.id),
+    [crmPinIds, currentUserId, isAdmin],
   );
 
   const handlePhoneClick = async (lead: CrmClientRow) => {
@@ -2074,6 +2110,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
             programOptions={interestedPrograms}
             employeeOptions={employeesForSelect}
             canContactLead={canContactLead}
+            canEditLead={canEditLead}
             onPhoneClick={(lead) => void handlePhoneClick(lead)}
             onWhatsAppClick={(lead) => openWhatsAppCompose(lead)}
             onEmailClick={(lead) => openEmailCompose(lead)}
@@ -2146,8 +2183,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
             rows={followRowsFiltered}
             clientMap={clientMapFiltered}
             employeeNameMap={employeeNameMap}
-            isAdmin={isAdmin}
-            currentUserId={currentUserId}
+            canEditLead={canEditLead}
             onComplete={(fr) => void markFollowCompleted(fr)}
           />
         </>
@@ -2344,15 +2380,13 @@ function FollowUpsTable({
   rows,
   clientMap,
   employeeNameMap,
-  isAdmin,
-  currentUserId,
+  canEditLead,
   onComplete,
 }: {
   rows: FollowRow[];
   clientMap: Record<string, CrmClientRow>;
   employeeNameMap: Record<string, string>;
-  isAdmin: boolean;
-  currentUserId: string;
+  canEditLead: (l: CrmClientRow) => boolean;
   onComplete: (r: FollowRow) => void;
 }) {
   const visibleRows = rows.filter((fr) => clientMap[fr.client_id]);
@@ -2385,7 +2419,7 @@ function FollowUpsTable({
               {visibleRows.map((fr) => {
                 const cli = clientMap[fr.client_id];
                 if (!cli) return null;
-                const canTouch = isAdmin || cli.assigned_to === currentUserId;
+                const canTouch = canEditLead(cli);
                 return (
                   <tr key={fr.id}>
                     <td className="px-3 py-2 font-semibold text-slate-900">{displayLeadName(cli)}</td>
@@ -2420,7 +2454,7 @@ function FollowUpsTable({
         ) : (
           visibleRows.map((fr) => {
             const cli = clientMap[fr.client_id];
-            const canTouch = isAdmin || cli.assigned_to === currentUserId;
+            const canTouch = canEditLead(cli);
             return (
               <MobileRecordCard
                 key={fr.id}
@@ -2560,6 +2594,7 @@ function AllLeadsTable({
   setFltAdmissionStatus,
   employeeOptions,
   canContactLead,
+  canEditLead,
   onPhoneClick,
   onWhatsAppClick,
   onEmailClick,
@@ -2602,6 +2637,7 @@ function AllLeadsTable({
   setFltAdmissionStatus: (s: string) => void;
   employeeOptions: { id: string; label: string }[];
   canContactLead: (l: CrmClientRow) => boolean;
+  canEditLead: (l: CrmClientRow) => boolean;
   onPhoneClick: (l: CrmClientRow) => void;
   onWhatsAppClick: (l: CrmClientRow) => void;
   onEmailClick: (l: CrmClientRow) => void;
@@ -2915,7 +2951,7 @@ function AllLeadsTable({
                               <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onProfile(lead)}>
                                 View
                               </button>
-                              {(isAdmin || lead.assigned_to === currentUserId) && (
+                              {canEditLead(lead) && (
                                 <button type="button" className="font-semibold text-slate-600 hover:underline" onClick={() => onEdit(lead)}>
                                   Edit
                                 </button>
@@ -2962,7 +2998,7 @@ function AllLeadsTable({
           ) : (
             leads.map((lead) => {
               const program = lead.interested_program || lead.service_interest || "—";
-              const canEdit = isAdmin || lead.assigned_to === currentUserId;
+              const canEdit = canEditLead(lead);
               const canAdmit = isAdmin && !isClosedLeadStatus(String(lead.status));
               const counsellor = lead.assigned_to ? employeeNameMap[lead.assigned_to] : "—";
               const stageOrStatus = lead.lead_stage || lead.status || "—";

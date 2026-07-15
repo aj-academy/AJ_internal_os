@@ -223,7 +223,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const loadVisits = useCallback(async () => {
     const res = await fetch("/api/college-visits");
-    const json = (await res.json()) as { visits?: CollegeVisitRow[]; error?: string };
+    const json = (await res.json()) as { visits?: CollegeVisitRow[]; pinIds?: string[]; error?: string };
     if (!res.ok) {
       const msg = json.error ?? "Could not load college visits.";
       if (isMissingCollegeVisitsTable(msg)) {

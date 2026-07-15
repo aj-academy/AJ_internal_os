@@ -13,7 +13,7 @@ as $$
   select exists (
     select 1
     from jsonb_array_elements(coalesce(p_client_ids, '[]'::jsonb)) as e(val)
-    where lower(btrim(both '"' from e.val::text)) = lower(p_client_id::text)
+    where lower(btrim(e.val::text, '"')) = lower(p_client_id::text)
        or lower(coalesce(e.val #>> '{}', '')) = lower(p_client_id::text)
   );
 $$;

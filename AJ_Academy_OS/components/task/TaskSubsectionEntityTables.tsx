@@ -173,12 +173,13 @@ type SubsectionSelection = {
   onToggleAll: () => void;
 };
 
-/** Single Student Master-shaped grid for My Tasks -> Student Lead (includes task + View/Activity). */
+/** Single Student Master-shaped grid for My Tasks -> Student Lead (View = edit form; Activity separate). */
 export function TaskSubsectionLeadsTable({
   rows,
   employeeNameMap,
   loading,
-  onViewTask,
+  onViewLead,
+  onActivityLead,
   selection,
   currentUserId,
   supabase,
@@ -189,7 +190,8 @@ export function TaskSubsectionLeadsTable({
   rows: TaskLeadFlatRow[];
   employeeNameMap: Record<string, string>;
   loading?: boolean;
-  onViewTask: (task: TaskRecord) => void;
+  onViewLead: (task: TaskRecord, lead: CrmClientRow, leadLoaded: boolean) => void;
+  onActivityLead: (task: TaskRecord, lead: CrmClientRow) => void;
   selection?: SubsectionSelection;
   currentUserId?: string;
   supabase?: ReturnType<typeof createClient>;
@@ -383,15 +385,27 @@ export function TaskSubsectionLeadsTable({
                   <td className={td}>{lead.payment_status || "-"}</td>
                   <td className={td}>{lead.admission_status || "-"}</td>
                   <td className={td}>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-7 rounded-full px-2 text-[11px]"
-                      onClick={() => onViewTask(task)}
-                    >
-                      View / Activity
-                    </Button>
+                    <div className="flex flex-wrap items-center justify-center gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 rounded-full px-2 text-[11px]"
+                        onClick={() => onViewLead(task, lead, leadLoaded)}
+                      >
+                        View
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 rounded-full px-2 text-[11px]"
+                        disabled={!leadLoaded}
+                        onClick={() => onActivityLead(task, lead)}
+                      >
+                        Activity
+                      </Button>
+                    </div>
                   </td>
                 </tr>
                 );
@@ -492,18 +506,20 @@ export function TaskSubsectionLeadsTable({
   );
 }
 
-/** Single College Visits-shaped grid for My Tasks -> College Visit (includes task + View/Activity). */
+/** Single College Visits-shaped grid for My Tasks -> College Visit (View = edit form; Activity separate). */
 export function TaskSubsectionCollegesTable({
   rows,
   ownerNameMap,
   loading,
-  onViewTask,
+  onViewCollege,
+  onActivityCollege,
   selection,
 }: {
   rows: TaskCollegeFlatRow[];
   ownerNameMap: Record<string, string>;
   loading?: boolean;
-  onViewTask: (task: TaskRecord) => void;
+  onViewCollege: (task: TaskRecord, college: CollegeVisitRow, collegeLoaded: boolean) => void;
+  onActivityCollege: (task: TaskRecord, college: CollegeVisitRow) => void;
   selection?: SubsectionSelection;
 }) {
   const {
@@ -623,15 +639,27 @@ export function TaskSubsectionCollegesTable({
                     <td className={td}>{college.proposal_pdf_url || "—"}</td>
                     <td className={td}>{college.proposal_pdf_name || "—"}</td>
                     <td className={td}>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-7 rounded-full px-2 text-[11px]"
-                        onClick={() => onViewTask(task)}
-                      >
-                        View / Activity
-                      </Button>
+                      <div className="flex flex-wrap items-center justify-center gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 rounded-full px-2 text-[11px]"
+                          onClick={() => onViewCollege(task, college, collegeLoaded)}
+                        >
+                          View
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 rounded-full px-2 text-[11px]"
+                          disabled={!collegeLoaded}
+                          onClick={() => onActivityCollege(task, college)}
+                        >
+                          Activity
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 );
