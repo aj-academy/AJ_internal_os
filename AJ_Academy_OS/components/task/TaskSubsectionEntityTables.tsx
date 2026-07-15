@@ -1,14 +1,27 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TableHeaderCell } from "@/components/ui/TableHeaderFilter";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { usePagination } from "@/lib/usePagination";
 import { STUDENT_MASTER_CSV_HEADERS } from "@/components/student-lead-master/studentMasterCsv";
 import { displayLeadName, type CrmClientRow } from "@/components/student-lead-master/studentMasterHelpers";
+import { StudentOutreachButtons } from "@/components/student-lead-master/StudentOutreachButtons";
+import { WhatsAppComposeModal } from "@/components/shared/WhatsAppComposeModal";
+import { EmailComposeModal } from "@/components/shared/EmailComposeModal";
 import { COLLEGE_VISIT_CSV_HEADERS } from "@/components/college-visits/collegeVisitsCsv";
 import { daysSince, isFollowUpDue, type CollegeVisitRow } from "@/components/college-visits/collegeVisitsHelpers";
+import { whatsAppHref } from "@/components/employee/leads/employeeLeadConfig";
+import {
+  logTaskLeadEmail,
+  logTaskLeadPhoneCall,
+  logTaskLeadWhatsApp,
+  mapClientRowToTaskLinkedLead,
+  type TaskLinkedLead,
+} from "@/lib/taskLeadOutreach";
 import { formatDisplayDate } from "@/lib/datetime";
+import type { createClient } from "@/lib/supabase/client";
 import type { TaskRecord } from "@/types/task";
 
 export type TaskLeadFlatRow = {
@@ -167,12 +180,22 @@ export function TaskSubsectionLeadsTable({
   loading,
   onViewTask,
   selection,
+  currentUserId,
+  supabase,
+  onOutreachUpdated,
+  onOutreachError,
+  onOutreachSuccess,
 }: {
   rows: TaskLeadFlatRow[];
   employeeNameMap: Record<string, string>;
   loading?: boolean;
   onViewTask: (task: TaskRecord) => void;
   selection?: SubsectionSelection;
+  currentUserId?: string;
+  supabase?: ReturnType<typeof createClient>;
+  onOutreachUpdated?: () => void;
+  onOutreachError?: (msg: string) => void;
+  onOutreachSuccess?: (msg: string) => void;
 }) {
   const {
     paginatedItems: pageRows,
@@ -184,11 +207,17 @@ export function TaskSubsectionLeadsTable({
     setPageSize,
   } = usePagination(rows, 25);
 
+  const [waTarget, setWaTarget] = useState<{ taskId: string; lead: TaskLinkedLead } | null>(null);
+  const [emailTarget, setEmailTarget] = useState<{ taskId: string; lead: TaskLinkedLead } | null>(null);
+  const [outreachBusy, setOutreachBusy] = useState(false);
+
   const th =
     "min-w-[10.5rem] whitespace-nowrap px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-[#64748b]";
   const td = "whitespace-nowrap px-4 py-3 text-center text-xs text-[#334155]";
   const tdTrunc = `${td} max-w-[160px] truncate`;
   const colSpan = STUDENT_MASTER_CSV_HEADERS.length + 5 + (selection ? 1 : 0);
+
+  const canOutreach = Boolean(currentUserId && supabase);
 
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
@@ -234,7 +263,10 @@ export function TaskSubsectionLeadsTable({
                 </td>
               </tr>
             ) : (
-              pageRows.map(({ key, task, lead, leadLoaded }) => (
+              pageRows.map(({ key, task, lead, leadLoaded }) => {
+                const linked = leadLoaded ? mapClientRowToTaskLinkedLead(lead) : null;
+                const outreachOk = Boolean(canOutreach && linked);
+                return (
                 <tr key={key} className="hover:bg-[#fafcff]">
                   {selection ? (
                     <td className={td}>
@@ -252,47 +284,104 @@ export function TaskSubsectionLeadsTable({
                   </td>
                   <td className={`${td} sticky-col sticky-col-2`}>{task.status}</td>
                   <td className={td}>{task.progress}%</td>
-                  <td className={td}>{task.assigner_display_name || "—"}</td>
-                  <td className={`${td} font-semibold`} title={leadLoaded ? undefined : "Lead CRM row not loaded (permissions or schema)"}>
-                    {displayLeadName(lead)}
+                  <td className={td}>{task.assigner_display_name || "-"}</td>
+                  <td
+                    className={`${td} font-semibold`}
+                    title={leadLoaded ? displayLeadName(lead) : "Run AJ_Academy_SB/tasks_linked_lead_access.sql to load student data"}
+                  >
+                    {displayLeadName(lead) || "-"}
                     {!leadLoaded ? <span className="ml-1 text-[10px] text-amber-700">(limited)</span> : null}
                   </td>
-                  <td className={td}>{lead.phone || "—"}</td>
-                  <td className={td}>{lead.whatsapp || "—"}</td>
-                  <td className={tdTrunc}>{lead.email || "—"}</td>
-                  <td className={td}>{lead.city || "—"}</td>
-                  <td className={tdTrunc}>{lead.current_profile || "—"}</td>
-                  <td className={td}>{lead.degree || "—"}</td>
-                  <td className={tdTrunc}>{lead.college_company || lead.company_name || "—"}</td>
-                  <td className={td}>{lead.year_of_passing || "—"}</td>
-                  <td className={td}>{lead.employment_status || "—"}</td>
-                  <td className={td}>{lead.current_salary != null ? String(lead.current_salary) : "—"}</td>
-                  <td className={tdTrunc}>{lead.interested_program || lead.service_interest || "—"}</td>
-                  <td className={tdTrunc}>{lead.career_goal || "—"}</td>
-                  <td className={tdTrunc}>{lead.preferred_job_role || "—"}</td>
-                  <td className={td}>{lead.target_salary != null ? String(lead.target_salary) : "—"}</td>
-                  <td className={td}>{lead.current_skill_level || "—"}</td>
-                  <td className={tdTrunc}>{lead.main_career_problem || "—"}</td>
-                  <td className={td}>{lead.joining_timeline || "—"}</td>
-                  <td className={td}>{lead.budget != null ? String(lead.budget) : "—"}</td>
-                  <td className={td}>{lead.payment_plan || "—"}</td>
-                  <td className={td}>{lead.parent_approval_required || "—"}</td>
-                  <td className={td}>{lead.decision_maker || "—"}</td>
-                  <td className={td}>{lead.preferred_batch || "—"}</td>
-                  <td className={td}>{lead.laptop_availability || "—"}</td>
-                  <td className={td}>{lead.source || "—"}</td>
-                  <td className={td}>{lead.assigned_to ? employeeNameMap[lead.assigned_to] || "—" : "—"}</td>
-                  <td className={td}>{lead.lead_stage || "—"}</td>
+                  <td className={`${td} min-w-[11rem]`}>
+                    <div className="flex justify-center">
+                      <StudentOutreachButtons
+                        mode="phone"
+                        phone={lead.phone}
+                        phoneCalled={lead.phone_called}
+                        onPhoneClick={
+                          outreachOk && linked && currentUserId && supabase
+                            ? () => {
+                                void (async () => {
+                                  const phone = linked.phone?.trim();
+                                  if (!phone) return;
+                                  try {
+                                    window.location.href = `tel:${phone}`;
+                                    await logTaskLeadPhoneCall(supabase, {
+                                      taskId: task.id,
+                                      lead: linked,
+                                      userId: currentUserId,
+                                      phone,
+                                    });
+                                    onOutreachSuccess?.(`Call logged for ${linked.name}.`);
+                                    onOutreachUpdated?.();
+                                  } catch (e) {
+                                    onOutreachError?.(e instanceof Error ? e.message : "Could not log call.");
+                                  }
+                                })();
+                              }
+                            : undefined
+                        }
+                      />
+                    </div>
+                  </td>
+                  <td className={td}>
+                    <div className="flex justify-center">
+                      <StudentOutreachButtons
+                        mode="whatsapp"
+                        phone={lead.phone}
+                        whatsapp={lead.whatsapp}
+                        whatsappSent={lead.whatsapp_sent}
+                        onWhatsAppClick={
+                          outreachOk && linked ? () => setWaTarget({ taskId: task.id, lead: linked }) : undefined
+                        }
+                      />
+                    </div>
+                  </td>
+                  <td className={td}>
+                    <div className="flex justify-center">
+                      <StudentOutreachButtons
+                        mode="email"
+                        email={lead.email}
+                        emailSent={lead.email_sent}
+                        onEmailClick={
+                          outreachOk && linked ? () => setEmailTarget({ taskId: task.id, lead: linked }) : undefined
+                        }
+                      />
+                    </div>
+                  </td>
+                  <td className={td}>{lead.city || "-"}</td>
+                  <td className={tdTrunc}>{lead.current_profile || "-"}</td>
+                  <td className={td}>{lead.degree || "-"}</td>
+                  <td className={tdTrunc}>{lead.college_company || lead.company_name || "-"}</td>
+                  <td className={td}>{lead.year_of_passing || "-"}</td>
+                  <td className={td}>{lead.employment_status || "-"}</td>
+                  <td className={td}>{lead.current_salary != null ? String(lead.current_salary) : "-"}</td>
+                  <td className={tdTrunc}>{lead.interested_program || lead.service_interest || "-"}</td>
+                  <td className={tdTrunc}>{lead.career_goal || "-"}</td>
+                  <td className={tdTrunc}>{lead.preferred_job_role || "-"}</td>
+                  <td className={td}>{lead.target_salary != null ? String(lead.target_salary) : "-"}</td>
+                  <td className={td}>{lead.current_skill_level || "-"}</td>
+                  <td className={tdTrunc}>{lead.main_career_problem || "-"}</td>
+                  <td className={td}>{lead.joining_timeline || "-"}</td>
+                  <td className={td}>{lead.budget != null ? String(lead.budget) : "-"}</td>
+                  <td className={td}>{lead.payment_plan || "-"}</td>
+                  <td className={td}>{lead.parent_approval_required || "-"}</td>
+                  <td className={td}>{lead.decision_maker || "-"}</td>
+                  <td className={td}>{lead.preferred_batch || "-"}</td>
+                  <td className={td}>{lead.laptop_availability || "-"}</td>
+                  <td className={td}>{lead.source || "-"}</td>
+                  <td className={td}>{lead.assigned_to ? employeeNameMap[lead.assigned_to] || "-" : "-"}</td>
+                  <td className={td}>{lead.lead_stage || "-"}</td>
                   <td className={td}>
                     <LeadStatusBadge status={lead.status} />
                   </td>
-                  <td className={td}>{lead.priority || "—"}</td>
-                  <td className={tdTrunc}>{lead.primary_objection || "—"}</td>
+                  <td className={td}>{lead.priority || "-"}</td>
+                  <td className={tdTrunc}>{lead.primary_objection || "-"}</td>
                   <td className={td}>{formatDisplayDate(lead.follow_up_date)}</td>
-                  <td className={td}>{lead.fee_quoted != null ? String(lead.fee_quoted) : "—"}</td>
-                  <td className={td}>{lead.final_fee != null ? String(lead.final_fee) : "—"}</td>
-                  <td className={td}>{lead.payment_status || "—"}</td>
-                  <td className={td}>{lead.admission_status || "—"}</td>
+                  <td className={td}>{lead.fee_quoted != null ? String(lead.fee_quoted) : "-"}</td>
+                  <td className={td}>{lead.final_fee != null ? String(lead.final_fee) : "-"}</td>
+                  <td className={td}>{lead.payment_status || "-"}</td>
+                  <td className={td}>{lead.admission_status || "-"}</td>
                   <td className={td}>
                     <Button
                       type="button"
@@ -305,7 +394,8 @@ export function TaskSubsectionLeadsTable({
                     </Button>
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
@@ -317,6 +407,86 @@ export function TaskSubsectionLeadsTable({
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
+      />
+      <WhatsAppComposeModal
+        open={!!waTarget}
+        leadName={waTarget?.lead.name ?? ""}
+        phone={waTarget?.lead.whatsapp || waTarget?.lead.phone || ""}
+        templates={[]}
+        submitting={outreachBusy}
+        onClose={() => !outreachBusy && setWaTarget(null)}
+        onSend={(message) => {
+          void (async () => {
+            if (!waTarget || !currentUserId || !supabase) return;
+            const trimmed = message.trim();
+            if (!trimmed) {
+              onOutreachError?.("Enter a message.");
+              return;
+            }
+            const wa = whatsAppHref(waTarget.lead.whatsapp || waTarget.lead.phone, trimmed);
+            if (!wa) {
+              onOutreachError?.("No WhatsApp number.");
+              return;
+            }
+            setOutreachBusy(true);
+            try {
+              window.open(wa, "_blank", "noopener,noreferrer");
+              await logTaskLeadWhatsApp(supabase, {
+                taskId: waTarget.taskId,
+                lead: waTarget.lead,
+                userId: currentUserId,
+                messagePreview: trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed,
+              });
+              onOutreachSuccess?.("WhatsApp logged on lead and task activity.");
+              onOutreachUpdated?.();
+              setWaTarget(null);
+            } catch (e) {
+              onOutreachError?.(e instanceof Error ? e.message : "Could not log WhatsApp.");
+            } finally {
+              setOutreachBusy(false);
+            }
+          })();
+        }}
+      />
+      <EmailComposeModal
+        open={!!emailTarget}
+        leadName={emailTarget?.lead.name ?? ""}
+        email={emailTarget?.lead.email ?? ""}
+        templates={[]}
+        submitting={outreachBusy}
+        onClose={() => !outreachBusy && setEmailTarget(null)}
+        onSend={(message) => {
+          void (async () => {
+            if (!emailTarget || !currentUserId || !supabase) return;
+            const trimmed = message.trim();
+            if (!trimmed) {
+              onOutreachError?.("Enter a message.");
+              return;
+            }
+            const to = emailTarget.lead.email?.trim();
+            if (!to) {
+              onOutreachError?.("No email address.");
+              return;
+            }
+            setOutreachBusy(true);
+            try {
+              window.location.href = `mailto:${encodeURIComponent(to)}?body=${encodeURIComponent(trimmed)}`;
+              await logTaskLeadEmail(supabase, {
+                taskId: emailTarget.taskId,
+                lead: emailTarget.lead,
+                userId: currentUserId,
+                subject: trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed,
+              });
+              onOutreachSuccess?.("Email logged on lead and task activity.");
+              onOutreachUpdated?.();
+              setEmailTarget(null);
+            } catch (e) {
+              onOutreachError?.(e instanceof Error ? e.message : "Could not log email.");
+            } finally {
+              setOutreachBusy(false);
+            }
+          })();
+        }}
       />
     </div>
   );

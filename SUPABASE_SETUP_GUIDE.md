@@ -159,11 +159,11 @@ API (staff session): `GET/POST /api/college-visits`, `PATCH/DELETE /api/college-
 
 **Employee not seeing assigned tasks?** Run **`tasks_employee_rls_fix.sql`** — `aj_academy_roles_patch.sql` removed employee task SELECT policies; this restores them.
 
-**Employee Lead Contact shows “—” on My Tasks?** Run **`tasks_linked_lead_access.sql`** after `employee_student_master_rls.sql`. It lets assignees/assigners read (and lightly update contact flags on) student leads linked on *their* tasks only — without opening all Student Master rows. Also creates `employee_task_pins` for **Add to my dashboard**.
+**Employee Lead Contact shows “—” / “(limited)” on My Tasks?** Re-run **`tasks_linked_lead_access.sql`** after `employee_student_master_rls.sql`. It fixes `task_links_client` matching on `client_ids`, adds `get_my_task_linked_clients` RPC, and lets assignees read (and lightly update contact flags on) student leads linked on *their* tasks only. Also creates `employee_task_pins` for dashboard pins.
 
 **Employee task notification opens wrong page / dashboard?** Run **`task_notification_employee_link_fix.sql`**. Older installs linked employees to `/student/my-tasks` (blocked by the student layout). The app also remaps those links client-side; the SQL fixes new notifications and backfills old ones.
 
-**Dashboard pins by Student Lead / College Visit / Project?** Run **`employee_task_pins_section_patch.sql`** after `tasks_linked_lead_access.sql` (adds `pin_section` + **UPDATE** grant for upsert). In My Tasks, open a subsection → **Add to my dashboard** → multi-select → **Pin selected to dashboard**. Pins store `pin_section` (`lead` | `college` | `project` | `all`) and appear in matching tables on the employee dashboard.
+**Dashboard pins by Student Lead / College Visit / Project?** Run **`employee_task_pins_section_patch.sql`** after `tasks_linked_lead_access.sql` (adds `pin_section` + **UPDATE** grant for upsert). In My Tasks, open a subsection → multi-select → **Pin selected to dashboard**. Pins store `pin_section` (`lead` | `college` | `project` | `all`) and appear in matching tables on the employee dashboard.
 
 My Tasks (employee) uses ownership tabs (**Assigned to me** / **Tasks I assigned**) plus type tabs (**Student Lead** / **College Visit** / **Project**) so columns match the link type. Phone / WhatsApp / email and **View / Activity** work on student-lead tasks for the assignee and the person who assigned the task.
 

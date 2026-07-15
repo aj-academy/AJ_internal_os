@@ -155,7 +155,6 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const isPortalAssignee = isAssigneeView && (isStudent || isMentor || isFreelancer);
   const [employeeTaskView, setEmployeeTaskView] = useState<EmployeeTaskView>("assigned-to-me");
   const [linkTypeFilter, setLinkTypeFilter] = useState<LinkTypeFilter>("all");
-  const [dashboardPinMode, setDashboardPinMode] = useState(false);
   const employeeDelegatedView = isEmployee && employeeTaskView === "assigned-by-me";
   const showLinkTypeTabs = isEmployee || isAdmin;
   const filterTasksByAssigner = mentorManagesTeam || employeeDelegatedView;
@@ -506,18 +505,36 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         );
       }
       if (clientIds.length) {
-        let clientSelect = STUDENT_LEAD_SELECT;
-        let { data: clients, error: clientsErr } = await supabase
-          .from("clients")
-          .select(clientSelect)
-          .in("id", clientIds);
-        if (clientsErr && isMissingStudentProposalFileColumn(clientsErr.message)) {
-          clientSelect = STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES;
-          ({ data: clients, error: clientsErr } = await supabase
-            .from("clients")
-            .select(clientSelect)
-            .in("id", clientIds));
+        let clients: unknown[] | null = null;
+        let clientsErr: { message: string } | null = null;
+
+        // Prefer RPC (security definer) so assignees always get real Student Master rows
+        const rpc = await supabase.rpc("get_my_task_linked_clients", { p_ids: clientIds });
+        if (!rpc.error && rpc.data) {
+          clients = rpc.data as unknown[];
+        } else {
+          let clientSelect = STUDENT_LEAD_SELECT;
+          let res = await supabase.from("clients").select(clientSelect).in("id", clientIds);
+          if (res.error && isMissingStudentProposalFileColumn(res.error.message)) {
+            clientSelect = STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES;
+            res = await supabase.from("clients").select(clientSelect).in("id", clientIds);
+          }
+          clients = res.data;
+          clientsErr = res.error;
+          // If RLS returned empty (no error) but we requested IDs, try contact-only select as last resort
+          if (!clientsErr && !(clients ?? []).length) {
+            const minimal = await supabase
+              .from("clients")
+              .select(
+                "id,lead_name,name,phone,whatsapp,email,city,status,priority,assigned_to,phone_called,whatsapp_sent,email_sent",
+              )
+              .in("id", clientIds);
+            if (!minimal.error && (minimal.data ?? []).length) {
+              clients = minimal.data;
+            }
+          }
         }
+
         if (clientsErr) {
           console.warn("My Tasks: could not load linked student leads", clientsErr.message);
         }
@@ -531,6 +548,13 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         }
         clientDetailMap = detailMap;
         setLinkedLeadById(fullMap);
+        const missing = clientIds.filter((id) => !fullMap[id]);
+        if (missing.length) {
+          console.warn(
+            "My Tasks: linked leads not readable (run AJ_Academy_SB/tasks_linked_lead_access.sql):",
+            missing.slice(0, 5),
+          );
+        }
       } else {
         setLinkedLeadById({});
       }
@@ -1349,7 +1373,6 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             `${ids.length} task(s) pinned. Re-run employee_task_pins_section_patch.sql so dashboard sections (Student Lead / College Visit / Project) save correctly.`,
           );
           taskSelection.clearSelection();
-          setDashboardPinMode(false);
           return;
         }
       } else {
@@ -1364,7 +1387,6 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       )
       .join(", ");
     taskSelection.clearSelection();
-    setDashboardPinMode(false);
     setSuccess(`${ids.length} task(s) pinned to your dashboard (${sectionLabel}).`);
   };
 
@@ -1576,7 +1598,6 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
               type="button"
               onClick={() => {
                 setLinkTypeFilter(tab.id);
-                setDashboardPinMode(false);
                 taskSelection.clearSelection();
               }}
               className={
@@ -1591,48 +1612,12 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                 : ` (${rows.length})`}
             </button>
           ))}
-          {isEmployee && !employeeDelegatedView ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className={[
-                "ml-auto h-8 rounded-full border-[#c9a227] px-3 text-xs font-semibold",
-                dashboardPinMode ? "bg-[#faf3e3] text-[#92400e]" : "bg-white text-[#92400e]",
-              ].join(" ")}
-              onClick={() => {
-                setDashboardPinMode((v) => !v);
-                if (dashboardPinMode) taskSelection.clearSelection();
-                else {
-                  setSuccess(
-                    "Multi-select is on - tick tasks below, then click Pin selected to dashboard. Pins save under the current subsection (or each task type when on All).",
-                  );
-                }
-              }}
-            >
-              {dashboardPinMode ? "Cancel dashboard pin" : "Add to my dashboard"}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {dashboardPinMode ? (
-        <div className="rounded-xl border border-[#f0e0b0] bg-[#fffbeb] px-3 py-2 text-xs text-[#92400e]">
-          Select one or more tasks in this subsection, then pin them to your employee dashboard
-          {linkTypeFilter === "lead"
-            ? " under Student Lead"
-            : linkTypeFilter === "college"
-              ? " under College Visit"
-              : linkTypeFilter === "project"
-                ? " under Project"
-                : ""}
-          .
         </div>
       ) : null}
 
       {taskSelection.selectedCount > 0 ? (
         <BulkSelectionBar selectedCount={taskSelection.selectedCount} totalCount={filteredRows.length} onClear={taskSelection.clearSelection}>
-          {(isEmployee || dashboardPinMode) && !employeeDelegatedView ? (
+          {(isEmployee || canManageTasks) && !employeeDelegatedView ? (
             <Button
               type="button"
               size="sm"
@@ -1663,6 +1648,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             employeeNameMap={employeeNameMap}
             loading={loading}
             onViewTask={(task) => setViewTask(task)}
+            currentUserId={currentUserId}
+            supabase={supabase}
+            onOutreachUpdated={() => void reload()}
+            onOutreachError={setError}
+            onOutreachSuccess={setSuccess}
             selection={{
               allSelected: taskSelection.allSelected,
               someSelected: taskSelection.someSelected,

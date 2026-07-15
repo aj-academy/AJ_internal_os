@@ -18,12 +18,12 @@ as $$
   select exists (
     select 1
     from public.tasks t
-    where coalesce(t.assignment_type, '') = 'college'
-      and (
-        t.assigned_to = auth.uid()
-        or t.assigned_by = auth.uid()
+    where (t.assigned_to = auth.uid() or t.assigned_by = auth.uid())
+      and exists (
+        select 1
+        from jsonb_array_elements_text(coalesce(t.college_visit_ids, '[]'::jsonb)) as elem(val)
+        where lower(btrim(elem.val)) = lower(p_college_id::text)
       )
-      and t.college_visit_ids @> jsonb_build_array(p_college_id::text)
   );
 $$;
 

@@ -255,7 +255,7 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
               <p className="mt-1">
                 {receiveOnly
                   ? "When someone assigns you work, it will show here and on My Tasks."
-                  : "Open My Tasks -> pick a subsection -> Add to my dashboard -> multi-select -> Pin selected."}
+                  : "Open My Tasks -> pick a subsection -> multi-select rows -> Pin selected to dashboard."}
               </p>
             </div>
           </div>

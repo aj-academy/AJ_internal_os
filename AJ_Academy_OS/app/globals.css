@@ -231,11 +231,12 @@
 
   table.table-freeze-cols .sticky-col-after-check-2 {
     left: calc(var(--sticky-check-w, 3rem) + var(--sticky-col-2, 10.5rem) - 1px);
-    z-index: 2;
+    z-index: 3;
+    box-shadow: 6px 0 8px -6px rgba(15, 23, 42, 0.12);
   }
 
   table.table-freeze-cols thead th.sticky-col-after-check-2 {
-    z-index: 3;
+    z-index: 4;
   }
 
   /* Checkbox / pick column — fixed width must match --sticky-check-w */

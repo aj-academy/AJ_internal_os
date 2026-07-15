@@ -4,6 +4,7 @@
 -- Run after employee_student_master_rls.sql + tasks_assignment_link_patch.sql + tasks_employee_rls_fix.sql.
 -- Safe to re-run.
 
+-- Robust membership check: client id present in tasks.client_ids JSON array (string elements)
 create or replace function public.task_links_client(p_client_id uuid)
 returns boolean
 language sql
@@ -15,19 +16,38 @@ as $$
   select exists (
     select 1
     from public.tasks t
-    where coalesce(t.assignment_type, '') = 'lead'
-      and (
-        t.assigned_to = auth.uid()
-        or t.assigned_by = auth.uid()
+    where (t.assigned_to = auth.uid() or t.assigned_by = auth.uid())
+      and exists (
+        select 1
+        from jsonb_array_elements_text(coalesce(t.client_ids, '[]'::jsonb)) as elem(val)
+        where lower(btrim(elem.val)) = lower(p_client_id::text)
       )
-      and t.client_ids @> jsonb_build_array(p_client_id::text)
   );
 $$;
 
 grant execute on function public.task_links_client(uuid) to authenticated;
 
 comment on function public.task_links_client(uuid) is
-  'True when the current user is assignee or assigner of a lead-linked task that includes this client id.';
+  'True when the current user is assignee or assigner of a task whose client_ids includes this client id.';
+
+-- SECURITY DEFINER loader so My Tasks always gets real Student Master rows for linked leads
+create or replace function public.get_my_task_linked_clients(p_ids uuid[])
+returns setof public.clients
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select c.*
+  from public.clients c
+  where p_ids is not null
+    and cardinality(p_ids) > 0
+    and c.id = any (p_ids)
+    and public.task_links_client(c.id);
+$$;
+
+grant execute on function public.get_my_task_linked_clients(uuid[]) to authenticated;
 
 -- SELECT linked lead contact fields for task work (alongside assigned-only Student Master policy)
 drop policy if exists clients_employee_select_task_linked on public.clients;

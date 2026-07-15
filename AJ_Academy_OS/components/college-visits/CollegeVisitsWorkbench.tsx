@@ -1243,7 +1243,8 @@ return (
               className="table-freeze-cols w-full min-w-[3000px]"
               style={
                 {
-                  ["--sticky-col-2" as string]: "14rem",
+                  /* --sticky-col-2 = S.No width (middle sticky); College Name uses after-check-2 */
+                  ["--sticky-col-2" as string]: "4.25rem",
                   ["--sticky-check-w" as string]: "2.75rem",
                 } as CSSProperties
               }
@@ -1264,7 +1265,10 @@ return (
                     </th>
                   ) : null}
                   <TableHeaderCell label="S.No" className={TABLE_SNO_TH} />
-                  <TableHeaderCell label="College Name" className={`${thClass} min-w-[14rem]`} />
+                  <TableHeaderCell
+                    label="College Name"
+                    className={`${thClass} sticky-col sticky-col-after-check-2 min-w-[14rem]`}
+                  />
                   <TableHeaderCell label="Location" className={thClass} />
                   <TableHeaderCell label="Call" className={`${thClass} min-w-[5.5rem]`} />
                   <TableHeaderCell label="WhatsApp" className={`${thClass} min-w-[5.5rem]`} />
@@ -1353,7 +1357,10 @@ return (
                           </td>
                         ) : null}
                         <td className={TABLE_SNO_TD}>{(page - 1) * pageSize + idx + 1}</td>
-                        <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate font-medium`} title={row.college_name}>
+                        <td
+                          className={`${tdClass} sticky-col sticky-col-after-check-2 min-w-[14rem] max-w-[18rem] truncate font-medium`}
+                          title={row.college_name}
+                        >
                           {row.college_name}
                         </td>
                         <td className={tdClass}>{row.location || "-"}</td>

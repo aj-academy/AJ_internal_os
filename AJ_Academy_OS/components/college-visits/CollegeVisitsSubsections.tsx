@@ -248,15 +248,21 @@ export function CollegePipelineBoard({
 }) {
   return (
     <div className="overflow-x-auto pb-2">
-      <div className="flex min-h-[340px] min-w-[980px] gap-3">
+      <div className="flex h-[min(70vh,720px)] min-h-[360px] min-w-[980px] gap-3">
         {VISIT_STATUSES.map((statusCol) => {
           const col = visits.filter((v) => v.visit_status === statusCol);
           return (
-            <div key={statusCol} className="min-w-[240px] flex-1 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-3">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#475569]">
+            <div
+              key={statusCol}
+              className="flex min-h-0 min-w-[240px] flex-1 flex-col rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-3"
+            >
+              <p className="mb-3 shrink-0 text-xs font-semibold uppercase tracking-wide text-[#475569]">
                 {statusCol} | {col.length}
               </p>
-              <div className="space-y-3">
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1">
+                {col.length === 0 ? (
+                  <p className="px-1 text-xs text-[#94a3b8]">No colleges in this stage.</p>
+                ) : null}
                 {col.map((card) => (
                   <div key={card.id} className="rounded-xl border border-white bg-white p-3 shadow-sm">
                     <p className="font-semibold text-slate-900">{card.college_name}</p>
