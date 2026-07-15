@@ -931,7 +931,9 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const handleDownloadTemplate = () => {
     downloadCollegeVisitImportTemplate();
-    setSuccess("Import template downloaded (headers match the College Visits table).");
+    setSuccess(
+      "Import template downloaded — includes Contact 2 / Contact 3 and alternate phone columns.",
+    );
   };
 
   const handleExport = () => {
@@ -977,7 +979,11 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         const res = await fetch("/api/college-visits", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...formRow, assigned_to: payload.assigned_to ?? "" }),
+          body: JSON.stringify({
+            ...formRow,
+            ...payload,
+            assigned_to: payload.assigned_to ?? currentUserId,
+          }),
         });
         if (!res.ok) {
           const json = (await res.json()) as { error?: string };

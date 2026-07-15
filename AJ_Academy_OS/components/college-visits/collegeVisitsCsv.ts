@@ -1,21 +1,43 @@
 import { buildCsv, downloadCsv, parseCsv } from "@/lib/csv";
 import {
   daysSince,
+  emptyCollegeContact,
+  flatFieldsFromPrimary,
   isFollowUpDue,
+  newCollegeContactId,
+  normalizeCollegeContacts,
+  resolveCollegeContacts,
+  type CollegeContact,
   type CollegeVisitFormValue,
   type CollegeVisitRow,
   emptyCollegeVisitForm,
 } from "@/components/college-visits/collegeVisitsHelpers";
 
-/** Exact table column headers (excluding Actions). Used for template, export, and import. */
+/**
+ * Exact import/export headers.
+ * Primary contact uses the original columns; Contact 2 / Contact 3 hold alternate people
+ * (Principal, Placement Officer, etc.). Put multiple phones on one person with " / ".
+ */
 export const COLLEGE_VISIT_CSV_HEADERS = [
   "S.No",
   "College Name",
   "Location",
   "Contact Number",
+  "Alternate Phone 2",
+  "Alternate Phone 3",
   "Email ID",
   "Connected Person Name",
   "Role",
+  "Contact 2 Name",
+  "Contact 2 Role",
+  "Contact 2 Phone",
+  "Contact 2 Alternate Phone 2",
+  "Contact 2 Email",
+  "Contact 3 Name",
+  "Contact 3 Role",
+  "Contact 3 Phone",
+  "Contact 3 Alternate Phone 2",
+  "Contact 3 Email",
   "Visit Status",
   "Visit Date",
   "MOU Signed Status",
@@ -59,6 +81,15 @@ const HEADER_ALIASES: Record<string, CollegeVisitCsvHeader> = {
   contact_number: "Contact Number",
   phone: "Contact Number",
   mobile: "Contact Number",
+  "primary phone": "Contact Number",
+  "alternate phone 2": "Alternate Phone 2",
+  "alternate phone": "Alternate Phone 2",
+  "alt phone 2": "Alternate Phone 2",
+  "alt phone": "Alternate Phone 2",
+  "phone 2": "Alternate Phone 2",
+  "alternate phone 3": "Alternate Phone 3",
+  "alt phone 3": "Alternate Phone 3",
+  "phone 3": "Alternate Phone 3",
   "email id": "Email ID",
   email: "Email ID",
   "connected person name": "Connected Person Name",
@@ -66,8 +97,40 @@ const HEADER_ALIASES: Record<string, CollegeVisitCsvHeader> = {
   connected_person_name: "Connected Person Name",
   "contact person": "Connected Person Name",
   "contact person name": "Connected Person Name",
+  "contact 1 name": "Connected Person Name",
+  "primary contact name": "Connected Person Name",
   role: "Role",
   connected_person_role: "Role",
+  "contact 1 role": "Role",
+  "primary role": "Role",
+  "contact 2 name": "Contact 2 Name",
+  "alternate contact name": "Contact 2 Name",
+  "contact2 name": "Contact 2 Name",
+  "contact 2 role": "Contact 2 Role",
+  "alternate contact role": "Contact 2 Role",
+  "contact2 role": "Contact 2 Role",
+  "contact 2 phone": "Contact 2 Phone",
+  "contact 2 number": "Contact 2 Phone",
+  "alternate contact phone": "Contact 2 Phone",
+  "contact2 phone": "Contact 2 Phone",
+  "contact 2 alternate phone 2": "Contact 2 Alternate Phone 2",
+  "contact 2 alt phone": "Contact 2 Alternate Phone 2",
+  "contact 2 phone 2": "Contact 2 Alternate Phone 2",
+  "contact 2 email": "Contact 2 Email",
+  "alternate contact email": "Contact 2 Email",
+  "contact2 email": "Contact 2 Email",
+  "contact 3 name": "Contact 3 Name",
+  "contact3 name": "Contact 3 Name",
+  "contact 3 role": "Contact 3 Role",
+  "contact3 role": "Contact 3 Role",
+  "contact 3 phone": "Contact 3 Phone",
+  "contact 3 number": "Contact 3 Phone",
+  "contact3 phone": "Contact 3 Phone",
+  "contact 3 alternate phone 2": "Contact 3 Alternate Phone 2",
+  "contact 3 alt phone": "Contact 3 Alternate Phone 2",
+  "contact 3 phone 2": "Contact 3 Alternate Phone 2",
+  "contact 3 email": "Contact 3 Email",
+  "contact3 email": "Contact 3 Email",
   "visit status": "Visit Status",
   visit_status: "Visit Status",
   "visit date": "Visit Date",
@@ -161,6 +224,132 @@ function cell(cells: string[], idx: Map<CollegeVisitCsvHeader, number>, key: Col
   return stripBom(cells[i] ?? "").trim();
 }
 
+function splitPhoneParts(...parts: string[]): string[] {
+  const out: string[] = [];
+  for (const part of parts) {
+    if (!part?.trim()) continue;
+    for (const p of part.split(/[/|,;]+/)) {
+      const t = p.trim();
+      if (t && !out.includes(t)) out.push(t);
+    }
+  }
+  return out.slice(0, 3);
+}
+
+function emailLooksValid(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+/** Build up to 3 contacts from primary + Contact 2 / Contact 3 CSV columns. */
+export function contactsFromCollegeVisitCsvCells(
+  cells: string[],
+  idx: Map<CollegeVisitCsvHeader, number>,
+): CollegeContact[] {
+  const primaryPhones = splitPhoneParts(
+    cell(cells, idx, "Contact Number"),
+    cell(cells, idx, "Alternate Phone 2"),
+    cell(cells, idx, "Alternate Phone 3"),
+  );
+  const primary: CollegeContact = {
+    id: newCollegeContactId(),
+    name: cell(cells, idx, "Connected Person Name"),
+    role: cell(cells, idx, "Role"),
+    phones: primaryPhones.length ? primaryPhones : [""],
+    email: cell(cells, idx, "Email ID"),
+    is_primary: true,
+  };
+
+  const contact2Phones = splitPhoneParts(
+    cell(cells, idx, "Contact 2 Phone"),
+    cell(cells, idx, "Contact 2 Alternate Phone 2"),
+  );
+  const contact2: CollegeContact = {
+    id: newCollegeContactId(),
+    name: cell(cells, idx, "Contact 2 Name"),
+    role: cell(cells, idx, "Contact 2 Role"),
+    phones: contact2Phones.length ? contact2Phones : [""],
+    email: cell(cells, idx, "Contact 2 Email"),
+    is_primary: false,
+  };
+
+  const contact3Phones = splitPhoneParts(
+    cell(cells, idx, "Contact 3 Phone"),
+    cell(cells, idx, "Contact 3 Alternate Phone 2"),
+  );
+  const contact3: CollegeContact = {
+    id: newCollegeContactId(),
+    name: cell(cells, idx, "Contact 3 Name"),
+    role: cell(cells, idx, "Contact 3 Role"),
+    phones: contact3Phones.length ? contact3Phones : [""],
+    email: cell(cells, idx, "Contact 3 Email"),
+    is_primary: false,
+  };
+
+  const hasContent = (c: CollegeContact) =>
+    Boolean(c.name.trim() || c.role.trim() || c.email.trim() || c.phones.some((p) => p.trim()));
+
+  const list: CollegeContact[] = [primary];
+  if (hasContent(contact2)) list.push(contact2);
+  if (hasContent(contact3)) list.push(contact3);
+  return normalizeCollegeContacts(list);
+}
+
+/** Flatten contacts into primary + Contact 2 / Contact 3 CSV fields for export/template. */
+export function collegeContactsToCsvFields(row: CollegeVisitRow): {
+  contact_number: string;
+  alternate_phone_2: string;
+  alternate_phone_3: string;
+  email: string;
+  connected_person_name: string;
+  role: string;
+  contact_2_name: string;
+  contact_2_role: string;
+  contact_2_phone: string;
+  contact_2_alternate_phone_2: string;
+  contact_2_email: string;
+  contact_3_name: string;
+  contact_3_role: string;
+  contact_3_phone: string;
+  contact_3_alternate_phone_2: string;
+  contact_3_email: string;
+} {
+  const contacts = resolveCollegeContacts(row);
+  const primaryIdx = Math.max(
+    0,
+    contacts.findIndex((c) => c.is_primary),
+  );
+  const ordered = [
+    contacts[primaryIdx],
+    ...contacts.filter((_, i) => i !== primaryIdx),
+  ].filter(Boolean) as CollegeContact[];
+
+  const c1 = ordered[0];
+  const c2 = ordered[1];
+  const c3 = ordered[2];
+  const phones1 = (c1?.phones ?? []).map((p) => p.trim()).filter(Boolean);
+  const phones2 = (c2?.phones ?? []).map((p) => p.trim()).filter(Boolean);
+  const phones3 = (c3?.phones ?? []).map((p) => p.trim()).filter(Boolean);
+
+  return {
+    contact_number: phones1[0] || row.contact_number || "",
+    alternate_phone_2: phones1[1] || "",
+    alternate_phone_3: phones1[2] || "",
+    email: c1?.email?.trim() || row.email || "",
+    connected_person_name: c1?.name?.trim() || row.connected_person_name || "",
+    role: c1?.role?.trim() || row.connected_person_role || "",
+    contact_2_name: c2?.name?.trim() || "",
+    contact_2_role: c2?.role?.trim() || "",
+    contact_2_phone: phones2[0] || "",
+    contact_2_alternate_phone_2: phones2[1] || "",
+    contact_2_email: c2?.email?.trim() || "",
+    contact_3_name: c3?.name?.trim() || "",
+    contact_3_role: c3?.role?.trim() || "",
+    contact_3_phone: phones3[0] || "",
+    contact_3_alternate_phone_2: phones3[1] || "",
+    contact_3_email: c3?.email?.trim() || "",
+  };
+}
+
 function matrixFromUnknownRows(raw: unknown[][]): string[][] {
   return raw
     .map((row) => row.map((c) => (c == null ? "" : stripBom(String(c)).trim())))
@@ -238,14 +427,27 @@ export function collegeVisitRowToCsvCells(
   ownerLabel: string,
 ): (string | number)[] {
   const days = daysSince(row.last_follow_up_date);
+  const c = collegeContactsToCsvFields(row);
   return [
     sno,
     row.college_name ?? "",
     row.location ?? "",
-    row.contact_number ?? "",
-    row.email ?? "",
-    row.connected_person_name ?? "",
-    row.connected_person_role ?? "",
+    c.contact_number,
+    c.alternate_phone_2,
+    c.alternate_phone_3,
+    c.email,
+    c.connected_person_name,
+    c.role,
+    c.contact_2_name,
+    c.contact_2_role,
+    c.contact_2_phone,
+    c.contact_2_alternate_phone_2,
+    c.contact_2_email,
+    c.contact_3_name,
+    c.contact_3_role,
+    c.contact_3_phone,
+    c.contact_3_alternate_phone_2,
+    c.contact_3_email,
     row.visit_status ?? "",
     row.visit_date?.slice(0, 10) ?? "",
     row.mou_signed_status ?? "",
@@ -276,9 +478,21 @@ export function buildCollegeVisitImportTemplateCsv() {
     "Sample Engineering College",
     "Chennai",
     "9876543210",
-    "tpo@college.edu",
+    "9876500001",
+    "",
+    "principal@college.edu",
     "Dr. Example",
-    "TPO",
+    "Principal",
+    "Ms. Placement",
+    "Placement Officer",
+    "9876500002",
+    "",
+    "tpo@college.edu",
+    "Mr. HOD",
+    "HOD",
+    "9876500003",
+    "",
+    "hod@college.edu",
     "Not Visited",
     "",
     "Not Signed",
@@ -287,7 +501,7 @@ export function buildCollegeVisitImportTemplateCsv() {
     "",
     "Warm",
     "",
-    "Campus placement drive discussion",
+    "Campus placement drive discussion - use Contact 2 / Contact 3 for alternate people",
     "",
     "",
     "",
@@ -367,20 +581,34 @@ export function parseCollegeVisitMatrix(
     const assigned_to = opts.defaultOwnerId;
 
     const email = cell(cells, idx, "Email ID");
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const email2 = cell(cells, idx, "Contact 2 Email");
+    const email3 = cell(cells, idx, "Contact 3 Email");
+    if (email && !emailLooksValid(email)) {
       errors.push(`Row ${i + 1}: invalid Email ID.`);
       continue;
     }
+    if (email2 && !emailLooksValid(email2)) {
+      errors.push(`Row ${i + 1}: invalid Contact 2 Email.`);
+      continue;
+    }
+    if (email3 && !emailLooksValid(email3)) {
+      errors.push(`Row ${i + 1}: invalid Contact 3 Email.`);
+      continue;
+    }
+
+    const contacts = contactsFromCollegeVisitCsvCells(cells, idx);
+    const flat = flatFieldsFromPrimary(contacts.length ? contacts : [emptyCollegeContact(true)]);
 
     const base = emptyCollegeVisitForm(assigned_to);
     forms.push({
       ...base,
       college_name: collegeName,
       location: cell(cells, idx, "Location"),
-      contact_number: cell(cells, idx, "Contact Number"),
-      email,
-      connected_person_name: cell(cells, idx, "Connected Person Name"),
-      connected_person_role: cell(cells, idx, "Role"),
+      contact_number: flat.contact_number ?? "",
+      email: flat.email ?? "",
+      connected_person_name: flat.connected_person_name ?? "",
+      connected_person_role: flat.connected_person_role ?? "",
+      contacts: contacts.length ? contacts : [emptyCollegeContact(true)],
       visit_status: cell(cells, idx, "Visit Status") || "Not Visited",
       visit_date: cell(cells, idx, "Visit Date"),
       mou_signed_status: cell(cells, idx, "MOU Signed Status") || "Not Signed",
