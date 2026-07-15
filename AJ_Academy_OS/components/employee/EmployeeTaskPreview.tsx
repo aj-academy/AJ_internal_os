@@ -104,11 +104,25 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
 
       const pinnedTasks: PinnedTask[] = [];
       if (pinnedIds.length) {
-        const { data: pinnedRows } = await supabase
+        const pinnedQuery = await supabase
           .from("tasks")
           .select(TASK_PIN_SELECT)
           .in("id", pinnedIds)
           .returns<TaskRecord[]>();
+        let pinnedRows = pinnedQuery.data;
+        if (pinnedQuery.error) {
+          console.warn("pinned tasks load:", pinnedQuery.error.message);
+          // Fallback without optional assignment columns if schema is older
+          const fallback = await supabase
+            .from("tasks")
+            .select(
+              "id,title,description,assigned_to,priority,status,start_date,due_date,progress,project_id,assignment_type,client_ids,created_at,updated_at",
+            )
+            .in("id", pinnedIds)
+            .returns<TaskRecord[]>();
+          pinnedRows = fallback.data;
+          if (fallback.error) console.warn("pinned tasks fallback:", fallback.error.message);
+        }
         const byId = Object.fromEntries((pinnedRows ?? []).map((t) => [t.id, t]));
         for (const id of pinnedIds) {
           if (byId[id]) {

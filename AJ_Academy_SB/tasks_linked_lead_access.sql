@@ -105,18 +105,89 @@ create index if not exists employee_task_pins_user_idx on public.employee_task_p
 
 alter table public.employee_task_pins enable row level security;
 
+-- Bypass nested tasks RLS when checking pin eligibility
+create or replace function public.can_pin_employee_task(p_task_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.tasks t
+    where t.id = p_task_id
+      and (
+        t.assigned_to = auth.uid()
+        or t.assigned_by = auth.uid()
+        or public.is_admin()
+      )
+  );
+$$;
+
+grant execute on function public.can_pin_employee_task(uuid) to authenticated;
+
 drop policy if exists employee_task_pins_own_all on public.employee_task_pins;
 create policy employee_task_pins_own_all
 on public.employee_task_pins for all to authenticated
 using (user_id = auth.uid())
 with check (
   user_id = auth.uid()
-  and exists (
-    select 1 from public.tasks t
-    where t.id = task_id
-      and (t.assigned_to = auth.uid() or t.assigned_by = auth.uid() or public.is_admin())
-  )
+  and public.can_pin_employee_task(task_id)
 );
 
--- UPDATE required for upsert (re-pin / change section) and pinned_at refresh
 grant select, insert, update, delete on public.employee_task_pins to authenticated;
+
+create or replace function public.upsert_my_task_pins(
+  p_task_ids uuid[],
+  p_pin_section text default 'all'
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_section text := nullif(btrim(coalesce(p_pin_section, '')), '');
+  v_id uuid;
+  v_count integer := 0;
+begin
+  if v_uid is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if v_section is null
+     or v_section not in ('lead', 'college', 'project', 'all') then
+    v_section := 'all';
+  end if;
+
+  if p_task_ids is null or cardinality(p_task_ids) = 0 then
+    return 0;
+  end if;
+
+  foreach v_id in array p_task_ids
+  loop
+    if v_id is null then
+      continue;
+    end if;
+    if not public.can_pin_employee_task(v_id) then
+      continue;
+    end if;
+
+    insert into public.employee_task_pins as p (user_id, task_id, pin_section, pinned_at)
+    values (v_uid, v_id, v_section, now())
+    on conflict (user_id, task_id) do update
+      set pin_section = excluded.pin_section,
+          pinned_at = excluded.pinned_at;
+
+    v_count := v_count + 1;
+  end loop;
+
+  return v_count;
+end;
+$$;
+
+grant execute on function public.upsert_my_task_pins(uuid[], text) to authenticated;

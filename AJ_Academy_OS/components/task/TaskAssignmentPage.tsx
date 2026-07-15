@@ -168,6 +168,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [pinBusy, setPinBusy] = useState(false);
   const [tasksTableMissing, setTasksTableMissing] = useState(false);
   const [summary, setSummary] = useState({ total: 0, pending: 0, inProgress: 0, completed: 0 });
   const [panelOpen, setPanelOpen] = useState(false);
@@ -1323,9 +1324,15 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   };
 
   const handleBulkPinToDashboard = async () => {
-    if (!currentUserId || taskSelection.selectedCount === 0) return;
+    if (taskSelection.selectedCount === 0) {
+      setError("Select at least one task row, then click Pin selected to dashboard.");
+      return;
+    }
+    if (!currentUserId) {
+      setError("Session not ready. Refresh the page and try pinning again.");
+      return;
+    }
     const ids = [...taskSelection.selected];
-    const now = new Date().toISOString();
     const taskById = Object.fromEntries(rows.map((t) => [t.id, t]));
     /** Prefer active subsection; otherwise each task's assignment_type so buckets stay correct. */
     const sectionFor = (taskId: string): string => {
@@ -1336,58 +1343,124 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       if (t === "lead" || t === "college" || t === "project") return t;
       return "all";
     };
-    const rowsToInsert = ids.map((task_id) => ({
-      user_id: currentUserId,
-      task_id,
-      pin_section: sectionFor(task_id),
-      pinned_at: now,
-    }));
-    const { error: pinError } = await supabase.from("employee_task_pins").upsert(rowsToInsert, {
-      onConflict: "user_id,task_id",
-    });
-    if (pinError) {
-      // Older DBs without pin_section / pinned_at update — retry stripped payloads
-      if (/pin_section|schema cache|column|permission|denied|update/i.test(pinError.message)) {
-        const { error: fallbackError } = await supabase.from("employee_task_pins").upsert(
-          ids.map((task_id) => ({
-            user_id: currentUserId,
-            task_id,
-            pinned_at: now,
-          })),
-          { onConflict: "user_id,task_id" },
-        );
-        if (fallbackError) {
-          const { error: insertOnly } = await supabase.from("employee_task_pins").upsert(
-            ids.map((task_id) => ({ user_id: currentUserId, task_id })),
-            { onConflict: "user_id,task_id", ignoreDuplicates: true },
+    // One section for the bulk RPC (usually the active subsection). Mixed All-tab pins use first task's type.
+    const primarySection = sectionFor(ids[0] ?? "");
+    const sectionsUsed = [...new Set(ids.map((id) => sectionFor(id)))];
+
+    setPinBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      // Prefer RPC (bypasses nested RLS failures on employee_task_pins upsert).
+      const { data: pinnedCount, error: rpcError } = await supabase.rpc("upsert_my_task_pins", {
+        p_task_ids: ids,
+        p_pin_section: primarySection,
+      });
+
+      if (!rpcError) {
+        // If mixed sections on All tab, re-pin remaining groups so each keeps its bucket.
+        if (sectionsUsed.length > 1) {
+          for (const section of sectionsUsed) {
+            if (section === primarySection) continue;
+            const groupIds = ids.filter((id) => sectionFor(id) === section);
+            if (!groupIds.length) continue;
+            const { error: groupErr } = await supabase.rpc("upsert_my_task_pins", {
+              p_task_ids: groupIds,
+              p_pin_section: section,
+            });
+            if (groupErr) {
+              // Non-fatal: primary group already pinned
+              console.warn("pin section group:", groupErr.message);
+            }
+          }
+        }
+
+        const n = typeof pinnedCount === "number" ? pinnedCount : Number(pinnedCount) || ids.length;
+        if (n <= 0) {
+          setError(
+            "Could not pin these tasks. You can only pin work assigned to you (or that you assigned). Re-run AJ_Academy_SB/employee_task_pins_section_patch.sql if this keeps failing.",
           );
-          if (insertOnly) {
+          return;
+        }
+        const sectionLabel = sectionsUsed
+          .map((s) =>
+            s === "lead" ? "Student Lead" : s === "college" ? "College Visit" : s === "project" ? "Project" : "All",
+          )
+          .join(", ");
+        taskSelection.clearSelection();
+        setSuccess(
+          `${n} task(s) pinned to your dashboard (${sectionLabel}). Open Dashboard → My tasks to see them.`,
+        );
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+        return;
+      }
+
+      // Fallback when RPC not deployed yet — direct upsert with clear errors
+      if (!/upsert_my_task_pins|function|schema cache|could not find/i.test(rpcError.message)) {
+        setError(
+          /permission|denied|policy|rls/i.test(rpcError.message)
+            ? "Pin blocked by database permissions. Run AJ_Academy_SB/employee_task_pins_section_patch.sql in Supabase SQL Editor, then try again."
+            : toReadableTaskError(rpcError),
+        );
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const rowsToInsert = ids.map((task_id) => ({
+        user_id: currentUserId,
+        task_id,
+        pin_section: sectionFor(task_id),
+        pinned_at: now,
+      }));
+      const { error: pinError } = await supabase.from("employee_task_pins").upsert(rowsToInsert, {
+        onConflict: "user_id,task_id",
+      });
+      if (pinError) {
+        if (/pin_section|schema cache|column|permission|denied|update|policy/i.test(pinError.message)) {
+          // Try insert-only rows that are missing
+          let inserted = 0;
+          for (const row of rowsToInsert) {
+            const { error: insErr } = await supabase.from("employee_task_pins").insert({
+              user_id: row.user_id,
+              task_id: row.task_id,
+              pinned_at: row.pinned_at,
+            });
+            if (!insErr) inserted += 1;
+            else if (/duplicate|unique/i.test(insErr.message)) inserted += 1;
+          }
+          if (inserted === 0) {
             setError(
-              /employee_task_pins|permission|denied|update/i.test(insertOnly.message)
-                ? "Run AJ_Academy_SB/employee_task_pins_section_patch.sql in Supabase (adds pin_section + UPDATE grant), then try again."
-                : toReadableTaskError(insertOnly),
+              "Run AJ_Academy_SB/employee_task_pins_section_patch.sql in Supabase (adds pin helpers + upsert_my_task_pins), then try again.",
             );
             return;
           }
           setSuccess(
-            `${ids.length} task(s) pinned. Re-run employee_task_pins_section_patch.sql so dashboard sections (Student Lead / College Visit / Project) save correctly.`,
+            `${inserted} task(s) pinned. Re-run employee_task_pins_section_patch.sql so dashboard sections (Student Lead / College Visit / Project) save correctly.`,
           );
           taskSelection.clearSelection();
+          if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
           return;
         }
-      } else {
         setError(toReadableTaskError(pinError));
         return;
       }
+      const sectionLabel = sectionsUsed
+        .map((s) =>
+          s === "lead" ? "Student Lead" : s === "college" ? "College Visit" : s === "project" ? "Project" : "All",
+        )
+        .join(", ");
+      taskSelection.clearSelection();
+      setSuccess(
+        `${ids.length} task(s) pinned to your dashboard (${sectionLabel}). Open Dashboard → My tasks to see them.`,
+      );
+      if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) {
+      setError(toReadableTaskError(e));
+    } finally {
+      setPinBusy(false);
     }
-    const sectionsUsed = [...new Set(rowsToInsert.map((r) => r.pin_section))];
-    const sectionLabel = sectionsUsed
-      .map((s) =>
-        s === "lead" ? "Student Lead" : s === "college" ? "College Visit" : s === "project" ? "Project" : "All",
-      )
-      .join(", ");
-    taskSelection.clearSelection();
-    setSuccess(`${ids.length} task(s) pinned to your dashboard (${sectionLabel}).`);
   };
 
   const persistEmployeeTaskUpdate = useCallback(
@@ -1621,10 +1694,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             <Button
               type="button"
               size="sm"
-              className="h-7 rounded-lg bg-[#c9a227] px-3 text-xs text-white hover:bg-[#b8921f]"
+              disabled={pinBusy}
+              className="h-7 rounded-lg bg-[#c9a227] px-3 text-xs text-white hover:bg-[#b8921f] disabled:opacity-60"
               onClick={() => void handleBulkPinToDashboard()}
             >
-              Pin selected to dashboard
+              {pinBusy ? "Pinning..." : "Pin selected to dashboard"}
             </Button>
           ) : null}
           <Button
@@ -1937,10 +2011,33 @@ function TaskViewPanel({
         setPinned(false);
         onSuccess?.("Removed from your dashboard.");
       } else {
+        const section =
+          task.assignment_type === "lead" || task.assignment_type === "college" || task.assignment_type === "project"
+            ? task.assignment_type
+            : "all";
+        const { data: pinnedCount, error: rpcError } = await supabase.rpc("upsert_my_task_pins", {
+          p_task_ids: [task.id],
+          p_pin_section: section,
+        });
+        if (!rpcError) {
+          const n = typeof pinnedCount === "number" ? pinnedCount : Number(pinnedCount) || 0;
+          if (n <= 0) {
+            throw new Error(
+              "Could not pin this task. Run AJ_Academy_SB/employee_task_pins_section_patch.sql if pinning keeps failing.",
+            );
+          }
+          setPinned(true);
+          onSuccess?.("Added to your dashboard.");
+          return;
+        }
+        if (!/upsert_my_task_pins|function|schema cache|could not find/i.test(rpcError.message)) {
+          throw new Error(rpcError.message);
+        }
+
         const { error } = await supabase.from("employee_task_pins").insert({
           user_id: currentUserId,
           task_id: task.id,
-          pin_section: task.assignment_type || "all",
+          pin_section: section,
           pinned_at: new Date().toISOString(),
         });
         if (error) {
@@ -1954,7 +2051,7 @@ function TaskViewPanel({
             const { error: up } = await supabase
               .from("employee_task_pins")
               .update({
-                pin_section: task.assignment_type || "all",
+                pin_section: section,
                 pinned_at: new Date().toISOString(),
               })
               .eq("user_id", currentUserId)
@@ -1978,8 +2075,15 @@ function TaskViewPanel({
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.toLowerCase().includes("employee_task_pins") || msg.toLowerCase().includes("schema cache") || msg.toLowerCase().includes("permission")) {
-        onError?.("Run AJ_Academy_SB/employee_task_pins_section_patch.sql in Supabase to enable dashboard pins by section.");
+      if (
+        msg.toLowerCase().includes("employee_task_pins") ||
+        msg.toLowerCase().includes("schema cache") ||
+        msg.toLowerCase().includes("permission") ||
+        msg.toLowerCase().includes("policy")
+      ) {
+        onError?.(
+          "Run AJ_Academy_SB/employee_task_pins_section_patch.sql in Supabase to enable dashboard pins.",
+        );
       } else {
         onError?.(msg);
       }
