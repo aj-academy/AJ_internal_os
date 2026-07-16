@@ -48,6 +48,11 @@ export async function POST(request: Request) {
   const { error: updateError } = await admin.from(table).update(clearMeta).eq("id", entityId);
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 400 });
   if (path) await admin.storage.from(PROPOSALS_BUCKET).remove([path]).catch(() => undefined);
-  await admin.from("proposal_files").delete().eq("entity_type", kind).eq("entity_id", entityId).catch(() => undefined);
+  const { error: cleanupError } = await admin
+    .from("proposal_files")
+    .delete()
+    .eq("entity_type", kind)
+    .eq("entity_id", entityId);
+  void cleanupError;
   return NextResponse.json({ ok: true });
 }
