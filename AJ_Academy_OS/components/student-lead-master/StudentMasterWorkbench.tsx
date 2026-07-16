@@ -471,7 +471,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
           // Pins table may not exist yet — keep owned rows only
           return { merged: owned, pinIds: new Set() };
         }
-        const pinIds = new Set((json.ids ?? []).map(String));
+        const pinIds = new Set((json.clients ?? []).map((row) => String(row.id)).filter(Boolean));
         const byId = new Map(owned.map((c) => [c.id, c]));
         for (const row of json.clients ?? []) {
           if (row?.id && !byId.has(row.id)) byId.set(row.id, row);

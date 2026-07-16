@@ -796,6 +796,18 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           void refreshTaskData(currentUserId);
         }, 800);
       })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "clients" }, () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          void refreshTaskData(currentUserId);
+        }, 800);
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "college_visits" }, () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          void refreshTaskData(currentUserId);
+        }, 800);
+      })
       .subscribe();
 
     return () => {

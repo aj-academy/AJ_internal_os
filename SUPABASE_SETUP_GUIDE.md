@@ -129,7 +129,7 @@ After Student Master SQL is applied, run **`employee_student_master_rls.sql`** s
 
 Then run **`crm_owner_isolation.sql`** so **employees only see their own** Student Master / College Visits rows, while **admins see every employee’s CRM** for activity tracking. Employees still cannot browse each other’s leads/colleges. Task-linked access remains for sharing specific rows via My Tasks. Re-run `crm_owner_isolation.sql` after `security_rls_access_fix.sql` if policies drift.
 
-Then run **`crm_delete_fix.sql`** so deletes work (owned-row RPCs + cascade-safe employee delete policies; admin can delete any row). Without it, deletes often look successful but remove **0 rows** because child-table RLS blocks cascades.
+Then run **`crm_delete_fix.sql`** so deletes work (owned-row RPCs + cascade-safe employee delete policies; admin can delete any row). Re-run this script after updates: it also removes task `client_ids` links, CRM pins, and empty lead-assignment tasks when an admin deletes a lead, so employees no longer see ghost assigned leads. Without it, deletes often look successful but remove **0 rows** because child-table RLS blocks cascades.
 
 If an employee sees **Forbidden** when saving a student, run (in order):
 
@@ -137,7 +137,7 @@ If an employee sees **Forbidden** when saving a student, run (in order):
 2. `security_rls_access_fix.sql`
 3. **`employee_student_master_rls.sql`** — assigned-only employee CRM (create with self as assignee)
 4. **`crm_owner_isolation.sql`** — employee own-only; admin sees all for tracking
-5. **`crm_delete_fix.sql`** — deletes actually remove rows (RPC + cascade policies)
+5. **`crm_delete_fix.sql`** — deletes actually remove rows (RPC + cascade policies); also cleans task/pin links on lead delete
 
 Then hard-refresh the app and try **Add Student** again.
 

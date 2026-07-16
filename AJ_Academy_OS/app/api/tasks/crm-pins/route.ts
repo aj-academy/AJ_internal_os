@@ -224,9 +224,13 @@ export async function GET(request: Request) {
       ({ data: clients, error: cErr } = await admin.from("clients").select(select).in("id", ids));
     }
     if (cErr) {
-      return NextResponse.json({ ids, clients: [], colleges: [], error: cErr.message }, { status: 400 });
+      return NextResponse.json({ ids: [], clients: [], colleges: [], error: cErr.message }, { status: 400 });
     }
-    return NextResponse.json({ ids, clients: clients ?? [], colleges: [] });
+    const liveClients = clients ?? [];
+    const liveIds = liveClients
+      .map((row) => (row as { id?: string }).id)
+      .filter((id): id is string => Boolean(id));
+    return NextResponse.json({ ids: liveIds, clients: liveClients, colleges: [] });
   }
 
   let select = COLLEGE_VISIT_SELECT;
@@ -238,7 +242,9 @@ export async function GET(request: Request) {
     ({ data: colleges, error: vErr } = await admin.from("college_visits").select(select).in("id", ids));
   }
   if (vErr) {
-    return NextResponse.json({ ids, clients: [], colleges: [], error: vErr.message }, { status: 400 });
+    return NextResponse.json({ ids: [], clients: [], colleges: [], error: vErr.message }, { status: 400 });
   }
-  return NextResponse.json({ ids, clients: [], colleges: (colleges ?? []).map((r) => mapCollegeVisitRow(r)) });
+  const liveColleges = (colleges ?? []).map((r) => mapCollegeVisitRow(r));
+  const liveIds = liveColleges.map((row) => row.id);
+  return NextResponse.json({ ids: liveIds, clients: [], colleges: liveColleges });
 }

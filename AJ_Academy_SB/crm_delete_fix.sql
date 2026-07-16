@@ -57,6 +57,49 @@ begin
 end $$;
 
 -- ---------- Reliable owned deletes (bypass child RLS during cascade) ----------
+create or replace function public.strip_task_client_ids(p_ids uuid[])
+returns void
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+begin
+  if coalesce(array_length(p_ids, 1), 0) = 0 then
+    return;
+  end if;
+
+  -- Drop CRM pins for deleted leads so employee Student Master stops listing them.
+  delete from public.employee_crm_pins
+  where entity_type = 'lead'
+    and entity_id = any(p_ids);
+
+  -- Remove deleted lead ids from task assignments.
+  update public.tasks t
+  set client_ids = coalesce(
+    (
+      select jsonb_agg(e.val)
+      from jsonb_array_elements(coalesce(t.client_ids, '[]'::jsonb)) as e(val)
+      where not ((e.val #>> '{}')::uuid = any(p_ids))
+    ),
+    '[]'::jsonb
+  )
+  where assignment_type = 'lead'
+    and exists (
+      select 1
+      from jsonb_array_elements(coalesce(t.client_ids, '[]'::jsonb)) as e(val)
+      where (e.val #>> '{}')::uuid = any(p_ids)
+    );
+
+  -- Remove empty lead-assignment tasks (admin bulk-assign creates these).
+  delete from public.tasks
+  where assignment_type = 'lead'
+    and coalesce(jsonb_array_length(client_ids), 0) = 0;
+end;
+$$;
+
+grant execute on function public.strip_task_client_ids(uuid[]) to authenticated;
+
 create or replace function public.delete_owned_clients(p_ids uuid[])
 returns integer
 language plpgsql
@@ -71,6 +114,8 @@ begin
     raise exception 'Not authenticated';
   end if;
 
+  perform public.strip_task_client_ids(p_ids);
+
   delete from public.clients
   where id = any(p_ids)
     and (assigned_to = auth.uid() or public.is_admin());
@@ -81,6 +126,27 @@ end;
 $$;
 
 grant execute on function public.delete_owned_clients(uuid[]) to authenticated;
+
+-- Only return pins for rows that still exist (orphan pins after admin delete).
+create or replace function public.get_my_crm_pin_ids(p_entity_type text)
+returns uuid[]
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select coalesce(array_agg(p.entity_id), '{}'::uuid[])
+  from public.employee_crm_pins p
+  where p.user_id = auth.uid()
+    and p.entity_type = p_entity_type
+    and (
+      (p_entity_type = 'lead' and exists (select 1 from public.clients c where c.id = p.entity_id))
+      or (p_entity_type = 'college' and exists (select 1 from public.college_visits v where v.id = p.entity_id))
+    );
+$$;
+
+grant execute on function public.get_my_crm_pin_ids(text) to authenticated;
 
 create or replace function public.delete_owned_college_visits(p_ids uuid[])
 returns integer
@@ -111,7 +177,9 @@ $$;
 
 grant execute on function public.delete_owned_college_visits(uuid[]) to authenticated;
 
+comment on function public.strip_task_client_ids(uuid[]) is
+  'Removes lead CRM pins and task client_ids references before lead delete; drops empty lead-assignment tasks.';
 comment on function public.delete_owned_clients(uuid[]) is
-  'Deletes Student Master rows owned by the caller, or any rows when caller is admin. Bypasses child RLS so cascades succeed.';
+  'Deletes Student Master rows owned by the caller, or any rows when caller is admin. Cleans task/pin links first; bypasses child RLS so cascades succeed.';
 comment on function public.delete_owned_college_visits(uuid[]) is
   'Deletes College Visit rows owned by the caller, or any rows when caller is admin. Bypasses child activity RLS so cascades succeed.';

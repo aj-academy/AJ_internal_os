@@ -211,18 +211,31 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
         }
       }
 
-      const withSummaries = mergedBase.map((t) => {
+      const withSummaries = mergedBase
+        .filter((t) => {
+          const assignmentType = (t.assignment_type || "").trim().toLowerCase();
+          if (assignmentType === "lead") {
+            const ids = parseIdList(t.client_ids);
+            if (ids.length && ids.every((id) => !clientLabel[id])) return false;
+          }
+          if (assignmentType === "college") {
+            const ids = parseIdList(t.college_visit_ids);
+            if (ids.length && ids.every((id) => !collegeLabel[id])) return false;
+          }
+          return true;
+        })
+        .map((t) => {
         const section = sectionOf(t);
         let linked_summary = "-";
         if (section === "lead") {
-          const ids = parseIdList(t.client_ids);
+          const ids = parseIdList(t.client_ids).filter((id) => clientLabel[id]);
           linked_summary = ids.length
-            ? ids.map((id) => clientLabel[id] || id.slice(0, 8)).join(", ")
+            ? ids.map((id) => clientLabel[id]).join(", ")
             : "-";
         } else if (section === "college") {
-          const ids = parseIdList(t.college_visit_ids);
+          const ids = parseIdList(t.college_visit_ids).filter((id) => collegeLabel[id]);
           linked_summary = ids.length
-            ? ids.map((id) => collegeLabel[id] || id.slice(0, 8)).join(", ")
+            ? ids.map((id) => collegeLabel[id]).join(", ")
             : "-";
         } else if (section === "project") {
           linked_summary = t.project_id ? projectLabel[t.project_id] || t.project_id.slice(0, 8) : "-";
@@ -245,6 +258,8 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
       .channel("employee-dashboard-tasks")
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => void load())
       .on("postgres_changes", { event: "*", schema: "public", table: "employee_task_pins" }, () => void load())
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "clients" }, () => void load())
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "college_visits" }, () => void load())
       .subscribe();
     return () => {
       void supabase.removeChannel(ch);

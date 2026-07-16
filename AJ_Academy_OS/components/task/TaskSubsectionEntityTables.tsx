@@ -133,11 +133,12 @@ export function flattenTaskLeads(
     }
     for (const id of ids) {
       const lead = leadById[id];
+      if (!lead) continue;
       out.push({
         key: `${task.id}:${id}`,
         task,
-        lead: lead ?? placeholderLead(id),
-        leadLoaded: Boolean(lead),
+        lead,
+        leadLoaded: true,
       });
     }
   }
@@ -163,11 +164,12 @@ export function flattenTaskColleges(
     }
     for (const id of ids) {
       const college = collegeById[id];
+      if (!college) continue;
       out.push({
         key: `${task.id}:${id}`,
         task,
-        college: college ?? placeholderCollege(id),
-        collegeLoaded: Boolean(college),
+        college,
+        collegeLoaded: true,
       });
     }
   }
