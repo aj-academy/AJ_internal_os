@@ -26,6 +26,7 @@ export type CollegeVisitRow = {
   contacts: CollegeContact[];
   visit_status: string;
   visit_date: string | null;
+  visited_by: string | null;
   mou_signed_status: string;
   follow_up_stage: string | null;
   last_follow_up_date: string | null;
@@ -76,6 +77,7 @@ export const COLLEGE_VISIT_SELECT = [
   "contacts",
   "visit_status",
   "visit_date",
+  "visited_by",
   "mou_signed_status",
   "follow_up_stage",
   "last_follow_up_date",
@@ -109,10 +111,16 @@ const PROPOSAL_FILE_SELECT =
 
 /** Fallback when contacts column not migrated yet. */
 export const COLLEGE_VISIT_SELECT_LEGACY = COLLEGE_VISIT_SELECT.replace("contacts,", "");
+/** Fallback when visited_by column not migrated yet. */
+export const COLLEGE_VISIT_SELECT_NO_VISITED_BY = COLLEGE_VISIT_SELECT.replace("visited_by,", "");
+export const COLLEGE_VISIT_SELECT_LEGACY_NO_VISITED_BY = COLLEGE_VISIT_SELECT_LEGACY.replace("visited_by,", "");
 
 /** Fallback when proposals_file_upload_patch.sql not run yet. */
 export const COLLEGE_VISIT_SELECT_NO_PROPOSAL_FILES = COLLEGE_VISIT_SELECT.replace(PROPOSAL_FILE_SELECT, "");
 export const COLLEGE_VISIT_SELECT_LEGACY_NO_PROPOSAL_FILES = COLLEGE_VISIT_SELECT_LEGACY.replace(PROPOSAL_FILE_SELECT, "");
+export const COLLEGE_VISIT_SELECT_NO_PROPOSAL_FILES_NO_VISITED_BY = COLLEGE_VISIT_SELECT_NO_PROPOSAL_FILES.replace("visited_by,", "");
+export const COLLEGE_VISIT_SELECT_LEGACY_NO_PROPOSAL_FILES_NO_VISITED_BY =
+  COLLEGE_VISIT_SELECT_LEGACY_NO_PROPOSAL_FILES.replace("visited_by,", "");
 
 export function isMissingContactsColumn(msg: string) {
   const m = msg.toLowerCase();
@@ -122,6 +130,11 @@ export function isMissingContactsColumn(msg: string) {
 export function isMissingProposalFileColumn(msg: string) {
   const m = msg.toLowerCase();
   return m.includes("proposal_file_") && (m.includes("column") || m.includes("schema cache") || m.includes("does not exist"));
+}
+
+export function isMissingVisitedByColumn(msg: string) {
+  const m = msg.toLowerCase();
+  return m.includes("visited_by") && (m.includes("column") || m.includes("schema cache") || m.includes("does not exist"));
 }
 
 /** True only when the college_visits TABLE is missing — not when a single column is missing. */
@@ -143,6 +156,14 @@ export function nextCollegeVisitSelect(current: string, errorMsg: string): strin
   if (isMissingProposalFileColumn(errorMsg)) {
     if (current === COLLEGE_VISIT_SELECT) return COLLEGE_VISIT_SELECT_NO_PROPOSAL_FILES;
     if (current === COLLEGE_VISIT_SELECT_LEGACY) return COLLEGE_VISIT_SELECT_LEGACY_NO_PROPOSAL_FILES;
+    if (current === COLLEGE_VISIT_SELECT_NO_VISITED_BY) return COLLEGE_VISIT_SELECT_NO_PROPOSAL_FILES_NO_VISITED_BY;
+    if (current === COLLEGE_VISIT_SELECT_LEGACY_NO_VISITED_BY) return COLLEGE_VISIT_SELECT_LEGACY_NO_PROPOSAL_FILES_NO_VISITED_BY;
+  }
+  if (isMissingVisitedByColumn(errorMsg)) {
+    if (current === COLLEGE_VISIT_SELECT) return COLLEGE_VISIT_SELECT_NO_VISITED_BY;
+    if (current === COLLEGE_VISIT_SELECT_LEGACY) return COLLEGE_VISIT_SELECT_LEGACY_NO_VISITED_BY;
+    if (current === COLLEGE_VISIT_SELECT_NO_PROPOSAL_FILES) return COLLEGE_VISIT_SELECT_NO_PROPOSAL_FILES_NO_VISITED_BY;
+    if (current === COLLEGE_VISIT_SELECT_LEGACY_NO_PROPOSAL_FILES) return COLLEGE_VISIT_SELECT_LEGACY_NO_PROPOSAL_FILES_NO_VISITED_BY;
   }
   return null;
 }
@@ -538,6 +559,7 @@ export type CollegeVisitFormValue = {
   contacts: CollegeContact[];
   visit_status: VisitStatus | string;
   visit_date: string;
+  visited_by: string;
   mou_signed_status: MouStatus | string;
   follow_up_stage: FollowUpStage | string;
   last_follow_up_date: string;
@@ -573,6 +595,7 @@ export function emptyCollegeVisitForm(assignedFallback = ""): CollegeVisitFormVa
     contacts: [emptyCollegeContact(true)],
     visit_status: "Not Visited",
     visit_date: "",
+    visited_by: "",
     mou_signed_status: "Not Signed",
     follow_up_stage: "",
     last_follow_up_date: "",
@@ -611,6 +634,7 @@ export function collegeVisitRowToForm(row: CollegeVisitRow): CollegeVisitFormVal
     contacts,
     visit_status: row.visit_status ?? "Not Visited",
     visit_date: row.visit_date?.slice(0, 10) ?? "",
+    visited_by: row.visited_by ?? "",
     mou_signed_status: row.mou_signed_status ?? "Not Signed",
     follow_up_stage: row.follow_up_stage ?? "",
     last_follow_up_date: row.last_follow_up_date?.slice(0, 10) ?? "",
@@ -636,13 +660,75 @@ export function collegeVisitRowToForm(row: CollegeVisitRow): CollegeVisitFormVal
   };
 }
 
+export function computeCollegeLeadScore(v: Pick<
+  CollegeVisitFormValue,
+  "visit_status" | "mou_signed_status" | "follow_up_stage" | "next_follow_up_date" | "priority" | "proposal_status" | "final_status" | "source_reference" | "contacts"
+>): number {
+  const visitScore: Record<string, number> = {
+    "Not Visited": 0,
+    Scheduled: 10,
+    Contacted: 15,
+    Visited: 25,
+    "Revisit Required": 8,
+    "On Hold": 4,
+  };
+  const mouScore: Record<string, number> = {
+    "Not Signed": 0,
+    "In Discussion": 10,
+    "Draft Shared": 15,
+    "Partially Signed": 20,
+    Signed: 30,
+    Declined: 0,
+  };
+  const priorityScore: Record<string, number> = {
+    Hot: 15,
+    High: 12,
+    Warm: 8,
+    Medium: 6,
+    Cold: 4,
+    Low: 2,
+  };
+  const proposalScore: Record<string, number> = {
+    "Not Sent": 0,
+    Drafted: 8,
+    Sent: 12,
+    Accepted: 20,
+    Rejected: 0,
+    "Revision Needed": 6,
+  };
+  const finalScore: Record<string, number> = {
+    Open: 6,
+    "In Progress": 12,
+    Converted: 25,
+    Lost: 0,
+    "On Hold": 4,
+    "Closed - Rejected": 0,
+  };
+
+  const hasContact = (v.contacts ?? []).some(
+    (c) => c.name.trim() || c.email.trim() || c.role.trim() || c.phones.some((p) => p.trim()),
+  );
+
+  let score = 0;
+  score += visitScore[String(v.visit_status)] ?? 0;
+  score += mouScore[String(v.mou_signed_status)] ?? 0;
+  score += priorityScore[String(v.priority)] ?? 0;
+  score += proposalScore[String(v.proposal_status)] ?? 0;
+  score += finalScore[String(v.final_status)] ?? 0;
+  if (String(v.follow_up_stage ?? "").trim()) score += 8;
+  if (String(v.next_follow_up_date ?? "").trim()) score += 5;
+  if (String(v.source_reference ?? "").trim()) score += 3;
+  if (hasContact) score += 5;
+  return Math.min(100, Math.max(0, Math.round(score)));
+}
+
 export function buildCollegeVisitPayload(
   v: CollegeVisitFormValue,
   opts: { userId: string; isDbAdmin: boolean },
 ): Record<string, unknown> {
   const contacts = normalizeCollegeContacts(v.contacts?.length ? v.contacts : [emptyCollegeContact(true)]);
   const flat = flatFieldsFromPrimary(contacts);
-  const scoreRaw = Number(v.lead_score);
+  const computedScore = computeCollegeLeadScore(v);
   const amountRaw = Number(v.proposal_amount);
   const assignee = opts.userId;
   return {
@@ -655,6 +741,7 @@ export function buildCollegeVisitPayload(
     contacts,
     visit_status: v.visit_status || "Not Visited",
     visit_date: v.visit_date || null,
+    visited_by: v.visited_by.trim() || null,
     mou_signed_status: v.mou_signed_status || "Not Signed",
     follow_up_stage: v.follow_up_stage.trim() || null,
     last_follow_up_date: v.last_follow_up_date || null,
@@ -664,7 +751,7 @@ export function buildCollegeVisitPayload(
     assigned_by: opts.userId,
     description: v.description.trim() || null,
     last_outcome_remarks: v.last_outcome_remarks.trim() || null,
-    lead_score: Number.isFinite(scoreRaw) ? Math.min(100, Math.max(0, Math.round(scoreRaw))) : 0,
+    lead_score: computedScore,
     final_status: v.final_status || "Open",
     source_reference: v.source_reference.trim() || null,
     proposal_status: v.proposal_status || "Not Sent",

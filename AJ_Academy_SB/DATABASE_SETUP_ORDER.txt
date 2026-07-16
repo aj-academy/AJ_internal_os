@@ -52,6 +52,7 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 10i) employee_lead_management_schema.sql (employee Lead Management — adds assigned_to on clients if missing)
 10j) employee_student_master_rls.sql (employee Student Master — assigned leads only; re-run to drop blanket CRM access)
 10k) college_visits_schema.sql (College Visits outreach tracker — admin + employee)
+10k0) college_visits_visited_by_patch.sql (adds visited_by/“Whom visited to the college” column; safe re-run)
 10k1) college_visits_proposal_patch.sql (Proposal Tracker columns + college-visit-proposals storage — after college_visits_schema.sql)
 10k1b) college_visits_contacts_patch.sql (multiple contacts JSON: name/role/phones/email — after college_visits_schema.sql)
 10k1c) proposals_file_upload_patch.sql (Student Master + College Visits proposal file columns + private `proposals` storage bucket — after proposal + contacts patches)

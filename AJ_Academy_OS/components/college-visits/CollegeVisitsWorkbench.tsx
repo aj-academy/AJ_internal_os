@@ -1338,6 +1338,7 @@ return (
                   <TableHeaderCell label="Role" className={thClass} />
                   <TableHeaderFilter label="Visit Status" value={fltVisitStatus} options={VISIT_STATUSES.map((s) => ({ value: s, label: s }))} onChange={setFltVisitStatus} className={thClass} />
                   <TableHeaderCell label="Visit Date" className={thClass} />
+                  <TableHeaderCell label="Whom Visited to the College" className={thClass} />
                   <TableHeaderCell label="MOU Signed Status" className={thClass} />
                   <TableHeaderCell label="Follow-up Stage" className={thClass} />
                   <TableHeaderCell label="Last Follow-up Date" className={thClass} />
@@ -1374,13 +1375,13 @@ return (
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={25} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                    <td colSpan={26} className="px-4 py-8 text-center text-sm text-[#64748b]">
                       Loading...
                     </td>
                   </tr>
                 ) : pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={25} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                    <td colSpan={26} className="px-4 py-8 text-center text-sm text-[#64748b]">
                       No college visits found.
                     </td>
                   </tr>
@@ -1474,6 +1475,7 @@ return (
                         </td>
                         <td className={tdClass}>{row.visit_status}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.visit_date)}</td>
+                        <td className={`${tdClass} min-w-[12rem]`}>{row.visited_by || "-"}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{row.mou_signed_status}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{row.follow_up_stage || "-"}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.last_follow_up_date)}</td>
@@ -1587,6 +1589,7 @@ return (
                         { label: "Role", value: dash(personRole || row.connected_person_role) },
                         { label: "Visit Status", value: dash(row.visit_status) },
                         { label: "Visit Date", value: formatDisplayDate(row.visit_date) || "—" },
+                        { label: "Whom visited to the college", value: dash(row.visited_by) },
                         { label: "MOU Signed Status", value: dash(row.mou_signed_status) },
                         { label: "Follow-up Stage", value: dash(row.follow_up_stage) },
                         { label: "Last Follow-up Date", value: formatDisplayDate(row.last_follow_up_date) || "—" },
@@ -1758,6 +1761,9 @@ return (
                 <p>
                   <span className="font-semibold text-[#3d3428]">Follow-up:</span>{" "}
                   {formatDisplayDate(viewVisit.next_follow_up_date) || "-"}
+                </p>
+                <p>
+                  <span className="font-semibold text-[#3d3428]">Whom visited to the college:</span> {viewVisit.visited_by || "-"}
                 </p>
               </div>
               <p className="mb-2 text-xs text-[#64748b]">

@@ -5,6 +5,7 @@ import {
   COLLEGE_VISIT_SELECT,
   isMissingContactsColumn,
   isMissingProposalFileColumn,
+  isMissingVisitedByColumn,
   nextCollegeVisitSelect,
 } from "@/components/college-visits/collegeVisitsHelpers";
 import { buildPayloadFromApi, mapCollegeVisitRow, parseCollegeVisitBody } from "@/lib/collegeVisitsApi";
@@ -15,6 +16,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 function stripUnavailableColumns(payload: Record<string, unknown>, errorMsg: string) {
   const next = { ...payload };
   if (isMissingContactsColumn(errorMsg)) delete next.contacts;
+  if (isMissingVisitedByColumn(errorMsg)) delete next.visited_by;
   if (isMissingProposalFileColumn(errorMsg)) {
     delete next.proposal_file_name;
     delete next.proposal_file_path;
