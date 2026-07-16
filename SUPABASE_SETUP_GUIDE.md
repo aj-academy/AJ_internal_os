@@ -206,6 +206,7 @@ Run **`finance_schema.sql`**, then **`reimbursement_schema_patch.sql`**, then **
 
 - **Admin:** sidebar **Reimbursements** (`/admin/reimbursements`) — Overview, All Claims, Pending, Special Approvals, Reimbursed, Policy Settings, Reports.
 - **Members:** sidebar **Reimbursement** — tabs: Overview, Submit Claim, My Claims, Import Bills, Policy & Limits (BB OS layout).
+- **Finance → Settings:** editable income categories, expense categories, and payment methods persist to `system_settings` key `finance` via `/api/admin/settings`. Staff read via `/api/finance/lists` (same store as Admin → System Settings → Finance). Form dropdowns use those lists. Only admins can save. Requires `system_settings_rls_fix.sql` (step 10e).
 
 ### Task completion files
 

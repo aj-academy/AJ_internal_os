@@ -416,16 +416,47 @@ export function SettingsWorkbench() {
             <LabeledInput label="Invoice prefix" value={String(fin.invoicePrefix ?? "")} onChange={(v) => patch("finance", { invoicePrefix: v })} />
           </div>
           <p className="rounded-xl border border-[#e8dcc8] bg-[#fffdf8] px-3 py-2 text-xs text-[#64748b]">
-            Expense categories are managed in{" "}
+            Category lists below also appear under{" "}
             <Link href="/admin/finance" className="font-semibold text-[#a68b2e] hover:underline">
-              Finance &amp; Expenses
-            </Link>{" "}
-            (finance_categories table), not in this settings screen.
+              Finance &amp; Expenses → Settings
+            </Link>
+            . Staff read them via <code className="rounded bg-white px-1">/api/finance/lists</code>.
           </p>
+          <LabeledTextarea
+            label="Income categories (one per line)"
+            value={(fin.incomeCategories as string[])?.join("\n") || ""}
+            onChange={(v) =>
+              patch("finance", {
+                incomeCategories: v
+                  .split("\n")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              })
+            }
+          />
+          <LabeledTextarea
+            label="Expense categories (one per line)"
+            value={(fin.expenseCategories as string[])?.join("\n") || ""}
+            onChange={(v) =>
+              patch("finance", {
+                expenseCategories: v
+                  .split("\n")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              })
+            }
+          />
           <LabeledTextarea
             label="Payment methods (one per line)"
             value={(fin.paymentMethods as string[])?.join("\n") || ""}
-            onChange={(v) => patch("finance", { paymentMethods: v.split("\n").map((s) => s.trim()).filter(Boolean) })}
+            onChange={(v) =>
+              patch("finance", {
+                paymentMethods: v
+                  .split("\n")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              })
+            }
           />
         </SettingsPanel>
       ) : null}

@@ -21,11 +21,8 @@ import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { formatDisplayDate } from "@/lib/datetime";
 import {
-  EXPENSE_CATEGORIES,
   FINANCE_TAB_LABELS,
   FINANCE_TAB_ORDER,
-  INCOME_CATEGORIES,
-  PAYMENT_METHODS,
   PAYMENT_STATUSES,
 } from "@/components/finance/financeConfig";
 import {
@@ -38,11 +35,18 @@ import {
   isMissingFinanceTable,
   monthKey,
 } from "@/components/finance/financeHelpers";
+import {
+  defaultFinanceSettingsLists,
+  fetchFinanceSettingsLists,
+  type FinanceSettingsLists,
+  linesToList,
+  listToLines,
+  persistFinanceSettingsLists,
+} from "@/lib/financeSettings";
 import type { ClientOption, ProjectRow } from "@/types/project";
 import type {
   ExpenseClaimRow,
   FinanceActivityRow,
-  FinanceCategoryRow,
   FinanceTabId,
   FinanceTransactionRow,
   FinanceVariant,
@@ -81,7 +85,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
   const [transactions, setTransactions] = useState<FinanceTransactionRow[]>([]);
   const [claims, setClaims] = useState<ExpenseClaimRow[]>([]);
   const [payments, setPayments] = useState<ProjectPaymentRow[]>([]);
-  const [categories, setCategories] = useState<FinanceCategoryRow[]>([]);
+  const [financeLists, setFinanceLists] = useState<FinanceSettingsLists>(() => defaultFinanceSettingsLists());
   const [activities, setActivities] = useState<FinanceActivityRow[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
@@ -151,9 +155,6 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
     );
     setPayments((pay as ProjectPaymentRow[] | null) ?? []);
 
-    const cat = await supabase.from("finance_categories").select("*").order("category_type").order("category_name").returns<FinanceCategoryRow[]>();
-    if (!cat.error) setCategories((cat.data as FinanceCategoryRow[] | null) ?? []);
-
     if (isPrivileged || isManager) {
       const act = await supabase.from("finance_activities").select("*").order("created_at", { ascending: false }).limit(200).returns<FinanceActivityRow[]>();
       if (!act.error) setActivities((act.data as FinanceActivityRow[] | null) ?? []);
@@ -182,13 +183,15 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
     setError(null);
     setLoading(true);
     try {
+      const lists = await fetchFinanceSettingsLists(supabase);
+      setFinanceLists(lists);
       await loadCore();
     } catch (e) {
       setError(friendlyFinanceError(e));
     } finally {
       setLoading(false);
     }
-  }, [loadCore, userId]);
+  }, [loadCore, supabase, userId]);
 
   useEffect(() => {
     void (async () => {
@@ -290,9 +293,9 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
 
   const [panel, setPanel] = useState<"none" | "income" | "expense" | "payment" | "claim">("none");
   const [incomeForm, setIncomeForm] = useState({
-    category: INCOME_CATEGORIES[0] as string,
+    category: "",
     amount: "",
-    payment_method: PAYMENT_METHODS[0] as string,
+    payment_method: "",
     payment_status: "Paid",
     transaction_date: todayISO(),
     client_id: "",
@@ -302,9 +305,9 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
     attachment_url: "",
   });
   const [expenseForm, setExpenseForm] = useState({
-    category: EXPENSE_CATEGORIES[0] as string,
+    category: "",
     amount: "",
-    payment_method: PAYMENT_METHODS[0] as string,
+    payment_method: "",
     payment_status: "Paid",
     transaction_date: todayISO(),
     description: "",
@@ -314,19 +317,62 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
     project_id: "",
     amount: "",
     payment_date: todayISO(),
-    payment_method: PAYMENT_METHODS[1] as string,
+    payment_method: "",
     payment_status: "Paid" as string,
     invoice_number: "",
     notes: "",
   });
   const [claimForm, setClaimForm] = useState({
-    expense_type: "Travel",
+    expense_type: "",
     amount: "",
     expense_date: todayISO(),
-    payment_method: PAYMENT_METHODS[0] as string,
+    payment_method: "",
     reason: "",
     receipt_url: "",
   });
+
+  useEffect(() => {
+    setIncomeForm((f) => ({
+      ...f,
+      category:
+        f.category && financeLists.incomeCategories.includes(f.category)
+          ? f.category
+          : financeLists.incomeCategories[0] ?? "",
+      payment_method:
+        f.payment_method && financeLists.paymentMethods.includes(f.payment_method)
+          ? f.payment_method
+          : financeLists.paymentMethods[0] ?? "",
+    }));
+    setExpenseForm((f) => ({
+      ...f,
+      category:
+        f.category && financeLists.expenseCategories.includes(f.category)
+          ? f.category
+          : financeLists.expenseCategories[0] ?? "",
+      payment_method:
+        f.payment_method && financeLists.paymentMethods.includes(f.payment_method)
+          ? f.payment_method
+          : financeLists.paymentMethods[0] ?? "",
+    }));
+    setPaymentForm((f) => ({
+      ...f,
+      payment_method:
+        f.payment_method && financeLists.paymentMethods.includes(f.payment_method)
+          ? f.payment_method
+          : financeLists.paymentMethods[1] ?? financeLists.paymentMethods[0] ?? "",
+    }));
+    setClaimForm((f) => ({
+      ...f,
+      expense_type:
+        f.expense_type && financeLists.expenseCategories.includes(f.expense_type)
+          ? f.expense_type
+          : financeLists.expenseCategories[0] ?? "",
+      payment_method:
+        f.payment_method && financeLists.paymentMethods.includes(f.payment_method)
+          ? f.payment_method
+          : financeLists.paymentMethods[0] ?? "",
+    }));
+  }, [financeLists]);
 
   const saveIncome = async () => {
     if (!isPrivileged || !userId) return;
@@ -1323,7 +1369,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                         label="Method"
                         value={fltTxMethod}
                         onChange={setFltTxMethod}
-                        options={PAYMENT_METHODS.map((m) => ({ value: m, label: m }))}
+                        options={financeLists.paymentMethods.map((m) => ({ value: m, label: m }))}
                         allLabel="All methods"
                       />
                       <TableHeaderFilter
@@ -1406,21 +1452,18 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
       ) : null}
 
       {activeTab === "settings" ? (
-        <div className="rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-6 text-sm text-[#475569] space-y-4">
-          <div>
-            <p className="font-semibold text-[#0f172a]">Income categories</p>
-            <p className="mt-1">{INCOME_CATEGORIES.join(", ")}.</p>
-          </div>
-          <div>
-            <p className="font-semibold text-[#0f172a]">Expense categories</p>
-            <p className="mt-1">{EXPENSE_CATEGORIES.join(", ")}.</p>
-          </div>
-          <div>
-            <p className="font-semibold text-[#0f172a]">Payment methods</p>
-            <p className="mt-1">{PAYMENT_METHODS.join(", ")}.</p>
-          </div>
-          <p className="text-[#64748b]">Advanced finance settings (tax, currency, approval rules) coming soon. DB categories: {categories.length} rows in finance_categories.</p>
-        </div>
+        <FinanceSettingsPanel
+          lists={financeLists}
+          canSave={variant === "admin"}
+          onSaved={(next) => {
+            setFinanceLists(next);
+            showToast("ok", "Finance settings saved.");
+          }}
+          onError={(message) => {
+            setError(message);
+            showToast("err", message);
+          }}
+        />
       ) : null}
 
       {panel !== "none" ? (
@@ -1441,7 +1484,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                 <>
                   <Field label="Category">
                     <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={incomeForm.category} onChange={(e) => setIncomeForm({ ...incomeForm, category: e.target.value })}>
-                      {INCOME_CATEGORIES.map((c) => (
+                      {financeLists.incomeCategories.map((c) => (
                         <option key={c} value={c}>
                           {c}
                         </option>
@@ -1453,7 +1496,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                   </Field>
                   <Field label="Payment method">
                     <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={incomeForm.payment_method} onChange={(e) => setIncomeForm({ ...incomeForm, payment_method: e.target.value })}>
-                      {PAYMENT_METHODS.map((m) => (
+                      {financeLists.paymentMethods.map((m) => (
                         <option key={m} value={m}>
                           {m}
                         </option>
@@ -1508,7 +1551,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                 <>
                   <Field label="Category">
                     <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={expenseForm.category} onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })}>
-                      {EXPENSE_CATEGORIES.map((c) => (
+                      {financeLists.expenseCategories.map((c) => (
                         <option key={c} value={c}>
                           {c}
                         </option>
@@ -1520,7 +1563,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                   </Field>
                   <Field label="Payment method">
                     <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={expenseForm.payment_method} onChange={(e) => setExpenseForm({ ...expenseForm, payment_method: e.target.value })}>
-                      {PAYMENT_METHODS.map((m) => (
+                      {financeLists.paymentMethods.map((m) => (
                         <option key={m} value={m}>
                           {m}
                         </option>
@@ -1567,7 +1610,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                   </Field>
                   <Field label="Method">
                     <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={paymentForm.payment_method} onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })}>
-                      {PAYMENT_METHODS.map((m) => (
+                      {financeLists.paymentMethods.map((m) => (
                         <option key={m} value={m}>
                           {m}
                         </option>
@@ -1597,7 +1640,13 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
               {panel === "claim" ? (
                 <>
                   <Field label="Expense type">
-                    <Input className="h-9 border-[#e8dcc8]" value={claimForm.expense_type} onChange={(e) => setClaimForm({ ...claimForm, expense_type: e.target.value })} />
+                    <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={claimForm.expense_type} onChange={(e) => setClaimForm({ ...claimForm, expense_type: e.target.value })}>
+                      {financeLists.expenseCategories.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
                   </Field>
                   <Field label="Amount">
                     <Input className="h-9 border-[#e8dcc8]" value={claimForm.amount} onChange={(e) => setClaimForm({ ...claimForm, amount: e.target.value })} />
@@ -1607,7 +1656,7 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                   </Field>
                   <Field label="Payment method (reimbursement)">
                     <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-2" value={claimForm.payment_method} onChange={(e) => setClaimForm({ ...claimForm, payment_method: e.target.value })}>
-                      {PAYMENT_METHODS.map((m) => (
+                      {financeLists.paymentMethods.map((m) => (
                         <option key={m} value={m}>
                           {m}
                         </option>
@@ -1813,6 +1862,133 @@ function ReportBlock({ title, rows }: { title: string; rows: { label: string; va
         ))}
         {!rows.length ? <li className="text-[#64748b]">No data.</li> : null}
       </ul>
+    </div>
+  );
+}
+
+function FinanceSettingsPanel({
+  lists,
+  canSave,
+  onSaved,
+  onError,
+}: {
+  lists: FinanceSettingsLists;
+  canSave: boolean;
+  onSaved: (next: FinanceSettingsLists) => void;
+  onError: (message: string) => void;
+}) {
+  const [draft, setDraft] = useState({
+    incomeCategories: listToLines(lists.incomeCategories),
+    expenseCategories: listToLines(lists.expenseCategories),
+    paymentMethods: listToLines(lists.paymentMethods),
+  });
+  const [saving, setSaving] = useState(false);
+  const [localMsg, setLocalMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraft({
+      incomeCategories: listToLines(lists.incomeCategories),
+      expenseCategories: listToLines(lists.expenseCategories),
+      paymentMethods: listToLines(lists.paymentMethods),
+    });
+  }, [lists]);
+
+  const patchField = (key: keyof typeof draft, value: string) => {
+    setLocalMsg(null);
+    setDraft((d) => ({ ...d, [key]: value }));
+  };
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    setLocalMsg(null);
+    try {
+      const payload: FinanceSettingsLists = {
+        incomeCategories: linesToList(draft.incomeCategories),
+        expenseCategories: linesToList(draft.expenseCategories),
+        paymentMethods: linesToList(draft.paymentMethods),
+      };
+      if (!payload.incomeCategories.length || !payload.expenseCategories.length || !payload.paymentMethods.length) {
+        throw new Error("Income categories, expense categories, and payment methods each need at least one entry.");
+      }
+      const next = await persistFinanceSettingsLists(payload);
+      onSaved(next);
+      setLocalMsg("Saved to system settings.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not save finance settings.";
+      onError(msg);
+      setLocalMsg(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const field = (
+    label: string,
+    description: string,
+    key: keyof typeof draft,
+  ) => (
+    <article className="flex flex-col rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+      <h4 className="text-sm font-semibold text-[#0f172a]">{label}</h4>
+      <p className="mt-1 text-xs leading-relaxed text-[#64748b]">{description}</p>
+      <textarea
+        className="mt-3 min-h-[140px] w-full rounded-lg border border-[#dbe6f3] bg-[#f8fbff] px-3 py-2 text-sm text-[#334155] outline-none focus:border-[#c9a227] disabled:bg-[#f1f5f9]"
+        value={draft[key]}
+        onChange={(e) => patchField(key, e.target.value)}
+        placeholder="One entry per line"
+        disabled={!canSave}
+      />
+      <p className="mt-1 text-[11px] text-[#94a3b8]">One entry per line · blanks ignored · duplicates removed on save</p>
+    </article>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-[20px] border border-blue-100 bg-[#f8fbff] p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-[#0f172a]">Finance configuration</h3>
+          <p className="mt-2 text-sm text-[#64748b]">
+            These lists power Finance &amp; Expenses dropdowns (income, expenses, payments, claims). Changes save to{" "}
+            <code className="rounded bg-white px-1 text-xs">system_settings</code> (key{" "}
+            <code className="rounded bg-white px-1 text-xs">finance</code>) and match Admin → System Settings → Finance.
+          </p>
+          {!canSave ? (
+            <p className="mt-2 text-xs text-[#64748b]">Only admins can edit these lists. You can view the current configuration below.</p>
+          ) : null}
+          {localMsg ? <p className="mt-2 text-xs font-medium text-blue-800">{localMsg}</p> : null}
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-xl border-[#dbe6f3]"
+            disabled={saving || !canSave}
+            onClick={() => {
+              setDraft({
+                incomeCategories: listToLines(lists.incomeCategories),
+                expenseCategories: listToLines(lists.expenseCategories),
+                paymentMethods: listToLines(lists.paymentMethods),
+              });
+              setLocalMsg(null);
+            }}
+          >
+            Reset
+          </Button>
+          <Button
+            type="button"
+            className="rounded-xl bg-[#c9a227] text-white hover:bg-[#b8921f]"
+            disabled={saving || !canSave}
+            onClick={() => void handleSave()}
+          >
+            {saving ? "Saving…" : "Save settings"}
+          </Button>
+        </div>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        {field("Income categories", "Used when adding income transactions.", "incomeCategories")}
+        {field("Expense categories", "Used for expenses and claim expense types.", "expenseCategories")}
+        {field("Payment methods", "Used across income, expenses, payments, and claims.", "paymentMethods")}
+      </div>
     </div>
   );
 }
