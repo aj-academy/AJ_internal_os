@@ -141,6 +141,17 @@ If an employee sees **Forbidden** when saving a student, run (in order):
 
 Then hard-refresh the app and try **Add Student** again.
 
+### Student Lead calling & follow-up workflow
+
+Run **`lead_call_workflow_schema.sql`** after `employee_student_master_rls.sql` + `crm_owner_isolation.sql` (safe to re-run). Adds:
+
+- Table **`lead_call_sessions`** (initiated → outcome_pending → completed / cancelled / stale) with partial unique index so only one active call per lead
+- Summary columns on **`clients`**: `current_call_*`, `last_call_outcome`, `total_call_attempts`, `next_follow_up_at`, `next_follow_up_employee_id`
+- Extra columns on **`lead_followups`** / **`lead_activities`** (assigned employee, parent follow-up, call_session_id links)
+- RPC **`start_lead_call_session`** (assignment check, concurrent-call lock, admin override) and **`mark_stale_lead_call_sessions`** (30-minute stale unlock)
+
+App APIs (staff session): `POST /api/leads/call/start`, `POST /api/leads/call/complete`, `GET /api/leads/call/pending`, `GET /api/leads/call/live`. Student Master mobile cards show Call / WhatsApp / Follow-up as primary actions; after dialer return, employees must confirm call outcome (web apps cannot detect whether a normal phone call was answered).
+
 **Attendance camera / location:** Employee layout shows a one-time popup asking for camera + location (saved in browser localStorage per user). `Permissions-Policy` must allow `camera=(self)` and `geolocation=(self)` (see `lib/security/headers.ts`). Restart the Next server after header changes.
 
 ### College Visits

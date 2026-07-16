@@ -43,13 +43,26 @@ import type { ProposalFileMeta } from "@/lib/proposalFiles";
 import {
   STUDENT_LEAD_SELECT,
   STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES,
+  STUDENT_LEAD_SELECT_NO_CALL_WORKFLOW,
+  STUDENT_LEAD_SELECT_NO_PROPOSAL_OR_CALL,
   isMissingStudentProposalFileColumn,
+  isMissingCallWorkflowColumn,
   type CrmClientRow,
   displayLeadName,
   formatMoney,
   friendlyError,
   normalizeStatus,
 } from "@/components/student-lead-master/studentMasterHelpers";
+import {
+  CallOutcomeModal,
+  LeadCallLiveDashboard,
+  PendingCallOutcomeBanner,
+} from "@/components/student-lead-master/CallOutcomeModal";
+import {
+  formatFollowUpFriendly,
+  followUpBadge,
+  type LeadCallSessionRow,
+} from "@/lib/leadCallWorkflow";
 import {
   downloadStudentMasterImportTemplate,
   exportStudentMasterCsv,
@@ -390,6 +403,26 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const [activityModalLead, setActivityModalLead] = useState<CrmClientRow | null>(null);
   const [activityModalRows, setActivityModalRows] = useState<ActivityRow[]>([]);
   const [activityModalLoading, setActivityModalLoading] = useState(false);
+  const [pendingCallSessions, setPendingCallSessions] = useState<LeadCallSessionRow[]>([]);
+  const [callOutcomeSession, setCallOutcomeSession] = useState<LeadCallSessionRow | null>(null);
+  const [callOutcomeSubmitting, setCallOutcomeSubmitting] = useState(false);
+  const [callLiveStats, setCallLiveStats] = useState<{
+    callsToday: number;
+    connectedToday: number;
+    unansweredToday: number;
+    pendingOutcomes: number;
+  } | null>(null);
+  const [callLiveRows, setCallLiveRows] = useState<
+    Array<{
+      id: string;
+      lead_name?: string;
+      employee_name?: string | null;
+      started_at: string;
+      elapsed_seconds?: number;
+      session_status: string;
+    }>
+  >([]);
+  const [hidePendingBanner, setHidePendingBanner] = useState(false);
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -488,9 +521,22 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   );
 
   const loadClientsDataset = useCallback(async () => {
-    let { data, error: loadError } = await buildClientsBaseQuery();
-    if (loadError && isMissingStudentProposalFileColumn(loadError.message)) {
-      ({ data, error: loadError } = await buildClientsBaseQuery(STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES));
+    const trySelect = async (select: string) => buildClientsBaseQuery(select);
+    let { data, error: loadError } = await trySelect(STUDENT_LEAD_SELECT);
+    if (loadError && (isMissingStudentProposalFileColumn(loadError.message) || isMissingCallWorkflowColumn(loadError.message))) {
+      if (isMissingStudentProposalFileColumn(loadError.message) && isMissingCallWorkflowColumn(loadError.message)) {
+        ({ data, error: loadError } = await trySelect(STUDENT_LEAD_SELECT_NO_PROPOSAL_OR_CALL));
+      } else if (isMissingCallWorkflowColumn(loadError.message)) {
+        ({ data, error: loadError } = await trySelect(STUDENT_LEAD_SELECT_NO_CALL_WORKFLOW));
+        if (loadError && isMissingStudentProposalFileColumn(loadError.message)) {
+          ({ data, error: loadError } = await trySelect(STUDENT_LEAD_SELECT_NO_PROPOSAL_OR_CALL));
+        }
+      } else {
+        ({ data, error: loadError } = await trySelect(STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES));
+        if (loadError && isMissingCallWorkflowColumn(loadError.message)) {
+          ({ data, error: loadError } = await trySelect(STUDENT_LEAD_SELECT_NO_PROPOSAL_OR_CALL));
+        }
+      }
     }
     if (loadError) throw new Error(loadError.message);
     const { merged, pinIds } = await mergePinnedLeads(data ?? []);
@@ -872,37 +918,159 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     [crmPinIds, currentUserId, isAdmin],
   );
 
-  const handlePhoneClick = async (lead: CrmClientRow) => {
-    if (!canContactLead(lead)) return;
+  const handlePhoneClick = async (lead: CrmClientRow, opts?: { adminOverride?: boolean }) => {
+    if (!canContactLead(lead)) {
+      const owner = lead.assigned_to ? employeeNameMap[lead.assigned_to] || "another employee" : "another employee";
+      setError(`This lead is assigned to ${owner}. Contact the admin if reassignment is required.`);
+      return;
+    }
     const phone = lead.phone?.trim();
     if (!phone) {
       setError("No mobile number on this student.");
       return;
     }
-    const now = new Date().toISOString();
-    patchClientLocal(lead.id, { phone_called: true, phone_called_at: now, last_contacted_at: now });
-    window.location.href = `tel:${phone}`;
-    const { error: updateError } = await supabase
-      .from("clients")
-      .update({ phone_called: true, phone_called_at: now, last_contacted_at: now })
-      .eq("id", lead.id);
-    if (updateError) {
-      setError(updateError.message);
-      await reload();
-      return;
+
+    setError(null);
+    try {
+      const res = await fetch("/api/leads/call/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: lead.id,
+          sourcePage: "student_master",
+          adminOverride: Boolean(opts?.adminOverride),
+        }),
+      });
+      const json = (await res.json()) as Record<string, unknown>;
+
+      if (res.status === 409 && json.code === "active_call") {
+        const msg = String(json.error || "Another employee is already calling this lead.");
+        if (isAdmin && json.can_override) {
+          const ok = window.confirm(`${msg}\n\nOverride and start your own call session?`);
+          if (ok) {
+            await handlePhoneClick(lead, { adminOverride: true });
+          }
+          return;
+        }
+        setError(msg);
+        return;
+      }
+
+      if (!res.ok || json.ok !== true) {
+        setError(String(json.error || "Could not start call session."));
+        return;
+      }
+
+      const sessionId = String(json.session_id || "");
+      const startedAt = String(json.started_at || new Date().toISOString());
+      const dialPhone = String(json.phone_number || phone);
+      const attempts =
+        typeof json.total_call_attempts === "number"
+          ? json.total_call_attempts
+          : (lead.total_call_attempts || 0) + 1;
+
+      patchClientLocal(lead.id, {
+        phone_called: true,
+        phone_called_at: lead.phone_called_at || startedAt,
+        current_call_employee_id: currentUserId,
+        current_call_started_at: startedAt,
+        current_call_session_id: sessionId,
+        total_call_attempts: attempts,
+      });
+
+      const pendingSession: LeadCallSessionRow = {
+        id: sessionId,
+        lead_id: lead.id,
+        employee_id: currentUserId,
+        employee_name: employeeNameMap[currentUserId] || "You",
+        phone_number: dialPhone,
+        started_at: startedAt,
+        ended_at: null,
+        approximate_duration_seconds: null,
+        session_status: "outcome_pending",
+        call_outcome: null,
+        notes: null,
+        next_action: null,
+        lead_stage_at_start: lead.lead_stage || lead.status || null,
+        lead_stage_after: null,
+        source_page: "student_master",
+        lead_name: displayLeadName(lead),
+      };
+      setPendingCallSessions((prev) => {
+        const without = prev.filter((s) => s.id !== sessionId && s.lead_id !== lead.id);
+        return [pendingSession, ...without];
+      });
+      setHidePendingBanner(false);
+      setCallOutcomeSession(pendingSession);
+
+      window.location.href = `tel:${dialPhone}`;
+      setSuccess(`Calling ${displayLeadName(lead)} — update the outcome when you return.`);
+      void refreshCallWorkflow();
+    } catch (e) {
+      setError(friendlyError(e));
     }
-    const activity: ActivityRow = {
-      id: `local-${Date.now()}`,
-      client_id: lead.id,
-      activity_type: "Phone Call",
-      notes: `Called ${phone}`,
-      old_value: null,
-      new_value: null,
-      created_at: now,
-      created_by: currentUserId,
-    };
-    setActivityRows((prev) => [activity, ...prev]);
-    await insertActivityClient(supabase, lead.id, "Phone Call", `Called ${phone}`, currentUserId);
+  };
+
+  const refreshCallWorkflow = useCallback(async () => {
+    try {
+      const [pendingRes, liveRes] = await Promise.all([
+        fetch("/api/leads/call/pending"),
+        fetch("/api/leads/call/live"),
+      ]);
+      if (pendingRes.ok) {
+        const pendingJson = (await pendingRes.json()) as {
+          sessions?: LeadCallSessionRow[];
+          schemaMissing?: boolean;
+        };
+        if (!pendingJson.schemaMissing) {
+          setPendingCallSessions(pendingJson.sessions || []);
+        }
+      }
+      if (liveRes.ok) {
+        const liveJson = (await liveRes.json()) as {
+          live?: typeof callLiveRows;
+          stats?: typeof callLiveStats;
+          schemaMissing?: boolean;
+        };
+        if (!liveJson.schemaMissing) {
+          setCallLiveRows(liveJson.live || []);
+          setCallLiveStats(liveJson.stats || null);
+        }
+      }
+    } catch {
+      // schema may not be applied yet
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    void refreshCallWorkflow();
+    const t = window.setInterval(() => void refreshCallWorkflow(), 45_000);
+    return () => window.clearInterval(t);
+  }, [currentUserId, refreshCallWorkflow]);
+
+  const submitCallOutcome = async (payload: Record<string, unknown>) => {
+    setCallOutcomeSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/leads/call/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = (await res.json()) as { error?: string; ok?: boolean };
+      if (!res.ok || !json.ok) {
+        setError(json.error || "Could not save call outcome.");
+        return;
+      }
+      setCallOutcomeSession(null);
+      setSuccess("Call outcome saved.");
+      await Promise.all([silentRefreshCrm(), refreshCallWorkflow()]);
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setCallOutcomeSubmitting(false);
+    }
   };
 
   const openWhatsAppCompose = (lead: CrmClientRow) => {
@@ -1929,6 +2097,16 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       {error ? <Banner tone="error" message={error} /> : null}
       {success ? <Banner tone="success" message={success} /> : null}
 
+      <LeadCallLiveDashboard stats={callLiveStats} live={callLiveRows} isAdmin={isAdmin} />
+
+      {!hidePendingBanner ? (
+        <PendingCallOutcomeBanner
+          sessions={pendingCallSessions}
+          onUpdate={(session) => setCallOutcomeSession(session)}
+          onDismiss={() => setHidePendingBanner(true)}
+        />
+      ) : null}
+
       {pickForTask ? (
         <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#c9a227] bg-[#fef3c7] px-3 py-2">
           <div>
@@ -2385,6 +2563,26 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         activities={activityModalRows}
         employeeNameMap={employeeNameMap}
         onClose={() => setActivityModalLead(null)}
+      />
+
+      <CallOutcomeModal
+        open={Boolean(callOutcomeSession)}
+        session={callOutcomeSession}
+        leadName={
+          callOutcomeSession
+            ? callOutcomeSession.lead_name ||
+              displayLeadName(clients.find((c) => c.id === callOutcomeSession.lead_id) || ({} as CrmClientRow)) ||
+              "Lead"
+            : "Lead"
+        }
+        currentStatus={clients.find((c) => c.id === callOutcomeSession?.lead_id)?.status}
+        currentStage={clients.find((c) => c.id === callOutcomeSession?.lead_id)?.lead_stage}
+        currentPriority={clients.find((c) => c.id === callOutcomeSession?.lead_id)?.priority}
+        assignedEmployeeId={clients.find((c) => c.id === callOutcomeSession?.lead_id)?.assigned_to}
+        employeeOptions={employeesForSelect}
+        submitting={callOutcomeSubmitting}
+        onClose={() => setCallOutcomeSession(null)}
+        onSubmit={submitCallOutcome}
       />
     </section>
   );
@@ -2940,7 +3138,22 @@ function AllLeadsTable({
                               pickMode || showBulk ? "sticky-col-after-check" : "sticky-col-1"
                             }`}
                           >
-                            {displayLeadName(lead) || "—"}
+                            <div className="flex flex-col items-center gap-1">
+                              <span>{displayLeadName(lead) || "—"}</span>
+                              {lead.current_call_employee_id ? (
+                                <span className="rounded-full bg-[#dbeafe] px-2 py-0.5 text-[10px] font-semibold text-[#1e3a5f]">
+                                  Calling: {employeeNameMap[lead.current_call_employee_id] || "Staff"}
+                                  {lead.current_call_started_at
+                                    ? ` · ${new Date(lead.current_call_started_at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}`
+                                    : ""}
+                                </span>
+                              ) : lead.last_call_outcome ? (
+                                <span className="max-w-[12rem] truncate text-[10px] font-normal text-[#64748b]" title={lead.last_call_outcome}>
+                                  Last: {lead.last_call_outcome}
+                                  {typeof lead.total_call_attempts === "number" ? ` · ${lead.total_call_attempts} attempts` : ""}
+                                </span>
+                              ) : null}
+                            </div>
                           </td>
                           <td
                             className={`whitespace-nowrap px-4 py-3 text-center align-middle min-w-[11rem] ${
@@ -3065,12 +3278,15 @@ function AllLeadsTable({
             leads.map((lead) => {
               const program = lead.interested_program || lead.service_interest || "—";
               const canEdit = canEditLead(lead);
+              const contactable = canContactLead(lead);
               const canAdmit = isAdmin && !isClosedLeadStatus(String(lead.status));
               const counsellor = lead.assigned_to ? employeeNameMap[lead.assigned_to] : "—";
               const stageOrStatus = lead.lead_stage || lead.status || "—";
+              const fuBadge = followUpBadge(lead.follow_up_date, lead.follow_up_time);
               const moreActions = [
-                { label: "Activity", onClick: () => onOpenActivity(lead) },
-                { label: "Follow-up", onClick: () => onAddFollow(lead) },
+                { label: "Add Activity", onClick: () => onOpenActivity(lead) },
+                { label: "View", onClick: () => onProfile(lead) },
+                ...(canEdit ? [{ label: "Edit", onClick: () => onEdit(lead) }] : []),
                 ...(canAdmit ? [{ label: "Admit", onClick: () => onConvert(lead) }] : []),
                 ...(isAdmin
                   ? [{ label: "Delete", onClick: () => onDelete(lead.id), destructive: true as const }]
@@ -3097,8 +3313,44 @@ function AllLeadsTable({
                     { label: "Mobile", value: dash(lead.phone) },
                     { label: "Program", value: dash(program) },
                     { label: "Stage/Status", value: dash(stageOrStatus) },
-                    { label: "Next follow-up", value: formatDisplayDate(lead.follow_up_date) || "—" },
                     { label: "Counsellor", value: dash(counsellor) },
+                    {
+                      label: "Last call",
+                      value: lead.last_call_outcome
+                        ? `${lead.last_call_outcome}${lead.last_contacted_at ? ` · ${formatDateTimeIST(String(lead.last_contacted_at))}` : ""}`
+                        : "Not contacted",
+                    },
+                    {
+                      label: "Next follow-up",
+                      value: (
+                        <span className="inline-flex flex-wrap items-center gap-1">
+                          <span>{formatFollowUpFriendly(lead.follow_up_date, lead.follow_up_time)}</span>
+                          {fuBadge === "overdue" ? (
+                            <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">
+                              Overdue
+                            </span>
+                          ) : fuBadge === "today" ? (
+                            <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">
+                              Due today
+                            </span>
+                          ) : null}
+                        </span>
+                      ),
+                    },
+                    {
+                      label: "Call attempts",
+                      value: typeof lead.total_call_attempts === "number" ? String(lead.total_call_attempts) : "0",
+                    },
+                    {
+                      label: "Calling now",
+                      value: lead.current_call_employee_id
+                        ? `${employeeNameMap[lead.current_call_employee_id] || "Staff"}${
+                            lead.current_call_started_at
+                              ? ` · ${formatDateTimeIST(String(lead.current_call_started_at))}`
+                              : ""
+                          }`
+                        : "—",
+                    },
                   ]}
                   detailFields={[
                     { label: "Student Name", value: displayLeadName(lead) || "—" },
@@ -3122,14 +3374,44 @@ function AllLeadsTable({
                     { label: "Lead Status", value: dash(lead.status) },
                     { label: "Priority", value: dash(lead.priority) },
                     { label: "Primary Objection", value: dash(lead.primary_objection) },
-                    { label: "Next Follow-up", value: formatDisplayDate(lead.follow_up_date) || "—" },
+                    { label: "Next Follow-up", value: formatFollowUpFriendly(lead.follow_up_date, lead.follow_up_time) },
+                    { label: "Last call outcome", value: dash(lead.last_call_outcome) },
+                    { label: "Last contacted", value: lead.last_contacted_at ? formatDateTimeIST(String(lead.last_contacted_at)) : "—" },
+                    { label: "Call attempts", value: String(lead.total_call_attempts ?? 0) },
                     { label: "Fee Quoted", value: formatMoney(lead.fee_quoted ?? lead.proposal_amount) },
                     { label: "Final Fee", value: formatMoney(lead.final_fee) },
                     { label: "Payment Status", value: dash(lead.payment_status) },
                     { label: "Admission Status", value: dash(lead.admission_status) },
                     { label: "Notes", value: dash(lead.notes), clamp: true },
                   ]}
+                  outreachSlot={
+                    contactable ? (
+                      <div className="space-y-2">
+                        {lead.current_call_employee_id ? (
+                          <p className="rounded-lg bg-[#dbeafe] px-2 py-1.5 text-center text-xs font-semibold text-[#1e3a5f]">
+                            Currently calling: {employeeNameMap[lead.current_call_employee_id] || "Staff"}
+                            {lead.current_call_started_at
+                              ? ` – started at ${formatDateTimeIST(String(lead.current_call_started_at))}`
+                              : ""}
+                          </p>
+                        ) : null}
+                        <StudentOutreachButtons
+                          mode="all"
+                          phone={lead.phone}
+                          whatsapp={lead.whatsapp || lead.phone}
+                          email={lead.email}
+                          phoneCalled={lead.phone_called}
+                          whatsappSent={lead.whatsapp_sent}
+                          emailSent={lead.email_sent}
+                          onPhoneClick={() => onPhoneClick(lead)}
+                          onWhatsAppClick={() => onWhatsAppClick(lead)}
+                          onEmailClick={() => onEmailClick(lead)}
+                        />
+                      </div>
+                    ) : undefined
+                  }
                   primaryActions={[
+                    ...(contactable ? [{ label: "Follow-up", onClick: () => onAddFollow(lead) }] : []),
                     { label: "View", onClick: () => onProfile(lead) },
                     ...(canEdit ? [{ label: "Edit", onClick: () => onEdit(lead) }] : []),
                   ]}
