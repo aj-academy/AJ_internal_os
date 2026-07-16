@@ -56,6 +56,7 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 10k1) college_visits_proposal_patch.sql (Proposal Tracker columns + college-visit-proposals storage — after college_visits_schema.sql)
 10k1b) college_visits_contacts_patch.sql (multiple contacts JSON: name/role/phones/email — after college_visits_schema.sql)
 10k1c) proposals_file_upload_patch.sql (Student Master + College Visits proposal file columns + private `proposals` storage bucket — after proposal + contacts patches)
+10k1d) proposals_multi_file_patch.sql (multiple proposal files per student/college entity — after proposals_file_upload_patch.sql)
 10k2) crm_owner_isolation.sql (employee own-only SM + CV; admin tracking SELECT/ALL — re-run after security_rls_access_fix.sql)
 10k3) crm_delete_fix.sql (delete_owned_clients / delete_owned_college_visits RPCs; admin bypass — after crm_owner_isolation.sql)
 10e) system_settings_rls_fix.sql (admin can save departments / settings — run if RLS error on delete)

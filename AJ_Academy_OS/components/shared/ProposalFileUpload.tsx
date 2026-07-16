@@ -11,6 +11,7 @@ import {
   validateProposalFile,
   type ProposalEntityKind,
   type ProposalFileMeta,
+  type ProposalStoredFile,
 } from "@/lib/proposalFiles";
 
 type ProposalFileUploadProps = {
@@ -20,6 +21,11 @@ type ProposalFileUploadProps = {
   meta: ProposalFileMeta;
   pendingFile: File | null;
   onPendingFileChange: (file: File | null) => void;
+  pendingFiles?: File[];
+  onPendingFilesChange?: (files: File[]) => void;
+  multiple?: boolean;
+  files?: ProposalStoredFile[];
+  onFilesChange?: (files: ProposalStoredFile[]) => void;
   onMetaChange: (meta: ProposalFileMeta) => void;
   disabled?: boolean;
   onError?: (message: string) => void;
@@ -32,6 +38,11 @@ export function ProposalFileUpload({
   meta,
   pendingFile,
   onPendingFileChange,
+  pendingFiles,
+  onPendingFilesChange,
+  multiple = false,
+  files = [],
+  onFilesChange,
   onMetaChange,
   disabled = false,
   onError,
@@ -45,18 +56,26 @@ export function ProposalFileUpload({
   const legacyHref = meta.proposal_pdf_url?.trim() || meta.proposal_link?.trim() || "";
   const legacyLabel = meta.proposal_pdf_name?.trim() || "Open link";
 
-  const pickFile = (file: File | null) => {
-    if (!file) {
-      onPendingFileChange(null);
+  const pendingList = multiple ? (pendingFiles ?? []) : pendingFile ? [pendingFile] : [];
+
+  const pickFiles = (list: FileList | null) => {
+    if (!list || list.length === 0) {
+      if (multiple) onPendingFilesChange?.([]);
+      else onPendingFileChange(null);
       return;
     }
-    const err = validateProposalFile(file);
-    if (err) {
-      onError?.(err);
-      if (inputRef.current) inputRef.current.value = "";
-      return;
+    const picked = Array.from(list);
+    const valid: File[] = [];
+    for (const file of picked) {
+      const err = validateProposalFile(file);
+      if (err) {
+        onError?.(`${file.name}: ${err}`);
+        continue;
+      }
+      valid.push(file);
     }
-    onPendingFileChange(file);
+    if (multiple) onPendingFilesChange?.(valid);
+    else onPendingFileChange(valid[0] ?? null);
   };
 
   const openSigned = async (download: boolean) => {
@@ -102,6 +121,45 @@ export function ProposalFileUpload({
       onSuccess?.("Proposal file removed.");
     } catch (e) {
       onError?.(e instanceof Error ? e.message : "Could not remove file.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeStoredFile = async (file: ProposalStoredFile) => {
+    if (!entityId) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/proposals/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entityType, entityId, filePath: file.file_path, fileId: file.id }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error || "Could not remove file.");
+      onFilesChange?.(files.filter((f) => f.id !== file.id));
+      onSuccess?.("File removed.");
+    } catch (e) {
+      onError?.(e instanceof Error ? e.message : "Could not remove file.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openStored = async (file: ProposalStoredFile, download: boolean) => {
+    if (!entityId) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/proposals/signed-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entityType, entityId, filePath: file.file_path, fileName: file.file_name, download }),
+      });
+      const json = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !json.url) throw new Error(json.error || "Could not open file.");
+      window.open(json.url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      onError?.(e instanceof Error ? e.message : "Could not open file.");
     } finally {
       setBusy(false);
     }
@@ -176,6 +234,31 @@ export function ProposalFileUpload({
         </div>
       ) : null}
 
+      {multiple && files.length ? (
+        <div className="space-y-2 rounded-xl border border-[#e8dcc8] bg-white p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#94a3b8]">Uploaded files ({files.length})</p>
+          {files.map((file) => (
+            <div key={file.id} className="flex items-center justify-between gap-2 rounded-lg border border-[#eee7d8] px-2 py-1.5">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-[#3d3428]">{file.file_name}</p>
+                <p className="text-[11px] text-[#6b5d4d]">{formatProposalBytes(file.file_size)}</p>
+              </div>
+              <div className="flex gap-1">
+                <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={() => void openStored(file, false)} disabled={busy || disabled}>
+                  <Eye className="h-3.5 w-3.5" />
+                </Button>
+                <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={() => void openStored(file, true)} disabled={busy || disabled}>
+                  <Download className="h-3.5 w-3.5" />
+                </Button>
+                <Button type="button" size="sm" variant="outline" className="h-7 border-rose-200 px-2 text-rose-700" onClick={() => void removeStoredFile(file)} disabled={busy || disabled}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {!uploaded && legacy && legacyHref ? (
         <div className="rounded-xl border border-dashed border-[#e8dcc8] bg-white p-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-[#94a3b8]">Existing proposal link</p>
@@ -191,12 +274,16 @@ export function ProposalFileUpload({
         </div>
       ) : null}
 
-      {pendingFile ? (
+      {pendingList.length ? (
         <div className="flex items-center justify-between gap-2 rounded-xl border border-[#c9a227]/40 bg-[#faf3e3] px-3 py-2">
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-[#3d3428]">{pendingFile.name}</p>
+            <p className="truncate text-sm font-semibold text-[#3d3428]">
+              {multiple ? `${pendingList.length} file(s) selected` : pendingList[0]?.name}
+            </p>
             <p className="text-xs text-[#6b5d4d]">
-              {formatProposalBytes(pendingFile.size)}
+              {multiple
+                ? pendingList.map((f) => formatProposalBytes(f.size)).join(", ")
+                : formatProposalBytes(pendingList[0]?.size)}
               {entityId ? " · Will replace on next save/upload" : " · Uploads after you save this record"}
             </p>
           </div>
@@ -207,7 +294,8 @@ export function ProposalFileUpload({
             className="h-8 shrink-0 rounded-lg border-[#e8dcc8]"
             disabled={disabled || busy}
             onClick={() => {
-              onPendingFileChange(null);
+              if (multiple) onPendingFilesChange?.([]);
+              else onPendingFileChange(null);
               if (inputRef.current) inputRef.current.value = "";
             }}
           >
@@ -216,7 +304,7 @@ export function ProposalFileUpload({
         </div>
       ) : null}
 
-      {!uploaded || pendingFile ? (
+      {!uploaded || pendingList.length > 0 ? (
         <label
           className={[
             "flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-[#e8dcc8] bg-white px-4 py-5 text-center transition hover:border-[#c9a227] hover:bg-[#fffdf8]",
@@ -232,20 +320,22 @@ export function ProposalFileUpload({
           <input
             ref={inputRef}
             type="file"
+            multiple={multiple}
             accept={PROPOSAL_ACCEPT}
             className="sr-only"
             disabled={disabled || busy}
-            onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => pickFiles(e.target.files)}
           />
         </label>
       ) : (
         <input
           ref={inputRef}
           type="file"
+          multiple={multiple}
           accept={PROPOSAL_ACCEPT}
           className="sr-only"
           disabled={disabled || busy}
-          onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+          onChange={(e) => pickFiles(e.target.files)}
         />
       )}
 

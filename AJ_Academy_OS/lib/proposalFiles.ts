@@ -13,6 +13,18 @@ export const PROPOSAL_ALLOWED_MIME = new Set([
 
 export type ProposalEntityKind = "student" | "college";
 
+export type ProposalStoredFile = {
+  id: string;
+  entity_type: ProposalEntityKind;
+  entity_id: string;
+  file_name: string;
+  file_path: string;
+  file_type: string | null;
+  file_size: number | null;
+  uploaded_at: string;
+  uploaded_by: string | null;
+};
+
 export type ProposalFileMeta = {
   proposal_file_name: string | null;
   proposal_file_path: string | null;

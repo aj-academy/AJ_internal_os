@@ -21,27 +21,34 @@ export async function POST(request: Request) {
   const kind = record.entityType === "student" || record.entityType === "college" ? (record.entityType as ProposalEntityKind) : null;
   const entityId = typeof record.entityId === "string" ? record.entityId.trim() : "";
   const download = Boolean(record.download);
+  const filePath = typeof record.filePath === "string" ? record.filePath.trim() : "";
+  const fileName = typeof record.fileName === "string" ? record.fileName.trim() : "";
 
   if (!kind || !entityId) {
     return NextResponse.json({ error: "entityType and entityId are required." }, { status: 400 });
   }
 
   const admin = createAdminClient();
-  const table = kind === "student" ? "clients" : "college_visits";
-  const { data, error } = await admin
-    .from(table)
-    .select("proposal_file_path,proposal_file_name")
-    .eq("id", entityId)
-    .maybeSingle();
-
-  if (error || !data?.proposal_file_path) {
-    return NextResponse.json({ error: "No uploaded proposal file." }, { status: 404 });
+  let path = filePath;
+  let name = fileName || "proposal";
+  if (!path) {
+    const table = kind === "student" ? "clients" : "college_visits";
+    const { data, error } = await admin
+      .from(table)
+      .select("proposal_file_path,proposal_file_name")
+      .eq("id", entityId)
+      .maybeSingle();
+    if (error || !data?.proposal_file_path) {
+      return NextResponse.json({ error: "No uploaded proposal file." }, { status: 404 });
+    }
+    path = String(data.proposal_file_path);
+    name = String(data.proposal_file_name || "proposal");
   }
 
   const { data: signed, error: signError } = await admin.storage
     .from(PROPOSALS_BUCKET)
-    .createSignedUrl(String(data.proposal_file_path), 120, download
-      ? { download: String(data.proposal_file_name || "proposal") }
+    .createSignedUrl(path, 120, download
+      ? { download: name }
       : undefined);
 
   if (signError || !signed?.signedUrl) {
@@ -50,6 +57,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     url: signed.signedUrl,
-    fileName: data.proposal_file_name ?? "proposal",
+    fileName: name,
   });
 }

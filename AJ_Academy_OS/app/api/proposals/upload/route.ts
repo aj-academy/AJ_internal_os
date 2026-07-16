@@ -78,14 +78,8 @@ export async function POST(request: Request) {
   const path = buildProposalObjectPath(kind, entityId, file.name);
   const admin = createAdminClient();
 
-  // Load previous path for cleanup after successful replace
+  // Keep latest file in legacy single-file columns for backward compatibility.
   const table = kind === "student" ? "clients" : "college_visits";
-  const { data: prev } = await admin
-    .from(table)
-    .select("proposal_file_path")
-    .eq("id", entityId)
-    .maybeSingle();
-  const oldPath = typeof prev?.proposal_file_path === "string" ? prev.proposal_file_path : null;
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const { error: uploadError } = await admin.storage.from(PROPOSALS_BUCKET).upload(path, buffer, {
@@ -110,9 +104,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: updateError.message }, { status: 400 });
   }
 
-  if (oldPath && oldPath !== path) {
-    await admin.storage.from(PROPOSALS_BUCKET).remove([oldPath]).catch(() => undefined);
-  }
+  // Multi-file table (safe if patch not applied yet).
+  const { data: inserted } = await admin
+    .from("proposal_files")
+    .insert({
+      entity_type: kind,
+      entity_id: entityId,
+      file_name: file.name,
+      file_path: path,
+      file_type: mime || null,
+      file_size: file.size,
+      uploaded_by: user.id,
+    })
+    .select("id,entity_type,entity_id,file_name,file_path,file_type,file_size,uploaded_at,uploaded_by")
+    .maybeSingle();
 
-  return NextResponse.json({ ok: true, ...meta });
+  return NextResponse.json({ ok: true, ...meta, file: inserted ?? null });
 }

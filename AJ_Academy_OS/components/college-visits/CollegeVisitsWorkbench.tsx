@@ -89,7 +89,7 @@ import {
   type CollegeVisitRow,
 } from "@/components/college-visits/collegeVisitsHelpers";
 import { ProposalFileUpload, uploadProposalFile } from "@/components/shared/ProposalFileUpload";
-import type { ProposalFileMeta } from "@/lib/proposalFiles";
+import type { ProposalFileMeta, ProposalStoredFile } from "@/lib/proposalFiles";
 
 type CollegeOutreachFlags = {
   phoneCalled?: boolean;
@@ -167,7 +167,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     proposal_pdf_name: "",
   });
   const [proposalSubmitting, setProposalSubmitting] = useState(false);
-  const [pendingProposalFile, setPendingProposalFile] = useState<File | null>(null);
+  const [pendingProposalFiles, setPendingProposalFiles] = useState<File[]>([]);
+  const [proposalFiles, setProposalFiles] = useState<ProposalStoredFile[]>([]);
   const [proposalFileMeta, setProposalFileMeta] = useState<ProposalFileMeta>({
     proposal_file_name: null,
     proposal_file_path: null,
@@ -193,6 +194,21 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [whatsAppTargetPhone, setWhatsAppTargetPhone] = useState("");
   /** Role-column selection: which contact Call / WhatsApp / Email should use. */
   const [selectedOutreachContactByVisit, setSelectedOutreachContactByVisit] = useState<Record<string, string>>({});
+
+  const loadProposalFiles = useCallback(async (entityType: "student" | "college", entityId: string) => {
+    try {
+      const res = await fetch("/api/proposals/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entityType, entityId }),
+      });
+      const json = (await res.json()) as { files?: ProposalStoredFile[] };
+      if (res.ok) setProposalFiles(json.files ?? []);
+      else setProposalFiles([]);
+    } catch {
+      setProposalFiles([]);
+    }
+  }, []);
 
   const setVisitOutreachContact = useCallback((visitId: string, contactId: string) => {
     setSelectedOutreachContactByVisit((prev) => ({ ...prev, [visitId]: contactId }));
@@ -710,7 +726,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const openCreate = () => {
     setEditId(null);
     setForm(emptyCollegeVisitForm(currentUserId));
-    setPendingProposalFile(null);
+    setPendingProposalFiles([]);
+    setProposalFiles([]);
     setProposalFileMeta({
       proposal_file_name: null,
       proposal_file_path: null,
@@ -729,7 +746,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const openEdit = (row: CollegeVisitRow) => {
     setEditId(row.id);
     setForm(collegeVisitRowToForm(row));
-    setPendingProposalFile(null);
+    setPendingProposalFiles([]);
     setProposalFileMeta({
       proposal_file_name: row.proposal_file_name ?? null,
       proposal_file_path: row.proposal_file_path ?? null,
@@ -742,6 +759,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     });
     setPanelOpen(true);
     setViewVisit(null);
+    void loadProposalFiles("college", row.id);
   };
 
   const openProposalModal = (row: CollegeVisitRow) => {
@@ -754,7 +772,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       proposal_pdf_url: row.proposal_pdf_url ?? "",
       proposal_pdf_name: row.proposal_pdf_name ?? "",
     });
-    setPendingProposalFile(null);
+    setPendingProposalFiles([]);
     setProposalFileMeta({
       proposal_file_name: row.proposal_file_name ?? null,
       proposal_file_path: row.proposal_file_path ?? null,
@@ -767,6 +785,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     });
     setError(null);
     setSuccess(null);
+    void loadProposalFiles("college", row.id);
   };
 
   const handleProposalSave = async () => {
@@ -774,7 +793,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setProposalSubmitting(true);
     setError(null);
     setSuccess(null);
-    const fileToUpload = pendingProposalFile;
+    const filesToUpload = [...pendingProposalFiles];
     try {
       const base = collegeVisitRowToForm(proposalRow);
       const formRow: CollegeVisitFormValue = {
@@ -793,15 +812,18 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Could not save proposal.");
-      if (fileToUpload) {
-        await uploadProposalFile({
-          entityType: "college",
-          entityId: proposalRow.id,
-          file: fileToUpload,
-        });
-        setPendingProposalFile(null);
+      if (filesToUpload.length) {
+        for (const file of filesToUpload) {
+          await uploadProposalFile({
+            entityType: "college",
+            entityId: proposalRow.id,
+            file,
+          });
+        }
+        setPendingProposalFiles([]);
+        await loadProposalFiles("college", proposalRow.id);
       }
-      setSuccess(fileToUpload ? "Proposal updated and file uploaded." : "Proposal updated.");
+      setSuccess(filesToUpload.length ? `Proposal updated and ${filesToUpload.length} file(s) uploaded.` : "Proposal updated.");
       setProposalRow(null);
       await reload();
     } catch (e) {
@@ -816,7 +838,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setSubmitting(true);
     setError(null);
     setSuccess(null);
-    const fileToUpload = pendingProposalFile;
+    const filesToUpload = [...pendingProposalFiles];
     const editingId = editId;
     try {
       const payload = buildCollegeVisitPayload(form, { userId: currentUserId, isDbAdmin });
@@ -828,16 +850,19 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         });
         const json = (await res.json()) as { error?: string };
         if (!res.ok) throw new Error(json.error ?? "Update failed.");
-        if (fileToUpload) {
-          const uploaded = await uploadProposalFile({
-            entityType: "college",
-            entityId: editingId,
-            file: fileToUpload,
-          });
-          setProposalFileMeta((m) => ({ ...m, ...uploaded }));
-          setPendingProposalFile(null);
+        if (filesToUpload.length) {
+          for (const file of filesToUpload) {
+            const uploaded = await uploadProposalFile({
+              entityType: "college",
+              entityId: editingId,
+              file,
+            });
+            setProposalFileMeta((m) => ({ ...m, ...uploaded }));
+          }
+          setPendingProposalFiles([]);
+          await loadProposalFiles("college", editingId);
         }
-        setSuccess(fileToUpload ? "College visit updated and proposal uploaded." : "College visit updated.");
+        setSuccess(filesToUpload.length ? `College visit updated and ${filesToUpload.length} file(s) uploaded.` : "College visit updated.");
       } else {
         const res = await fetch("/api/college-visits", {
           method: "POST",
@@ -847,20 +872,23 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         const json = (await res.json()) as { visit?: { id?: string }; error?: string };
         if (!res.ok) throw new Error(json.error ?? "Create failed.");
         const nid = json.visit?.id;
-        if (nid && fileToUpload) {
-          const uploaded = await uploadProposalFile({
-            entityType: "college",
-            entityId: nid,
-            file: fileToUpload,
-          });
-          setProposalFileMeta((m) => ({ ...m, ...uploaded }));
-          setPendingProposalFile(null);
+        if (nid && filesToUpload.length) {
+          for (const file of filesToUpload) {
+            const uploaded = await uploadProposalFile({
+              entityType: "college",
+              entityId: nid,
+              file,
+            });
+            setProposalFileMeta((m) => ({ ...m, ...uploaded }));
+          }
+          setPendingProposalFiles([]);
+          await loadProposalFiles("college", nid);
         }
-        setSuccess(nid && fileToUpload ? "College visit created and proposal uploaded." : "College visit created.");
+        setSuccess(nid && filesToUpload.length ? `College visit created and ${filesToUpload.length} proposal file(s) uploaded.` : "College visit created.");
       }
       setPanelOpen(false);
       setEditId(null);
-      setPendingProposalFile(null);
+      setPendingProposalFiles([]);
       await reload();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
@@ -1664,8 +1692,13 @@ return (
             entityType="college"
             entityId={editId}
             meta={proposalFileMeta}
-            pendingFile={pendingProposalFile}
-            onPendingFileChange={setPendingProposalFile}
+            pendingFile={pendingProposalFiles[0] ?? null}
+            pendingFiles={pendingProposalFiles}
+            onPendingFileChange={(f) => setPendingProposalFiles(f ? [f] : [])}
+            onPendingFilesChange={setPendingProposalFiles}
+            multiple
+            files={proposalFiles}
+            onFilesChange={setProposalFiles}
             onMetaChange={setProposalFileMeta}
             disabled={submitting}
             onError={setError}
@@ -1681,7 +1714,7 @@ return (
           setDraft={setProposalDraft}
           onClose={() => {
             setProposalRow(null);
-            setPendingProposalFile(null);
+            setPendingProposalFiles([]);
           }}
           onSave={() => void handleProposalSave()}
           submitting={proposalSubmitting}
@@ -1690,8 +1723,13 @@ return (
               entityType="college"
               entityId={proposalRow.id}
               meta={proposalFileMeta}
-              pendingFile={pendingProposalFile}
-              onPendingFileChange={setPendingProposalFile}
+              pendingFile={pendingProposalFiles[0] ?? null}
+              pendingFiles={pendingProposalFiles}
+              onPendingFileChange={(f) => setPendingProposalFiles(f ? [f] : [])}
+              onPendingFilesChange={setPendingProposalFiles}
+              multiple
+              files={proposalFiles}
+              onFilesChange={setProposalFiles}
               onMetaChange={setProposalFileMeta}
               disabled={proposalSubmitting}
               onError={setError}
