@@ -53,10 +53,11 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 10k) college_visits_schema.sql (College Visits outreach tracker — admin + employee)
 10k1) college_visits_proposal_patch.sql (Proposal Tracker columns + college-visit-proposals storage — after college_visits_schema.sql)
 10k1b) college_visits_contacts_patch.sql (multiple contacts JSON: name/role/phones/email — after college_visits_schema.sql)
+10k1bb) college_visits_visited_by_patch.sql (adds visited_by_name on college_visits — after college_visits_schema.sql)
 10k1c) proposals_file_upload_patch.sql (Student Master + College Visits proposal file columns + private `proposals` storage bucket — after proposal + contacts patches)
 10k2) crm_owner_isolation.sql (employee own-only SM + CV; admin tracking SELECT/ALL — re-run after security_rls_access_fix.sql)
 10k3) crm_delete_fix.sql (delete_owned_clients / delete_owned_college_visits RPCs; admin bypass — after crm_owner_isolation.sql)
-10e) system_settings_rls_fix.sql (admin can save departments / settings — run if RLS error on delete)
+10e) system_settings_rls_fix.sql (admin can save departments / settings — run if RLS error on delete; also required for Student Master / College Visits / Project Master Settings + Admin System Settings)
 11) attendance_delete_grants.sql (optional — admin delete attendance)
 11b) remove_leave_requests_module.sql (optional — drops leave_requests; use permission_requests only)
 

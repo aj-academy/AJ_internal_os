@@ -25,6 +25,7 @@ create table if not exists public.college_visits (
   connected_person_name text,
   connected_person_role text,
   visit_status text not null default 'Not Visited',
+  visited_by_name text,
   visit_date date,
   mou_signed_status text not null default 'Not Signed',
   follow_up_stage text,

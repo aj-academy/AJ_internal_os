@@ -145,10 +145,12 @@ Then hard-refresh the app and try **Add Student** again.
 
 ### College Visits
 
-Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / profiles), then **`college_visits_proposal_patch.sql`** (Proposal Tracker: link + PDF columns and `college-visit-proposals` storage bucket), then **`college_visits_contacts_patch.sql`** (multiple contacts: name / role / alternate phones / email JSON + primary sync), then **`proposals_file_upload_patch.sql`** (unified private `proposals` bucket + file columns on `clients` and `college_visits` for PDF/DOC/DOCX upload on Add/Edit), then **`crm_owner_isolation.sql`**, then **`crm_delete_fix.sql`**. Adds:
+Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / profiles), then **`college_visits_proposal_patch.sql`** (Proposal Tracker: link + PDF columns and `college-visit-proposals` storage bucket), then **`college_visits_contacts_patch.sql`** (multiple contacts: name / role / alternate phones / email JSON + primary sync), then **`college_visits_visited_by_patch.sql`** (adds `visited_by_name` for who visited), then **`proposals_file_upload_patch.sql`** (unified private `proposals` bucket + file columns on `clients` and `college_visits` for PDF/DOC/DOCX upload on Add/Edit), then **`crm_owner_isolation.sql`**, then **`crm_delete_fix.sql`**. Adds:
 
 - `/admin/college-visits` and `/employee/college-visits` — **same subsection tabs as Student Master**: Overview, All Colleges, Follow-ups, Pipeline, Converted Colleges, MOU Tracker, **Proposal Tracker**, Activity Timeline (+ Reports / Settings for admin). **Admin sees all employees’ colleges**; **employees see only their own**. Share via College Visit tasks without opening another employee’s full CRM.
+- **Settings tab (admin):** editable visit / MOU / proposal / final status lists persist to `system_settings` key `college_visits` via `/api/admin/settings`. Staff read via `/api/college-visits/lists` (same store as Admin → System Settings → College Visits). Dropdowns, filters, and Pipeline columns use those lists.
 - **Import / Export CSV** includes primary contact plus **Contact 2 / Contact 3** (name, role, phone, alternate phone, email) and **Alternate Phone 2 / 3** on the primary — same multi-contact model as Add/Edit. Older single-contact CSVs still import.
+- **Visit & MOU:** `Who visited` field is available on Add/Edit and saves to `college_visits.visited_by_name` for both admin and employee dashboards.
 - Proposal Tracker / Add·Edit forms upload **PDF, DOC, or DOCX** (max 10 MB) into the private `proposals` bucket; legacy URL/PDF fields remain readable.
 - Pick-for-task flow uses the **All Colleges** tab (same pattern as Student Master → All Students).
 
@@ -157,6 +159,13 @@ Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / 
 API (staff session): `GET/POST /api/college-visits`, `PATCH/DELETE /api/college-visits/[id]`, `GET/POST /api/college-visits/[id]/activities`. GET returns **all rows for admin**, else the signed-in employee’s own rows.
 
 **Task assignment:** In Assign Task, choose **Colleges** → open College Visits table to pick rows (same flow as Student Master leads). Run `tasks_college_link_patch.sql` after `college_visits_schema.sql`.
+
+### Project Master
+
+Run **`project_master_schema.sql`** after `schema.sql` and task schema (see `DATABASE_SETUP_ORDER.txt` step 9).
+
+- `/admin/project-master` — Overview, All / Active / Completed / Delayed projects, Team Allocation, Timeline, Budget & Payments, Reports, **Settings**.
+- **Settings tab:** editable project types, statuses, priorities, and default deadline (days) persist to `system_settings` key `project` via `/api/admin/settings`. Staff read via `/api/projects/lists` (same store as Admin → System Settings → Project defaults). Dropdowns and table filters use those lists. Only admins can save.
 
 **Employee not seeing assigned tasks?** Run **`tasks_employee_rls_fix.sql`** — `aj_academy_roles_patch.sql` removed employee task SELECT policies; this restores them.
 
@@ -222,6 +231,7 @@ Run **`aj_reminders_schema.sql`** after `schema.sql` / profiles helpers (`is_adm
 
 Run **`student_lead_master_schema.sql`**, then **`student_lead_master_aux_schema.sql`** (follow-ups/activities), then **`student_master_columns_patch.sql`**, then **`student_lead_master_rls_fix.sql`**.  
 Admin sidebar **Student Master** (`/admin/student-master`) — All Students table columns match Meta CRM Import (`AJ_Academy_Meta_Leads_CRM_Import_*.xlsx` sheet **CRM Import**): City, Current Profile, College/Company, Career Goal, Preferred Job Role, Target Salary, Current Skill Level, Main Career Problem, Full Payment or Instalment, Parent Approval Required, Decision Maker, Laptop Availability, Primary Objection, plus counselling/admission fields. CSV/XLSX import & export use the same headers; XLSX import prefers the **CRM Import** sheet. Header filters: program, source, stage, status, priority, counsellor, payment, admission.  
+**Settings tab (admin):** editable CRM lists (sources, statuses, programs, follow-up types, priorities) persist to `system_settings` key `crm` via `/api/admin/settings` (same store as Admin → System Settings → CRM). Staff read lists via `/api/crm/lists` (so employees get the same dropdowns). Requires `system_settings_rls_fix.sql` (step 10e) so admins can save. Dropdowns, filters, and Pipeline columns reload from those lists.  
 Legacy URL `/admin/client-lead-master` redirects to `/admin/student-master`. Table name remains `public.clients` (FKs from projects/finance). Requires `student_master_columns_patch.sql` for the extra counselling columns.
 
 10f4) portal_expense_claims_rls.sql (reimbursement for employee / mentor / freelancer — after finance_schema.sql)
