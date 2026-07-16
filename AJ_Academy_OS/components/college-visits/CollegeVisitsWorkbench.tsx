@@ -1579,7 +1579,13 @@ return (
                   const days = daysSince(row.last_follow_up_date);
                   const due = isFollowUpDue(row);
                   const contacts = collegeContactsForRow(row);
-                  const selectedContact = selectedCollegeContact(row, outreachContactIdFor(row));
+                  const outreachContactId = outreachContactIdFor(row);
+                  const selectedContact = selectedCollegeContact(row, outreachContactId);
+                  const phone =
+                    collegeOutreachTargetsForContact(row, outreachContactId, "phone")[0]?.phone || "";
+                  const email =
+                    collegeOutreachTargetsForContact(row, outreachContactId, "email")[0]?.email || "";
+                  const flags = outreachDone[row.id] ?? {};
                   const person = selectedContact?.name?.trim() || row.connected_person_name || "—";
                   const personRole = selectedContact?.role?.trim() || row.connected_person_role || "";
                   return (
@@ -1635,6 +1641,47 @@ return (
                         { label: "Proposal Amount", value: row.proposal_amount != null ? `₹${Number(row.proposal_amount).toLocaleString()}` : "—" },
                         { label: "Proposal Sent Date", value: formatDisplayDate(row.proposal_sent_date) || "—" },
                       ]}
+                      outreachSlot={
+                        pickForTask ? undefined : (
+                          <div className="space-y-2.5">
+                            {contacts.length > 1 ? (
+                              <div>
+                                <label
+                                  htmlFor={`cv-mobile-contact-${row.id}`}
+                                  className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[#94a3b8]"
+                                >
+                                  Contact role
+                                </label>
+                                <select
+                                  id={`cv-mobile-contact-${row.id}`}
+                                  className="w-full rounded-md border border-[#e2e8f0] bg-white px-2 py-2 text-xs text-[#0f172a] outline-none focus:border-[#c4a35a] focus:ring-1 focus:ring-[#c4a35a]/40"
+                                  value={selectedContact?.id || contacts[0]?.id || ""}
+                                  onChange={(e) => setVisitOutreachContact(row.id, e.target.value)}
+                                  aria-label={`Select contact for ${row.college_name}`}
+                                >
+                                  {contacts.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                      {contactRoleSelectLabel(c)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            ) : null}
+                            <StudentOutreachButtons
+                              mode="all"
+                              phone={phone}
+                              whatsapp={phone}
+                              email={email}
+                              phoneCalled={flags.phoneCalled}
+                              whatsappSent={flags.whatsappSent}
+                              emailSent={flags.emailSent}
+                              onPhoneClick={() => requestCollegePhone(row)}
+                              onWhatsAppClick={() => requestCollegeWhatsApp(row)}
+                              onEmailClick={() => requestCollegeEmail(row)}
+                            />
+                          </div>
+                        )
+                      }
                       primaryActions={
                         pickForTask
                           ? []
@@ -1646,18 +1693,7 @@ return (
                       moreActions={
                         pickForTask
                           ? []
-                          : [
-                              { label: "Activity", onClick: () => void openCollegeActivity(row) },
-                              ...(contacts.length > 1
-                                ? contacts.map((c) => ({
-                                    label: `Use: ${contactRoleSelectLabel(c)}`,
-                                    onClick: () => setVisitOutreachContact(row.id, c.id),
-                                  }))
-                                : []),
-                              { label: "Call", onClick: () => requestCollegePhone(row) },
-                              { label: "WhatsApp", onClick: () => requestCollegeWhatsApp(row) },
-                              { label: "Email", onClick: () => requestCollegeEmail(row) },
-                            ]
+                          : [{ label: "Activity", onClick: () => void openCollegeActivity(row) }]
                       }
                     />
                   );

@@ -5,7 +5,7 @@ import { Mail, MessageCircle, Phone } from "lucide-react";
 import { whatsAppHref } from "@/components/employee/leads/employeeLeadConfig";
 
 type StudentOutreachButtonsProps = {
-  mode: "phone" | "whatsapp" | "email" | "both";
+  mode: "phone" | "whatsapp" | "email" | "both" | "all";
   phone?: string | null;
   whatsapp?: string | null;
   email?: string | null;
@@ -108,28 +108,80 @@ export function StudentOutreachButtons({
     );
   }
 
+  if (mode === "both") {
+    return (
+      <Centered>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            title={canPhone ? `Call ${phone}` : "No mobile number"}
+            disabled={!canPhone || !onPhoneClick}
+            onClick={onPhoneClick}
+            className={outreachClass(Boolean(phoneCalled), canPhone && Boolean(onPhoneClick))}
+          >
+            <Phone className={iconClass} />
+          </button>
+          <button
+            type="button"
+            title={canWa ? `WhatsApp ${whatsapp || phone}` : "No WhatsApp number"}
+            disabled={!canWa || !onWhatsAppClick}
+            onClick={onWhatsAppClick}
+            className={outreachClass(Boolean(whatsappSent), canWa && Boolean(onWhatsAppClick))}
+          >
+            <MessageCircle className={iconClass} />
+          </button>
+        </div>
+      </Centered>
+    );
+  }
+
+  const phoneEnabled = canPhone && Boolean(onPhoneClick);
+  const waEnabled = canWa && Boolean(onWhatsAppClick);
+  const emailEnabled = canEmail && Boolean(onEmailClick);
+
   return (
-    <Centered>
-      <div className="flex flex-wrap items-center justify-center gap-2">
+    <div className="flex flex-wrap items-center justify-center gap-3">
+      <button
+        type="button"
+        title={canPhone ? `Call ${phone}` : "No mobile number"}
+        disabled={!phoneEnabled}
+        onClick={onPhoneClick}
+        className={outreachClass(Boolean(phoneCalled), phoneEnabled)}
+        aria-label="Call"
+      >
+        <Phone className={iconClass} />
+      </button>
+      <button
+        type="button"
+        title={canWa ? `WhatsApp ${whatsapp || phone}` : "No WhatsApp number"}
+        disabled={!waEnabled}
+        onClick={onWhatsAppClick}
+        className={outreachClass(Boolean(whatsappSent), waEnabled)}
+        aria-label="WhatsApp"
+      >
+        <MessageCircle className={iconClass} />
+      </button>
+      {emailEnabled ? (
         <button
           type="button"
-          title={canPhone ? `Call ${phone}` : "No mobile number"}
-          disabled={!canPhone || !onPhoneClick}
-          onClick={onPhoneClick}
-          className={outreachClass(Boolean(phoneCalled), canPhone && Boolean(onPhoneClick))}
+          title={`Email ${emailValue}`}
+          onClick={onEmailClick}
+          className={outreachClass(Boolean(emailSent), true)}
+          aria-label="Email"
         >
-          <Phone className={iconClass} />
+          <Mail className={iconClass} />
         </button>
-        <button
-          type="button"
-          title={canWa ? `WhatsApp ${whatsapp || phone}` : "No WhatsApp number"}
-          disabled={!canWa || !onWhatsAppClick}
-          onClick={onWhatsAppClick}
-          className={outreachClass(Boolean(whatsappSent), canWa && Boolean(onWhatsAppClick))}
+      ) : (
+        <span
+          role="button"
+          aria-disabled
+          title="No email address"
+          className={outreachClass(Boolean(emailSent), false)}
+          aria-label="Email"
         >
-          <MessageCircle className={iconClass} />
-        </button>
-      </div>
-    </Centered>
+          <Mail className={iconClass} />
+        </span>
+      )}
+    </div>
   );
 }
