@@ -1864,13 +1864,25 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       let fail = errors.length;
       const rowErrors = [...errors];
 
-      for (const payload of payloads) {
-        const { error: insertError } = await supabase.from("clients").insert(payload);
-        if (insertError) {
-          fail += 1;
-          rowErrors.push(insertError.message);
-        } else {
-          ok += 1;
+      // Bulk insert for speed; if a chunk fails, fall back to row-by-row
+      // to keep detailed row-level failure reporting.
+      const chunkSize = 150;
+      for (let i = 0; i < payloads.length; i += chunkSize) {
+        const chunk = payloads.slice(i, i + chunkSize);
+        const { error: chunkError } = await supabase.from("clients").insert(chunk);
+        if (!chunkError) {
+          ok += chunk.length;
+          continue;
+        }
+
+        for (const payload of chunk) {
+          const { error: insertError } = await supabase.from("clients").insert(payload);
+          if (insertError) {
+            fail += 1;
+            rowErrors.push(insertError.message);
+          } else {
+            ok += 1;
+          }
         }
       }
 

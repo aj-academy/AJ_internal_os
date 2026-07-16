@@ -8,8 +8,10 @@ on conflict (setting_key) do nothing;
 
 drop policy if exists "system_settings_admin_all" on public.system_settings;
 drop policy if exists "system_settings_admin_read" on public.system_settings;
-drop policy if exists "system_settings_admin_update" on public.system_settings;
+drop policy if exists "system_settings_admin_select" on public.system_settings;
 drop policy if exists "system_settings_admin_insert" on public.system_settings;
+drop policy if exists "system_settings_admin_update" on public.system_settings;
+drop policy if exists "system_settings_admin_delete" on public.system_settings;
 
 create policy "system_settings_admin_select"
 on public.system_settings
