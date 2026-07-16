@@ -38,6 +38,10 @@ interface CollegeVisitFormPanelProps {
   onClose: () => void;
   onSubmit: () => void;
   proposalUploadSlot?: ReactNode;
+  visitStatusOptions?: readonly string[];
+  mouStatusOptions?: readonly string[];
+  finalStatusOptions?: readonly string[];
+  proposalStatusOptions?: readonly string[];
 }
 
 function ensureFormContacts(contacts: CollegeContact[]): CollegeContact[] {
@@ -77,8 +81,17 @@ export function CollegeVisitFormPanel({
   onClose,
   onSubmit,
   proposalUploadSlot,
+  visitStatusOptions,
+  mouStatusOptions,
+  finalStatusOptions,
+  proposalStatusOptions,
 }: CollegeVisitFormPanelProps) {
   if (!open) return null;
+
+  const visitStatuses = visitStatusOptions?.length ? visitStatusOptions : VISIT_STATUSES;
+  const mouStatuses = mouStatusOptions?.length ? mouStatusOptions : MOU_STATUSES;
+  const finalStatuses = finalStatusOptions?.length ? finalStatusOptions : FINAL_STATUSES;
+  const proposalStatuses = proposalStatusOptions?.length ? proposalStatusOptions : CV_PROPOSAL_STATUSES;
 
   const contacts = ensureFormContacts(value.contacts);
 
@@ -315,7 +328,7 @@ export function CollegeVisitFormPanel({
                 <label className="grid gap-1">
                   <span className="font-medium text-[#334155]">Visit status</span>
                   <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3" value={value.visit_status} onChange={(e) => onChange({ ...value, visit_status: e.target.value })}>
-                    {VISIT_STATUSES.map((s) => (
+                    {visitStatuses.map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
@@ -326,9 +339,18 @@ export function CollegeVisitFormPanel({
                 </label>
               </div>
               <label className="grid gap-1">
+                <span className="font-medium text-[#334155]">Who visited</span>
+                <Input
+                  value={value.visited_by_name}
+                  onChange={(e) => onChange({ ...value, visited_by_name: e.target.value })}
+                  className="border-[#e8dcc8]"
+                  placeholder="Enter visitor name"
+                />
+              </label>
+              <label className="grid gap-1">
                 <span className="font-medium text-[#334155]">MOU signed status</span>
                 <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3" value={value.mou_signed_status} onChange={(e) => onChange({ ...value, mou_signed_status: e.target.value })}>
-                  {MOU_STATUSES.map((s) => (
+                  {mouStatuses.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
@@ -381,7 +403,7 @@ export function CollegeVisitFormPanel({
               <label className="grid gap-1">
                 <span className="font-medium text-[#334155]">Final status</span>
                 <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3" value={value.final_status} onChange={(e) => onChange({ ...value, final_status: e.target.value })}>
-                  {FINAL_STATUSES.map((s) => (
+                  {finalStatuses.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
@@ -408,7 +430,7 @@ export function CollegeVisitFormPanel({
                   value={value.proposal_status}
                   onChange={(e) => onChange({ ...value, proposal_status: e.target.value })}
                 >
-                  {CV_PROPOSAL_STATUSES.map((s) => (
+                  {proposalStatuses.map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>

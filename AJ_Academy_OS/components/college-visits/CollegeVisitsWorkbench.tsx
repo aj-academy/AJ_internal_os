@@ -48,10 +48,13 @@ import {
   COLLEGE_PRIORITIES,
   CV_TAB_IDS,
   CV_TAB_LABELS,
-  FINAL_STATUSES,
-  VISIT_STATUSES,
   type CvTabId,
 } from "@/components/college-visits/collegeVisitsConfig";
+import {
+  defaultCollegeVisitSettingsLists,
+  fetchCollegeVisitSettingsLists,
+  type CollegeVisitSettingsLists,
+} from "@/lib/collegeVisitSettings";
 import {
   CollegeActivityTimeline,
   CollegeConvertedTable,
@@ -184,6 +187,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const importFileRef = useRef<HTMLInputElement>(null);
   const [outreachDone, setOutreachDone] = useState<Record<string, CollegeOutreachFlags>>({});
   const [whatsAppTemplates, setWhatsAppTemplates] = useState<string[]>([]);
+  const [cvLists, setCvLists] = useState<CollegeVisitSettingsLists>(() => defaultCollegeVisitSettingsLists());
   const [whatsAppComposeVisit, setWhatsAppComposeVisit] = useState<CollegeVisitRow | null>(null);
   const [whatsAppSubmitting, setWhatsAppSubmitting] = useState(false);
   const [emailComposeVisit, setEmailComposeVisit] = useState<CollegeVisitRow | null>(null);
@@ -270,13 +274,15 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setLoading(true);
     setError(null);
     try {
+      const lists = await fetchCollegeVisitSettingsLists(supabase);
+      setCvLists(lists);
       await loadVisits();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
     } finally {
       setLoading(false);
     }
-  }, [currentUserId, loadVisits]);
+  }, [currentUserId, loadVisits, supabase]);
 
   useEffect(() => {
     async function bootstrap() {
@@ -1164,7 +1170,12 @@ return (
       ) : null}
 
       {activeTab === "pipeline" ? (
-        <CollegePipelineBoard visits={filteredVisits} canEdit={isAdmin} onChangeStatus={(row, s) => void changePipelineStatus(row, s)} />
+        <CollegePipelineBoard
+          visits={filteredVisits}
+          canEdit={isAdmin}
+          statusOptions={cvLists.visitStatuses}
+          onChangeStatus={(row, s) => void changePipelineStatus(row, s)}
+        />
       ) : null}
 
       {activeTab === "converted" ? (
@@ -1189,7 +1200,16 @@ return (
       ) : null}
 
       {activeTab === "reports" && isDbAdmin ? <CollegeReportsPanel visits={filteredVisits} ownerNameMap={ownerNameMap} /> : null}
-      {activeTab === "settings" && isDbAdmin ? <CollegeSettingsPanel /> : null}
+      {activeTab === "settings" && isDbAdmin ? (
+        <CollegeSettingsPanel
+          lists={cvLists}
+          onSaved={(next) => {
+            setCvLists(next);
+            setSuccess("College Visits settings saved. Dropdowns and pipeline columns updated.");
+          }}
+          onError={setError}
+        />
+      ) : null}
 
       {activeTab === "all-colleges" ? (
         <div className="space-y-3">
@@ -1336,7 +1356,7 @@ return (
                   <TableHeaderCell label="Email" className={`${thClass} min-w-[5.5rem]`} />
                   <TableHeaderCell label="Connected Person Name" className={thClass} />
                   <TableHeaderCell label="Role" className={thClass} />
-                  <TableHeaderFilter label="Visit Status" value={fltVisitStatus} options={VISIT_STATUSES.map((s) => ({ value: s, label: s }))} onChange={setFltVisitStatus} className={thClass} />
+                  <TableHeaderFilter label="Visit Status" value={fltVisitStatus} options={cvLists.visitStatuses.map((s) => ({ value: s, label: s }))} onChange={setFltVisitStatus} className={thClass} />
                   <TableHeaderCell label="Visit Date" className={thClass} />
                   <TableHeaderCell label="MOU Signed Status" className={thClass} />
                   <TableHeaderCell label="Follow-up Stage" className={thClass} />
@@ -1366,7 +1386,7 @@ return (
                     className={thClass}
                   />
                   <TableHeaderCell label="Lead Score" className={thClass} />
-                  <TableHeaderFilter label="Final Status" value={fltFinalStatus} options={FINAL_STATUSES.map((s) => ({ value: s, label: s }))} onChange={setFltFinalStatus} className={thClass} />
+                  <TableHeaderFilter label="Final Status" value={fltFinalStatus} options={cvLists.finalStatuses.map((s) => ({ value: s, label: s }))} onChange={setFltFinalStatus} className={thClass} />
                   <TableHeaderCell label="Source / Reference" className={thClass} />
                   {!pickForTask ? <TableHeaderCell label="Actions" className={thClass} /> : null}
                 </tr>
@@ -1656,6 +1676,10 @@ return (
         onChange={setForm}
         onClose={() => setPanelOpen(false)}
         onSubmit={() => void handleSave()}
+        visitStatusOptions={cvLists.visitStatuses}
+        mouStatusOptions={cvLists.mouStatuses}
+        finalStatusOptions={cvLists.finalStatuses}
+        proposalStatusOptions={cvLists.proposalStatuses}
         proposalUploadSlot={
           <ProposalFileUpload
             entityType="college"
@@ -1682,6 +1706,7 @@ return (
           }}
           onSave={() => void handleProposalSave()}
           submitting={proposalSubmitting}
+          proposalStatusOptions={cvLists.proposalStatuses}
           proposalUploadSlot={
             <ProposalFileUpload
               entityType="college"

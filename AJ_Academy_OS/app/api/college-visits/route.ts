@@ -5,12 +5,14 @@ import {
   COLLEGE_VISIT_SELECT,
   isMissingContactsColumn,
   isMissingProposalFileColumn,
+  isMissingVisitedByColumn,
   nextCollegeVisitSelect,
 } from "@/components/college-visits/collegeVisitsHelpers";
 import { buildPayloadFromApi, mapCollegeVisitRow, parseCollegeVisitBody } from "@/lib/collegeVisitsApi";
 
 function stripUnavailableColumns(payload: Record<string, unknown>, errorMsg: string) {
   const next = { ...payload };
+  if (isMissingVisitedByColumn(errorMsg)) delete next.visited_by_name;
   if (isMissingContactsColumn(errorMsg)) delete next.contacts;
   if (isMissingProposalFileColumn(errorMsg)) {
     delete next.proposal_file_name;

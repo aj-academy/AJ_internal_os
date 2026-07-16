@@ -39,6 +39,9 @@ interface ProjectFormPanelProps {
   onChange: (v: ProjectFormValue) => void;
   onClose: () => void;
   onSubmit: () => void;
+  statusOptions?: readonly string[];
+  priorityOptions?: readonly string[];
+  projectTypeOptions?: readonly string[];
 }
 
 export function ProjectFormPanel({
@@ -52,8 +55,15 @@ export function ProjectFormPanel({
   onChange,
   onClose,
   onSubmit,
+  statusOptions,
+  priorityOptions,
+  projectTypeOptions,
 }: ProjectFormPanelProps) {
   if (!open) return null;
+
+  const statuses = statusOptions?.length ? statusOptions : PROJECT_STATUSES;
+  const priorities = priorityOptions?.length ? priorityOptions : PROJECT_PRIORITIES;
+  const projectTypes = projectTypeOptions?.length ? projectTypeOptions : PROJECT_TYPES;
 
   const budgetNum = parseFloat(value.budget) || 0;
   const advNum = parseFloat(value.advance_paid) || 0;
@@ -117,7 +127,7 @@ export function ProjectFormPanel({
                   onChange={(e) => onChange({ ...value, project_type: e.target.value })}
                 >
                   <option value="">Select type</option>
-                  {PROJECT_TYPES.map((t) => (
+                  {projectTypes.map((t) => (
                     <option key={t} value={t}>
                       {t}
                     </option>
@@ -253,7 +263,7 @@ export function ProjectFormPanel({
                   value={value.status}
                   onChange={(e) => onChange({ ...value, status: e.target.value })}
                 >
-                  {PROJECT_STATUSES.map((s) => (
+                  {statuses.map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
@@ -268,7 +278,7 @@ export function ProjectFormPanel({
                   value={value.priority}
                   onChange={(e) => onChange({ ...value, priority: e.target.value })}
                 >
-                  {PROJECT_PRIORITIES.map((p) => (
+                  {priorities.map((p) => (
                     <option key={p} value={p}>
                       {p}
                     </option>

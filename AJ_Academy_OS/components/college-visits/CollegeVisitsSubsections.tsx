@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { TablePagination } from "@/components/ui/TablePagination";
@@ -9,8 +9,6 @@ import { ResponsiveDataView } from "@/components/ui/ResponsiveDataView";
 import { formatDisplayDate } from "@/lib/datetime";
 import { usePagination } from "@/lib/usePagination";
 import {
-  FINAL_STATUSES,
-  MOU_STATUSES,
   CV_PROPOSAL_STATUSES,
   VISIT_STATUSES,
   type CvProposalStatus,
@@ -22,6 +20,12 @@ import {
   type CollegeVisitActivityRow,
   type CollegeVisitRow,
 } from "@/components/college-visits/collegeVisitsHelpers";
+import {
+  linesToList,
+  listToLines,
+  persistCollegeVisitSettingsLists,
+  type CollegeVisitSettingsLists,
+} from "@/lib/collegeVisitSettings";
 
 function countBy(rows: CollegeVisitRow[], key: (r: CollegeVisitRow) => string) {
   const m = new Map<string, number>();
@@ -240,16 +244,19 @@ export function CollegeFollowUpsPanel({
 export function CollegePipelineBoard({
   visits,
   canEdit,
+  statusOptions,
   onChangeStatus,
 }: {
   visits: CollegeVisitRow[];
   canEdit: boolean;
+  statusOptions?: readonly string[];
   onChangeStatus: (row: CollegeVisitRow, status: string) => void;
 }) {
+  const statuses = statusOptions?.length ? statusOptions : VISIT_STATUSES;
   return (
     <div className="overflow-x-auto pb-2">
       <div className="flex h-[min(70vh,720px)] min-h-[360px] min-w-[980px] gap-3">
-        {VISIT_STATUSES.map((statusCol) => {
+        {statuses.map((statusCol) => {
           const col = visits.filter((v) => v.visit_status === statusCol);
           return (
             <div
@@ -278,7 +285,7 @@ export function CollegePipelineBoard({
                         value={card.visit_status}
                         onChange={(e) => onChangeStatus(card, e.target.value)}
                       >
-                        {VISIT_STATUSES.map((opt) => (
+                        {statuses.map((opt) => (
                           <option key={opt} value={opt}>
                             {opt}
                           </option>
@@ -711,6 +718,7 @@ export function CollegeProposalEditModal({
   onSave,
   submitting,
   proposalUploadSlot,
+  proposalStatusOptions,
 }: {
   row: CollegeVisitRow;
   draft: CollegeProposalDraft;
@@ -719,7 +727,9 @@ export function CollegeProposalEditModal({
   onSave: () => void;
   submitting: boolean;
   proposalUploadSlot?: ReactNode;
+  proposalStatusOptions?: readonly string[];
 }) {
+  const statuses = proposalStatusOptions?.length ? proposalStatusOptions : CV_PROPOSAL_STATUSES;
   return (
     <>
       <button type="button" aria-label="Close" className="fixed inset-0 z-[60] bg-slate-900/40" onClick={onClose} />
@@ -736,7 +746,7 @@ export function CollegeProposalEditModal({
               value={draft.status}
               onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value }))}
             >
-              {CV_PROPOSAL_STATUSES.map((st) => (
+              {statuses.map((st) => (
                 <option key={st} value={st}>
                   {st}
                 </option>
@@ -867,36 +877,138 @@ export function CollegeReportsPanel({
   );
 }
 
-export function CollegeSettingsPanel() {
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <SettingList title="Visit statuses" items={[...VISIT_STATUSES]} />
-      <SettingList title="MOU statuses" items={[...MOU_STATUSES]} />
-      <SettingList title="Proposal statuses" items={[...CV_PROPOSAL_STATUSES]} />
-      <SettingList title="Final statuses" items={[...FINAL_STATUSES]} />
-      <div className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-4 text-sm text-[#475569]">
-        <p className="font-semibold text-[#0f172a]">Notes</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
-          <li>Admin sees every employee&apos;s colleges for activity tracking; employees only see their own.</li>
-          <li>Share outreach via <strong>Assign as College Visit task</strong> (My Tasks) without opening full CRM.</li>
-          <li>Import / create always owns the row as the signed-in user.</li>
-          <li>Proposal Tracker stores a URL link and/or a PDF in Storage.</li>
-        </ul>
-      </div>
-    </div>
-  );
-}
+export function CollegeSettingsPanel({
+  lists,
+  onSaved,
+  onError,
+}: {
+  lists: CollegeVisitSettingsLists;
+  onSaved: (next: CollegeVisitSettingsLists) => void;
+  onError: (message: string) => void;
+}) {
+  const [draft, setDraft] = useState({
+    visitStatuses: listToLines(lists.visitStatuses),
+    mouStatuses: listToLines(lists.mouStatuses),
+    proposalStatuses: listToLines(lists.proposalStatuses),
+    finalStatuses: listToLines(lists.finalStatuses),
+  });
+  const [saving, setSaving] = useState(false);
+  const [localMsg, setLocalMsg] = useState<string | null>(null);
 
-function SettingList({ title, items }: { title: string; items: string[] }) {
+  useEffect(() => {
+    setDraft({
+      visitStatuses: listToLines(lists.visitStatuses),
+      mouStatuses: listToLines(lists.mouStatuses),
+      proposalStatuses: listToLines(lists.proposalStatuses),
+      finalStatuses: listToLines(lists.finalStatuses),
+    });
+  }, [lists]);
+
+  const patchField = (key: keyof typeof draft, value: string) => {
+    setLocalMsg(null);
+    setDraft((d) => ({ ...d, [key]: value }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setLocalMsg(null);
+    try {
+      const payload: CollegeVisitSettingsLists = {
+        visitStatuses: linesToList(draft.visitStatuses),
+        mouStatuses: linesToList(draft.mouStatuses),
+        proposalStatuses: linesToList(draft.proposalStatuses),
+        finalStatuses: linesToList(draft.finalStatuses),
+      };
+      if (
+        !payload.visitStatuses.length ||
+        !payload.mouStatuses.length ||
+        !payload.proposalStatuses.length ||
+        !payload.finalStatuses.length
+      ) {
+        throw new Error("Each status list needs at least one entry.");
+      }
+      const next = await persistCollegeVisitSettingsLists(payload);
+      onSaved(next);
+      setLocalMsg("Saved to system settings.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not save College Visits settings.";
+      onError(msg);
+      setLocalMsg(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const field = (label: string, description: string, key: keyof typeof draft) => (
+    <article className="flex flex-col rounded-2xl border border-[#dbe6f3] bg-white p-4 shadow-sm">
+      <h4 className="text-sm font-semibold text-[#0f172a]">{label}</h4>
+      <p className="mt-1 text-xs leading-relaxed text-[#64748b]">{description}</p>
+      <textarea
+        className="mt-3 min-h-[140px] w-full rounded-lg border border-[#dbe6f3] bg-[#f8fbff] px-3 py-2 text-sm text-[#334155] outline-none focus:border-[#c9a227]"
+        value={draft[key]}
+        onChange={(e) => patchField(key, e.target.value)}
+        placeholder="One entry per line"
+      />
+      <p className="mt-1 text-[11px] text-[#94a3b8]">One entry per line · blanks ignored · duplicates removed on save</p>
+    </article>
+  );
+
   return (
-    <div className="rounded-2xl border border-[#dbe6f3] bg-white p-4">
-      <p className="text-sm font-semibold text-[#0f172a]">{title}</p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {items.map((item) => (
-          <span key={item} className="rounded-full border border-[#e8dcc8] bg-[#faf3e3] px-2.5 py-1 text-xs text-[#475569]">
-            {item}
-          </span>
-        ))}
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-blue-100 bg-[#f8fbff] p-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-[#0f172a]">College Visits configuration</h3>
+          <p className="mt-2 text-sm text-[#64748b]">
+            These lists power College Visits dropdowns, filters, and the pipeline. Changes save to{" "}
+            <code className="rounded bg-white px-1 text-xs">system_settings</code> (key{" "}
+            <code className="rounded bg-white px-1 text-xs">college_visits</code>).
+          </p>
+          {localMsg ? <p className="mt-2 text-xs font-medium text-blue-800">{localMsg}</p> : null}
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-xl border-[#dbe6f3]"
+            disabled={saving}
+            onClick={() => {
+              setDraft({
+                visitStatuses: listToLines(lists.visitStatuses),
+                mouStatuses: listToLines(lists.mouStatuses),
+                proposalStatuses: listToLines(lists.proposalStatuses),
+                finalStatuses: listToLines(lists.finalStatuses),
+              });
+              setLocalMsg(null);
+            }}
+          >
+            Reset
+          </Button>
+          <Button
+            type="button"
+            className="rounded-xl bg-[#c9a227] text-white hover:bg-[#b8911f]"
+            disabled={saving}
+            onClick={() => void handleSave()}
+          >
+            {saving ? "Saving…" : "Save settings"}
+          </Button>
+        </div>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {field("Visit statuses", "Pipeline stages for college outreach visits.", "visitStatuses")}
+        {field("MOU statuses", "Memorandum of Understanding progress on each college.", "mouStatuses")}
+        {field("Proposal statuses", "Proposal Tracker and form dropdown options.", "proposalStatuses")}
+        {field("Final statuses", "Overall college outcome (open through converted / lost).", "finalStatuses")}
+        <div className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-4 text-sm text-[#475569] md:col-span-2">
+          <p className="font-semibold text-[#0f172a]">Notes</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+            <li>Admin sees every employee&apos;s colleges for activity tracking; employees only see their own.</li>
+            <li>
+              Share outreach via <strong>Assign as College Visit task</strong> (My Tasks) without opening full CRM.
+            </li>
+            <li>Import / create always owns the row as the signed-in user.</li>
+            <li>Proposal Tracker stores a URL link and/or a PDF in Storage.</li>
+          </ul>
+        </div>
       </div>
     </div>
   );

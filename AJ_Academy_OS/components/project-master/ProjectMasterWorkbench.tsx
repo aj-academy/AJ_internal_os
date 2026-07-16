@@ -18,7 +18,7 @@ import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
-import { PROJECT_TAB_IDS, TAB_LABELS } from "@/components/project-master/projectConfig";
+import { PROJECT_PRIORITIES, PROJECT_STATUSES, PROJECT_TAB_IDS, TAB_LABELS } from "@/components/project-master/projectConfig";
 import { ProjectFormPanel, type ProjectFormValue } from "@/components/project-master/ProjectFormPanel";
 import {
   PROJECT_SELECT,
@@ -29,6 +29,14 @@ import {
   normalizeProjectStatus,
   type ProjectRowLoose,
 } from "@/components/project-master/projectHelpers";
+import {
+  defaultProjectSettingsLists,
+  fetchProjectSettingsLists,
+  linesToList,
+  listToLines,
+  persistProjectSettingsLists,
+  type ProjectSettingsLists,
+} from "@/lib/projectSettings";
 import type { ClientOption, ProjectActivityRow, ProjectRow, ProjectTabId, TeamMemberRow } from "@/types/project";
 import type { TaskRecord } from "@/types/task";
 
@@ -50,7 +58,9 @@ function monthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function emptyForm(): ProjectFormValue {
+function emptyForm(lists?: Pick<ProjectSettingsLists, "statuses" | "priorities">): ProjectFormValue {
+  const statuses = lists?.statuses?.length ? lists.statuses : [...PROJECT_STATUSES];
+  const priorities = lists?.priorities?.length ? lists.priorities : [...PROJECT_PRIORITIES];
   return {
     project_name: "",
     project_code: "",
@@ -64,8 +74,8 @@ function emptyForm(): ProjectFormValue {
     advance_paid: "0",
     project_manager: "",
     team_ids: new Set<string>(),
-    status: "Planning",
-    priority: "Medium",
+    status: statuses.includes("Planning") ? "Planning" : (statuses[0] ?? "Planning"),
+    priority: priorities.includes("Medium") ? "Medium" : (priorities[0] ?? "Medium"),
     notes: "",
   };
 }
@@ -139,7 +149,8 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
   const [schemaMissing, setSchemaMissing] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState<ProjectFormValue>(emptyForm);
+  const [form, setForm] = useState<ProjectFormValue>(() => emptyForm());
+  const [projectLists, setProjectLists] = useState<ProjectSettingsLists>(() => defaultProjectSettingsLists());
   const [viewProject, setViewProject] = useState<ProjectRowLoose | null>(null);
   const [fltStatus, setFltStatus] = useState("");
   const [fltPriority, setFltPriority] = useState("");
@@ -201,13 +212,15 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
     setError(null);
     setLoading(true);
     try {
+      const lists = await fetchProjectSettingsLists(supabase);
+      setProjectLists(lists);
       await loadCore();
     } catch (e) {
       setError(friendlyProjectError(e));
     } finally {
       setLoading(false);
     }
-  }, [loadCore, userId]);
+  }, [loadCore, supabase, userId]);
 
   useEffect(() => {
     void (async () => {
@@ -298,7 +311,7 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
   const openCreate = () => {
     if (!canCreate || schemaMissing) return;
     setEditId(null);
-    setForm(emptyForm());
+    setForm(emptyForm(projectLists));
     setPanelOpen(true);
   };
 
@@ -604,6 +617,8 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
             setFltClient={setFltClient}
             fltDeadline={fltDeadline}
             setFltDeadline={setFltDeadline}
+            statusOptions={projectLists.statuses}
+            priorityOptions={projectLists.priorities}
             onView={setViewProject}
             onEdit={openEdit}
             onDelete={(id) => void deleteProject(id)}
@@ -796,10 +811,15 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
       ) : null}
 
       {activeTab === "settings" ? (
-        <div className="rounded-[20px] border border-[#dbe6f3] bg-[#f8fbff] p-6 text-sm text-[#475569]">
-          <p className="font-semibold text-[#0f172a]">Project configuration</p>
-          <p className="mt-2">Project types, status lists, priorities, and notification defaults are defined in the app today. Advanced editable settings (stored in Supabase) are coming soon.</p>
-        </div>
+        <ProjectSettingsPanel
+          lists={projectLists}
+          canSave={isAdmin}
+          onSaved={(next) => {
+            setProjectLists(next);
+            setSuccess("Project settings saved. Dropdowns and filters updated.");
+          }}
+          onError={setError}
+        />
       ) : null}
 
       {panelOpen ? (
@@ -814,6 +834,9 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
           onChange={setForm}
           onClose={() => setPanelOpen(false)}
           onSubmit={() => void saveProject()}
+          statusOptions={projectLists.statuses}
+          priorityOptions={projectLists.priorities}
+          projectTypeOptions={projectLists.projectTypes}
         />
       ) : null}
 
@@ -855,6 +878,8 @@ function ProjectsDataTable({
   setFltClient,
   fltDeadline,
   setFltDeadline,
+  statusOptions,
+  priorityOptions,
   onView,
   onEdit,
   onDelete,
@@ -879,6 +904,8 @@ function ProjectsDataTable({
   setFltClient: (s: string) => void;
   fltDeadline: string;
   setFltDeadline: (s: string) => void;
+  statusOptions: readonly string[];
+  priorityOptions: readonly string[];
   onView: (p: ProjectRowLoose) => void;
   onEdit: (p: ProjectRowLoose) => void;
   onDelete: (id: string) => void;
@@ -959,7 +986,7 @@ function ProjectsDataTable({
                     label="Status"
                     value={fltStatus}
                     onChange={setFltStatus}
-                    options={["Planning", "Active", "On Hold", "In Review", "Completed", "Cancelled", "Delayed"].map((s) => ({
+                    options={(statusOptions.length ? statusOptions : PROJECT_STATUSES).map((s) => ({
                       value: s,
                       label: s,
                     }))}
@@ -970,7 +997,7 @@ function ProjectsDataTable({
                     label="Priority"
                     value={fltPriority}
                     onChange={setFltPriority}
-                    options={["Low", "Medium", "High", "Urgent"].map((s) => ({ value: s, label: s }))}
+                    options={(priorityOptions.length ? priorityOptions : PROJECT_PRIORITIES).map((s) => ({ value: s, label: s }))}
                     allLabel="All priorities"
                     className="px-4 py-3"
                   />
@@ -1207,5 +1234,156 @@ function ProjectViewDrawer({
         </div>
       </div>
     </>
+  );
+}
+
+function ProjectSettingsPanel({
+  lists,
+  canSave,
+  onSaved,
+  onError,
+}: {
+  lists: ProjectSettingsLists;
+  canSave: boolean;
+  onSaved: (next: ProjectSettingsLists) => void;
+  onError: (message: string) => void;
+}) {
+  const [draft, setDraft] = useState({
+    projectTypes: listToLines(lists.projectTypes),
+    statuses: listToLines(lists.statuses),
+    priorities: listToLines(lists.priorities),
+    defaultDeadlineDays: String(lists.defaultDeadlineDays),
+  });
+  const [saving, setSaving] = useState(false);
+  const [localMsg, setLocalMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraft({
+      projectTypes: listToLines(lists.projectTypes),
+      statuses: listToLines(lists.statuses),
+      priorities: listToLines(lists.priorities),
+      defaultDeadlineDays: String(lists.defaultDeadlineDays),
+    });
+  }, [lists]);
+
+  const patchField = (key: keyof typeof draft, value: string) => {
+    setLocalMsg(null);
+    setDraft((d) => ({ ...d, [key]: value }));
+  };
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    setLocalMsg(null);
+    try {
+      const days = Number(draft.defaultDeadlineDays);
+      const payload: ProjectSettingsLists = {
+        projectTypes: linesToList(draft.projectTypes),
+        statuses: linesToList(draft.statuses),
+        priorities: linesToList(draft.priorities),
+        defaultDeadlineDays: Number.isFinite(days) && days > 0 ? Math.round(days) : 30,
+      };
+      if (!payload.projectTypes.length || !payload.statuses.length || !payload.priorities.length) {
+        throw new Error("Project types, statuses, and priorities each need at least one entry.");
+      }
+      const next = await persistProjectSettingsLists(payload);
+      onSaved(next);
+      setLocalMsg("Saved to system settings.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not save project settings.";
+      onError(msg);
+      setLocalMsg(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const field = (label: string, description: string, key: "projectTypes" | "statuses" | "priorities") => (
+    <article className="flex flex-col rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+      <h4 className="text-sm font-semibold text-[#0f172a]">{label}</h4>
+      <p className="mt-1 text-xs leading-relaxed text-[#64748b]">{description}</p>
+      <textarea
+        className="mt-3 min-h-[140px] w-full rounded-lg border border-[#dbe6f3] bg-[#f8fbff] px-3 py-2 text-sm text-[#334155] outline-none focus:border-[#c9a227] disabled:bg-[#f1f5f9]"
+        value={draft[key]}
+        onChange={(e) => patchField(key, e.target.value)}
+        placeholder="One entry per line"
+        disabled={!canSave}
+      />
+      <p className="mt-1 text-[11px] text-[#94a3b8]">One entry per line · blanks ignored · duplicates removed on save</p>
+    </article>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-[20px] border border-blue-100 bg-[#f8fbff] p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-[#0f172a]">Project configuration</h3>
+          <p className="mt-2 text-sm text-[#64748b]">
+            These lists power Project Master dropdowns and table filters. Changes save to{" "}
+            <code className="rounded bg-white px-1 text-xs">system_settings</code> (key{" "}
+            <code className="rounded bg-white px-1 text-xs">project</code>) and match Admin → System Settings → Project defaults.
+          </p>
+          {!canSave ? (
+            <p className="mt-2 text-xs text-[#64748b]">Only admins can edit these lists. You can view the current configuration below.</p>
+          ) : null}
+          {localMsg ? <p className="mt-2 text-xs font-medium text-blue-800">{localMsg}</p> : null}
+        </div>
+        {canSave ? (
+          <div className="flex shrink-0 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl border-[#dbe6f3]"
+              disabled={saving}
+              onClick={() => {
+                setDraft({
+                  projectTypes: listToLines(lists.projectTypes),
+                  statuses: listToLines(lists.statuses),
+                  priorities: listToLines(lists.priorities),
+                  defaultDeadlineDays: String(lists.defaultDeadlineDays),
+                });
+                setLocalMsg(null);
+              }}
+            >
+              Reset
+            </Button>
+            <Button
+              type="button"
+              className="rounded-xl bg-[#c9a227] text-white hover:bg-[#b8911f]"
+              disabled={saving}
+              onClick={() => void handleSave()}
+            >
+              {saving ? "Saving…" : "Save settings"}
+            </Button>
+          </div>
+        ) : null}
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {field("Project types", "Service categories shown when creating or editing a project.", "projectTypes")}
+        {field("Statuses", "Pipeline stages for live, completed, and delayed project views.", "statuses")}
+        {field("Priorities", "Deal urgency for triage and filtering.", "priorities")}
+        <article className="flex flex-col rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+          <h4 className="text-sm font-semibold text-[#0f172a]">Default deadline (days)</h4>
+          <p className="mt-1 text-xs leading-relaxed text-[#64748b]">
+            Suggested timeline offset for new projects (informational default; admins can still pick any deadline on the form).
+          </p>
+          <Input
+            type="number"
+            min={1}
+            className="mt-3 max-w-[8rem] border-[#dbe6f3]"
+            value={draft.defaultDeadlineDays}
+            onChange={(e) => patchField("defaultDeadlineDays", e.target.value)}
+            disabled={!canSave}
+          />
+        </article>
+        <div className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-4 text-sm text-[#475569] md:col-span-2">
+          <p className="font-semibold text-[#0f172a]">Notes</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+            <li>Task-linked progress and notifications use existing task / notification settings.</li>
+            <li>Auto progress from tasks is configured in Admin → System Settings → Project defaults.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
   );
 }

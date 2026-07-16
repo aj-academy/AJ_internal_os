@@ -1,6 +1,25 @@
 const IST_TIMEZONE = "Asia/Kolkata";
 const IST_LOCALE = "en-IN";
 
+type DateFormatPref = "DD/MM/YYYY" | "YYYY-MM-DD" | "MM/DD/YYYY";
+type TimeFormatPref = "12h" | "24h";
+
+let displayDateFormat: DateFormatPref = "DD/MM/YYYY";
+let displayTimeFormat: TimeFormatPref = "12h";
+
+/** Called by useSystemPreferences when settings load — affects formatDisplayDate / time helpers. */
+export function setDisplayPreferences(prefs: {
+  dateFormat?: string | null;
+  timeFormat?: string | null;
+}) {
+  if (prefs.dateFormat === "YYYY-MM-DD" || prefs.dateFormat === "MM/DD/YYYY" || prefs.dateFormat === "DD/MM/YYYY") {
+    displayDateFormat = prefs.dateFormat;
+  }
+  if (prefs.timeFormat === "24h" || prefs.timeFormat === "12h") {
+    displayTimeFormat = prefs.timeFormat;
+  }
+}
+
 export function parseTimeToMinutes(value: string): number | null {
   const normalized = value.trim().toLowerCase();
   const amPmMatch = normalized.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm)$/);
@@ -33,16 +52,25 @@ export function formatPermissionTime(value: string | null | undefined): string {
   if (minutes === null) return value;
   const hour24 = Math.floor(minutes / 60) % 24;
   const mins = minutes % 60;
+  if (displayTimeFormat === "24h") {
+    return `${String(hour24).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+  }
   const period = hour24 >= 12 ? "PM" : "AM";
   const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
   return `${String(hour12).padStart(2, "0")}:${String(mins).padStart(2, "0")} ${period}`;
 }
 
-/** Display calendar dates as dd/mm/yyyy (IST). Keep ISO (yyyy-mm-dd) for storage / date inputs. */
+function formatPartsToPref(day: string, month: string, year: string): string {
+  if (displayDateFormat === "YYYY-MM-DD") return `${year}-${month}-${day}`;
+  if (displayDateFormat === "MM/DD/YYYY") return `${month}/${day}/${year}`;
+  return `${day}/${month}/${year}`;
+}
+
+/** Display calendar dates using System Preferences date format (default DD/MM/YYYY). */
 export function formatDisplayDate(value: string | null | undefined, empty = "—"): string {
   if (value == null || String(value).trim() === "") return empty;
   const raw = String(value).trim();
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw) && displayDateFormat === "DD/MM/YYYY") return raw;
   const isoDay = raw.slice(0, 10);
   const dateOnly = raw.length <= 10 || /^\d{4}-\d{2}-\d{2}/.test(raw);
   const parsed = dateOnly ? new Date(`${isoDay}T12:00:00+05:30`) : new Date(raw);
@@ -64,10 +92,10 @@ export function formatDisplayDate(value: string | null | undefined, empty = "—
       year: "numeric",
     });
   }
-  return `${day}/${month}/${year}`;
+  return formatPartsToPref(day, month, year);
 }
 
-/** Same dd/mm/yyyy as formatDisplayDate (legacy name). */
+/** Same as formatDisplayDate (legacy name). */
 export function formatDateIST(value: string | null | undefined): string {
   return formatDisplayDate(value, "-");
 }
@@ -81,7 +109,7 @@ export function formatDateTimeIST(value: string | null | undefined): string {
     timeZone: IST_TIMEZONE,
     hour: "2-digit",
     minute: "2-digit",
-    hour12: true,
+    hour12: displayTimeFormat !== "24h",
   });
   return `${date}, ${time}`;
 }
@@ -94,7 +122,7 @@ export function formatTimeIST(value: string | null | undefined): string {
     timeZone: IST_TIMEZONE,
     hour: "2-digit",
     minute: "2-digit",
-    hour12: true,
+    hour12: displayTimeFormat !== "24h",
   });
 }
 

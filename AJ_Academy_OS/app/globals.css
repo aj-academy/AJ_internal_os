@@ -315,3 +315,23 @@
     @apply text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-[#a68b2e];
   }
 }
+
+/* Shell-level dark theme from System Preferences (minimal tokens) */
+html[data-theme="dark"],
+html.dark {
+  color-scheme: dark;
+}
+
+.aj-shell-dark {
+  --aj-shell-bg: #0f172a;
+  --aj-shell-fg: #e2e8f0;
+}
+
+.aj-shell-dark .aj-page {
+  color: #e2e8f0;
+}
+
+.aj-shell-dark main {
+  color: #e2e8f0;
+}
+

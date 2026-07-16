@@ -6,8 +6,19 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HrOrgSettingsPanel } from "@/components/settings/HrOrgSettingsPanel";
-import { mergeSettings, SETTINGS_DEFAULTS } from "@/components/settings/settingsDefaults";
+import {
+  mergeSettings,
+  mergeSystemPreferences,
+  normalizeTimeInputValue,
+  PREFERENCE_DASHBOARD_VIEW_OPTIONS,
+  PREFERENCE_DATE_FORMAT_OPTIONS,
+  PREFERENCE_THEME_OPTIONS,
+  PREFERENCE_TIME_FORMAT_OPTIONS,
+  SETTINGS_DEFAULTS,
+} from "@/components/settings/settingsDefaults";
 import type { SystemSettingRow } from "@/types/settings";
+import { setDisplayPreferences } from "@/lib/datetime";
+import Link from "next/link";
 
 export type SettingsTabId =
   | "company"
@@ -15,6 +26,7 @@ export type SettingsTabId =
   | "hr_org"
   | "attendance"
   | "crm"
+  | "college_visits"
   | "project"
   | "finance"
   | "notifications"
@@ -27,6 +39,7 @@ const SETTINGS_TAB_ORDER: SettingsTabId[] = [
   "hr_org",
   "attendance",
   "crm",
+  "college_visits",
   "project",
   "finance",
   "notifications",
@@ -40,6 +53,7 @@ const SETTINGS_TAB_LABELS: Record<SettingsTabId, string> = {
   hr_org: "Departments & courses",
   attendance: "Attendance Settings",
   crm: "CRM Settings",
+  college_visits: "College Visits",
   project: "Project Settings",
   finance: "Finance Settings",
   notifications: "Notification Settings",
@@ -144,12 +158,25 @@ export function SettingsWorkbench() {
       return;
     }
     showToast("ok", "Settings saved.");
+    if (key === "preferences") {
+      const prefs = mergeSystemPreferences(settings.preferences || {});
+      setDisplayPreferences({ dateFormat: prefs.dateFormat, timeFormat: prefs.timeFormat });
+      const root = document.documentElement;
+      if (prefs.theme === "dark") {
+        root.classList.add("dark");
+        root.setAttribute("data-theme", "dark");
+      } else {
+        root.classList.remove("dark");
+        root.setAttribute("data-theme", "light");
+      }
+    }
     await loadSettings();
   };
 
   const c = settings.company || mergeSettings("company", {});
   const a = settings.attendance || mergeSettings("attendance", {});
   const crm = settings.crm || mergeSettings("crm", {});
+  const cv = settings.college_visits || mergeSettings("college_visits", {});
   const proj = settings.project || mergeSettings("project", {});
   const fin = settings.finance || mergeSettings("finance", {});
   const notif = settings.notifications || mergeSettings("notifications", {});
@@ -206,6 +233,10 @@ export function SettingsWorkbench() {
 
       {activeTab === "company" ? (
         <SettingsPanel title="Company" onSave={() => void saveKey("company")} saving={saving} disabled={schemaMissing}>
+          <p className="rounded-xl border border-[#e8dcc8] bg-[#fffdf8] px-3 py-2 text-xs text-[#64748b]">
+            Optional company profile for AJ Academy (name, GST, address, logo). The app already works with defaults
+            (Timezone Asia/Kolkata, Currency INR). Fill these when you want branding or invoice details — empty fields are fine.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <LabeledInput label="Company name" value={String(c.companyName ?? "")} onChange={(v) => patch("company", { companyName: v })} />
             <LabeledInput label="Company email" value={String(c.companyEmail ?? "")} onChange={(v) => patch("company", { companyEmail: v })} />
@@ -258,8 +289,16 @@ export function SettingsWorkbench() {
       {activeTab === "attendance" ? (
         <SettingsPanel title="Attendance" onSave={() => void saveKey("attendance")} saving={saving} disabled={schemaMissing}>
           <div className="grid gap-3 sm:grid-cols-2">
-            <LabeledInput label="Office start" value={String(a.officeStartTime ?? "")} onChange={(v) => patch("attendance", { officeStartTime: v })} />
-            <LabeledInput label="Office end" value={String(a.officeEndTime ?? "")} onChange={(v) => patch("attendance", { officeEndTime: v })} />
+            <LabeledTimeInput
+              label="Office start"
+              value={normalizeTimeInputValue(a.officeStartTime)}
+              onChange={(v) => patch("attendance", { officeStartTime: v })}
+            />
+            <LabeledTimeInput
+              label="Office end"
+              value={normalizeTimeInputValue(a.officeEndTime)}
+              onChange={(v) => patch("attendance", { officeEndTime: v })}
+            />
             <LabeledInput label="Grace (minutes)" value={String(a.graceMinutes ?? "")} onChange={(v) => patch("attendance", { graceMinutes: Number(v) || 0 })} />
             <LabeledInput label="Working days" value={String(a.workingDays ?? "")} onChange={(v) => patch("attendance", { workingDays: v })} />
             <LabeledInput label="Overtime rules" value={String(a.overtimeRules ?? "")} onChange={(v) => patch("attendance", { overtimeRules: v })} />
@@ -294,9 +333,16 @@ export function SettingsWorkbench() {
             onChange={(v) => patch("crm", { followUpTypes: v.split("\n").map((s) => s.trim()).filter(Boolean) })}
           />
           <LabeledTextarea
-            label="Service categories"
-            value={(crm.serviceCategories as string[])?.join("\n") || ""}
-            onChange={(v) => patch("crm", { serviceCategories: v.split("\n").map((s) => s.trim()).filter(Boolean) })}
+            label="Programs / service interests"
+            value={
+              ((crm.interestedPrograms as string[])?.length
+                ? (crm.interestedPrograms as string[])
+                : (crm.serviceCategories as string[]))?.join("\n") || ""
+            }
+            onChange={(v) => {
+              const list = v.split("\n").map((s) => s.trim()).filter(Boolean);
+              patch("crm", { serviceCategories: list, interestedPrograms: list });
+            }}
           />
           <LabeledTextarea
             label="Priority types"
@@ -306,8 +352,40 @@ export function SettingsWorkbench() {
         </SettingsPanel>
       ) : null}
 
+      {activeTab === "college_visits" ? (
+        <SettingsPanel title="College Visits" onSave={() => void saveKey("college_visits")} saving={saving} disabled={schemaMissing}>
+          <p className="text-xs text-[#64748b]">One entry per line. Same lists as College Visits → Settings.</p>
+          <LabeledTextarea
+            label="Visit statuses"
+            value={(cv.visitStatuses as string[])?.join("\n") || ""}
+            onChange={(v) => patch("college_visits", { visitStatuses: v.split("\n").map((s) => s.trim()).filter(Boolean) })}
+          />
+          <LabeledTextarea
+            label="MOU statuses"
+            value={(cv.mouStatuses as string[])?.join("\n") || ""}
+            onChange={(v) => patch("college_visits", { mouStatuses: v.split("\n").map((s) => s.trim()).filter(Boolean) })}
+          />
+          <LabeledTextarea
+            label="Proposal statuses"
+            value={(cv.proposalStatuses as string[])?.join("\n") || ""}
+            onChange={(v) => patch("college_visits", { proposalStatuses: v.split("\n").map((s) => s.trim()).filter(Boolean) })}
+          />
+          <LabeledTextarea
+            label="Final statuses"
+            value={(cv.finalStatuses as string[])?.join("\n") || ""}
+            onChange={(v) => patch("college_visits", { finalStatuses: v.split("\n").map((s) => s.trim()).filter(Boolean) })}
+          />
+        </SettingsPanel>
+      ) : null}
+
       {activeTab === "project" ? (
         <SettingsPanel title="Project defaults" onSave={() => void saveKey("project")} saving={saving} disabled={schemaMissing}>
+          <p className="text-xs text-[#64748b]">One entry per line for lists. Same store as Project Master → Settings.</p>
+          <LabeledTextarea
+            label="Project types"
+            value={(proj.projectTypes as string[])?.join("\n") || ""}
+            onChange={(v) => patch("project", { projectTypes: v.split("\n").map((s) => s.trim()).filter(Boolean) })}
+          />
           <LabeledTextarea
             label="Statuses (one per line)"
             value={(proj.statuses as string[])?.join("\n") || ""}
@@ -336,8 +414,14 @@ export function SettingsWorkbench() {
             <LabeledInput label="Currency" value={String(fin.currency ?? "")} onChange={(v) => patch("finance", { currency: v })} />
             <LabeledInput label="Tax %" value={String(fin.taxPercent ?? "")} onChange={(v) => patch("finance", { taxPercent: Number(v) || 0 })} />
             <LabeledInput label="Invoice prefix" value={String(fin.invoicePrefix ?? "")} onChange={(v) => patch("finance", { invoicePrefix: v })} />
-            <LabeledInput label="Expense categories note" value={String(fin.expenseCategoriesNote ?? "")} onChange={(v) => patch("finance", { expenseCategoriesNote: v })} />
           </div>
+          <p className="rounded-xl border border-[#e8dcc8] bg-[#fffdf8] px-3 py-2 text-xs text-[#64748b]">
+            Expense categories are managed in{" "}
+            <Link href="/admin/finance" className="font-semibold text-[#a68b2e] hover:underline">
+              Finance &amp; Expenses
+            </Link>{" "}
+            (finance_categories table), not in this settings screen.
+          </p>
           <LabeledTextarea
             label="Payment methods (one per line)"
             value={(fin.paymentMethods as string[])?.join("\n") || ""}
@@ -374,16 +458,38 @@ export function SettingsWorkbench() {
       {activeTab === "preferences" ? (
         <SettingsPanel title="Preferences" onSave={() => void saveKey("preferences")} saving={saving} disabled={schemaMissing}>
           <div className="grid gap-3 sm:grid-cols-2">
-            <LabeledInput label="Theme" value={String(pref.theme ?? "")} onChange={(v) => patch("preferences", { theme: v })} />
-            <LabeledInput label="Date format" value={String(pref.dateFormat ?? "")} onChange={(v) => patch("preferences", { dateFormat: v })} />
-            <LabeledInput label="Time format" value={String(pref.timeFormat ?? "")} onChange={(v) => patch("preferences", { timeFormat: v })} />
-            <LabeledInput label="Dashboard default view" value={String(pref.dashboardDefaultView ?? "")} onChange={(v) => patch("preferences", { dashboardDefaultView: v })} />
+            <LabeledSelect
+              label="Theme"
+              value={String(pref.theme ?? "light")}
+              options={PREFERENCE_THEME_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              onChange={(v) => patch("preferences", { theme: v })}
+            />
+            <LabeledSelect
+              label="Date format"
+              value={String(pref.dateFormat ?? "DD/MM/YYYY")}
+              options={PREFERENCE_DATE_FORMAT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              onChange={(v) => patch("preferences", { dateFormat: v })}
+            />
+            <LabeledSelect
+              label="Time format"
+              value={String(pref.timeFormat ?? "12h")}
+              options={PREFERENCE_TIME_FORMAT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              onChange={(v) => patch("preferences", { timeFormat: v })}
+            />
+            <LabeledSelect
+              label="Dashboard default view"
+              value={String(pref.dashboardDefaultView ?? "overview")}
+              options={PREFERENCE_DASHBOARD_VIEW_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              onChange={(v) => patch("preferences", { dashboardDefaultView: v })}
+            />
             <label className="flex items-center gap-2 text-sm text-[#334155] sm:col-span-2">
               <input type="checkbox" checked={Boolean(pref.sidebarCollapsed)} onChange={(e) => patch("preferences", { sidebarCollapsed: e.target.checked })} />
               Sidebar collapsed by default
             </label>
           </div>
-          <p className="mt-4 text-xs text-[#94a3b8]">Theme/sidebar UI wiring to the dashboard layout can be done in a follow-up; values persist in Supabase.</p>
+          <p className="mt-4 text-xs text-[#94a3b8]">
+            These apply across admin and employee dashboards after save (theme, sidebar, date/time display, and default landing module).
+          </p>
         </SettingsPanel>
       ) : null}
 
@@ -423,6 +529,49 @@ function LabeledInput({ label, value, onChange }: { label: string; value: string
     <label className="block text-sm">
       <span className="text-xs font-semibold uppercase text-[#64748b]">{label}</span>
       <Input className="mt-1 h-9 border-[#e8dcc8]" value={value} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  );
+}
+
+function LabeledTimeInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="block text-sm">
+      <span className="text-xs font-semibold uppercase text-[#64748b]">{label}</span>
+      <Input
+        type="time"
+        className="mt-1 h-9 border-[#e8dcc8]"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </label>
+  );
+}
+
+function LabeledSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className="block text-sm">
+      <span className="text-xs font-semibold uppercase text-[#64748b]">{label}</span>
+      <select
+        className="mt-1 h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227]"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }

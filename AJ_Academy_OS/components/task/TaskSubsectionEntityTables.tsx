@@ -83,6 +83,7 @@ function placeholderCollege(id: string): CollegeVisitRow {
     connected_person_role: null,
     contacts: [],
     visit_status: "-",
+    visited_by_name: null,
     visit_date: null,
     mou_signed_status: "-",
     follow_up_stage: null,

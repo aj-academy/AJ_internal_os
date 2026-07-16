@@ -31,6 +31,15 @@ export function mergeProgramLists(existing: string[], incoming: string[]): strin
 export async function fetchInterestedPrograms(
   supabase: ReturnType<typeof createClient>,
 ): Promise<string[]> {
+  try {
+    const res = await fetch("/api/crm/lists", { credentials: "include" });
+    const json = (await res.json()) as { lists?: { interestedPrograms?: string[] }; error?: string };
+    if (res.ok && Array.isArray(json.lists?.interestedPrograms) && json.lists.interestedPrograms.length) {
+      return json.lists.interestedPrograms.map((x) => String(x).trim()).filter(Boolean);
+    }
+  } catch {
+    /* fall through */
+  }
   const { data, error } = await supabase
     .from("system_settings")
     .select("setting_value")
@@ -42,13 +51,14 @@ export async function fetchInterestedPrograms(
 
 export async function persistInterestedPrograms(programs: string[]): Promise<string[]> {
   const merged = mergeProgramLists(defaultInterestedPrograms(), programs);
-  const getRes = await fetch("/api/admin/settings?key=crm");
+  const getRes = await fetch("/api/admin/settings?key=crm", { credentials: "include" });
   const getJson = (await getRes.json()) as { setting?: { setting_value?: unknown } | null; error?: string };
   if (!getRes.ok) throw new Error(getJson.error ?? "Could not load CRM settings.");
 
   const crmBase = mergeSettings(CRM_SETTINGS_KEY, getJson.setting?.setting_value);
   const putRes = await fetch("/api/admin/settings", {
     method: "PUT",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       setting_key: CRM_SETTINGS_KEY,

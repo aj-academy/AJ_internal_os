@@ -29,7 +29,6 @@ import {
   CRM_LEAD_STATUSES,
   CRM_PRIORITIES,
   CRM_PROPOSAL_STATUSES,
-  CRM_SERVICES,
   CRM_SOURCES,
   CRM_TAB_IDS,
   LEAD_STAGES,
@@ -59,7 +58,15 @@ import {
   STUDENT_MASTER_DATA_COLUMN_COUNT,
 } from "@/components/student-lead-master/studentMasterCsv";
 import { formatDateTimeIST, formatDisplayDate } from "@/lib/datetime";
-import { fetchInterestedPrograms, persistInterestedPrograms } from "@/lib/studentPrograms";
+import { persistInterestedPrograms } from "@/lib/studentPrograms";
+import {
+  defaultCrmSettingsLists,
+  fetchCrmSettingsLists,
+  linesToList,
+  listToLines,
+  persistCrmSettingsLists,
+  type CrmSettingsLists,
+} from "@/lib/crmSettings";
 import { StudentOutreachButtons } from "@/components/student-lead-master/StudentOutreachButtons";
 import { whatsAppHref } from "@/components/employee/leads/employeeLeadConfig";
 import { WhatsAppComposeModal } from "@/components/shared/WhatsAppComposeModal";
@@ -141,7 +148,14 @@ function isIsoDate(d: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(d);
 }
 
-function emptyForm(assignedFallback: string, admin: boolean): StudentLeadFormValue {
+function emptyForm(
+  assignedFallback: string,
+  _admin: boolean,
+  lists?: Pick<CrmSettingsLists, "leadSources" | "leadStatuses" | "priorityTypes">,
+): StudentLeadFormValue {
+  const sources = lists?.leadSources?.length ? lists.leadSources : [...CRM_SOURCES];
+  const statuses = lists?.leadStatuses?.length ? lists.leadStatuses : [...CRM_LEAD_STATUSES];
+  const priorities = lists?.priorityTypes?.length ? lists.priorityTypes : [...CRM_PRIORITIES];
   return {
     lead_name: "",
     phone: "",
@@ -168,11 +182,11 @@ function emptyForm(assignedFallback: string, admin: boolean): StudentLeadFormVal
     decision_maker: "",
     preferred_batch: "",
     laptop_availability: "",
-    source: CRM_SOURCES[0],
+    source: sources[0] ?? CRM_SOURCES[0],
     assigned_to: assignedFallback,
     lead_stage: "",
-    status: "New",
-    priority: "Warm",
+    status: statuses.includes("New") ? "New" : (statuses[0] ?? "New"),
+    priority: priorities.includes("Warm") ? "Warm" : (priorities[0] ?? "Warm"),
     follow_up_date: "",
     follow_up_time: "",
     follow_up_type: "",
@@ -366,6 +380,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const [fltAdmissionStatus, setFltAdmissionStatus] = useState("");
 
   const [interestedPrograms, setInterestedPrograms] = useState<string[]>([]);
+  const [crmLists, setCrmLists] = useState<CrmSettingsLists>(() => defaultCrmSettingsLists());
   const [whatsAppTemplates, setWhatsAppTemplates] = useState<string[]>([]);
   const [whatsAppComposeLead, setWhatsAppComposeLead] = useState<CrmClientRow | null>(null);
   const [whatsAppSubmitting, setWhatsAppSubmitting] = useState(false);
@@ -488,8 +503,9 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     setError(null);
     setLoading(true);
     try {
-      const programs = await fetchInterestedPrograms(supabase);
-      setInterestedPrograms(programs);
+      const lists = await fetchCrmSettingsLists(supabase);
+      setCrmLists(lists);
+      setInterestedPrograms(lists.interestedPrograms);
       const templates = await fetchWhatsAppTemplates(supabase);
       setWhatsAppTemplates(templates);
       const emailTpls = await fetchEmailTemplates(supabase);
@@ -1202,7 +1218,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     setSuccess(null);
     setError(null);
     setEditId(null);
-    setForm(emptyForm(currentUserId, isDbAdmin));
+    setForm(emptyForm(currentUserId, isDbAdmin, crmLists));
     setPendingProposalFile(null);
     setProposalFileMeta({
       proposal_file_name: null,
@@ -1234,6 +1250,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         if (isDbAdmin) {
           const updated = await persistInterestedPrograms([...interestedPrograms, programName]);
           setInterestedPrograms(updated);
+          setCrmLists((prev) => ({ ...prev, interestedPrograms: updated, serviceCategories: updated }));
         }
         saveForm = { ...form, interested_program: programName, new_program_name: "" };
       }
@@ -2108,6 +2125,9 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
             fltAdmissionStatus={fltAdmissionStatus}
             setFltAdmissionStatus={setFltAdmissionStatus}
             programOptions={interestedPrograms}
+            sourceOptions={crmLists.leadSources}
+            statusOptions={crmLists.leadStatuses}
+            priorityOptions={crmLists.priorityTypes}
             employeeOptions={employeesForSelect}
             canContactLead={canContactLead}
             canEditLead={canEditLead}
@@ -2190,7 +2210,12 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       )}
 
       {activeTab === "pipeline" && (
-        <PipelineBoard leads={filteredClients} isAdmin={canWriteOwnLeads} onChangeStatus={(r, ns) => void changePipelineStatus(r, ns)} />
+        <PipelineBoard
+          leads={filteredClients}
+          isAdmin={canWriteOwnLeads}
+          statusOptions={crmLists.leadStatuses}
+          onChangeStatus={(r, ns) => void changePipelineStatus(r, ns)}
+        />
       )}
 
       {activeTab === "converted" && (
@@ -2248,7 +2273,17 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         />
       ) : null}
 
-      {activeTab === "settings" && isDbAdmin ? <CrmSettingsPanel /> : null}
+      {activeTab === "settings" && isDbAdmin ? (
+        <CrmSettingsPanel
+          lists={crmLists}
+          onSaved={(next) => {
+            setCrmLists(next);
+            setInterestedPrograms(next.interestedPrograms);
+            setSuccess("CRM settings saved. Dropdowns and pipeline columns updated.");
+          }}
+          onError={setError}
+        />
+      ) : null}
 
       {panelOpen && (
         <>
@@ -2259,6 +2294,10 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
               open={panelOpen}
               value={form}
               programOptions={interestedPrograms}
+              sourceOptions={crmLists.leadSources}
+              statusOptions={crmLists.leadStatuses}
+              priorityOptions={crmLists.priorityTypes}
+              followUpTypeOptions={crmLists.followUpTypes}
               employees={employeesForSelect}
               canAssign={false}
               submitting={submitting}
@@ -2288,7 +2327,15 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       ) : null}
 
       {followModalFor ? (
-        <QuickFollowModal draft={followDraft} setDraft={setFollowDraft} submitting={submitting} target={followModalFor} onClose={() => setFollowModalFor(null)} onSave={() => void saveFollowQuick()} />
+        <QuickFollowModal
+          draft={followDraft}
+          setDraft={setFollowDraft}
+          submitting={submitting}
+          target={followModalFor}
+          followUpTypes={crmLists.followUpTypes}
+          onClose={() => setFollowModalFor(null)}
+          onSave={() => void saveFollowQuick()}
+        />
       ) : null}
 
       {whatsAppComposeLead ? (
@@ -2493,16 +2540,19 @@ function FollowUpsTable({
 function PipelineBoard({
   leads,
   isAdmin,
+  statusOptions,
   onChangeStatus,
 }: {
   leads: CrmClientRow[];
   isAdmin: boolean;
+  statusOptions: readonly string[];
   onChangeStatus: (r: CrmClientRow, s: string) => void;
 }) {
+  const statuses = statusOptions.length ? statusOptions : CRM_LEAD_STATUSES;
   return (
     <div className="overflow-x-auto pb-2">
       <div className="flex h-[min(70vh,720px)] min-h-[360px] min-w-[980px] gap-3">
-        {CRM_LEAD_STATUSES.map((statusCol) => {
+        {statuses.map((statusCol) => {
           const colLeads = leads.filter((l) => normalizeStatus(String(l.status)) === statusCol);
           return (
             <div
@@ -2531,7 +2581,7 @@ function PipelineBoard({
                         value={normalizeStatus(String(card.status))}
                         onChange={(e) => onChangeStatus(card, e.target.value)}
                       >
-                        {CRM_LEAD_STATUSES.map((opt) => (
+                        {statuses.map((opt) => (
                           <option key={opt} value={opt}>
                             {opt}
                           </option>
@@ -2573,6 +2623,9 @@ function AllLeadsTable({
   isAdmin,
   currentUserId,
   programOptions,
+  sourceOptions,
+  statusOptions,
+  priorityOptions,
   fltSource,
   setFltSource,
   fltProgram,
@@ -2616,6 +2669,9 @@ function AllLeadsTable({
   isAdmin: boolean;
   currentUserId: string;
   programOptions: string[];
+  sourceOptions: readonly string[];
+  statusOptions: readonly string[];
+  priorityOptions: readonly string[];
   fltSource: string;
   setFltSource: (s: string) => void;
   fltProgram: string;
@@ -2762,7 +2818,7 @@ function AllLeadsTable({
                     label="Lead Source"
                     value={fltSource}
                     onChange={setFltSource}
-                    options={CRM_SOURCES.map((s) => ({ value: s, label: s }))}
+                    options={(sourceOptions.length ? sourceOptions : CRM_SOURCES).map((s) => ({ value: s, label: s }))}
                     allLabel="All sources"
                     className={thCls}
                   />
@@ -2787,7 +2843,7 @@ function AllLeadsTable({
                     label="Lead Status"
                     value={fltStatus}
                     onChange={setFltStatus}
-                    options={CRM_LEAD_STATUSES.map((s) => ({ value: s, label: s }))}
+                    options={(statusOptions.length ? statusOptions : CRM_LEAD_STATUSES).map((s) => ({ value: s, label: s }))}
                     allLabel="All statuses"
                     className={thCls}
                   />
@@ -2795,7 +2851,7 @@ function AllLeadsTable({
                     label="Priority"
                     value={fltPriority}
                     onChange={setFltPriority}
-                    options={CRM_PRIORITIES.map((p) => ({ value: p, label: p }))}
+                    options={(priorityOptions.length ? priorityOptions : CRM_PRIORITIES).map((p) => ({ value: p, label: p }))}
                     allLabel="All priorities"
                     className={thCls}
                   />
@@ -2833,7 +2889,6 @@ function AllLeadsTable({
                     ))
                   : leads.map((lead) => {
                       const fu = lead.follow_up_date ? String(lead.follow_up_date) : null;
-                      const overdue = !!(fu && fu < today && !isClosedLeadStatus(String(lead.status || "")));
                       const hot = lead.priority === "Hot";
                       const program = lead.interested_program || lead.service_interest || "—";
                       const contactable = canContactLead(lead);
@@ -2841,7 +2896,6 @@ function AllLeadsTable({
                         <tr
                           key={lead.id}
                           className={[
-                            overdue ? "bg-rose-50/80" : "",
                             hot ? "outline outline-2 outline-orange-200/70" : "",
                             fu === today ? "shadow-[inset_3px_0_0_#c9a227]" : "",
                           ].join(" ")}
@@ -3897,39 +3951,143 @@ function SimpleReportTable({ title, pairs }: { title: string; pairs: [string, nu
   );
 }
 
-function CrmSettingsPanel() {
-  const block = (title: string, description: string, items: readonly string[]) => (
+function CrmSettingsPanel({
+  lists,
+  onSaved,
+  onError,
+}: {
+  lists: CrmSettingsLists;
+  onSaved: (next: CrmSettingsLists) => void;
+  onError: (message: string) => void;
+}) {
+  const [draft, setDraft] = useState({
+    leadSources: listToLines(lists.leadSources),
+    leadStatuses: listToLines(lists.leadStatuses),
+    interestedPrograms: listToLines(lists.interestedPrograms),
+    followUpTypes: listToLines(lists.followUpTypes),
+    priorityTypes: listToLines(lists.priorityTypes),
+  });
+  const [saving, setSaving] = useState(false);
+  const [localMsg, setLocalMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraft({
+      leadSources: listToLines(lists.leadSources),
+      leadStatuses: listToLines(lists.leadStatuses),
+      interestedPrograms: listToLines(lists.interestedPrograms),
+      followUpTypes: listToLines(lists.followUpTypes),
+      priorityTypes: listToLines(lists.priorityTypes),
+    });
+  }, [lists]);
+
+  const patchField = (key: keyof typeof draft, value: string) => {
+    setLocalMsg(null);
+    setDraft((d) => ({ ...d, [key]: value }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setLocalMsg(null);
+    try {
+      const payload: CrmSettingsLists = {
+        leadSources: linesToList(draft.leadSources),
+        leadStatuses: linesToList(draft.leadStatuses),
+        followUpTypes: linesToList(draft.followUpTypes),
+        priorityTypes: linesToList(draft.priorityTypes),
+        interestedPrograms: linesToList(draft.interestedPrograms),
+        serviceCategories: linesToList(draft.interestedPrograms),
+      };
+      if (!payload.leadSources.length || !payload.leadStatuses.length) {
+        throw new Error("Lead sources and lead statuses need at least one entry each.");
+      }
+      if (!payload.followUpTypes.length || !payload.priorityTypes.length) {
+        throw new Error("Follow-up types and priority types need at least one entry each.");
+      }
+      if (!payload.interestedPrograms.length) {
+        throw new Error("Programs / service interests need at least one entry.");
+      }
+      const next = await persistCrmSettingsLists(payload);
+      onSaved(next);
+      setLocalMsg("Saved to system settings.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not save CRM settings.";
+      onError(msg);
+      setLocalMsg(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const field = (label: string, description: string, key: keyof typeof draft) => (
     <article className="flex flex-col rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
-      <h4 className="text-sm font-semibold text-[#0f172a]">{title}</h4>
+      <h4 className="text-sm font-semibold text-[#0f172a]">{label}</h4>
       <p className="mt-1 text-xs leading-relaxed text-[#64748b]">{description}</p>
-      <ul className="mt-3 max-h-48 list-inside list-disc space-y-1 overflow-y-auto text-xs text-[#475569]">
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
+      <textarea
+        className="mt-3 min-h-[140px] w-full rounded-lg border border-[#dbe6f3] bg-[#f8fbff] px-3 py-2 text-sm text-[#334155] outline-none focus:border-[#c9a227]"
+        value={draft[key]}
+        onChange={(e) => patchField(key, e.target.value)}
+        placeholder="One entry per line"
+      />
+      <p className="mt-1 text-[11px] text-[#94a3b8]">One entry per line · blanks ignored · duplicates removed on save</p>
     </article>
   );
 
   return (
     <div className="space-y-4">
-      <div className="rounded-[20px] border border-blue-100 bg-[#f8fbff] p-5">
-        <h3 className="text-base font-semibold text-[#0f172a]">CRM configuration</h3>
-        <p className="mt-2 text-sm text-[#64748b]">
-          These lists define what your team sees in dropdowns when adding or editing leads. They are <strong>static</strong> in the app for now.
-        </p>
-        <p className="mt-2 text-xs font-medium text-blue-800">Coming soon: editable CRM settings stored in Supabase (e.g. system_settings).</p>
+      <div className="flex flex-col gap-3 rounded-[20px] border border-blue-100 bg-[#f8fbff] p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-[#0f172a]">CRM configuration</h3>
+          <p className="mt-2 text-sm text-[#64748b]">
+            These lists power Student Master dropdowns, filters, and the pipeline. Changes save to{" "}
+            <code className="rounded bg-white px-1 text-xs">system_settings</code> (key{" "}
+            <code className="rounded bg-white px-1 text-xs">crm</code>) and match Admin → System Settings → CRM.
+          </p>
+          {localMsg ? <p className="mt-2 text-xs font-medium text-blue-800">{localMsg}</p> : null}
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-xl border-[#dbe6f3]"
+            disabled={saving}
+            onClick={() => {
+              setDraft({
+                leadSources: listToLines(lists.leadSources),
+                leadStatuses: listToLines(lists.leadStatuses),
+                interestedPrograms: listToLines(lists.interestedPrograms),
+                followUpTypes: listToLines(lists.followUpTypes),
+                priorityTypes: listToLines(lists.priorityTypes),
+              });
+              setLocalMsg(null);
+            }}
+          >
+            Reset
+          </Button>
+          <Button
+            type="button"
+            className="rounded-xl bg-[#c9a227] text-white hover:bg-[#b8911f]"
+            disabled={saving}
+            onClick={() => void handleSave()}
+          >
+            {saving ? "Saving…" : "Save settings"}
+          </Button>
+        </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-        {block("Lead sources", "Where new business originates. Used in the Add Lead form.", CRM_SOURCES)}
-        {block("Lead statuses", "Pipeline stages from first touch through close.", CRM_LEAD_STATUSES)}
-        {block("Service interests", "Services Birthmark Brahma offers; multi-select on leads.", CRM_SERVICES)}
-        {block("Follow-up types", "How the next touch is planned (call, message, meeting, email).", CRM_FOLLOW_UP_TYPES_UI)}
-        {block("Priority types", "Deal temperature for triage.", CRM_PRIORITIES)}
-        {block(
-          "Default lead owner",
-          "When adding a lead, admins pick assignee; employees default to themselves. Persisted per-lead on the client row.",
-          ["Configured per lead in Add / Edit Lead (Assigned To)."],
-        )}
+        {field("Lead sources", "Where new business originates. Used in the Add / Edit Student form and table filters.", "leadSources")}
+        {field("Lead statuses", "Pipeline stages from first touch through close. Columns on the Pipeline tab.", "leadStatuses")}
+        {field("Programs / service interests", "Interested program options on the Add / Edit Student form.", "interestedPrograms")}
+        {field("Follow-up types", "How the next touch is planned (call, message, meeting, email).", "followUpTypes")}
+        {field("Priority types", "Deal temperature for triage.", "priorityTypes")}
+        <article className="flex flex-col rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
+          <h4 className="text-sm font-semibold text-[#0f172a]">Default lead owner</h4>
+          <p className="mt-1 text-xs leading-relaxed text-[#64748b]">
+            New leads are owned by the signed-in user. Share work by assigning a Student Lead task — ownership does not transfer via Settings.
+          </p>
+          <ul className="mt-3 list-inside list-disc space-y-1 text-xs text-[#475569]">
+            <li>Configured per lead on create (Assigned To stays with creator).</li>
+          </ul>
+        </article>
       </div>
     </div>
   );
@@ -3942,6 +4100,7 @@ function QuickFollowModal({
   onClose,
   onSave,
   submitting,
+  followUpTypes,
 }: {
   target: CrmClientRow;
   draft: { date: string; time: string; type: string; notes: string };
@@ -3949,16 +4108,19 @@ function QuickFollowModal({
   onClose: () => void;
   onSave: () => void;
   submitting: boolean;
+  followUpTypes: readonly string[];
 }) {
+  const types = followUpTypes.length ? followUpTypes : CRM_FOLLOW_UP_TYPES_UI;
   useEffect(() => {
     const t = typeof target.follow_up_time === "string" ? target.follow_up_time.slice(0, 5) : "";
+    const opts = followUpTypes.length ? followUpTypes : [...CRM_FOLLOW_UP_TYPES_UI];
     setDraft({
       date: (typeof target.follow_up_date === "string" ? target.follow_up_date.slice(0, 10) : "") || "",
       time: t,
-      type: (target.follow_up_type as string | null | undefined)?.trim() || "Call",
+      type: (target.follow_up_type as string | null | undefined)?.trim() || opts[0] || "Call",
       notes: "",
     });
-  }, [target.id, setDraft, target.follow_up_date, target.follow_up_time, target.follow_up_type]);
+  }, [target.id, setDraft, target.follow_up_date, target.follow_up_time, target.follow_up_type, followUpTypes]);
 
   return (
     <>
@@ -3992,7 +4154,7 @@ function QuickFollowModal({
               value={draft.type}
               onChange={(e) => setDraft((d) => ({ ...d, type: e.target.value }))}
             >
-              {CRM_FOLLOW_UP_TYPES_UI.map((ft) => (
+              {types.map((ft) => (
                 <option key={ft} value={ft}>
                   {ft}
                 </option>

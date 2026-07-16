@@ -25,6 +25,7 @@ export type CollegeVisitRow = {
   connected_person_role: string | null;
   contacts: CollegeContact[];
   visit_status: string;
+  visited_by_name: string | null;
   visit_date: string | null;
   mou_signed_status: string;
   follow_up_stage: string | null;
@@ -75,6 +76,7 @@ export const COLLEGE_VISIT_SELECT = [
   "connected_person_role",
   "contacts",
   "visit_status",
+  "visited_by_name",
   "visit_date",
   "mou_signed_status",
   "follow_up_stage",
@@ -106,13 +108,20 @@ export const COLLEGE_VISIT_SELECT = [
 
 const PROPOSAL_FILE_SELECT =
   "proposal_file_name,proposal_file_path,proposal_file_type,proposal_file_size,proposal_uploaded_at,";
+const VISITED_BY_SELECT = "visited_by_name,";
 
 /** Fallback when contacts column not migrated yet. */
 export const COLLEGE_VISIT_SELECT_LEGACY = COLLEGE_VISIT_SELECT.replace("contacts,", "");
+/** Fallback when visited_by_name column not migrated yet. */
+export const COLLEGE_VISIT_SELECT_NO_VISITED_BY = COLLEGE_VISIT_SELECT.replace(VISITED_BY_SELECT, "");
 
 /** Fallback when proposals_file_upload_patch.sql not run yet. */
 export const COLLEGE_VISIT_SELECT_NO_PROPOSAL_FILES = COLLEGE_VISIT_SELECT.replace(PROPOSAL_FILE_SELECT, "");
 export const COLLEGE_VISIT_SELECT_LEGACY_NO_PROPOSAL_FILES = COLLEGE_VISIT_SELECT_LEGACY.replace(PROPOSAL_FILE_SELECT, "");
+export const COLLEGE_VISIT_SELECT_NO_VISITED_BY_NO_PROPOSAL_FILES = COLLEGE_VISIT_SELECT_NO_VISITED_BY.replace(
+  PROPOSAL_FILE_SELECT,
+  "",
+);
 
 export function isMissingContactsColumn(msg: string) {
   const m = msg.toLowerCase();
@@ -122,6 +131,11 @@ export function isMissingContactsColumn(msg: string) {
 export function isMissingProposalFileColumn(msg: string) {
   const m = msg.toLowerCase();
   return m.includes("proposal_file_") && (m.includes("column") || m.includes("schema cache") || m.includes("does not exist"));
+}
+
+export function isMissingVisitedByColumn(msg: string) {
+  const m = msg.toLowerCase();
+  return m.includes("visited_by_name") && (m.includes("column") || m.includes("schema cache") || m.includes("does not exist"));
 }
 
 /** True only when the college_visits TABLE is missing — not when a single column is missing. */
@@ -136,13 +150,27 @@ export function isMissingCollegeVisitsTable(msg: string) {
 }
 
 export function nextCollegeVisitSelect(current: string, errorMsg: string): string | null {
+  if (isMissingVisitedByColumn(errorMsg)) {
+    if (current === COLLEGE_VISIT_SELECT) return COLLEGE_VISIT_SELECT_NO_VISITED_BY;
+    if (current === COLLEGE_VISIT_SELECT_NO_PROPOSAL_FILES) return COLLEGE_VISIT_SELECT_NO_VISITED_BY_NO_PROPOSAL_FILES;
+  }
   if (isMissingContactsColumn(errorMsg)) {
     if (current === COLLEGE_VISIT_SELECT) return COLLEGE_VISIT_SELECT_LEGACY;
     if (current === COLLEGE_VISIT_SELECT_NO_PROPOSAL_FILES) return COLLEGE_VISIT_SELECT_LEGACY_NO_PROPOSAL_FILES;
+    if (current === COLLEGE_VISIT_SELECT_NO_VISITED_BY) {
+      return COLLEGE_VISIT_SELECT_NO_VISITED_BY.replace("contacts,", "");
+    }
+    if (current === COLLEGE_VISIT_SELECT_NO_VISITED_BY_NO_PROPOSAL_FILES) {
+      return COLLEGE_VISIT_SELECT_NO_VISITED_BY_NO_PROPOSAL_FILES.replace("contacts,", "");
+    }
   }
   if (isMissingProposalFileColumn(errorMsg)) {
     if (current === COLLEGE_VISIT_SELECT) return COLLEGE_VISIT_SELECT_NO_PROPOSAL_FILES;
     if (current === COLLEGE_VISIT_SELECT_LEGACY) return COLLEGE_VISIT_SELECT_LEGACY_NO_PROPOSAL_FILES;
+    if (current === COLLEGE_VISIT_SELECT_NO_VISITED_BY) return COLLEGE_VISIT_SELECT_NO_VISITED_BY_NO_PROPOSAL_FILES;
+    if (current.includes("contacts,") && current.includes("proposal_file_name")) {
+      return current.replace(PROPOSAL_FILE_SELECT, "");
+    }
   }
   return null;
 }
@@ -518,6 +546,9 @@ export function friendlyCollegeVisitError(raw: unknown) {
   if (isMissingContactsColumn(msg)) {
     return "Contacts column is missing. Run `college_visits_contacts_patch.sql` from AJ_Academy_SB in Supabase SQL Editor, then refresh.";
   }
+  if (isMissingVisitedByColumn(msg)) {
+    return "Who visited column is missing. Run `college_visits_visited_by_patch.sql` from AJ_Academy_SB in Supabase SQL Editor, then refresh.";
+  }
   if (
     msg === "Forbidden" ||
     msg.toLowerCase().includes("row-level security") ||
@@ -537,6 +568,7 @@ export type CollegeVisitFormValue = {
   connected_person_role: string;
   contacts: CollegeContact[];
   visit_status: VisitStatus | string;
+  visited_by_name: string;
   visit_date: string;
   mou_signed_status: MouStatus | string;
   follow_up_stage: FollowUpStage | string;
@@ -572,6 +604,7 @@ export function emptyCollegeVisitForm(assignedFallback = ""): CollegeVisitFormVa
     connected_person_role: "",
     contacts: [emptyCollegeContact(true)],
     visit_status: "Not Visited",
+    visited_by_name: "",
     visit_date: "",
     mou_signed_status: "Not Signed",
     follow_up_stage: "",
@@ -610,6 +643,7 @@ export function collegeVisitRowToForm(row: CollegeVisitRow): CollegeVisitFormVal
     connected_person_role: flat.connected_person_role ?? "",
     contacts,
     visit_status: row.visit_status ?? "Not Visited",
+    visited_by_name: row.visited_by_name ?? "",
     visit_date: row.visit_date?.slice(0, 10) ?? "",
     mou_signed_status: row.mou_signed_status ?? "Not Signed",
     follow_up_stage: row.follow_up_stage ?? "",
@@ -654,6 +688,7 @@ export function buildCollegeVisitPayload(
     connected_person_role: flat.connected_person_role,
     contacts,
     visit_status: v.visit_status || "Not Visited",
+    visited_by_name: v.visited_by_name.trim() || null,
     visit_date: v.visit_date || null,
     mou_signed_status: v.mou_signed_status || "Not Signed",
     follow_up_stage: v.follow_up_stage.trim() || null,

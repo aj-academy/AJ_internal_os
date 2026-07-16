@@ -36,6 +36,7 @@ import { AttendanceSelfieThumb } from "@/components/attendance/AttendanceSelfieT
 import { StatCard } from "@/components/dashboard/StatCard";
 import { TodaysRemindersWidget } from "@/components/reminders/TodaysRemindersWidget";
 import { Button } from "@/components/ui/button";
+import { DashboardDefaultViewRedirect } from "@/components/settings/DashboardDefaultViewRedirect";
 
 type DateFilter = "today" | "week" | "month" | "year";
 type Profile = { id: string; full_name: string | null; email: string | null; department: string | null; role?: string | null; status: string | null; created_at: string };
@@ -466,6 +467,7 @@ export default function AdminDashboardPage() {
 
   return (
     <section className="dashboard-section space-y-5 rounded-[1.25rem] border border-[#e8dcc8] bg-white p-4 shadow-[0_1px_2px_rgba(61,52,40,0.04),0_12px_32px_rgba(61,52,40,0.06)] sm:space-y-6 sm:p-6 lg:p-7">
+      <DashboardDefaultViewRedirect role="admin" />
       <header className="aj-page-header">
         <div className="aj-page-header__copy">
           <p className="aj-page-kicker">Operations control</p>

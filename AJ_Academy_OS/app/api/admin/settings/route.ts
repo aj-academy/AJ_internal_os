@@ -6,6 +6,7 @@ const ALLOWED_KEYS = new Set([
   "company",
   "attendance",
   "crm",
+  "college_visits",
   "project",
   "finance",
   "notifications",

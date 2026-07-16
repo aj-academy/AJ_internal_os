@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Sidebar, type SidebarItem } from "@/components/layouts/Sidebar";
 import { Topbar } from "@/components/layouts/Topbar";
+import { useSystemPreferences } from "@/hooks/useSystemPreferences";
 
 interface DashboardLayoutProps {
   roleLabel: string;
@@ -27,6 +28,26 @@ export function DashboardLayout({
 }: DashboardLayoutProps) {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [collapseHydrated, setCollapseHydrated] = useState(false);
+  const { preferences, loading: prefsLoading } = useSystemPreferences();
+
+  useEffect(() => {
+    if (prefsLoading || collapseHydrated) return;
+    setCollapsed(preferences.sidebarCollapsed);
+    setCollapseHydrated(true);
+  }, [prefsLoading, preferences.sidebarCollapsed, collapseHydrated]);
+
+  useEffect(() => {
+    if (prefsLoading) return;
+    const root = document.documentElement;
+    if (preferences.theme === "dark") {
+      root.classList.add("dark");
+      root.setAttribute("data-theme", "dark");
+    } else {
+      root.classList.remove("dark");
+      root.setAttribute("data-theme", "light");
+    }
+  }, [prefsLoading, preferences.theme]);
 
   const mobileMenuTrigger: ReactNode = (
     <SheetTrigger
@@ -46,7 +67,13 @@ export function DashboardLayout({
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <div className="min-h-[100dvh] min-w-0 overflow-x-hidden bg-[#fffdf8] text-[#3d3428]">
+      <div
+        data-theme={preferences.theme}
+        className={[
+          "min-h-[100dvh] min-w-0 overflow-x-hidden text-[#3d3428]",
+          preferences.theme === "dark" ? "aj-shell-dark bg-[#0f172a] text-[#e2e8f0]" : "bg-[#fffdf8]",
+        ].join(" ")}
+      >
         <div
           className={[
             "hidden lg:fixed lg:inset-y-0 lg:z-30 lg:block lg:p-3 lg:pr-0 lg:transition-all lg:duration-200 lg:ease-out xl:p-4 xl:pr-0",

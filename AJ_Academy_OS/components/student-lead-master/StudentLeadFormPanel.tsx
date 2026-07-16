@@ -97,6 +97,11 @@ interface StudentLeadFormPanelProps {
   onSubmit: () => void;
   /** Shared proposal upload UI (works on Add + Edit). */
   proposalUploadSlot?: ReactNode;
+  /** Live CRM dropdown lists from system_settings (falls back to config defaults). */
+  sourceOptions?: readonly string[];
+  statusOptions?: readonly string[];
+  priorityOptions?: readonly string[];
+  followUpTypeOptions?: readonly string[];
 }
 
 const selectClass =
@@ -114,8 +119,17 @@ export function StudentLeadFormPanel({
   onClose,
   onSubmit,
   proposalUploadSlot,
+  sourceOptions,
+  statusOptions,
+  priorityOptions,
+  followUpTypeOptions,
 }: StudentLeadFormPanelProps) {
   if (!open) return null;
+
+  const sources = sourceOptions?.length ? sourceOptions : CRM_SOURCES;
+  const statuses = statusOptions?.length ? statusOptions : CRM_LEAD_STATUSES;
+  const priorities = priorityOptions?.length ? priorityOptions : CRM_PRIORITIES;
+  const followUpTypes = followUpTypeOptions?.length ? followUpTypeOptions : CRM_FOLLOW_UP_TYPES_UI;
 
   return (
     <aside className="flex h-full max-h-[100dvh] flex-col overflow-hidden bg-white shadow-[0_16px_30px_rgba(30,64,175,0.12)] lg:rounded-[24px] lg:border lg:border-[#e8dcc8]">
@@ -322,7 +336,7 @@ export function StudentLeadFormPanel({
           <div className="grid gap-3">
             <Field label="Lead source">
               <select className={selectClass} value={value.source} onChange={(e) => onChange({ ...value, source: e.target.value })}>
-                {CRM_SOURCES.map((o) => (
+                {sources.map((o) => (
                   <option key={o} value={o}>
                     {o}
                   </option>
@@ -356,7 +370,7 @@ export function StudentLeadFormPanel({
             </Field>
             <Field label="Lead status">
               <select className={selectClass} value={value.status} onChange={(e) => onChange({ ...value, status: e.target.value })}>
-                {CRM_LEAD_STATUSES.map((o) => (
+                {statuses.map((o) => (
                   <option key={o} value={o}>
                     {o}
                   </option>
@@ -365,7 +379,7 @@ export function StudentLeadFormPanel({
             </Field>
             <Field label="Priority">
               <select className={selectClass} value={value.priority} onChange={(e) => onChange({ ...value, priority: e.target.value })}>
-                {CRM_PRIORITIES.map((o) => (
+                {priorities.map((o) => (
                   <option key={o} value={o}>
                     {o}
                   </option>
@@ -381,7 +395,7 @@ export function StudentLeadFormPanel({
             <Field label="Follow-up type">
               <select className={selectClass} value={value.follow_up_type} onChange={(e) => onChange({ ...value, follow_up_type: e.target.value })}>
                 <option value="">—</option>
-                {CRM_FOLLOW_UP_TYPES_UI.map((o) => (
+                {followUpTypes.map((o) => (
                   <option key={o} value={o}>
                     {o}
                   </option>
