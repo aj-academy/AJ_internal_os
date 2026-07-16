@@ -167,9 +167,9 @@ Run **`project_master_schema.sql`** after `schema.sql` and task schema (see `DAT
 - `/admin/project-master` — Overview, All / Active / Completed / Delayed projects, Team Allocation, Timeline, Budget & Payments, Reports, **Settings**.
 - **Settings tab:** editable project types, statuses, priorities, and default deadline (days) persist to `system_settings` key `project` via `/api/admin/settings`. Staff read via `/api/projects/lists` (same store as Admin → System Settings → Project defaults). Dropdowns and table filters use those lists. Only admins can save.
 
-**Employee not seeing assigned tasks?** Run **`tasks_employee_rls_fix.sql`** — `aj_academy_roles_patch.sql` removed employee task SELECT policies; this restores them.
+**Employee not seeing assigned tasks?** Run **`tasks_employee_rls_fix.sql`** — `aj_academy_roles_patch.sql` removed employee task SELECT policies; this restores them. Re-run the same script if **My Tasks → Delete selected** says permission denied (adds employee DELETE for tasks assigned to / by them).
 
-**Employee Lead Contact shows “—” / “(limited)” / ID placeholders on My Tasks?** Deploy + re-run **`tasks_linked_lead_access.sql`**. Prefer the app path: `/api/tasks/linked-crm` (needs **`SUPABASE_SERVICE_ROLE_KEY`** on the server) loads full Student Master columns for leads linked on the user’s tasks. Also ensures `get_my_task_linked_clients` RPC matches `client_ids` reliably.
+**Employee Lead Contact shows “—” / “(limited)” / ID placeholders on My Tasks?** Deploy + re-run **`tasks_linked_lead_access.sql`**. Prefer the app path: `/api/tasks/linked-crm` (needs **`SUPABASE_SERVICE_ROLE_KEY`** on the server) loads full Student Master columns for leads linked on the user’s tasks. Also ensures `get_my_task_linked_clients` RPC matches `client_ids` reliably. If the lead was deleted by admin but the task remains, re-run **`crm_delete_fix.sql`** (cleans task links) or delete the orphan task after the employee DELETE policy is applied.
 
 **Employee task notification opens wrong page / dashboard?** Run **`task_notification_employee_link_fix.sql`**. Older installs linked employees to `/student/my-tasks` (blocked by the student layout). The app also remaps those links client-side; the SQL fixes new notifications and backfills old ones.
 

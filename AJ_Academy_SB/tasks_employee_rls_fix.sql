@@ -30,4 +30,16 @@ create policy tasks_employee_insert_delegated
 on public.tasks for insert to authenticated
 with check (public.is_employee() and public.tasks_employee_may_assign_to(auth.uid(), assigned_to));
 
+-- Employee can delete tasks assigned to them or that they assigned to others.
+-- Without this, My Tasks → Delete selected returns 0 rows (permission denied).
+drop policy if exists tasks_employee_delete_own on public.tasks;
+drop policy if exists "tasks_employee_delete_own" on public.tasks;
+create policy tasks_employee_delete_own
+on public.tasks for delete to authenticated
+using (
+  public.is_employee()
+  and (assigned_to = auth.uid() or assigned_by = auth.uid())
+);
+
 comment on policy tasks_employee_select_assigned on public.tasks is 'Employee sees tasks assigned to them (admin or peer assignee).';
+comment on policy tasks_employee_delete_own on public.tasks is 'Employee can delete tasks they own as assignee or assigner (My Tasks Delete selected).';

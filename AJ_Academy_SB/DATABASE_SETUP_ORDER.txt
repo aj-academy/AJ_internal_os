@@ -21,7 +21,7 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 5b) tasks_assignees_include_employees.sql (admin assignee picker includes employees)
 5c) tasks_assignment_link_patch.sql (link tasks to leads/projects + task activity log)
 5c2) tasks_college_link_patch.sql (link tasks to college visits — after college_visits_schema.sql)
-5c3) tasks_employee_rls_fix.sql (employee sees tasks assigned to them — run after aj_academy_roles_patch.sql)
+5c3) tasks_employee_rls_fix.sql (employee sees/updates/deletes tasks assigned to them or that they assigned — run after aj_academy_roles_patch.sql; re-run if My Tasks Delete selected says permission denied)
 5c4) tasks_linked_lead_access.sql (task-linked lead RPC/RLS + get_my_task_linked_clients; app also uses /api/tasks/linked-crm with service role)
 5c5) task_notification_employee_link_fix.sql (employee task notifications → /employee/my-tasks; backfills bad links)
 5c6) employee_task_pins_section_patch.sql (pin_section + can_pin_employee_task + upsert_my_task_pins RPC — Project pins on employee Dashboard → My tasks)
