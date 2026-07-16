@@ -92,7 +92,7 @@ import {
   type CollegeVisitRow,
 } from "@/components/college-visits/collegeVisitsHelpers";
 import { ProposalFileUpload, uploadProposalFile } from "@/components/shared/ProposalFileUpload";
-import type { ProposalFileMeta } from "@/lib/proposalFiles";
+import type { ProposalFileMeta, ProposalStoredFile } from "@/lib/proposalFiles";
 
 type CollegeOutreachFlags = {
   phoneCalled?: boolean;
@@ -170,7 +170,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     proposal_pdf_name: "",
   });
   const [proposalSubmitting, setProposalSubmitting] = useState(false);
-  const [pendingProposalFile, setPendingProposalFile] = useState<File | null>(null);
+  const [pendingProposalFiles, setPendingProposalFiles] = useState<File[]>([]);
+  const [proposalFiles, setProposalFiles] = useState<ProposalStoredFile[]>([]);
   const [proposalFileMeta, setProposalFileMeta] = useState<ProposalFileMeta>({
     proposal_file_name: null,
     proposal_file_path: null,
@@ -197,6 +198,21 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [whatsAppTargetPhone, setWhatsAppTargetPhone] = useState("");
   /** Role-column selection: which contact Call / WhatsApp / Email should use. */
   const [selectedOutreachContactByVisit, setSelectedOutreachContactByVisit] = useState<Record<string, string>>({});
+
+  const loadProposalFiles = useCallback(async (entityType: "student" | "college", entityId: string) => {
+    try {
+      const res = await fetch("/api/proposals/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entityType, entityId }),
+      });
+      const json = (await res.json()) as { files?: ProposalStoredFile[] };
+      if (res.ok) setProposalFiles(json.files ?? []);
+      else setProposalFiles([]);
+    } catch {
+      setProposalFiles([]);
+    }
+  }, []);
 
   const setVisitOutreachContact = useCallback((visitId: string, contactId: string) => {
     setSelectedOutreachContactByVisit((prev) => ({ ...prev, [visitId]: contactId }));
@@ -716,7 +732,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const openCreate = () => {
     setEditId(null);
     setForm(emptyCollegeVisitForm(currentUserId));
-    setPendingProposalFile(null);
+    setPendingProposalFiles([]);
+    setProposalFiles([]);
     setProposalFileMeta({
       proposal_file_name: null,
       proposal_file_path: null,
@@ -735,7 +752,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const openEdit = (row: CollegeVisitRow) => {
     setEditId(row.id);
     setForm(collegeVisitRowToForm(row));
-    setPendingProposalFile(null);
+    setPendingProposalFiles([]);
     setProposalFileMeta({
       proposal_file_name: row.proposal_file_name ?? null,
       proposal_file_path: row.proposal_file_path ?? null,
@@ -748,6 +765,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     });
     setPanelOpen(true);
     setViewVisit(null);
+    void loadProposalFiles("college", row.id);
   };
 
   const openProposalModal = (row: CollegeVisitRow) => {
@@ -760,7 +778,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       proposal_pdf_url: row.proposal_pdf_url ?? "",
       proposal_pdf_name: row.proposal_pdf_name ?? "",
     });
-    setPendingProposalFile(null);
+    setPendingProposalFiles([]);
     setProposalFileMeta({
       proposal_file_name: row.proposal_file_name ?? null,
       proposal_file_path: row.proposal_file_path ?? null,
@@ -773,6 +791,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     });
     setError(null);
     setSuccess(null);
+    void loadProposalFiles("college", row.id);
   };
 
   const handleProposalSave = async () => {
@@ -780,7 +799,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setProposalSubmitting(true);
     setError(null);
     setSuccess(null);
-    const fileToUpload = pendingProposalFile;
+    const filesToUpload = [...pendingProposalFiles];
     try {
       const base = collegeVisitRowToForm(proposalRow);
       const formRow: CollegeVisitFormValue = {
@@ -799,15 +818,18 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Could not save proposal.");
-      if (fileToUpload) {
-        await uploadProposalFile({
-          entityType: "college",
-          entityId: proposalRow.id,
-          file: fileToUpload,
-        });
-        setPendingProposalFile(null);
+      if (filesToUpload.length) {
+        for (const file of filesToUpload) {
+          await uploadProposalFile({
+            entityType: "college",
+            entityId: proposalRow.id,
+            file,
+          });
+        }
+        setPendingProposalFiles([]);
+        await loadProposalFiles("college", proposalRow.id);
       }
-      setSuccess(fileToUpload ? "Proposal updated and file uploaded." : "Proposal updated.");
+      setSuccess(filesToUpload.length ? `Proposal updated and ${filesToUpload.length} file(s) uploaded.` : "Proposal updated.");
       setProposalRow(null);
       await reload();
     } catch (e) {
@@ -822,7 +844,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setSubmitting(true);
     setError(null);
     setSuccess(null);
-    const fileToUpload = pendingProposalFile;
+    const filesToUpload = [...pendingProposalFiles];
     const editingId = editId;
     try {
       const payload = buildCollegeVisitPayload(form, { userId: currentUserId, isDbAdmin });
@@ -834,16 +856,19 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         });
         const json = (await res.json()) as { error?: string };
         if (!res.ok) throw new Error(json.error ?? "Update failed.");
-        if (fileToUpload) {
-          const uploaded = await uploadProposalFile({
-            entityType: "college",
-            entityId: editingId,
-            file: fileToUpload,
-          });
-          setProposalFileMeta((m) => ({ ...m, ...uploaded }));
-          setPendingProposalFile(null);
+        if (filesToUpload.length) {
+          for (const file of filesToUpload) {
+            const uploaded = await uploadProposalFile({
+              entityType: "college",
+              entityId: editingId,
+              file,
+            });
+            setProposalFileMeta((m) => ({ ...m, ...uploaded }));
+          }
+          setPendingProposalFiles([]);
+          await loadProposalFiles("college", editingId);
         }
-        setSuccess(fileToUpload ? "College visit updated and proposal uploaded." : "College visit updated.");
+        setSuccess(filesToUpload.length ? `College visit updated and ${filesToUpload.length} file(s) uploaded.` : "College visit updated.");
       } else {
         const res = await fetch("/api/college-visits", {
           method: "POST",
@@ -853,20 +878,23 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         const json = (await res.json()) as { visit?: { id?: string }; error?: string };
         if (!res.ok) throw new Error(json.error ?? "Create failed.");
         const nid = json.visit?.id;
-        if (nid && fileToUpload) {
-          const uploaded = await uploadProposalFile({
-            entityType: "college",
-            entityId: nid,
-            file: fileToUpload,
-          });
-          setProposalFileMeta((m) => ({ ...m, ...uploaded }));
-          setPendingProposalFile(null);
+        if (nid && filesToUpload.length) {
+          for (const file of filesToUpload) {
+            const uploaded = await uploadProposalFile({
+              entityType: "college",
+              entityId: nid,
+              file,
+            });
+            setProposalFileMeta((m) => ({ ...m, ...uploaded }));
+          }
+          setPendingProposalFiles([]);
+          await loadProposalFiles("college", nid);
         }
-        setSuccess(nid && fileToUpload ? "College visit created and proposal uploaded." : "College visit created.");
+        setSuccess(nid && filesToUpload.length ? `College visit created and ${filesToUpload.length} proposal file(s) uploaded.` : "College visit created.");
       }
       setPanelOpen(false);
       setEditId(null);
-      setPendingProposalFile(null);
+      setPendingProposalFiles([]);
       await reload();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
@@ -1358,6 +1386,7 @@ return (
                   <TableHeaderCell label="Role" className={thClass} />
                   <TableHeaderFilter label="Visit Status" value={fltVisitStatus} options={cvLists.visitStatuses.map((s) => ({ value: s, label: s }))} onChange={setFltVisitStatus} className={thClass} />
                   <TableHeaderCell label="Visit Date" className={thClass} />
+                  <TableHeaderCell label="Whom Visited to the College" className={thClass} />
                   <TableHeaderCell label="MOU Signed Status" className={thClass} />
                   <TableHeaderCell label="Follow-up Stage" className={thClass} />
                   <TableHeaderCell label="Last Follow-up Date" className={thClass} />
@@ -1394,13 +1423,13 @@ return (
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={25} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                    <td colSpan={26} className="px-4 py-8 text-center text-sm text-[#64748b]">
                       Loading...
                     </td>
                   </tr>
                 ) : pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={25} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                    <td colSpan={26} className="px-4 py-8 text-center text-sm text-[#64748b]">
                       No college visits found.
                     </td>
                   </tr>
@@ -1494,6 +1523,7 @@ return (
                         </td>
                         <td className={tdClass}>{row.visit_status}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.visit_date)}</td>
+                        <td className={`${tdClass} min-w-[12rem]`}>{row.visited_by || "-"}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{row.mou_signed_status}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{row.follow_up_stage || "-"}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.last_follow_up_date)}</td>
@@ -1569,7 +1599,13 @@ return (
                   const days = daysSince(row.last_follow_up_date);
                   const due = isFollowUpDue(row);
                   const contacts = collegeContactsForRow(row);
-                  const selectedContact = selectedCollegeContact(row, outreachContactIdFor(row));
+                  const outreachContactId = outreachContactIdFor(row);
+                  const selectedContact = selectedCollegeContact(row, outreachContactId);
+                  const phone =
+                    collegeOutreachTargetsForContact(row, outreachContactId, "phone")[0]?.phone || "";
+                  const email =
+                    collegeOutreachTargetsForContact(row, outreachContactId, "email")[0]?.email || "";
+                  const flags = outreachDone[row.id] ?? {};
                   const person = selectedContact?.name?.trim() || row.connected_person_name || "—";
                   const personRole = selectedContact?.role?.trim() || row.connected_person_role || "";
                   return (
@@ -1607,6 +1643,7 @@ return (
                         { label: "Role", value: dash(personRole || row.connected_person_role) },
                         { label: "Visit Status", value: dash(row.visit_status) },
                         { label: "Visit Date", value: formatDisplayDate(row.visit_date) || "—" },
+                        { label: "Whom visited to the college", value: dash(row.visited_by) },
                         { label: "MOU Signed Status", value: dash(row.mou_signed_status) },
                         { label: "Follow-up Stage", value: dash(row.follow_up_stage) },
                         { label: "Last Follow-up Date", value: formatDisplayDate(row.last_follow_up_date) || "—" },
@@ -1624,6 +1661,47 @@ return (
                         { label: "Proposal Amount", value: row.proposal_amount != null ? `₹${Number(row.proposal_amount).toLocaleString()}` : "—" },
                         { label: "Proposal Sent Date", value: formatDisplayDate(row.proposal_sent_date) || "—" },
                       ]}
+                      outreachSlot={
+                        pickForTask ? undefined : (
+                          <div className="space-y-2.5">
+                            {contacts.length > 1 ? (
+                              <div>
+                                <label
+                                  htmlFor={`cv-mobile-contact-${row.id}`}
+                                  className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[#94a3b8]"
+                                >
+                                  Contact role
+                                </label>
+                                <select
+                                  id={`cv-mobile-contact-${row.id}`}
+                                  className="w-full rounded-md border border-[#e2e8f0] bg-white px-2 py-2 text-xs text-[#0f172a] outline-none focus:border-[#c4a35a] focus:ring-1 focus:ring-[#c4a35a]/40"
+                                  value={selectedContact?.id || contacts[0]?.id || ""}
+                                  onChange={(e) => setVisitOutreachContact(row.id, e.target.value)}
+                                  aria-label={`Select contact for ${row.college_name}`}
+                                >
+                                  {contacts.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                      {contactRoleSelectLabel(c)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            ) : null}
+                            <StudentOutreachButtons
+                              mode="all"
+                              phone={phone}
+                              whatsapp={phone}
+                              email={email}
+                              phoneCalled={flags.phoneCalled}
+                              whatsappSent={flags.whatsappSent}
+                              emailSent={flags.emailSent}
+                              onPhoneClick={() => requestCollegePhone(row)}
+                              onWhatsAppClick={() => requestCollegeWhatsApp(row)}
+                              onEmailClick={() => requestCollegeEmail(row)}
+                            />
+                          </div>
+                        )
+                      }
                       primaryActions={
                         pickForTask
                           ? []
@@ -1635,18 +1713,7 @@ return (
                       moreActions={
                         pickForTask
                           ? []
-                          : [
-                              { label: "Activity", onClick: () => void openCollegeActivity(row) },
-                              ...(contacts.length > 1
-                                ? contacts.map((c) => ({
-                                    label: `Use: ${contactRoleSelectLabel(c)}`,
-                                    onClick: () => setVisitOutreachContact(row.id, c.id),
-                                  }))
-                                : []),
-                              { label: "Call", onClick: () => requestCollegePhone(row) },
-                              { label: "WhatsApp", onClick: () => requestCollegeWhatsApp(row) },
-                              { label: "Email", onClick: () => requestCollegeEmail(row) },
-                            ]
+                          : [{ label: "Activity", onClick: () => void openCollegeActivity(row) }]
                       }
                     />
                   );
@@ -1685,8 +1752,13 @@ return (
             entityType="college"
             entityId={editId}
             meta={proposalFileMeta}
-            pendingFile={pendingProposalFile}
-            onPendingFileChange={setPendingProposalFile}
+            pendingFile={pendingProposalFiles[0] ?? null}
+            pendingFiles={pendingProposalFiles}
+            onPendingFileChange={(f) => setPendingProposalFiles(f ? [f] : [])}
+            onPendingFilesChange={setPendingProposalFiles}
+            multiple
+            files={proposalFiles}
+            onFilesChange={setProposalFiles}
             onMetaChange={setProposalFileMeta}
             disabled={submitting}
             onError={setError}
@@ -1702,7 +1774,7 @@ return (
           setDraft={setProposalDraft}
           onClose={() => {
             setProposalRow(null);
-            setPendingProposalFile(null);
+            setPendingProposalFiles([]);
           }}
           onSave={() => void handleProposalSave()}
           submitting={proposalSubmitting}
@@ -1712,8 +1784,13 @@ return (
               entityType="college"
               entityId={proposalRow.id}
               meta={proposalFileMeta}
-              pendingFile={pendingProposalFile}
-              onPendingFileChange={setPendingProposalFile}
+              pendingFile={pendingProposalFiles[0] ?? null}
+              pendingFiles={pendingProposalFiles}
+              onPendingFileChange={(f) => setPendingProposalFiles(f ? [f] : [])}
+              onPendingFilesChange={setPendingProposalFiles}
+              multiple
+              files={proposalFiles}
+              onFilesChange={setProposalFiles}
               onMetaChange={setProposalFileMeta}
               disabled={proposalSubmitting}
               onError={setError}
@@ -1783,6 +1860,9 @@ return (
                 <p>
                   <span className="font-semibold text-[#3d3428]">Follow-up:</span>{" "}
                   {formatDisplayDate(viewVisit.next_follow_up_date) || "-"}
+                </p>
+                <p>
+                  <span className="font-semibold text-[#3d3428]">Whom visited to the college:</span> {viewVisit.visited_by || "-"}
                 </p>
               </div>
               <p className="mb-2 text-xs text-[#64748b]">

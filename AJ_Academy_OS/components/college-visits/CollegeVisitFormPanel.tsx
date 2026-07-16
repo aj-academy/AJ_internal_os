@@ -14,6 +14,7 @@ import {
   VISIT_STATUSES,
 } from "@/components/college-visits/collegeVisitsConfig";
 import {
+  computeCollegeLeadScore,
   emptyCollegeContact,
   MAX_COLLEGE_CONTACTS,
   MAX_PHONES_PER_CONTACT,
@@ -94,6 +95,7 @@ export function CollegeVisitFormPanel({
   const proposalStatuses = proposalStatusOptions?.length ? proposalStatusOptions : CV_PROPOSAL_STATUSES;
 
   const contacts = ensureFormContacts(value.contacts);
+  const leadScore = computeCollegeLeadScore({ ...value, contacts });
 
   const setContact = (id: string, patch: Partial<CollegeContact>) => {
     updateContacts(
@@ -337,16 +339,22 @@ export function CollegeVisitFormPanel({
                   <span className="font-medium text-[#334155]">Visit date</span>
                   <Input type="date" value={value.visit_date} onChange={(e) => onChange({ ...value, visit_date: e.target.value })} className="border-[#e8dcc8]" />
                 </label>
+                <label className="grid gap-1">
+                  <span className="font-medium text-[#334155]">Whom visited to the college</span>
+                  <Input
+                    value={value.visited_by || value.visited_by_name}
+                    onChange={(e) =>
+                      onChange({
+                        ...value,
+                        visited_by: e.target.value,
+                        visited_by_name: e.target.value,
+                      })
+                    }
+                    className="border-[#e8dcc8]"
+                    placeholder="Employee / person who visited"
+                  />
+                </label>
               </div>
-              <label className="grid gap-1">
-                <span className="font-medium text-[#334155]">Who visited</span>
-                <Input
-                  value={value.visited_by_name}
-                  onChange={(e) => onChange({ ...value, visited_by_name: e.target.value })}
-                  className="border-[#e8dcc8]"
-                  placeholder="Enter visitor name"
-                />
-              </label>
               <label className="grid gap-1">
                 <span className="font-medium text-[#334155]">MOU signed status</span>
                 <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3" value={value.mou_signed_status} onChange={(e) => onChange({ ...value, mou_signed_status: e.target.value })}>
@@ -397,9 +405,10 @@ export function CollegeVisitFormPanel({
                 </label>
                 <label className="grid gap-1">
                   <span className="font-medium text-[#334155]">Lead score</span>
-                  <Input type="number" min={0} max={100} value={value.lead_score} onChange={(e) => onChange({ ...value, lead_score: e.target.value })} className="border-[#e8dcc8]" />
+                  <Input type="number" min={0} max={100} value={String(leadScore)} readOnly className="border-[#e8dcc8] bg-slate-50" />
                 </label>
               </div>
+              <p className="text-[11px] text-[#94a3b8]">Lead score is auto-calculated from visit/MOU/follow-up/proposal/final status and contact completeness.</p>
               <label className="grid gap-1">
                 <span className="font-medium text-[#334155]">Final status</span>
                 <select className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3" value={value.final_status} onChange={(e) => onChange({ ...value, final_status: e.target.value })}>

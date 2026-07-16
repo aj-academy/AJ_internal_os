@@ -14,6 +14,7 @@ function stripUnavailableColumns(payload: Record<string, unknown>, errorMsg: str
   const next = { ...payload };
   if (isMissingVisitedByColumn(errorMsg)) delete next.visited_by_name;
   if (isMissingContactsColumn(errorMsg)) delete next.contacts;
+  if (isMissingVisitedByColumn(errorMsg)) delete next.visited_by;
   if (isMissingProposalFileColumn(errorMsg)) {
     delete next.proposal_file_name;
     delete next.proposal_file_path;

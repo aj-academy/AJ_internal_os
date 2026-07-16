@@ -36,6 +36,8 @@ type MobileRecordCardProps = {
   selectAriaLabel?: string;
   primaryActions?: MobileRecordAction[];
   moreActions?: MobileRecordAction[];
+  /** Prominent row for outreach (call / WhatsApp / email) on mobile cards */
+  outreachSlot?: ReactNode;
   className?: string;
 };
 
@@ -88,6 +90,7 @@ export function MobileRecordCard({
   selectAriaLabel,
   primaryActions = [],
   moreActions = [],
+  outreachSlot,
   className,
 }: MobileRecordCardProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -129,6 +132,10 @@ export function MobileRecordCard({
             </div>
           ))}
         </dl>
+      ) : null}
+
+      {outreachSlot ? (
+        <div className="mt-3 rounded-xl border border-[#f1e8d8] bg-[#fffdf8] p-3">{outreachSlot}</div>
       ) : null}
 
       {(primaryActions.length > 0 || moreActions.length > 0) && (

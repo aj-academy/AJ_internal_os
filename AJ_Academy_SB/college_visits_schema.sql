@@ -27,6 +27,7 @@ create table if not exists public.college_visits (
   visit_status text not null default 'Not Visited',
   visited_by_name text,
   visit_date date,
+  visited_by text,
   mou_signed_status text not null default 'Not Signed',
   follow_up_stage text,
   last_follow_up_date date,
@@ -49,6 +50,9 @@ create index if not exists college_visits_assigned_to_idx on public.college_visi
 create index if not exists college_visits_visit_status_idx on public.college_visits (visit_status);
 create index if not exists college_visits_next_follow_up_idx on public.college_visits (next_follow_up_date);
 create index if not exists college_visits_updated_at_idx on public.college_visits (updated_at desc);
+
+alter table public.college_visits
+  add column if not exists visited_by text;
 
 create or replace function public.college_visits_set_updated_at()
 returns trigger

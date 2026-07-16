@@ -7,6 +7,7 @@ import { Sheet, SheetClose, SheetContent, SheetTrigger } from "@/components/ui/s
 import { Sidebar, type SidebarItem } from "@/components/layouts/Sidebar";
 import { Topbar } from "@/components/layouts/Topbar";
 import { useSystemPreferences } from "@/hooks/useSystemPreferences";
+import { ReminderAlertsWatcher } from "@/components/reminders/ReminderAlertsWatcher";
 
 interface DashboardLayoutProps {
   roleLabel: string;
@@ -104,6 +105,7 @@ export function DashboardLayout({
           <main className="mx-auto min-h-0 w-full max-w-[1920px] min-w-0 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pt-4 lg:px-6 lg:pb-8 lg:pt-5">
             <div className="aj-page">{children}</div>
           </main>
+          <ReminderAlertsWatcher />
         </div>
 
         <SheetContent

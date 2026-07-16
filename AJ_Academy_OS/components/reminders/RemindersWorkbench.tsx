@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, CalendarDays, Check, Clock, Plus, X } from "lucide-react";
+import { CalendarDays, Check, Clock, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
@@ -20,7 +20,6 @@ import {
   REMINDER_STATUSES,
   REMINDER_TYPES,
   type ReminderFormValue,
-  type ReminderNotificationRow,
   type ReminderRow,
   type ReminderUserSettings,
   type ReminderWorkbenchTab,
@@ -33,7 +32,7 @@ import {
   todayDateIST,
   validateReminderForm,
 } from "@/lib/reminders/reminderHelpers";
-import { isInQuietHours, playReminderChimeOnce, unlockReminderAudio } from "@/lib/reminders/reminderSound";
+import { playReminderChimeOnce, stopReminderRing, unlockReminderAudio } from "@/lib/reminders/reminderSound";
 
 type ProfileMini = { id: string; full_name: string | null; email: string | null };
 
@@ -72,7 +71,6 @@ export function RemindersWorkbench({
   const [submitting, setSubmitting] = useState(false);
   const [viewRow, setViewRow] = useState<ReminderRow | null>(null);
   const [settings, setSettings] = useState<ReminderUserSettings | null>(null);
-  const [dueNotifs, setDueNotifs] = useState<ReminderNotificationRow[]>([]);
   const [calMonth, setCalMonth] = useState(() => todayDateIST().slice(0, 7));
   const [relatedQ, setRelatedQ] = useState("");
   const [relatedItems, setRelatedItems] = useState<{ id: string; label: string }[]>([]);
@@ -104,47 +102,16 @@ export function RemindersWorkbench({
     if (json.settings) setSettings(json.settings as ReminderUserSettings);
   }, []);
 
-  const loadDue = useCallback(async () => {
-    const res = await fetch("/api/reminders/notifications");
-    const json = (await res.json()) as { notifications?: ReminderNotificationRow[] };
-    setDueNotifs(json.notifications ?? []);
-  }, []);
-
   useEffect(() => {
     void load();
     void loadSettings();
-    void loadDue();
-  }, [load, loadSettings, loadDue]);
+  }, [load, loadSettings]);
 
   useEffect(() => {
     const unlock = () => unlockReminderAudio();
     window.addEventListener("pointerdown", unlock, { once: true });
     return () => window.removeEventListener("pointerdown", unlock);
   }, []);
-
-  useEffect(() => {
-    const t = setInterval(() => void loadDue(), 25_000);
-    return () => clearInterval(t);
-  }, [loadDue]);
-
-  useEffect(() => {
-    const top = dueNotifs[0];
-    if (!top || !settings?.popup_enabled) return;
-    if (top.reminder && (top.reminder.status === "Completed" || top.reminder.status === "Cancelled")) return;
-    if (isInQuietHours(settings.quiet_hours_start, settings.quiet_hours_end)) return;
-    if (settings.sound_enabled && top.reminder?.sound_enabled !== false) {
-      playReminderChimeOnce({
-        notificationId: top.id,
-        volume: settings.sound_volume,
-        enabled: true,
-      });
-      void fetch("/api/reminders/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: top.id, action: "sound_played" }),
-      });
-    }
-  }, [dueNotifs, settings]);
 
   useEffect(() => {
     void (async () => {
@@ -276,8 +243,8 @@ export function RemindersWorkbench({
       return;
     }
     setSuccess(action === "complete" ? "Marked complete." : action === "snooze" ? "Snoozed." : "Rescheduled.");
+    if (action === "snooze" || action === "complete") stopReminderRing();
     await load();
-    await loadDue();
   };
 
   const remove = async (id: string) => {
@@ -392,8 +359,6 @@ export function RemindersWorkbench({
     a.click();
   };
 
-  const activeDue = dueNotifs[0];
-
   return (
     <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 shadow-[0_20px_40px_rgba(30,64,175,0.08)] sm:p-6 lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -444,7 +409,11 @@ export function RemindersWorkbench({
           onEnableBrowser={enableBrowserNotifications}
           onEnablePush={enablePush}
           onTestSound={() =>
-            playReminderChimeOnce({ notificationId: `test-${Date.now()}`, volume: settings?.sound_volume ?? 80 })
+            playReminderChimeOnce({
+              notificationId: `test-${Date.now()}`,
+              volume: settings?.sound_volume ?? 80,
+              durationMs: 60_000,
+            })
           }
         />
       ) : null}
@@ -677,25 +646,6 @@ export function RemindersWorkbench({
           onReschedule={(date, time, reason) =>
             void quickAction(viewRow.id, "reschedule", { reschedule_date: date, reschedule_time: time, reschedule_reason: reason })
           }
-        />
-      ) : null}
-
-      {activeDue && settings?.popup_enabled !== false ? (
-        <DuePopup
-          notif={activeDue}
-          onDismiss={async () => {
-            await fetch("/api/reminders/notifications", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id: activeDue.id, action: "dismiss" }),
-            });
-            await loadDue();
-          }}
-          onComplete={() => void quickAction(activeDue.reminder_id, "complete")}
-          onSnooze={(m) => void quickAction(activeDue.reminder_id, "snooze", { snooze_minutes: m })}
-          onView={() => {
-            if (activeDue.reminder) setViewRow(activeDue.reminder);
-          }}
         />
       ) : null}
     </section>
@@ -1083,41 +1033,6 @@ function ViewDrawer({
   );
 }
 
-function DuePopup({
-  notif,
-  onDismiss,
-  onComplete,
-  onSnooze,
-  onView,
-}: {
-  notif: ReminderNotificationRow;
-  onDismiss: () => void;
-  onComplete: () => void;
-  onSnooze: (m: number) => void;
-  onView: () => void;
-}) {
-  return (
-    <div className="fixed bottom-4 right-4 z-[70] w-[min(100vw-1.5rem,24rem)] rounded-2xl border border-[#e8dcc8] bg-white p-4 shadow-2xl">
-      <div className="flex items-start gap-2">
-        <Bell className="mt-0.5 h-5 w-5 text-[#c9a227]" />
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase text-[#94a3b8]">Reminder due</p>
-          <p className="font-semibold text-[#0f172a]">{notif.title}</p>
-          <p className="text-xs text-[#64748b]">{notif.body}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" className="rounded-full" onClick={onView}>View</Button>
-            {[5, 10, 15, 30].map((m) => (
-              <Button key={m} size="sm" variant="outline" className="rounded-full" onClick={() => onSnooze(m)}>Snooze {m}m</Button>
-            ))}
-            <Button size="sm" className="rounded-full bg-emerald-600 text-white" onClick={onComplete}>Complete</Button>
-            <Button size="sm" variant="outline" className="rounded-full" onClick={onDismiss}>Dismiss</Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function SettingsPanel({
   settings,
   onSave,
@@ -1159,7 +1074,8 @@ function SettingsPanel({
       </div>
       <div className="flex flex-wrap gap-2 pt-2">
         <Button className="rounded-full bg-[#c9a227] text-white" onClick={() => onSave(local)}>Save settings</Button>
-        <Button variant="outline" className="rounded-full border-[#e8dcc8]" onClick={onTestSound}>Test sound</Button>
+        <Button variant="outline" className="rounded-full border-[#e8dcc8]" onClick={onTestSound}>Test sound (1 min)</Button>
+        <Button variant="outline" className="rounded-full border-[#e8dcc8]" onClick={() => stopReminderRing()}>Stop sound</Button>
         <Button variant="outline" className="rounded-full border-[#e8dcc8]" onClick={onEnableBrowser}>Enable notifications</Button>
         <Button variant="outline" className="rounded-full border-[#e8dcc8]" onClick={onEnablePush}>Enable push</Button>
       </div>

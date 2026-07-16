@@ -145,13 +145,13 @@ Then hard-refresh the app and try **Add Student** again.
 
 ### College Visits
 
-Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / profiles), then **`college_visits_proposal_patch.sql`** (Proposal Tracker: link + PDF columns and `college-visit-proposals` storage bucket), then **`college_visits_contacts_patch.sql`** (multiple contacts: name / role / alternate phones / email JSON + primary sync), then **`college_visits_visited_by_patch.sql`** (adds `visited_by_name` for who visited), then **`proposals_file_upload_patch.sql`** (unified private `proposals` bucket + file columns on `clients` and `college_visits` for PDF/DOC/DOCX upload on Add/Edit), then **`crm_owner_isolation.sql`**, then **`crm_delete_fix.sql`**. Adds:
+Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / profiles), then **`college_visits_visited_by_patch.sql`** (adds `visited_by` / `visited_by_name` for who visited), then **`college_visits_proposal_patch.sql`** (Proposal Tracker: link + PDF columns and `college-visit-proposals` storage bucket), then **`college_visits_contacts_patch.sql`** (multiple contacts: name / role / alternate phones / email JSON + primary sync), then **`proposals_file_upload_patch.sql`** (unified private `proposals` bucket + file columns on `clients` and `college_visits` for PDF/DOC/DOCX upload on Add/Edit), then **`proposals_multi_file_patch.sql`** (multi-file attachments table for Student/College proposals), then **`crm_owner_isolation.sql`**, then **`crm_delete_fix.sql`**. Adds:
 
 - `/admin/college-visits` and `/employee/college-visits` — **same subsection tabs as Student Master**: Overview, All Colleges, Follow-ups, Pipeline, Converted Colleges, MOU Tracker, **Proposal Tracker**, Activity Timeline (+ Reports / Settings for admin). **Admin sees all employees’ colleges**; **employees see only their own**. Share via College Visit tasks without opening another employee’s full CRM.
 - **Settings tab (admin):** editable visit / MOU / proposal / final status lists persist to `system_settings` key `college_visits` via `/api/admin/settings`. Staff read via `/api/college-visits/lists` (same store as Admin → System Settings → College Visits). Dropdowns, filters, and Pipeline columns use those lists.
+- Add/Edit includes **Whom visited to the college** (`visited_by`) and auto-calculates **Lead Score** from visit/MOU/follow-up/proposal/final-status signals.
 - **Import / Export CSV** includes primary contact plus **Contact 2 / Contact 3** (name, role, phone, alternate phone, email) and **Alternate Phone 2 / 3** on the primary — same multi-contact model as Add/Edit. Older single-contact CSVs still import.
-- **Visit & MOU:** `Who visited` field is available on Add/Edit and saves to `college_visits.visited_by_name` for both admin and employee dashboards.
-- Proposal Tracker / Add·Edit forms upload **PDF, DOC, or DOCX** (max 10 MB) into the private `proposals` bucket; legacy URL/PDF fields remain readable.
+- Proposal Tracker / Add·Edit forms upload **PDF, DOC, or DOCX** (max 10 MB) into the private `proposals` bucket; legacy URL/PDF fields remain readable. College Visit proposal upload now supports **multiple files**.
 - Pick-for-task flow uses the **All Colleges** tab (same pattern as Student Master → All Students).
 
 **Student Master proposals:** Same file upload (Add + Edit + Proposal Tracker) after `proposals_file_upload_patch.sql`. Paths: `students/{client_id}/…` and `colleges/{college_visit_id}/…`. APIs: `POST /api/proposals/upload`, `/signed-url`, `/remove` (staff session + service role).
@@ -214,13 +214,15 @@ Run **`task_completion_attachments.sql`** so students can upload files when mark
 
 ### Reminders & Calendar (additive)
 
-Run **`aj_reminders_schema.sql`** after `schema.sql` / profiles helpers (`is_admin`). Creates **only** `aj_reminders*` tables + RLS — **does not alter** Student Master, College Visits, Tasks, Finance, Attendance, or `profiles` columns.
+Run **`aj_reminders_schema.sql`** after `schema.sql` / profiles helpers (`is_admin`). Creates **only** `aj_reminders*` tables + RLS — **does not alter** Student Master, College Visits, Tasks, Finance, Attendance, or `profiles` columns. If reminder save fails with `infinite recursion detected in policy for relation "aj_reminders"`, run **`aj_reminders_rls_recursion_fix.sql`** (safe to re-run; does not touch CRM).
 
 - Admin: `/admin/reminders` · Employee: `/employee/reminders`
 - Dashboard widget: Today’s Reminders (read-only counts + quick snooze/complete)
+- While any admin/employee page is open, due alerts are processed on poll (~20s) so sound/popup do not wait for the daily Hobby cron
+- In-app popup + Web Audio chime + optional browser notifications (enable in Reminders → Settings)
 - Alerts processor: `POST /api/reminders/cron/process-alerts` with `Authorization: Bearer $CRON_SECRET`
   - `vercel.json` schedules **once daily** (`0 4 * * *` UTC) so Hobby-plan deploys succeed (Hobby forbids denser cron).
-  - For frequent processing on Hobby, point an external cron (e.g. every 1–5 min) at the same URL with the Bearer secret.
+  - For frequent processing when no one is logged in, point an external cron (e.g. every 1–5 min) at the same URL with the Bearer secret.
   - Pro plan can change the schedule to `*/5 * * * *` if desired.
 - Optional Web Push: set `REMINDER_VAPID_PUBLIC_KEY`, `REMINDER_VAPID_PRIVATE_KEY`, `NEXT_PUBLIC_REMINDER_VAPID_PUBLIC_KEY`, install `web-push` if sending pushes
 - Rollback: **`aj_reminders_rollback.sql`** (drops only `aj_reminder*` objects)

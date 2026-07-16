@@ -223,9 +223,44 @@ create table if not exists public.aj_reminder_activity_logs (
 create index if not exists aj_reminder_activity_reminder_idx
   on public.aj_reminder_activity_logs (reminder_id, created_at desc);
 
--- ---------------------------------------------------------------------------
+-- Helper: read assignees without triggering assignees RLS (also used by recursion fix)
+create or replace function public.aj_reminder_is_assignee(p_reminder_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.aj_reminder_assignees a
+    where a.reminder_id = p_reminder_id
+      and a.user_id = auth.uid()
+  );
+$$;
+
+grant execute on function public.aj_reminder_is_assignee(uuid) to authenticated;
+
+create or replace function public.aj_reminder_is_creator(p_reminder_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.aj_reminders r
+    where r.id = p_reminder_id
+      and r.created_by = auth.uid()
+  );
+$$;
+
+grant execute on function public.aj_reminder_is_creator(uuid) to authenticated;
+
 -- Visibility helper (SECURITY DEFINER — does not alter existing role functions)
--- ---------------------------------------------------------------------------
 create or replace function public.aj_reminder_user_can_access(p_reminder_id uuid)
 returns boolean
 language sql
@@ -262,17 +297,14 @@ alter table public.aj_reminder_push_subscriptions enable row level security;
 alter table public.aj_reminder_user_settings enable row level security;
 alter table public.aj_reminder_activity_logs enable row level security;
 
--- reminders
+-- reminders (use SECURITY DEFINER helpers — no direct cross-table RLS recursion)
 drop policy if exists aj_reminders_select on public.aj_reminders;
 create policy aj_reminders_select on public.aj_reminders
 for select to authenticated
 using (
   public.is_admin()
   or created_by = auth.uid()
-  or exists (
-    select 1 from public.aj_reminder_assignees a
-    where a.reminder_id = id and a.user_id = auth.uid()
-  )
+  or public.aj_reminder_is_assignee(id)
 );
 
 drop policy if exists aj_reminders_insert on public.aj_reminders;
@@ -289,18 +321,12 @@ for update to authenticated
 using (
   public.is_admin()
   or created_by = auth.uid()
-  or exists (
-    select 1 from public.aj_reminder_assignees a
-    where a.reminder_id = id and a.user_id = auth.uid() and a.role = 'assignee'
-  )
+  or public.aj_reminder_is_assignee(id)
 )
 with check (
   public.is_admin()
   or created_by = auth.uid()
-  or exists (
-    select 1 from public.aj_reminder_assignees a
-    where a.reminder_id = id and a.user_id = auth.uid() and a.role = 'assignee'
-  )
+  or public.aj_reminder_is_assignee(id)
 );
 
 drop policy if exists aj_reminders_delete on public.aj_reminders;
@@ -312,48 +338,44 @@ using (public.is_admin() or created_by = auth.uid());
 drop policy if exists aj_reminder_assignees_select on public.aj_reminder_assignees;
 create policy aj_reminder_assignees_select on public.aj_reminder_assignees
 for select to authenticated
-using (public.aj_reminder_user_can_access(reminder_id));
+using (
+  public.is_admin()
+  or user_id = auth.uid()
+  or public.aj_reminder_is_creator(reminder_id)
+);
 
 drop policy if exists aj_reminder_assignees_write on public.aj_reminder_assignees;
 create policy aj_reminder_assignees_write on public.aj_reminder_assignees
 for all to authenticated
 using (
   public.is_admin()
-  or exists (
-    select 1 from public.aj_reminders r
-    where r.id = reminder_id and r.created_by = auth.uid()
-  )
+  or public.aj_reminder_is_creator(reminder_id)
 )
 with check (
   public.is_admin()
-  or exists (
-    select 1 from public.aj_reminders r
-    where r.id = reminder_id and r.created_by = auth.uid()
-  )
+  or public.aj_reminder_is_creator(reminder_id)
 );
 
--- alerts (users read via reminder access; writes mainly via service role / creator)
+-- alerts
 drop policy if exists aj_reminder_alerts_select on public.aj_reminder_alerts;
 create policy aj_reminder_alerts_select on public.aj_reminder_alerts
 for select to authenticated
-using (public.aj_reminder_user_can_access(reminder_id));
+using (
+  public.is_admin()
+  or public.aj_reminder_is_creator(reminder_id)
+  or public.aj_reminder_is_assignee(reminder_id)
+);
 
 drop policy if exists aj_reminder_alerts_write on public.aj_reminder_alerts;
 create policy aj_reminder_alerts_write on public.aj_reminder_alerts
 for all to authenticated
 using (
   public.is_admin()
-  or exists (
-    select 1 from public.aj_reminders r
-    where r.id = reminder_id and r.created_by = auth.uid()
-  )
+  or public.aj_reminder_is_creator(reminder_id)
 )
 with check (
   public.is_admin()
-  or exists (
-    select 1 from public.aj_reminders r
-    where r.id = reminder_id and r.created_by = auth.uid()
-  )
+  or public.aj_reminder_is_creator(reminder_id)
 );
 
 -- notifications
@@ -391,12 +413,20 @@ with check (user_id = auth.uid() or public.is_admin());
 drop policy if exists aj_reminder_activity_select on public.aj_reminder_activity_logs;
 create policy aj_reminder_activity_select on public.aj_reminder_activity_logs
 for select to authenticated
-using (public.aj_reminder_user_can_access(reminder_id));
+using (
+  public.is_admin()
+  or public.aj_reminder_is_creator(reminder_id)
+  or public.aj_reminder_is_assignee(reminder_id)
+);
 
 drop policy if exists aj_reminder_activity_insert on public.aj_reminder_activity_logs;
 create policy aj_reminder_activity_insert on public.aj_reminder_activity_logs
 for insert to authenticated
-with check (public.aj_reminder_user_can_access(reminder_id));
+with check (
+  public.is_admin()
+  or public.aj_reminder_is_creator(reminder_id)
+  or public.aj_reminder_is_assignee(reminder_id)
+);
 
 grant select, insert, update, delete on public.aj_reminders to authenticated;
 grant select, insert, update, delete on public.aj_reminder_assignees to authenticated;

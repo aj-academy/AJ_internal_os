@@ -20,6 +20,8 @@ export async function POST(request: Request) {
   const record = body as Record<string, unknown>;
   const kind = record.entityType === "student" || record.entityType === "college" ? (record.entityType as ProposalEntityKind) : null;
   const entityId = typeof record.entityId === "string" ? record.entityId.trim() : "";
+  const filePath = typeof record.filePath === "string" ? record.filePath.trim() : "";
+  const fileId = typeof record.fileId === "string" ? record.fileId.trim() : "";
 
   if (!kind || !entityId) {
     return NextResponse.json({ error: "entityType and entityId are required." }, { status: 400 });
@@ -27,34 +29,30 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
   const table = kind === "student" ? "clients" : "college_visits";
-  const { data, error } = await admin
-    .from(table)
-    .select("proposal_file_path")
-    .eq("id", entityId)
-    .maybeSingle();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  if (filePath || fileId) {
+    const targetPath = filePath;
+    if (fileId) {
+      await admin.from("proposal_files").delete().eq("id", fileId).eq("entity_type", kind).eq("entity_id", entityId);
+    } else {
+      await admin.from("proposal_files").delete().eq("entity_type", kind).eq("entity_id", entityId).eq("file_path", targetPath);
+    }
+    if (targetPath) await admin.storage.from(PROPOSALS_BUCKET).remove([targetPath]).catch(() => undefined);
+    return NextResponse.json({ ok: true });
   }
 
+  const { data, error } = await admin.from(table).select("proposal_file_path").eq("id", entityId).maybeSingle();
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   const path = typeof data?.proposal_file_path === "string" ? data.proposal_file_path : null;
 
-  const clearMeta = {
-    proposal_file_name: null,
-    proposal_file_path: null,
-    proposal_file_type: null,
-    proposal_file_size: null,
-    proposal_uploaded_at: null,
-  };
-
+  const clearMeta = { proposal_file_name: null, proposal_file_path: null, proposal_file_type: null, proposal_file_size: null, proposal_uploaded_at: null };
   const { error: updateError } = await admin.from(table).update(clearMeta).eq("id", entityId);
-  if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 400 });
-  }
-
-  if (path) {
-    await admin.storage.from(PROPOSALS_BUCKET).remove([path]).catch(() => undefined);
-  }
-
+  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 400 });
+  if (path) await admin.storage.from(PROPOSALS_BUCKET).remove([path]).catch(() => undefined);
+  const { error: cleanupError } = await admin
+    .from("proposal_files")
+    .delete()
+    .eq("entity_type", kind)
+    .eq("entity_id", entityId);
+  void cleanupError;
   return NextResponse.json({ ok: true });
 }

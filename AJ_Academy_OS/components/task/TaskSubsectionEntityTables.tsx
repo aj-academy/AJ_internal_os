@@ -85,6 +85,7 @@ function placeholderCollege(id: string): CollegeVisitRow {
     visit_status: "-",
     visited_by_name: null,
     visit_date: null,
+    visited_by: null,
     mou_signed_status: "-",
     follow_up_stage: null,
     last_follow_up_date: null,
