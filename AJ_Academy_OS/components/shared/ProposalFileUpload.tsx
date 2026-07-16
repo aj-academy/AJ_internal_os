@@ -60,8 +60,7 @@ export function ProposalFileUpload({
 
   const pickFiles = (list: FileList | null) => {
     if (!list || list.length === 0) {
-      if (multiple) onPendingFilesChange?.([]);
-      else onPendingFileChange(null);
+      if (!multiple) onPendingFileChange(null);
       return;
     }
     const picked = Array.from(list);
@@ -74,8 +73,16 @@ export function ProposalFileUpload({
       }
       valid.push(file);
     }
-    if (multiple) onPendingFilesChange?.(valid);
-    else onPendingFileChange(valid[0] ?? null);
+    if (!valid.length) return;
+    if (multiple) {
+      const existing = pendingFiles ?? [];
+      const byKey = new Map(existing.map((f) => [`${f.name}:${f.size}:${f.lastModified}`, f]));
+      for (const f of valid) byKey.set(`${f.name}:${f.size}:${f.lastModified}`, f);
+      onPendingFilesChange?.([...byKey.values()]);
+    } else {
+      onPendingFileChange(valid[0] ?? null);
+    }
+    if (inputRef.current) inputRef.current.value = "";
   };
 
   const openSigned = async (download: boolean) => {
@@ -167,7 +174,9 @@ export function ProposalFileUpload({
 
   return (
     <div className="space-y-2">
-      <span className="block text-xs font-medium text-[#64748b]">Upload Proposal</span>
+      <span className="block text-xs font-medium text-[#64748b]">
+        {multiple ? "Upload Proposal (multiple files)" : "Upload Proposal"}
+      </span>
 
       {uploaded ? (
         <div className="rounded-xl border border-[#e8dcc8] bg-[#fffdf8] p-3">
@@ -182,6 +191,7 @@ export function ProposalFileUpload({
                 {meta.proposal_uploaded_at
                   ? ` · ${new Date(meta.proposal_uploaded_at).toLocaleDateString()}`
                   : ""}
+                {multiple ? " · Primary / legacy file" : ""}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button
@@ -206,17 +216,19 @@ export function ProposalFileUpload({
                   <Download className="mr-1 h-3.5 w-3.5" />
                   Download
                 </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 rounded-lg border-[#e8dcc8]"
-                  disabled={disabled || busy}
-                  onClick={() => inputRef.current?.click()}
-                >
-                  <Upload className="mr-1 h-3.5 w-3.5" />
-                  Replace
-                </Button>
+                {!multiple ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 rounded-lg border-[#e8dcc8]"
+                    disabled={disabled || busy}
+                    onClick={() => inputRef.current?.click()}
+                  >
+                    <Upload className="mr-1 h-3.5 w-3.5" />
+                    Replace
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   size="sm"
@@ -275,48 +287,78 @@ export function ProposalFileUpload({
       ) : null}
 
       {pendingList.length ? (
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-[#c9a227]/40 bg-[#faf3e3] px-3 py-2">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-[#3d3428]">
-              {multiple ? `${pendingList.length} file(s) selected` : pendingList[0]?.name}
+        <div className="space-y-2 rounded-xl border border-[#c9a227]/40 bg-[#faf3e3] p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#8a7020]">
+              Ready to upload ({pendingList.length})
             </p>
-            <p className="text-xs text-[#6b5d4d]">
-              {multiple
-                ? pendingList.map((f) => formatProposalBytes(f.size)).join(", ")
-                : formatProposalBytes(pendingList[0]?.size)}
-              {entityId ? " · Will replace on next save/upload" : " · Uploads after you save this record"}
-            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 rounded-lg border-[#e8dcc8]"
+              disabled={disabled || busy}
+              onClick={() => {
+                if (multiple) onPendingFilesChange?.([]);
+                else onPendingFileChange(null);
+                if (inputRef.current) inputRef.current.value = "";
+              }}
+            >
+              Clear all
+            </Button>
           </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 shrink-0 rounded-lg border-[#e8dcc8]"
-            disabled={disabled || busy}
-            onClick={() => {
-              if (multiple) onPendingFilesChange?.([]);
-              else onPendingFileChange(null);
-              if (inputRef.current) inputRef.current.value = "";
-            }}
-          >
-            Clear
-          </Button>
+          {pendingList.map((file, idx) => (
+            <div key={`${file.name}-${file.size}-${file.lastModified}-${idx}`} className="flex items-center justify-between gap-2 rounded-lg bg-white/70 px-2 py-1.5">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-[#3d3428]">{file.name}</p>
+                <p className="text-[11px] text-[#6b5d4d]">
+                  {formatProposalBytes(file.size)}
+                  {entityId ? " · Uploads on Save" : " · Uploads after you save this record"}
+                </p>
+              </div>
+              {multiple ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 shrink-0 border-rose-200 px-2 text-rose-700"
+                  disabled={disabled || busy}
+                  onClick={() =>
+                    onPendingFilesChange?.(pendingList.filter((_, i) => i !== idx))
+                  }
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
+            </div>
+          ))}
         </div>
       ) : null}
 
-      {!uploaded || pendingList.length > 0 ? (
+      {/* Always show add zone in multiple mode; single mode hides it when a file is already uploaded */}
+      {multiple || !uploaded || pendingList.length > 0 ? (
         <label
           className={[
             "flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-[#e8dcc8] bg-white px-4 py-5 text-center transition hover:border-[#c9a227] hover:bg-[#fffdf8]",
             disabled || busy ? "pointer-events-none opacity-50" : "",
-            uploaded && !pendingFile ? "hidden" : "",
+            !multiple && uploaded && pendingList.length === 0 ? "hidden" : "",
           ].join(" ")}
         >
           <Upload className="h-5 w-5 text-[#c9a227]" />
           <span className="text-sm font-semibold text-[#3d3428]">
-            {pendingFile ? "Choose a different file" : "Choose file / Drop proposal here"}
+            {multiple
+              ? uploaded || files.length || pendingList.length
+                ? "Add more proposal files"
+                : "Choose files / Drop proposals here"
+              : pendingList.length
+                ? "Choose a different file"
+                : "Choose file / Drop proposal here"}
           </span>
-          <span className="text-[11px] text-[#6b5d4d]">PDF, DOC or DOCX — Maximum 10 MB</span>
+          <span className="text-[11px] text-[#6b5d4d]">
+            {multiple
+              ? "PDF, DOC or DOCX — max 10 MB each · select multiple files"
+              : "PDF, DOC or DOCX — Maximum 10 MB"}
+          </span>
           <input
             ref={inputRef}
             type="file"
@@ -339,7 +381,7 @@ export function ProposalFileUpload({
         />
       )}
 
-      {!uploaded && !pendingFile ? (
+      {!uploaded && !pendingList.length && !multiple ? (
         <p className="text-[11px] leading-relaxed text-[#6b5d4d]">PDF, DOC or DOCX — Maximum 10 MB</p>
       ) : null}
     </div>
