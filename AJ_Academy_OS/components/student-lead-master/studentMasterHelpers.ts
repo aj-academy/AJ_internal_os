@@ -31,6 +31,13 @@ export type StudentLeadRow = Record<string, unknown> & {
   whatsapp_sent_at?: string | null;
   email_sent?: boolean | null;
   email_sent_at?: string | null;
+  current_call_employee_id?: string | null;
+  current_call_started_at?: string | null;
+  current_call_session_id?: string | null;
+  last_call_outcome?: string | null;
+  total_call_attempts?: number | null;
+  next_follow_up_at?: string | null;
+  next_follow_up_employee_id?: string | null;
   custom_fields?: Record<string, unknown> | null;
   notes?: string | null;
   proposal_status?: string | null;
@@ -108,6 +115,13 @@ export const STUDENT_LEAD_SELECT = [
   "whatsapp_sent_at",
   "email_sent",
   "email_sent_at",
+  "current_call_employee_id",
+  "current_call_started_at",
+  "current_call_session_id",
+  "last_call_outcome",
+  "total_call_attempts",
+  "next_follow_up_at",
+  "next_follow_up_employee_id",
   "custom_fields",
   "notes",
   "proposal_status",
@@ -154,8 +168,31 @@ export const STUDENT_LEAD_SELECT = [
 const PROPOSAL_FILE_SELECT =
   "proposal_file_name,proposal_file_path,proposal_file_type,proposal_file_size,proposal_uploaded_at,";
 
+const CALL_WORKFLOW_SELECT =
+  "current_call_employee_id,current_call_started_at,current_call_session_id,last_call_outcome,total_call_attempts,next_follow_up_at,next_follow_up_employee_id,";
+
 /** Fallback when proposals_file_upload_patch.sql not applied yet. */
 export const STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES = STUDENT_LEAD_SELECT.replace(PROPOSAL_FILE_SELECT, "");
+
+/** Fallback when lead_call_workflow_schema.sql not applied yet. */
+export const STUDENT_LEAD_SELECT_NO_CALL_WORKFLOW = STUDENT_LEAD_SELECT.replace(CALL_WORKFLOW_SELECT, "");
+export const STUDENT_LEAD_SELECT_NO_PROPOSAL_OR_CALL = STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES.replace(
+  CALL_WORKFLOW_SELECT,
+  "",
+);
+
+export function isMissingCallWorkflowColumn(msg: string) {
+  const m = msg.toLowerCase();
+  return (
+    m.includes("current_call_employee_id") ||
+    m.includes("current_call_started_at") ||
+    m.includes("current_call_session_id") ||
+    m.includes("last_call_outcome") ||
+    m.includes("total_call_attempts") ||
+    m.includes("next_follow_up_at") ||
+    m.includes("next_follow_up_employee_id")
+  );
+}
 
 export function isMissingStudentProposalFileColumn(msg: string) {
   const m = msg.toLowerCase();

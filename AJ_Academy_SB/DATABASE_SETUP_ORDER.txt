@@ -30,6 +30,7 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 5c8) crm_delete_fix.sql (owned-row delete RPCs + employee delete policies; admin can delete any — fixes silent/blocked CRM deletes; run after crm_owner_isolation.sql)
 5c9) aj_reminders_schema.sql (Reminders & Calendar — NEW tables only: aj_reminders*; never alters CRM tables. Rollback: aj_reminders_rollback.sql)
 5c9b) aj_reminders_rls_recursion_fix.sql (fixes infinite recursion in aj_reminders ↔ assignees RLS — run if save fails with recursion error)
+5c10) lead_call_workflow_schema.sql (Student Lead call sessions, live calling lock, outcome workflow, follow-up extras — after employee_student_master_rls + crm_owner_isolation; safe re-run)
 
 6) task_notifications_columns.sql
 7) in_app_notifications.sql
