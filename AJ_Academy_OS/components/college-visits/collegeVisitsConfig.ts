@@ -104,10 +104,26 @@ export const CONNECTED_PERSON_ROLES = [
   "Professor",
   "Admin Staff",
   "Chairman",
-  "Custom role",
   "Whom visited to the college",
   "Other",
 ] as const;
+
+/** Preset roles shown in the dropdown (excludes Other — that opens a free-text field). */
+export const CONNECTED_PERSON_ROLE_PRESETS = CONNECTED_PERSON_ROLES.filter((r) => r !== "Other");
+
+export function isCollegeContactCustomRole(role: string | null | undefined): boolean {
+  const r = (role ?? "").trim();
+  if (!r) return false;
+  if (r === "Other") return true;
+  return !(CONNECTED_PERSON_ROLE_PRESETS as readonly string[]).includes(r);
+}
+
+export function collegeContactRoleSelectValue(role: string | null | undefined): string {
+  const r = (role ?? "").trim();
+  if (!r) return "";
+  if ((CONNECTED_PERSON_ROLE_PRESETS as readonly string[]).includes(r)) return r;
+  return "Other";
+}
 
 export type VisitStatus = (typeof VISIT_STATUSES)[number];
 export type MouStatus = (typeof MOU_STATUSES)[number];

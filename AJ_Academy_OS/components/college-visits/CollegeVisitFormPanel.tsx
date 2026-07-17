@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   COLLEGE_PRIORITIES,
-  CONNECTED_PERSON_ROLES,
+  CONNECTED_PERSON_ROLE_PRESETS,
   CV_PROPOSAL_STATUSES,
   FINAL_STATUSES,
   FOLLOW_UP_STAGES,
   MOU_STATUSES,
   VISIT_STATUSES,
+  collegeContactRoleSelectValue,
+  isCollegeContactCustomRole,
 } from "@/components/college-visits/collegeVisitsConfig";
 import {
   computeCollegeLeadScore,
@@ -22,6 +24,7 @@ import {
   type CollegeContact,
   type CollegeVisitFormValue,
 } from "@/components/college-visits/collegeVisitsHelpers";
+import { useSuppressBackdropClose } from "@/lib/useSuppressBackdropClose";
 
 interface OwnerOption {
   id: string;
@@ -87,6 +90,7 @@ export function CollegeVisitFormPanel({
   finalStatusOptions,
   proposalStatusOptions,
 }: CollegeVisitFormPanelProps) {
+  const { onBackdropClick } = useSuppressBackdropClose(1500);
   if (!open) return null;
 
   const visitStatuses = visitStatusOptions?.length ? visitStatusOptions : VISIT_STATUSES;
@@ -148,7 +152,12 @@ export function CollegeVisitFormPanel({
 
   return (
     <>
-      <button type="button" aria-label="Close" className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px]" onClick={onClose} />
+      <button
+        type="button"
+        aria-label="Close"
+        className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px]"
+        onClick={() => onBackdropClick(onClose)}
+      />
       <aside className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white shadow-[0_16px_30px_rgba(61,52,40,0.12)] lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[560px] lg:max-w-[100vw] lg:rounded-l-[24px] lg:border-l lg:border-[#e8dcc8]">
         <div className="flex shrink-0 items-center justify-between border-b border-[#e8edf5] px-4 py-4 sm:px-5">
           <h3 className="text-lg font-semibold text-[#0f172a]">{title}</h3>
@@ -246,16 +255,40 @@ export function CollegeVisitFormPanel({
                       <span className="font-medium text-[#334155]">Role</span>
                       <select
                         className="h-10 w-full rounded-xl border border-[#e8dcc8] bg-white px-3"
-                        value={contact.role}
-                        onChange={(e) => setContact(contact.id, { role: e.target.value })}
+                        value={collegeContactRoleSelectValue(contact.role)}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (next === "Other") {
+                            // Keep existing custom text if switching from a free-typed role; otherwise start blank for typing.
+                            const keepCustom =
+                              isCollegeContactCustomRole(contact.role) && contact.role.trim() !== "Other"
+                                ? contact.role
+                                : "Other";
+                            setContact(contact.id, { role: keepCustom });
+                          } else {
+                            setContact(contact.id, { role: next });
+                          }
+                        }}
                       >
                         <option value="">Select role</option>
-                        {CONNECTED_PERSON_ROLES.map((r) => (
+                        {CONNECTED_PERSON_ROLE_PRESETS.map((r) => (
                           <option key={r} value={r}>
                             {r}
                           </option>
                         ))}
+                        <option value="Other">Other (type manually)</option>
                       </select>
+                      {isCollegeContactCustomRole(contact.role) ? (
+                        <Input
+                          value={contact.role === "Other" ? "" : contact.role}
+                          onChange={(e) =>
+                            setContact(contact.id, { role: e.target.value.trim() ? e.target.value : "Other" })
+                          }
+                          className="mt-1.5 border-[#e8dcc8] bg-white"
+                          placeholder="Type the role (e.g. Dean, Vice Principal)"
+                          aria-label="Custom role"
+                        />
+                      ) : null}
                     </label>
                   </div>
 
