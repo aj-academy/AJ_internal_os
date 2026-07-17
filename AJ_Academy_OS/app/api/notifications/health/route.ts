@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { firebasePrivateKeyLooksValid } from "@/lib/firebase/admin";
+import { firebasePrivateKeyLooksValid } from "@/lib/firebase/privateKey";
 
 export const runtime = "nodejs";
 
@@ -7,7 +7,7 @@ function present(name: string): boolean {
   return Boolean(process.env[name]?.trim());
 }
 
-/** Safe Firebase / push health — never returns credentials. */
+/** Safe Firebase / push health — never returns credentials. Never imports firebase-admin. */
 export async function GET() {
   const clientProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim() ?? "";
   const serverProjectId = process.env.FIREBASE_PROJECT_ID?.trim() ?? "";

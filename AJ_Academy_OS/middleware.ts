@@ -1,18 +1,31 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/middleware";
 
+/**
+ * Keep middleware Edge-safe and minimal.
+ * Do not import firebase-admin, Node crypto, or heavy SDKs here.
+ * Session refresh stays best-effort and must never take down the site.
+ */
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  // Login must render immediately (no session refresh — was causing white screen / minute-long waits).
+  // Login must render immediately (no session work).
   if (pathname === "/login" || pathname.startsWith("/login/")) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    res.headers.set("x-ajos-pathname", pathname);
+    return res;
   }
 
-  const response = await updateSession(request);
-  // Let requireRole() rebuild /login?redirect=… after notification clicks while logged out.
-  response.headers.set("x-ajos-pathname", pathname);
-  return response;
+  try {
+    const { updateSession } = await import("@/lib/supabase/middleware");
+    const response = await updateSession(request);
+    response.headers.set("x-ajos-pathname", pathname);
+    return response;
+  } catch {
+    // If Edge session refresh fails, still allow the page through.
+    const res = NextResponse.next();
+    res.headers.set("x-ajos-pathname", pathname);
+    return res;
+  }
 }
 
 export const config = {
