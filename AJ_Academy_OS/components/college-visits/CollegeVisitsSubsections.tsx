@@ -26,6 +26,7 @@ import {
   persistCollegeVisitSettingsLists,
   type CollegeVisitSettingsLists,
 } from "@/lib/collegeVisitSettings";
+import { useSuppressBackdropClose } from "@/lib/useSuppressBackdropClose";
 
 function countBy(rows: CollegeVisitRow[], key: (r: CollegeVisitRow) => string) {
   const m = new Map<string, number>();
@@ -729,11 +730,18 @@ export function CollegeProposalEditModal({
   proposalUploadSlot?: ReactNode;
   proposalStatusOptions?: readonly string[];
 }) {
+  const { onBackdropClick } = useSuppressBackdropClose(1500);
   const statuses = proposalStatusOptions?.length ? proposalStatusOptions : CV_PROPOSAL_STATUSES;
   return (
     <>
-      <button type="button" aria-label="Close" className="fixed inset-0 z-[60] bg-slate-900/40" onClick={onClose} />
-      <div className="fixed left-4 right-4 top-[8%] z-[61] mx-auto max-h-[85vh] max-w-lg overflow-y-auto rounded-[20px] border border-[#e8dcc8] bg-white p-6 shadow-2xl sm:left-auto sm:right-10">
+      <button
+        type="button"
+        aria-label="Close"
+        className="fixed inset-0 z-[60] bg-slate-900/40"
+        onClick={() => onBackdropClick(onClose)}
+      />
+      <div className="fixed left-4 right-4 top-[8%] z-[61] mx-auto flex max-h-[85vh] max-w-lg flex-col overflow-hidden rounded-[20px] border border-[#e8dcc8] bg-white shadow-2xl sm:left-auto sm:right-10">
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <h4 className="text-lg font-semibold text-[#0f172a]">Update proposal</h4>
         <p className="mt-1 text-xs text-[#64748b]">
           {row.college_name} | {row.location || "No location"}
@@ -773,7 +781,8 @@ export function CollegeProposalEditModal({
           </label>
           {proposalUploadSlot}
         </div>
-        <div className="mt-6 flex justify-end gap-2">
+        </div>
+        <div className="flex shrink-0 justify-end gap-2 border-t border-[#e8edf5] bg-white px-6 py-4">
           <Button type="button" variant="outline" className="rounded-full" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>

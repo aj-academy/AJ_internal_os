@@ -22,6 +22,7 @@ import {
   type CollegeContact,
   type CollegeVisitFormValue,
 } from "@/components/college-visits/collegeVisitsHelpers";
+import { useSuppressBackdropClose } from "@/lib/useSuppressBackdropClose";
 
 interface OwnerOption {
   id: string;
@@ -87,6 +88,7 @@ export function CollegeVisitFormPanel({
   finalStatusOptions,
   proposalStatusOptions,
 }: CollegeVisitFormPanelProps) {
+  const { onBackdropClick } = useSuppressBackdropClose(1500);
   if (!open) return null;
 
   const visitStatuses = visitStatusOptions?.length ? visitStatusOptions : VISIT_STATUSES;
@@ -148,7 +150,12 @@ export function CollegeVisitFormPanel({
 
   return (
     <>
-      <button type="button" aria-label="Close" className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px]" onClick={onClose} />
+      <button
+        type="button"
+        aria-label="Close"
+        className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px]"
+        onClick={() => onBackdropClick(onClose)}
+      />
       <aside className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white shadow-[0_16px_30px_rgba(61,52,40,0.12)] lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[560px] lg:max-w-[100vw] lg:rounded-l-[24px] lg:border-l lg:border-[#e8dcc8]">
         <div className="flex shrink-0 items-center justify-between border-b border-[#e8edf5] px-4 py-4 sm:px-5">
           <h3 className="text-lg font-semibold text-[#0f172a]">{title}</h3>

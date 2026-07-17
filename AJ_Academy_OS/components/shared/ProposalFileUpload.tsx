@@ -13,6 +13,7 @@ import {
   type ProposalFileMeta,
   type ProposalStoredFile,
 } from "@/lib/proposalFiles";
+import { armFilePickerBackdropGuard } from "@/lib/useSuppressBackdropClose";
 
 type ProposalFileUploadProps = {
   entityType: ProposalEntityKind;
@@ -50,6 +51,7 @@ export function ProposalFileUpload({
 }: ProposalFileUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [pickError, setPickError] = useState<string | null>(null);
 
   const uploaded = hasUploadedProposal(meta);
   const legacy = hasLegacyProposalLink(meta);
@@ -58,22 +60,41 @@ export function ProposalFileUpload({
 
   const pendingList = multiple ? (pendingFiles ?? []) : pendingFile ? [pendingFile] : [];
 
+  const openPicker = () => {
+    if (disabled || busy) return;
+    setPickError(null);
+    armFilePickerBackdropGuard();
+    inputRef.current?.click();
+  };
+
   const pickFiles = (list: FileList | null) => {
+    armFilePickerBackdropGuard();
     if (!list || list.length === 0) {
-      if (!multiple) onPendingFileChange(null);
+      // User cancelled picker — keep existing pending selection
       return;
     }
     const picked = Array.from(list);
     const valid: File[] = [];
+    const errors: string[] = [];
     for (const file of picked) {
       const err = validateProposalFile(file);
       if (err) {
-        onError?.(`${file.name}: ${err}`);
+        errors.push(`${file.name}: ${err}`);
         continue;
       }
       valid.push(file);
     }
-    if (!valid.length) return;
+    if (errors.length) {
+      const msg = errors.join(" ");
+      setPickError(msg);
+      onError?.(msg);
+    } else {
+      setPickError(null);
+    }
+    if (!valid.length) {
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
     if (multiple) {
       const existing = pendingFiles ?? [];
       const byKey = new Map(existing.map((f) => [`${f.name}:${f.size}:${f.lastModified}`, f]));
@@ -223,7 +244,7 @@ export function ProposalFileUpload({
                     variant="outline"
                     className="h-8 rounded-lg border-[#e8dcc8]"
                     disabled={disabled || busy}
-                    onClick={() => inputRef.current?.click()}
+                    onClick={openPicker}
                   >
                     <Upload className="mr-1 h-3.5 w-3.5" />
                     Replace
@@ -335,13 +356,17 @@ export function ProposalFileUpload({
         </div>
       ) : null}
 
-      {/* Always show add zone in multiple mode; single mode hides it when a file is already uploaded */}
-      {multiple || !uploaded || pendingList.length > 0 ? (
-        <label
+      {pickError ? <p className="text-xs font-medium text-rose-700">{pickError}</p> : null}
+
+      {(multiple || !uploaded || pendingList.length > 0) &&
+      !(!multiple && uploaded && pendingList.length === 0) ? (
+        <button
+          type="button"
+          disabled={disabled || busy}
+          onClick={openPicker}
           className={[
-            "flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-[#e8dcc8] bg-white px-4 py-5 text-center transition hover:border-[#c9a227] hover:bg-[#fffdf8]",
+            "flex w-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-[#e8dcc8] bg-white px-4 py-5 text-center transition hover:border-[#c9a227] hover:bg-[#fffdf8]",
             disabled || busy ? "pointer-events-none opacity-50" : "",
-            !multiple && uploaded && pendingList.length === 0 ? "hidden" : "",
           ].join(" ")}
         >
           <Upload className="h-5 w-5 text-[#c9a227]" />
@@ -349,40 +374,42 @@ export function ProposalFileUpload({
             {multiple
               ? uploaded || files.length || pendingList.length
                 ? "Add more proposal files"
-                : "Choose files / Drop proposals here"
+                : "Choose files"
               : pendingList.length
                 ? "Choose a different file"
-                : "Choose file / Drop proposal here"}
+                : "Choose file"}
           </span>
           <span className="text-[11px] text-[#6b5d4d]">
             {multiple
-              ? "PDF, DOC or DOCX — max 10 MB each · select multiple files"
+              ? "PDF, DOC or DOCX — max 10 MB each · you can select multiple"
               : "PDF, DOC or DOCX — Maximum 10 MB"}
           </span>
-          <input
-            ref={inputRef}
-            type="file"
-            multiple={multiple}
-            accept={PROPOSAL_ACCEPT}
-            className="sr-only"
-            disabled={disabled || busy}
-            onChange={(e) => pickFiles(e.target.files)}
-          />
-        </label>
-      ) : (
-        <input
-          ref={inputRef}
-          type="file"
-          multiple={multiple}
-          accept={PROPOSAL_ACCEPT}
-          className="sr-only"
-          disabled={disabled || busy}
-          onChange={(e) => pickFiles(e.target.files)}
-        />
-      )}
+          <span className="mt-1 text-[11px] font-semibold text-[#a68b2e]">
+            {pendingList.length ? "Files selected — tap Save on this form to upload" : "Tap to select"}
+          </span>
+        </button>
+      ) : null}
+
+      <input
+        ref={inputRef}
+        type="file"
+        multiple={multiple}
+        accept={PROPOSAL_ACCEPT}
+        className="sr-only"
+        tabIndex={-1}
+        disabled={disabled || busy}
+        onClick={() => armFilePickerBackdropGuard()}
+        onChange={(e) => pickFiles(e.target.files)}
+      />
 
       {!uploaded && !pendingList.length && !multiple ? (
         <p className="text-[11px] leading-relaxed text-[#6b5d4d]">PDF, DOC or DOCX — Maximum 10 MB</p>
+      ) : null}
+
+      {pendingList.length ? (
+        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
+          {pendingList.length} file(s) ready. Tap <strong>Save</strong> at the bottom to upload.
+        </p>
       ) : null}
     </div>
   );
