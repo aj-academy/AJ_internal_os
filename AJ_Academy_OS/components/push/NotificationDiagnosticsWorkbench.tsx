@@ -223,6 +223,13 @@ export function NotificationDiagnosticsWorkbench() {
           })}>
             Send Test Notification (API)
           </Button>
+          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run("probe", async () => {
+            const res = await fetch("/api/push/admin-probe", { method: "POST", credentials: "include" });
+            const json = await res.json().catch(() => ({}));
+            pushLog(Boolean((json as { ok?: boolean }).ok), `Admin probe: ${JSON.stringify(json)}`);
+          })}>
+            Probe Firebase Admin Credential
+          </Button>
           <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run("debug", async () => {
             const r = await sendDebugPush(true);
             if (r.ok) {

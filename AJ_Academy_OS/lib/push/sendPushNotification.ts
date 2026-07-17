@@ -3,6 +3,8 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFirebaseAdminMessaging, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { safePushTargetUrl } from "@/lib/push/safeTargetUrl";
+import { absolutePushClickUrl, firebaseSendErrorInfo } from "@/lib/push/webPushLink";
+
 
 export type PushNotificationInput = {
   userId: string;
@@ -203,17 +205,15 @@ export async function sendPushNotification(input: PushNotificationInput): Promis
         android: { priority: priority === "high" ? "high" : "normal" },
         webpush: {
           headers: { Urgency: priority === "high" ? "high" : "normal" },
-          fcmOptions: { link: targetUrl },
+          fcmOptions: { link: absolutePushClickUrl(targetUrl) },
         },
       });
       result.succeeded += 1;
     } catch (e) {
       result.failed += 1;
-      const code =
-        e && typeof e === "object" && "code" in e ? String((e as { code?: string }).code || "") : "";
-      const msg = e instanceof Error ? e.message : "Send failed";
+      const { code, message: msg } = firebaseSendErrorInfo(e);
       // Never log the token
-      result.errors.push(code ? `${code}` : msg.slice(0, 120));
+      result.errors.push(code ? `${code}: ${msg}` : msg);
 
       if (INVALID_TOKEN_CODES.has(code) || /not-registered|invalid-registration/i.test(msg)) {
         await admin

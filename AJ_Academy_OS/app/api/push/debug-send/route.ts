@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { enforceRateLimit, requireStaffApiSession, trimString } from "@/lib/security";
 import { getFirebaseAdminMessaging, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
+import { absolutePushClickUrl, firebaseSendErrorInfo } from "@/lib/push/webPushLink";
 
 export const runtime = "nodejs";
 
@@ -140,7 +141,7 @@ export async function POST(request: Request) {
         android: { priority: "high" },
         webpush: {
           headers: { Urgency: "high" },
-          fcmOptions: { link: "/employee/notifications" },
+          fcmOptions: { link: absolutePushClickUrl("/employee/notifications") },
         },
       });
       entry.ok = true;
@@ -148,11 +149,9 @@ export async function POST(request: Request) {
       succeeded += 1;
     } catch (e) {
       failed += 1;
-      const code =
-        e && typeof e === "object" && "code" in e ? String((e as { code?: string }).code || "") : "";
-      const msg = e instanceof Error ? e.message : "Send failed";
+      const { code, message: msg } = firebaseSendErrorInfo(e);
       entry.errorCode = code || undefined;
-      entry.errorMessage = msg.slice(0, 200);
+      entry.errorMessage = msg;
       if (
         code === "messaging/registration-token-not-registered" ||
         code === "messaging/invalid-registration-token" ||
