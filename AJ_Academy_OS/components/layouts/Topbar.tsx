@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, type ReactNode } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { InAppNotificationsBell } from "@/components/layouts/InAppNotificationsBell";
 import { NotificationSoundControl } from "@/components/layouts/NotificationSoundControl";
 import { AppLogo } from "@/components/branding/AppLogo";
+import { disablePushOnThisDevice } from "@/lib/push/clientPush";
 
 interface TopbarProps {
   fullName: string;
@@ -27,12 +28,44 @@ export const Topbar = memo(function Topbar({
   mobileMenuTrigger,
 }: TopbarProps) {
   const router = useRouter();
+  const [logoutBusy, setLogoutBusy] = useState(false);
 
-  const handleLogout = async () => {
+  const clearSessionAndGoLogin = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    await fetch("/api/auth/clear-session", { method: "POST", credentials: "include" });
+    try {
+      await fetch("/api/auth/clear-session", { method: "POST", credentials: "include" });
+    } catch {
+      /* logout must still complete */
+    }
     router.replace("/login");
+  };
+
+  /** Normal logout — keep FCM token active (notifications continue). */
+  const handleLogout = async () => {
+    if (logoutBusy) return;
+    setLogoutBusy(true);
+    try {
+      await clearSessionAndGoLogin();
+    } finally {
+      setLogoutBusy(false);
+    }
+  };
+
+  /** Logout and stop notifications on this device only. */
+  const handleLogoutAndStopNotifications = async () => {
+    if (logoutBusy) return;
+    setLogoutBusy(true);
+    try {
+      try {
+        await disablePushOnThisDevice("logout_and_stop");
+      } catch {
+        /* unregister must not block logout */
+      }
+      await clearSessionAndGoLogin();
+    } finally {
+      setLogoutBusy(false);
+    }
   };
 
   return (
@@ -65,22 +98,36 @@ export const Topbar = memo(function Topbar({
                 {fullName.slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleLogout}
-              className="touch-target hidden gap-2 rounded-xl border-[#e8dcc8] bg-white px-3 text-[#3d3428] hover:bg-[#faf3e3] sm:inline-flex sm:px-3.5"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </Button>
+            <div className="hidden flex-col items-stretch gap-0.5 sm:flex">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={logoutBusy}
+                onClick={() => void handleLogout()}
+                title="Notifications will continue on this device"
+                className="touch-target gap-2 rounded-xl border-[#e8dcc8] bg-white px-3 text-[#3d3428] hover:bg-[#faf3e3] sm:px-3.5"
+              >
+                <LogOut className="h-4 w-4" />
+                Logout
+              </Button>
+              <button
+                type="button"
+                disabled={logoutBusy}
+                onClick={() => void handleLogoutAndStopNotifications()}
+                className="px-1 text-left text-[10px] font-medium text-[#94a3b8] hover:text-rose-600 hover:underline disabled:opacity-50"
+              >
+                Log out &amp; stop notifications
+              </button>
+            </div>
             <Button
               type="button"
               variant="outline"
               size="icon"
-              onClick={handleLogout}
+              disabled={logoutBusy}
+              onClick={() => void handleLogout()}
               className="touch-target rounded-xl border-[#e8dcc8] bg-white text-[#a68b2e] sm:hidden"
               aria-label="Log out"
+              title="Notifications will continue on this device"
             >
               <LogOut className="h-4 w-4" />
             </Button>

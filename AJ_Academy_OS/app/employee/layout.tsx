@@ -8,6 +8,7 @@ const employeeSidebarItems = [
   { label: "My Attendance", href: "/employee/attendance" },
   { label: "My Tasks", href: "/employee/my-tasks" },
   { label: "Reminders & Calendar", href: "/employee/reminders" },
+  { label: "Notifications", href: "/employee/notifications" },
   { label: "Student Master", href: "/employee/student-master" },
   { label: "College Visits", href: "/employee/college-visits" },
   { label: "Leave & Permission", href: "/employee/leave" },

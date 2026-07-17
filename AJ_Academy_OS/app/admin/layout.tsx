@@ -18,6 +18,7 @@ const adminSidebarItems = [
   { label: "Portfolio", href: "/admin/portfolio" },
   { label: "Reports", href: "/admin/reports" },
   { label: "Settings", href: "/admin/settings" },
+  { label: "Notification Diagnostics", href: "/admin/notification-diagnostics" },
 ];
 
 export default async function AdminLayout({

@@ -1,11 +1,23 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { getRoleRedirectPath } from "@/lib/auth/roleRedirect";
+import { safeRelativePath } from "@/lib/security/safeRedirect";
 import type { Profile, UserRole } from "@/types/profile";
 
 interface RequireRoleResult {
   profile: Profile;
   userEmail: string;
+}
+
+async function loginRedirectWithReturn(errorCode: string) {
+  const h = await headers();
+  const pathname = h.get("x-ajos-pathname") || "";
+  const safe = safeRelativePath(pathname, "");
+  if (safe && safe !== "/") {
+    redirect(`/login?error=${encodeURIComponent(errorCode)}&redirect=${encodeURIComponent(safe)}`);
+  }
+  redirect(`/login?error=${encodeURIComponent(errorCode)}`);
 }
 
 export async function requireRole(
@@ -14,12 +26,14 @@ export async function requireRole(
   const { user, profile } = await getUserProfile();
 
   if (!user) {
-    redirect("/login?error=session");
+    await loginRedirectWithReturn("session");
+    throw new Error("Unauthorized");
   }
 
   const roleRaw = profile?.role;
   if (!roleRaw || typeof roleRaw !== "string") {
-    redirect("/login?error=missing_role");
+    await loginRedirectWithReturn("missing_role");
+    throw new Error("Missing role");
   }
 
   const role = roleRaw.trim().toLowerCase() as UserRole;
@@ -27,7 +41,8 @@ export async function requireRole(
   if (typeof profile?.status === "string") {
     const status = profile.status.trim().toLowerCase();
     if (status && status !== "active") {
-      redirect("/login?error=inactive");
+      await loginRedirectWithReturn("inactive");
+      throw new Error("Inactive");
     }
   }
 

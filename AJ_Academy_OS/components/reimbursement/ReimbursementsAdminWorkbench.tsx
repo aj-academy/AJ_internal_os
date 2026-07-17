@@ -237,6 +237,16 @@ export function ReimbursementsAdminWorkbench() {
       return;
     }
     setSuccess(`Claim ${claim.claim_code ?? claim.id.slice(0, 8)} updated.`);
+    try {
+      void fetch("/api/push/event", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "reimbursement_updated", claimId: claim.id }),
+      });
+    } catch {
+      /* ignore */
+    }
     await loadAll();
   };
 

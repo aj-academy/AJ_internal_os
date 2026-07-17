@@ -9,7 +9,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  return updateSession(request);
+  const response = await updateSession(request);
+  // Let requireRole() rebuild /login?redirect=… after notification clicks while logged out.
+  response.headers.set("x-ajos-pathname", pathname);
+  return response;
 }
 
 export const config = {

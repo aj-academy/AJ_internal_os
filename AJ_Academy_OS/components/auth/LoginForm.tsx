@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { normalizeLoginProfile, type LoginProfileRow } from "@/lib/auth/profileSelect";
 import { validateLoginProfile, type LoginRoleOption } from "@/lib/auth/validateLoginProfile";
 import { getRoleRedirectPath } from "@/lib/auth/roleRedirect";
+import { safeRelativePath } from "@/lib/security/safeRedirect";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,8 @@ interface LoginFormProps {
   initialError?: string;
   resetSuccess?: boolean;
   initialEmail?: string;
+  /** Safe internal path from ?redirect= after notification click while logged out */
+  initialRedirect?: string;
 }
 
 async function accountNeedsFirstLogin(email: string): Promise<boolean> {
@@ -109,7 +112,12 @@ function friendlyAuthError(message: string) {
   return message || "Invalid credentials.";
 }
 
-export function LoginForm({ initialError, resetSuccess = false, initialEmail = "" }: LoginFormProps) {
+export function LoginForm({
+  initialError,
+  resetSuccess = false,
+  initialEmail = "",
+  initialRedirect = "",
+}: LoginFormProps) {
   const [selectedRole, setSelectedRole] = useState<LoginRoleOption>("admin");
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
@@ -295,7 +303,8 @@ export function LoginForm({ initialError, resetSuccess = false, initialEmail = "
       return;
     }
 
-    const redirectTo = getRoleRedirectPath(validation.role);
+    const roleHome = getRoleRedirectPath(validation.role);
+    const redirectTo = safeRelativePath(initialRedirect, roleHome);
 
     if (process.env.NODE_ENV !== "production") {
       console.log("[login] redirect path", redirectTo);

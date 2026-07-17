@@ -955,6 +955,16 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       } catch {
         /* optional */
       }
+      try {
+        void fetch("/api/push/event", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "visit_assigned", taskId: inserted.id }),
+        });
+      } catch {
+        /* ignore */
+      }
       visitBulk.clearSelection();
       setBulkAssignTo("");
       setSuccess(`${ids.length} college(s) sent to ${label} as My Tasks -> College Visit.`);

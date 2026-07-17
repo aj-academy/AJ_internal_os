@@ -21,6 +21,7 @@ import {
 import { OfflineBanner } from "@/components/pwa/OfflineBanner";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { MobileInstallHelp } from "@/components/pwa/MobileInstallHelp";
+import { ForegroundPushListener } from "@/components/push/ForegroundPushListener";
 import { isPwaStandalone, markPwaInstallComplete } from "@/lib/pwa/install-state";
 
 type PwaContextValue = {
@@ -109,8 +110,11 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
 
-    // Service worker offline shell breaks local dev when the server restarts or compiles slowly.
-    if (process.env.NODE_ENV === "development") {
+    const firebaseConfigured = Boolean(process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY);
+
+    // Offline SW caching is noisy in local dev, but FCM requires an active SW.
+    // When Firebase is configured, keep /sw.js registered even in development.
+    if (process.env.NODE_ENV === "development" && !firebaseConfigured) {
       void navigator.serviceWorker.getRegistrations().then((regs) =>
         Promise.all(regs.map((r) => r.unregister())),
       );
@@ -148,6 +152,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
             }
           });
         });
+        await navigator.serviceWorker.ready;
       } catch {
         /* SW optional — app still works without it */
       }
@@ -178,6 +183,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
           {offlineToast}
         </div>
       ) : null}
+      <ForegroundPushListener />
       {children}
     </PwaContext.Provider>
   );

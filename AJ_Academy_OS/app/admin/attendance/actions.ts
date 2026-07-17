@@ -74,8 +74,33 @@ export async function handlePermissionAction(formData: FormData): Promise<Attend
     const { error } = await supabase.from("permission_requests").update(payload).eq("id", id);
     if (error) return { ok: false, error: error.message };
 
+    // Non-blocking FCM — approval already succeeded
+    try {
+      const { sendPushNotification } = await import("@/lib/push/sendPushNotification");
+      const { data: row } = await supabase
+        .from("permission_requests")
+        .select("employee_id,status")
+        .eq("id", id)
+        .maybeSingle();
+      if (row?.employee_id) {
+        const approved = String(row.status || "").toLowerCase().includes("approv");
+        void sendPushNotification({
+          userId: row.employee_id,
+          title: approved ? "Leave Request Approved" : "Leave Request Updated",
+          message: "Open AJ OS to view the updated request.",
+          type: approved ? "leave_approved" : "leave_rejected",
+          targetUrl: "/employee/leave",
+          entityType: "permission_request",
+          entityId: id,
+          priority: "high",
+        });
+      }
+    } catch {
+      /* push must not fail the approval */
+    }
+
     revalidatePath("/admin/attendance");
-    revalidatePath("/admin/attendance");
+    revalidatePath("/employee/leave");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Permission action failed." };
