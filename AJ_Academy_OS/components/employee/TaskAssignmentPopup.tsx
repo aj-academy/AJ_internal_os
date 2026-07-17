@@ -6,6 +6,7 @@ import { ClipboardList, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { resolveNotificationHref } from "@/lib/notificationLinks";
+import { playNotificationSound } from "@/lib/notifications/notificationSound";
 
 type TaskNotif = {
   id: string;
@@ -44,6 +45,7 @@ export function TaskAssignmentPopup({ fallbackTaskHref = "/employee/my-tasks" }:
     if (shown.has(row.id)) return;
     markShown(row.id);
     setPopup(row);
+    playNotificationSound();
   }, []);
 
   const checkRecentUnread = useCallback(async () => {

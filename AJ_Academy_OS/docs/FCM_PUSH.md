@@ -5,15 +5,18 @@ Firebase is used **only** for Cloud Messaging. Supabase remains the auth and dat
 ## Manual steps (you must complete)
 
 1. **Supabase SQL** — run `AJ_Academy_SB/fcm_push_devices.sql` in the SQL Editor (after profiles / `is_admin`).
-2. **Firebase Console**
-   - Create or open a Firebase project
-   - Add a **Web** app
-   - Enable **Cloud Messaging**
-   - Generate a **Web Push certificate (VAPID)** key pair
-   - Project Settings → Service accounts → Generate new private key (Admin SDK)
-3. **Environment variables** — set in `.env.local` and Vercel (see `.env.example`)
-4. **Redeploy** on Vercel after env vars are set
-5. Employee: Profile → Preferences → **Enable Notifications** → **Send Test Notification**
+2. **Firebase Console** — Web app + Cloud Messaging + VAPID + service account
+3. **Environment variables** — `.env.local` and **Vercel Production + Preview**
+4. **Redeploy** after env vars are set
+5. Open **`/admin/notification-diagnostics`** and run the action buttons in order
+6. Employee Profile → Enable Notifications → Send Test
+
+## Diagnostics
+
+- Page: `/admin/notification-diagnostics`
+- Health: `GET /api/notifications/health`
+- Debug send: `POST /api/push/debug-send`
+- SW config: `GET /api/push/sw-config` (public Firebase config for the service worker)
 
 ## Public (browser) env
 

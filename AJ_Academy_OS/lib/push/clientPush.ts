@@ -48,6 +48,29 @@ function detectDeviceMeta(): DeviceMeta {
   };
 }
 
+function maskToken(token: string): string {
+  if (token.length <= 12) return "••••";
+  return `${token.slice(0, 6)}…${token.slice(-4)}`;
+}
+
+async function ensureServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (!("serviceWorker" in navigator)) return null;
+  try {
+    let registration = await navigator.serviceWorker.getRegistration("/");
+    if (!registration) {
+      registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    }
+    if (registration.waiting) {
+      registration.waiting.postMessage({ type: "SKIP_WAITING" });
+    }
+    // Firebase getToken requires a ready/active registration
+    const ready = await navigator.serviceWorker.ready;
+    return ready;
+  } catch {
+    return null;
+  }
+}
+
 export async function getPushSupportStatus(): Promise<PushPermissionStatus> {
   if (typeof window === "undefined") return "unsupported";
   if (!("Notification" in window) || !("serviceWorker" in navigator)) return "unsupported";
@@ -62,14 +85,70 @@ export async function getPushSupportStatus(): Promise<PushPermissionStatus> {
   return "enabled";
 }
 
-async function ensureServiceWorker(): Promise<ServiceWorkerRegistration | null> {
-  if (!("serviceWorker" in navigator)) return null;
+/** Obtain FCM token using active SW + VAPID (does not register to Supabase). */
+export async function refreshFcmToken(): Promise<
+  { ok: true; tokenHint: string; token: string } | { ok: false; error: string; status: PushPermissionStatus }
+> {
+  const messagingResult = await getFirebaseMessaging();
+  if (!messagingResult.ok) {
+    const status: PushPermissionStatus =
+      messagingResult.reason === "unconfigured" ? "unconfigured" : "unsupported";
+    return {
+      ok: false,
+      status,
+      error: status === "unconfigured" ? "Firebase public env vars missing." : "Messaging unsupported.",
+    };
+  }
+  const vapidKey = getFirebaseVapidKey();
+  if (!vapidKey) {
+    return { ok: false, status: "unconfigured", error: "NEXT_PUBLIC_FIREBASE_VAPID_KEY is missing." };
+  }
+  const registration = await ensureServiceWorker();
+  if (!registration) {
+    return { ok: false, status: "sw_unavailable", error: "Service worker is not active." };
+  }
+  if (Notification.permission !== "granted") {
+    return {
+      ok: false,
+      status: Notification.permission === "denied" ? "denied" : "default",
+      error: "Notification permission is not granted.",
+    };
+  }
   try {
-    const existing = await navigator.serviceWorker.getRegistration("/");
-    if (existing) return existing;
-    return await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-  } catch {
-    return null;
+    const token = await getToken(messagingResult.messaging, {
+      vapidKey,
+      serviceWorkerRegistration: registration,
+    });
+    if (!token) return { ok: false, status: "token_failed", error: "Empty FCM token." };
+    return { ok: true, tokenHint: maskToken(token), token };
+  } catch (e) {
+    return {
+      ok: false,
+      status: "token_failed",
+      error: e instanceof Error ? e.message : "getToken failed.",
+    };
+  }
+}
+
+/** Local browser notification via SW — no Firebase. */
+export async function showLocalTestNotification(): Promise<{ ok: boolean; error?: string }> {
+  const registration = await ensureServiceWorker();
+  if (!registration) return { ok: false, error: "Service worker unavailable." };
+  if (Notification.permission !== "granted") {
+    return { ok: false, error: `Permission is "${Notification.permission}".` };
+  }
+  try {
+    await registration.showNotification("AJ OS Local Test", {
+      body: "The browser notification system is working.",
+      icon: "/icons/icon-192x192.png?v=3",
+      badge: "/icons/icon-192x192.png?v=3",
+      silent: false,
+      tag: "ajos-local-test",
+      data: { url: "/employee/notifications" },
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "showNotification failed." };
   }
 }
 
@@ -211,19 +290,58 @@ export async function sendTestPush(): Promise<{ ok: boolean; error?: string; det
   return { ok: true, detail: json };
 }
 
-/** Foreground FCM listener — does not show a second browser notification. */
+export async function sendDebugPush(allDevices = true): Promise<{ ok: boolean; error?: string; detail?: unknown }> {
+  const res = await fetch("/api/push/debug-send", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ allDevices }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { ok: false, error: (json as { error?: string }).error || "Debug send failed.", detail: json };
+  }
+  return { ok: true, detail: json };
+}
+
+/**
+ * Foreground FCM listener.
+ * Shows in-app toast via callback; optionally also shows a system notification
+ * when NEXT_PUBLIC_SHOW_SYSTEM_NOTIFICATION_IN_FOREGROUND !== "false".
+ */
 export async function subscribeForegroundMessages(
   onPayload: (payload: { title: string; body: string; url: string }) => void,
 ): Promise<Unsubscribe | null> {
   const messagingResult = await getFirebaseMessaging();
   if (!messagingResult.ok) return null;
+  const showSystem =
+    typeof process.env.NEXT_PUBLIC_SHOW_SYSTEM_NOTIFICATION_IN_FOREGROUND === "undefined" ||
+    process.env.NEXT_PUBLIC_SHOW_SYSTEM_NOTIFICATION_IN_FOREGROUND !== "false";
+
   return onMessage(messagingResult.messaging, (payload) => {
     const data = payload.data || {};
-    onPayload({
-      title: data.title || payload.notification?.title || "AJ OS",
-      body: data.body || payload.notification?.body || "",
-      url: data.url || "/employee/dashboard",
-    });
+    const title = data.title || payload.notification?.title || "AJ OS";
+    const body = data.body || payload.notification?.body || "";
+    const url = data.url || "/employee/dashboard";
+    console.info("[AJOS FCM] Foreground message received");
+    onPayload({ title, body, url });
+
+    if (showSystem && typeof Notification !== "undefined" && Notification.permission === "granted") {
+      void navigator.serviceWorker.ready
+        .then((reg) =>
+          reg.showNotification(title, {
+            body: body || "Open AJ OS to view details.",
+            icon: "/icons/icon-192x192.png?v=3",
+            badge: "/icons/icon-192x192.png?v=3",
+            silent: false,
+            tag: String(data.notificationId || data.type || "ajos-fg").slice(0, 64),
+            data: { url },
+          }),
+        )
+        .catch(() => {
+          /* ignore */
+        });
+    }
   });
 }
 

@@ -18,7 +18,7 @@ export const securityHeaders: SecurityHeader[] = [
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://fcm.googleapis.com https://firebase.googleapis.com https://firebaseinstallations.googleapis.com https://*.firebaseio.com https://*.gstatic.com",
-      "worker-src 'self'",
+      "worker-src 'self' blob: https://www.gstatic.com",
       "frame-src 'self' blob:",
       "object-src 'none'",
       "base-uri 'self'",
