@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { HrOrgSettingsPanel } from "@/components/settings/HrOrgSettingsPanel";
+import { AdminPushDevicesPanel } from "@/components/push/AdminPushDevicesPanel";
 import {
   mergeSettings,
   mergeSystemPreferences,
@@ -469,6 +470,7 @@ export function SettingsWorkbench() {
               {k.replace(/([A-Z])/g, " $1").trim()}
             </label>
           ))}
+          <AdminPushDevicesPanel />
         </SettingsPanel>
       ) : null}
 

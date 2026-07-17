@@ -1,5 +1,5 @@
 /* AJ Academy — PWA service worker (static assets only) */
-const CACHE_VERSION = "aj-academy-v5-icons";
+const CACHE_VERSION = "aj-academy-v6-fcm";
 const ICON_QUERY = "?v=3";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
@@ -131,33 +131,91 @@ self.addEventListener("message", (event) => {
   }
 });
 
-/* Additive: Web Push for Reminders & Calendar (does not change fetch/cache behaviour) */
-self.addEventListener("push", (event) => {
-  let payload = { title: "Reminder", body: "", url: "/employee/reminders" };
+/**
+ * Push handling:
+ * - Reminder Web Push (JSON payload without source=ajos-fcm) — existing behaviour
+ * - Firebase FCM data-only messages (source=ajos-fcm) — showNotification once
+ * Avoid Firebase "notification" payloads so the browser does not double-display.
+ */
+function resolvePushPayload(event) {
+  const defaults = {
+    title: "AJ OS",
+    body: "",
+    url: "/employee/dashboard",
+    tag: "ajos",
+    source: "",
+  };
   try {
-    if (event.data) payload = { ...payload, ...event.data.json() };
+    if (!event.data) return defaults;
+    const raw = event.data.json();
+    // FCM may nest under data
+    const data = raw?.data && typeof raw.data === "object" ? { ...raw, ...raw.data } : raw;
+    return {
+      title: data.title || raw.notification?.title || defaults.title,
+      body: data.body || data.message || raw.notification?.body || defaults.body,
+      url: data.url || data.link_path || data.click_action || defaults.url,
+      tag: data.tag || data.notificationId || data.type || defaults.tag,
+      source: data.source || "",
+      notificationId: data.notificationId || "",
+      type: data.type || "",
+    };
   } catch {
-    /* ignore */
+    try {
+      const text = event.data?.text?.() || "";
+      if (text) return { ...defaults, body: text.slice(0, 180) };
+    } catch {
+      /* ignore */
+    }
+    return defaults;
   }
+}
+
+function isSafeInternalUrl(url) {
+  if (typeof url !== "string") return false;
+  const t = url.trim();
+  if (!t.startsWith("/") || t.startsWith("//")) return false;
+  if (/^[a-z]+:/i.test(t)) return false;
+  if (t.includes("\\")) return false;
+  return true;
+}
+
+self.addEventListener("push", (event) => {
+  const payload = resolvePushPayload(event);
+  const targetUrl = isSafeInternalUrl(payload.url) ? payload.url : "/employee/dashboard";
   event.waitUntil(
-    self.registration.showNotification(payload.title || "Reminder", {
-      body: payload.body || "",
+    self.registration.showNotification(payload.title || "AJ OS", {
+      body: payload.body || "Open AJ OS to view details.",
       icon: "/icons/icon-192x192.png?v=3",
       badge: "/icons/icon-192x192.png?v=3",
-      data: { url: payload.url || "/employee/reminders" },
+      tag: String(payload.tag || "ajos").slice(0, 64),
+      renotify: true,
+      data: {
+        url: targetUrl,
+        notificationId: payload.notificationId || "",
+        type: payload.type || "",
+        source: payload.source || "",
+      },
     }),
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || "/employee/reminders";
+  const rawUrl = event.notification.data?.url || "/employee/dashboard";
+  const url = isSafeInternalUrl(rawUrl) ? rawUrl : "/employee/dashboard";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if ("focus" in client) {
-          client.navigate(url);
-          return client.focus();
+          try {
+            if ("navigate" in client && typeof client.navigate === "function") {
+              return client.navigate(url).then((c) => (c && "focus" in c ? c.focus() : client.focus()));
+            }
+          } catch {
+            /* fall through */
+          }
+          client.focus();
+          return client.postMessage?.({ type: "AJOS_NAVIGATE", url });
         }
       }
       if (self.clients.openWindow) return self.clients.openWindow(url);

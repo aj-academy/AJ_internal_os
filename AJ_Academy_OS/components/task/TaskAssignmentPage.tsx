@@ -938,6 +938,17 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       } catch (e) {
         console.warn("create_task_assignment_notification", e);
       }
+      // Non-blocking FCM — never fails the assignment
+      try {
+        void fetch("/api/push/event", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "task_assigned", taskId }),
+        });
+      } catch {
+        /* ignore */
+      }
     },
     [supabase],
   );
@@ -1309,6 +1320,17 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         await reload();
         if (priorAssignee !== basePayload.assigned_to) {
           void notifyAssigneeInApp(savedTaskId);
+        } else {
+          try {
+            void fetch("/api/push/event", {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ type: "task_updated", taskId: savedTaskId }),
+            });
+          } catch {
+            /* ignore */
+          }
         }
         await logTaskActivity(supabase, {
           taskId: savedTaskId,

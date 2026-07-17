@@ -32,6 +32,7 @@ import {
   type ProfileTabId,
 } from "@/lib/employeeProfile";
 import { TagInput } from "./TagInput";
+import { PushDeviceSettings } from "@/components/push/PushDeviceSettings";
 
 type ProfileRow = {
   id: string;
@@ -1204,6 +1205,7 @@ export function EmployeeProfileWorkbench() {
               </label>
             ))}
           </div>
+          <PushDeviceSettings />
           <SaveBar saving={saving} disabled={schemaMissing} onSave={() => void saveProfile()} />
         </div>
       ) : null}

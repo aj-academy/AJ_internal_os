@@ -21,6 +21,7 @@ import {
 import { OfflineBanner } from "@/components/pwa/OfflineBanner";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { MobileInstallHelp } from "@/components/pwa/MobileInstallHelp";
+import { ForegroundPushListener } from "@/components/push/ForegroundPushListener";
 import { isPwaStandalone, markPwaInstallComplete } from "@/lib/pwa/install-state";
 
 type PwaContextValue = {
@@ -178,6 +179,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
           {offlineToast}
         </div>
       ) : null}
+      <ForegroundPushListener />
       {children}
     </PwaContext.Provider>
   );
