@@ -104,7 +104,6 @@ export const CONNECTED_PERSON_ROLES = [
   "Professor",
   "Admin Staff",
   "Chairman",
-  "Whom visited to the college",
   "Other",
 ] as const;
 
