@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   COLLEGE_PRIORITIES,
-  CONNECTED_PERSON_ROLES,
+  CONNECTED_PERSON_ROLE_PRESETS,
   CV_PROPOSAL_STATUSES,
   FINAL_STATUSES,
   FOLLOW_UP_STAGES,
   MOU_STATUSES,
   VISIT_STATUSES,
+  collegeContactRoleSelectValue,
+  isCollegeContactCustomRole,
 } from "@/components/college-visits/collegeVisitsConfig";
 import {
   computeCollegeLeadScore,
@@ -253,16 +255,40 @@ export function CollegeVisitFormPanel({
                       <span className="font-medium text-[#334155]">Role</span>
                       <select
                         className="h-10 w-full rounded-xl border border-[#e8dcc8] bg-white px-3"
-                        value={contact.role}
-                        onChange={(e) => setContact(contact.id, { role: e.target.value })}
+                        value={collegeContactRoleSelectValue(contact.role)}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (next === "Other") {
+                            // Keep existing custom text if switching from a free-typed role; otherwise start blank for typing.
+                            const keepCustom =
+                              isCollegeContactCustomRole(contact.role) && contact.role.trim() !== "Other"
+                                ? contact.role
+                                : "Other";
+                            setContact(contact.id, { role: keepCustom });
+                          } else {
+                            setContact(contact.id, { role: next });
+                          }
+                        }}
                       >
                         <option value="">Select role</option>
-                        {CONNECTED_PERSON_ROLES.map((r) => (
+                        {CONNECTED_PERSON_ROLE_PRESETS.map((r) => (
                           <option key={r} value={r}>
                             {r}
                           </option>
                         ))}
+                        <option value="Other">Other (type manually)</option>
                       </select>
+                      {isCollegeContactCustomRole(contact.role) ? (
+                        <Input
+                          value={contact.role === "Other" ? "" : contact.role}
+                          onChange={(e) =>
+                            setContact(contact.id, { role: e.target.value.trim() ? e.target.value : "Other" })
+                          }
+                          className="mt-1.5 border-[#e8dcc8] bg-white"
+                          placeholder="Type the role (e.g. Dean, Vice Principal)"
+                          aria-label="Custom role"
+                        />
+                      ) : null}
                     </label>
                   </div>
 
