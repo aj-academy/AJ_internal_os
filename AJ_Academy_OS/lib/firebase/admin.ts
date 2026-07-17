@@ -2,6 +2,12 @@ import "server-only";
 
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getMessaging, type Messaging } from "firebase-admin/messaging";
+import {
+  firebasePrivateKeyLooksValid,
+  normalizeFirebasePrivateKey,
+} from "@/lib/firebase/privateKey";
+
+export { firebasePrivateKeyLooksValid, normalizeFirebasePrivateKey } from "@/lib/firebase/privateKey";
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim() ?? "";
@@ -9,38 +15,6 @@ function requireEnv(name: string): string {
     throw new Error(`Missing required server env: ${name}`);
   }
   return value;
-}
-
-/**
- * Normalize Vercel / .env private key paste variants:
- * - wrapping quotes
- * - literal \n / \\n
- * - Windows CRLF
- */
-export function normalizeFirebasePrivateKey(raw: string): string {
-  let key = raw.trim();
-  if (
-    (key.startsWith('"') && key.endsWith('"')) ||
-    (key.startsWith("'") && key.endsWith("'"))
-  ) {
-    key = key.slice(1, -1).trim();
-  }
-  // Prefer double-escaped first, then single-escaped
-  if (key.includes("\\\\n")) {
-    key = key.replace(/\\\\n/g, "\n");
-  }
-  key = key.replace(/\\n/g, "\n");
-  key = key.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  return key;
-}
-
-export function firebasePrivateKeyLooksValid(raw: string | undefined): boolean {
-  if (!raw?.trim()) return false;
-  const normalized = normalizeFirebasePrivateKey(raw);
-  if (!normalized.includes("BEGIN PRIVATE KEY")) return false;
-  if (!normalized.includes("END PRIVATE KEY")) return false;
-  if (/^nMII/.test(normalized.replace(/^-----BEGIN PRIVATE KEY-----\s*/, ""))) return false;
-  return true;
 }
 
 let adminApp: App | null = null;
@@ -80,15 +54,15 @@ function getFirebaseAdminApp(): App {
     return adminApp;
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Firebase Admin init failed";
-    // Never include key material — keep message short/safe
-    adminInitError = msg.includes("private") || msg.includes("PEM") || msg.includes("DECODER")
-      ? "Firebase Admin private key could not be parsed. Re-set FIREBASE_PRIVATE_KEY on Vercel (full key with BEGIN/END, newlines as \\n)."
-      : msg.slice(0, 240);
+    adminInitError =
+      msg.includes("private") || msg.includes("PEM") || msg.includes("DECODER")
+        ? "Firebase Admin private key could not be parsed. Re-set FIREBASE_PRIVATE_KEY on Vercel (full key with BEGIN/END, newlines as \\n)."
+        : msg.slice(0, 240);
     throw new Error(adminInitError);
   }
 }
 
-/** Server-only FCM Admin messaging client. Never import from client components. */
+/** Server-only FCM Admin messaging client. Never import from client components or middleware. */
 export function getFirebaseAdminMessaging(): Messaging {
   return getMessaging(getFirebaseAdminApp());
 }

@@ -4,8 +4,8 @@ import { enforceRateLimit, requireStaffApiSession } from "@/lib/security";
 import {
   getFirebaseAdminMessaging,
   isFirebaseAdminConfigured,
-  firebasePrivateKeyLooksValid,
 } from "@/lib/firebase/admin";
+import { firebasePrivateKeyLooksValid } from "@/lib/firebase/privateKey";
 import { firebaseSendErrorInfo } from "@/lib/push/webPushLink";
 
 export const runtime = "nodejs";
