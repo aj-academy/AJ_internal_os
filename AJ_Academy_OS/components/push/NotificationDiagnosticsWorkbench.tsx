@@ -225,7 +225,11 @@ export function NotificationDiagnosticsWorkbench() {
           </Button>
           <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run("debug", async () => {
             const r = await sendDebugPush(true);
-            pushLog(r.ok, r.ok ? `Debug send: ${JSON.stringify(r.detail)}` : r.error || "Debug failed");
+            if (r.ok) {
+              pushLog(true, `Debug send: ${JSON.stringify(r.detail)}`);
+            } else {
+              pushLog(false, `${r.error || "Debug failed"} | ${JSON.stringify(r.detail ?? {})}`);
+            }
           })}>
             Send Debug to All My Devices
           </Button>

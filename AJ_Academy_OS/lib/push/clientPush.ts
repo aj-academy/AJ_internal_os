@@ -297,9 +297,24 @@ export async function sendDebugPush(allDevices = true): Promise<{ ok: boolean; e
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ allDevices }),
   });
-  const json = await res.json().catch(() => ({}));
+  const json = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    error?: string;
+    succeeded?: number;
+    failed?: number;
+    results?: unknown;
+  };
   if (!res.ok) {
-    return { ok: false, error: (json as { error?: string }).error || "Debug send failed.", detail: json };
+    return {
+      ok: false,
+      error: json.error || `Debug send HTTP ${res.status}`,
+      detail: json,
+    };
+  }
+  if (json.ok === false) {
+    const first = Array.isArray(json.results) ? (json.results[0] as { errorCode?: string; errorMessage?: string }) : null;
+    const hint = first?.errorCode || first?.errorMessage || json.error || "Firebase send returned 0 successes";
+    return { ok: false, error: hint, detail: json };
   }
   return { ok: true, detail: json };
 }

@@ -82,7 +82,23 @@ export async function POST(request: Request) {
     });
   }
 
-  const messaging = getFirebaseAdminMessaging();
+  let messaging;
+  try {
+    messaging = getFirebaseAdminMessaging();
+  } catch (e) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: e instanceof Error ? e.message : "Firebase Admin init failed.",
+        attempted: devices.length,
+        succeeded: 0,
+        failed: 0,
+        results: [],
+      },
+      { status: 500 },
+    );
+  }
+
   const dataPayload = {
     title: "AJ OS Debug Push",
     body: "Open AJ OS — debug delivery test.",
