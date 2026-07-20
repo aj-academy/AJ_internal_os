@@ -119,12 +119,14 @@ export function flattenTaskLeads(
   tasks: TaskRecord[],
   leadById: Record<string, CrmClientRow>,
 ): TaskLeadFlatRow[] {
-  const out: TaskLeadFlatRow[] = [];
+  const byLeadId = new Map<string, TaskLeadFlatRow>();
+  const unlinked: TaskLeadFlatRow[] = [];
+
   for (const task of tasks) {
     if ((task.assignment_type ?? "") !== "lead") continue;
     const ids = task.client_ids ?? [];
     if (!ids.length) {
-      out.push({
+      unlinked.push({
         key: `${task.id}:none`,
         task,
         lead: placeholderLead(task.id),
@@ -135,27 +137,34 @@ export function flattenTaskLeads(
     for (const id of ids) {
       const lead = leadById[id];
       if (!lead) continue;
-      out.push({
-        key: `${task.id}:${id}`,
+      const candidate: TaskLeadFlatRow = {
+        key: id,
         task,
         lead,
         leadLoaded: true,
-      });
+      };
+      const prev = byLeadId.get(id);
+      if (!prev || task.updated_at.localeCompare(prev.task.updated_at) > 0) {
+        byLeadId.set(id, candidate);
+      }
     }
   }
-  return out;
+
+  return [...byLeadId.values(), ...unlinked];
 }
 
 export function flattenTaskColleges(
   tasks: TaskRecord[],
   collegeById: Record<string, CollegeVisitRow>,
 ): TaskCollegeFlatRow[] {
-  const out: TaskCollegeFlatRow[] = [];
+  const byCollegeId = new Map<string, TaskCollegeFlatRow>();
+  const unlinked: TaskCollegeFlatRow[] = [];
+
   for (const task of tasks) {
     if ((task.assignment_type ?? "") !== "college") continue;
     const ids = task.college_visit_ids ?? [];
     if (!ids.length) {
-      out.push({
+      unlinked.push({
         key: `${task.id}:none`,
         task,
         college: placeholderCollege(task.id),
@@ -166,15 +175,20 @@ export function flattenTaskColleges(
     for (const id of ids) {
       const college = collegeById[id];
       if (!college) continue;
-      out.push({
-        key: `${task.id}:${id}`,
+      const candidate: TaskCollegeFlatRow = {
+        key: id,
         task,
         college,
         collegeLoaded: true,
-      });
+      };
+      const prev = byCollegeId.get(id);
+      if (!prev || task.updated_at.localeCompare(prev.task.updated_at) > 0) {
+        byCollegeId.set(id, candidate);
+      }
     }
   }
-  return out;
+
+  return [...byCollegeId.values(), ...unlinked];
 }
 
 function LeadStatusBadge({ status }: { status: string | null | undefined }) {

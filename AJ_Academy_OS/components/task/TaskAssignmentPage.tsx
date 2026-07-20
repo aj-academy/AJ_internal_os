@@ -19,6 +19,11 @@ import { useRowSelection } from "@/lib/useRowSelection";
 import { assignerDisplayFromProfile } from "@/lib/profileDisplayName";
 import { parseTaskAttachments, uploadTaskAttachments, type TaskAttachment } from "@/lib/taskAttachments";
 import { fetchTaskActivities, logTaskActivity, parseClientIds, type TaskActivityRow } from "@/lib/taskActivities";
+import {
+  countUniqueLinkedEntities,
+  dedupeTasksByProjectId,
+  resolveTaskAssignment,
+} from "@/lib/taskAssignmentDedupe";
 import { mapClientRowToTaskLinkedLead } from "@/lib/taskLeadOutreach";
 import { TaskLeadOutreachBlock } from "@/components/task/TaskLeadOutreachBlock";
 import {
@@ -879,9 +884,21 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   }, [rows]);
 
   const filteredRows = useMemo(() => {
-    if (linkTypeFilter === "all") return rows;
-    return rows.filter((t) => (t.assignment_type ?? "") === linkTypeFilter);
+    const list =
+      linkTypeFilter === "all" ? rows : rows.filter((t) => (t.assignment_type ?? "") === linkTypeFilter);
+    if (linkTypeFilter === "project") return dedupeTasksByProjectId(list);
+    return list;
   }, [linkTypeFilter, rows]);
+
+  const linkTypeCounts = useMemo(
+    () => ({
+      all: rows.length,
+      lead: countUniqueLinkedEntities(rows, "lead"),
+      college: countUniqueLinkedEntities(rows, "college"),
+      project: countUniqueLinkedEntities(rows, "project"),
+    }),
+    [rows],
+  );
 
   const subsectionLeadRows = useMemo(
     () => flattenTaskLeads(filteredRows, linkedLeadById),
@@ -1165,6 +1182,67 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     };
   };
 
+  const persistResolvedAssignment = async (
+    linkPayload: ReturnType<typeof buildLinkPayload>,
+    baseInsertPayload: Record<string, unknown>,
+  ): Promise<
+    | { kind: "insert"; payload: Record<string, unknown> }
+    | { kind: "merged"; taskId: string; message: string }
+    | { kind: "skipped"; message: string }
+  > => {
+    const assigneeId = String(baseInsertPayload.assigned_to ?? "").trim();
+    const resolved = await resolveTaskAssignment(supabase, {
+      assigneeId,
+      assignmentType: linkPayload.assignment_type,
+      clientIds: linkPayload.client_ids,
+      collegeVisitIds: linkPayload.college_visit_ids,
+      projectId: linkPayload.project_id,
+    });
+
+    if (resolved.action === "skip") {
+      return {
+        kind: "skipped",
+        message:
+          resolved.reason === "project_exists"
+            ? "This employee already has an active task for that project."
+            : "These linked records are already on an active task for this employee.",
+      };
+    }
+
+    if (resolved.action === "merge") {
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (resolved.clientIds) patch.client_ids = resolved.clientIds;
+      if (resolved.collegeVisitIds) patch.college_visit_ids = resolved.collegeVisitIds;
+      const { error: mergeError } = await supabase.from("tasks").update(patch).eq("id", resolved.taskId);
+      if (mergeError) throw new Error(mergeError.message);
+
+      const entityLabel =
+        linkPayload.assignment_type === "lead"
+          ? "lead"
+          : linkPayload.assignment_type === "college"
+            ? "college"
+            : "record";
+      const skippedNote =
+        resolved.skippedCount > 0 ? ` ${resolved.skippedCount} already linked and skipped.` : "";
+      return {
+        kind: "merged",
+        taskId: resolved.taskId,
+        message: `Added ${resolved.addedCount} ${entityLabel}${resolved.addedCount === 1 ? "" : "s"} to an existing task.${skippedNote}`,
+      };
+    }
+
+    return {
+      kind: "insert",
+      payload: {
+        ...baseInsertPayload,
+        assignment_type: linkPayload.assignment_type,
+        project_id: resolved.projectId,
+        client_ids: resolved.clientIds,
+        college_visit_ids: resolved.collegeVisitIds,
+      },
+    };
+  };
+
   const handleSaveTask = async () => {
     if (tasksTableMissing || isStudent) return;
     if (isEmployee) {
@@ -1206,9 +1284,53 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         progress: form.progress,
       };
       try {
+        const resolved = await persistResolvedAssignment(linkPayload, employeePayload);
+        if (resolved.kind === "skipped") {
+          setSuccess(resolved.message);
+          setPanelOpen(false);
+          setForm(initialForm);
+          setSelectedClientIds([]);
+          setSelectedLeadLabels([]);
+          setLeadSelectionPath("");
+          setSelectedCollegeVisitIds([]);
+          setSelectedCollegeLabels([]);
+          setCollegeSelectionPath("");
+          setPendingAttachmentFiles([]);
+          await reload();
+          return;
+        }
+
+        if (resolved.kind === "merged") {
+          await logTaskActivity(supabase, {
+            taskId: resolved.taskId,
+            actorId: currentUserId,
+            activityType: "task_updated",
+            notes: resolved.message,
+            metadata: {
+              assignment_type: linkPayload.assignment_type,
+              client_ids: linkPayload.client_ids,
+              college_visit_ids: linkPayload.college_visit_ids,
+              project_id: linkPayload.project_id,
+            },
+          });
+          setSuccess(resolved.message);
+          setPanelOpen(false);
+          setForm(initialForm);
+          setSelectedClientIds([]);
+          setSelectedLeadLabels([]);
+          setLeadSelectionPath("");
+          setSelectedCollegeVisitIds([]);
+          setSelectedCollegeLabels([]);
+          setCollegeSelectionPath("");
+          setPendingAttachmentFiles([]);
+          await reload();
+          void notifyAssigneeInApp(resolved.taskId);
+          return;
+        }
+
         const { data: inserted, error: insertError } = await supabase
           .from("tasks")
-          .insert(employeePayload)
+          .insert(resolved.payload)
           .select("id")
           .single();
         if (insertError) throw new Error(insertError.message);
@@ -1339,9 +1461,59 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           notes: "Task details or assignment link updated.",
         });
       } else {
+        const resolved = await persistResolvedAssignment(linkPayload, {
+          ...basePayload,
+          assigned_by: currentUserId,
+          attachment_urls: [],
+        });
+        if (resolved.kind === "skipped") {
+          setSuccess(resolved.message);
+          setPanelOpen(false);
+          setForm(initialForm);
+          setEditId(null);
+          setSelectedClientIds([]);
+          setSelectedLeadLabels([]);
+          setLeadSelectionPath("");
+          setSelectedCollegeVisitIds([]);
+          setSelectedCollegeLabels([]);
+          setCollegeSelectionPath("");
+          setPendingAttachmentFiles([]);
+          await reload();
+          return;
+        }
+
+        if (resolved.kind === "merged") {
+          await logTaskActivity(supabase, {
+            taskId: resolved.taskId,
+            actorId: currentUserId,
+            activityType: "task_updated",
+            notes: resolved.message,
+            metadata: {
+              assignment_type: linkPayload.assignment_type,
+              client_ids: linkPayload.client_ids,
+              college_visit_ids: linkPayload.college_visit_ids,
+              project_id: linkPayload.project_id,
+            },
+          });
+          setSuccess(resolved.message);
+          setPanelOpen(false);
+          setForm(initialForm);
+          setEditId(null);
+          setSelectedClientIds([]);
+          setSelectedLeadLabels([]);
+          setLeadSelectionPath("");
+          setSelectedCollegeVisitIds([]);
+          setSelectedCollegeLabels([]);
+          setCollegeSelectionPath("");
+          setPendingAttachmentFiles([]);
+          await reload();
+          void notifyAssigneeInApp(resolved.taskId);
+          return;
+        }
+
         const { data: inserted, error: insertError } = await supabase
           .from("tasks")
-          .insert({ ...basePayload, assigned_by: currentUserId, attachment_urls: [] })
+          .insert(resolved.payload)
           .select("id")
           .single();
         if (insertError) throw new Error(insertError.message);
@@ -1898,8 +2070,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             >
               {tab.label}
               {tab.id !== "all"
-                ? ` (${rows.filter((r) => (r.assignment_type ?? "") === tab.id).length})`
-                : ` (${rows.length})`}
+                ? ` (${linkTypeCounts[tab.id]})`
+                : ` (${linkTypeCounts.all})`}
             </button>
           ))}
         </div>
