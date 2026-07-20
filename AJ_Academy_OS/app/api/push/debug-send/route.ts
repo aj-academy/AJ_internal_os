@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { enforceRateLimit, requireStaffApiSession, trimString } from "@/lib/security";
 import { getFirebaseAdminMessaging, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
-import { absolutePushClickUrl, firebaseSendErrorInfo } from "@/lib/push/webPushLink";
+import { firebaseSendErrorInfo } from "@/lib/push/webPushLink";
 
 export const runtime = "nodejs";
 
@@ -103,11 +103,11 @@ export async function POST(request: Request) {
   const dataPayload = {
     title: "AJ OS Debug Push",
     body: "Open AJ OS — debug delivery test.",
+    targetUrl: "/employee/notifications",
     url: "/employee/notifications",
     type: "debug_push",
     notificationId: `debug-${Date.now()}`,
     source: "ajos-fcm",
-    priority: "high",
   };
 
   const results: Array<{
@@ -138,10 +138,8 @@ export async function POST(request: Request) {
       const messageId = await messaging.send({
         token,
         data: dataPayload,
-        android: { priority: "high" },
         webpush: {
           headers: { Urgency: "high" },
-          fcmOptions: { link: absolutePushClickUrl("/employee/notifications") },
         },
       });
       entry.ok = true;

@@ -18,7 +18,7 @@ export async function GET() {
 
   const body = `/* AJ OS FCM SW config — public only */
 self.__FIREBASE_CONFIG__ = ${JSON.stringify(config)};
-self.__AJOS_FCM_DEBUG__ = ${JSON.stringify(process.env.NODE_ENV !== "production")};
+self.__AJOS_FCM_DEBUG__ = true;
 `;
 
   return new NextResponse(body, {
