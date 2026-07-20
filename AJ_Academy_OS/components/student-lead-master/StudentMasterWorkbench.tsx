@@ -19,6 +19,7 @@ import {
 import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { saveTaskLeadSelection } from "@/lib/taskLeadPickStorage";
+import { resolveTaskAssignment } from "@/lib/taskAssignmentDedupe";
 import { deleteOwnedClients } from "@/lib/crmOwnedDelete";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
@@ -1638,41 +1639,86 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       return;
     }
     const today = todayISO();
-    const { data: inserted, error: insertError } = await supabase
-      .from("tasks")
-      .insert({
-        title: `Student lead outreach (${ids.length} lead${ids.length === 1 ? "" : "s"})`,
-        description: `Assigned from Student Master · ${ids.length} linked lead(s).`,
-        assigned_to: bulkAssignTo,
-        assigned_by: currentUserId,
-        assignment_type: "lead",
-        client_ids: ids,
-        college_visit_ids: [],
-        project_id: null,
-        priority: "Medium",
-        status: "Pending",
-        progress: 0,
-        start_date: today,
-        due_date: null,
-      })
-      .select("id")
-      .single();
-    if (insertError) {
-      setError(insertError.message);
-      return;
-    }
-    // Do NOT set clients.assigned_to — ownership stays admin/counsellor; work happens via the task.
     try {
-      await supabase.rpc("create_task_assignment_notification", { p_task_id: inserted.id });
-    } catch {
-      /* optional RPC */
+      const resolved = await resolveTaskAssignment(supabase, {
+        assigneeId: bulkAssignTo,
+        assignmentType: "lead",
+        clientIds: ids,
+        collegeVisitIds: [],
+        projectId: null,
+      });
+
+      if (resolved.action === "skip") {
+        leadBulk.clearSelection();
+        setBulkAssignTo("");
+        setSuccess(`${label} already has these lead(s) on an active task.`);
+        await reload();
+        return;
+      }
+
+      let taskId: string;
+      if (resolved.action === "merge") {
+        const { error: mergeError } = await supabase
+          .from("tasks")
+          .update({
+            client_ids: resolved.clientIds,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", resolved.taskId);
+        if (mergeError) {
+          setError(mergeError.message);
+          return;
+        }
+        taskId = resolved.taskId;
+      } else {
+        const { data: inserted, error: insertError } = await supabase
+          .from("tasks")
+          .insert({
+            title: `Student lead outreach (${resolved.clientIds.length} lead${resolved.clientIds.length === 1 ? "" : "s"})`,
+            description: `Assigned from Student Master · ${resolved.clientIds.length} linked lead(s).`,
+            assigned_to: bulkAssignTo,
+            assigned_by: currentUserId,
+            assignment_type: "lead",
+            client_ids: resolved.clientIds,
+            college_visit_ids: [],
+            project_id: null,
+            priority: "Medium",
+            status: "Pending",
+            progress: 0,
+            start_date: today,
+            due_date: null,
+          })
+          .select("id")
+          .single();
+        if (insertError) {
+          setError(insertError.message);
+          return;
+        }
+        if (!inserted?.id) {
+          setError("Task was not created.");
+          return;
+        }
+        taskId = inserted.id;
+      }
+
+      try {
+        await supabase.rpc("create_task_assignment_notification", { p_task_id: taskId });
+      } catch {
+        /* optional RPC */
+      }
+      leadBulk.clearSelection();
+      setBulkAssignTo("");
+      setSuccess(
+        resolved.action === "merge"
+          ? `${resolved.addedCount} lead(s) added to ${label}'s existing Student Lead task.${
+              resolved.skippedCount ? ` ${resolved.skippedCount} already linked.` : ""
+            }`
+          : `${resolved.clientIds.length} lead(s) sent to ${label} as a My Tasks → Student Lead assignment (Task Assignment).`,
+      );
+      await reload();
+    } catch (assignError) {
+      setError(assignError instanceof Error ? assignError.message : "Could not assign leads.");
     }
-    leadBulk.clearSelection();
-    setBulkAssignTo("");
-    setSuccess(
-      `${ids.length} lead(s) sent to ${label} as a My Tasks → Student Lead assignment (Task Assignment).`,
-    );
-    await reload();
   };
 
   const leadBulkSelectionProps = !pickForTask

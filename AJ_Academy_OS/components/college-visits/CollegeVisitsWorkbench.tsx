@@ -6,6 +6,7 @@ import { Download, FileText, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatDisplayDate } from "@/lib/datetime";
 import { saveTaskCollegeSelection } from "@/lib/taskLeadPickStorage";
+import { resolveTaskAssignment } from "@/lib/taskAssignmentDedupe";
 import { deleteOwnedCollegeVisits } from "@/lib/crmOwnedDelete";
 import { whatsAppHref } from "@/components/employee/leads/employeeLeadConfig";
 import { StudentOutreachButtons } from "@/components/student-lead-master/StudentOutreachButtons";
@@ -930,28 +931,60 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setSubmitting(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const { data: inserted, error: insertError } = await supabase
-        .from("tasks")
-        .insert({
-          title: `College visit outreach (${ids.length})`,
-          description: `Assigned from College Visits | ${ids.length} linked college(s).`,
-          assigned_to: bulkAssignTo,
-          assigned_by: currentUserId,
-          assignment_type: "college",
-          client_ids: [],
-          college_visit_ids: ids,
-          project_id: null,
-          priority: "Medium",
-          status: "Pending",
-          progress: 0,
-          start_date: today,
-          due_date: null,
-        })
-        .select("id")
-        .single();
-      if (insertError) throw new Error(insertError.message);
+      const resolved = await resolveTaskAssignment(supabase, {
+        assigneeId: bulkAssignTo,
+        assignmentType: "college",
+        clientIds: [],
+        collegeVisitIds: ids,
+        projectId: null,
+      });
+
+      if (resolved.action === "skip") {
+        visitBulk.clearSelection();
+        setBulkAssignTo("");
+        setSuccess(`${label} already has these college(s) on an active task.`);
+        await reload();
+        return;
+      }
+
+      let taskId: string;
+      if (resolved.action === "merge") {
+        const { error: mergeError } = await supabase
+          .from("tasks")
+          .update({
+            college_visit_ids: resolved.collegeVisitIds,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", resolved.taskId);
+        if (mergeError) throw new Error(mergeError.message);
+        taskId = resolved.taskId;
+      } else {
+        const { data: inserted, error: insertError } = await supabase
+          .from("tasks")
+          .insert({
+            title: `College visit outreach (${resolved.collegeVisitIds.length})`,
+            description: `Assigned from College Visits | ${resolved.collegeVisitIds.length} linked college(s).`,
+            assigned_to: bulkAssignTo,
+            assigned_by: currentUserId,
+            assignment_type: "college",
+            client_ids: [],
+            college_visit_ids: resolved.collegeVisitIds,
+            project_id: null,
+            priority: "Medium",
+            status: "Pending",
+            progress: 0,
+            start_date: today,
+            due_date: null,
+          })
+          .select("id")
+          .single();
+        if (insertError) throw new Error(insertError.message);
+        if (!inserted?.id) throw new Error("Task was not created.");
+        taskId = inserted.id;
+      }
+
       try {
-        await supabase.rpc("create_task_assignment_notification", { p_task_id: inserted.id });
+        await supabase.rpc("create_task_assignment_notification", { p_task_id: taskId });
       } catch {
         /* optional */
       }
@@ -960,14 +993,20 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "visit_assigned", taskId: inserted.id }),
+          body: JSON.stringify({ type: "visit_assigned", taskId }),
         });
       } catch {
         /* ignore */
       }
       visitBulk.clearSelection();
       setBulkAssignTo("");
-      setSuccess(`${ids.length} college(s) sent to ${label} as My Tasks -> College Visit.`);
+      setSuccess(
+        resolved.action === "merge"
+          ? `${resolved.addedCount} college(s) added to ${label}'s existing College Visit task.${
+              resolved.skippedCount ? ` ${resolved.skippedCount} already linked.` : ""
+            }`
+          : `${resolved.collegeVisitIds.length} college(s) sent to ${label} as My Tasks -> College Visit.`,
+      );
       await reload();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
