@@ -386,6 +386,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         pendingQuery = pendingQuery.eq("assigned_to", userId);
         inProgressQuery = inProgressQuery.eq("assigned_to", userId);
         completedQuery = completedQuery.eq("assigned_to", userId);
+      } else if (assignedFilter) {
+        totalQuery = totalQuery.eq("assigned_to", assignedFilter);
+        pendingQuery = pendingQuery.eq("assigned_to", assignedFilter);
+        inProgressQuery = inProgressQuery.eq("assigned_to", assignedFilter);
+        completedQuery = completedQuery.eq("assigned_to", assignedFilter);
       }
 
       const [totalRes, pendingRes, inProgressRes, completedRes] = await Promise.all([
@@ -413,7 +418,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         completed: completedRes.count ?? 0,
       });
     },
-    [filterTasksByAssigner, seesAllTasks, supabase],
+    [assignedFilter, filterTasksByAssigner, seesAllTasks, supabase],
   );
 
   const loadTasks = useCallback(
@@ -1963,7 +1968,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                 : "Work assigned to you and tasks you delegate to teammates. Update your own task progress or assign new work."
               : departmentAssigner
                 ? `Assign work to students in your department (${selfProfile?.department ?? "set department in User Master"}). Only matching students appear in the assignee list.`
-                : "Assign, track and manage tasks for students, freelancers, and mentors"}
+                : "Assign, track and manage tasks. Use the Employee filter to review one person's assigned work and activity."}
           </p>
         </div>
         {canManageTasks || isEmployee ? (
@@ -2017,6 +2022,47 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         onClear={clearTableFilters}
         hint={`Showing ${paginatedRows.length} of ${filteredRows.length} task(s)${linkTypeFilter !== "all" ? ` Â· ${LINK_TYPE_TABS.find((t) => t.id === linkTypeFilter)?.label ?? ""}` : ""}`}
       />
+
+      {isAdmin ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] px-4 py-3">
+          <label className="text-xs font-semibold uppercase tracking-wide text-[#64748b]" htmlFor="ta-employee-tracker">
+            Employee
+          </label>
+          <select
+            id="ta-employee-tracker"
+            className="h-9 min-w-[12rem] rounded-lg border border-[#dbe6f3] bg-white px-3 text-sm text-[#334155]"
+            value={assignedFilter}
+            onChange={(e) => setAssignedFilter(e.target.value)}
+          >
+            <option value="">All employees</option>
+            {employeeOptions.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.label}
+              </option>
+            ))}
+          </select>
+          {assignedFilter ? (
+            <>
+              <span className="text-xs text-[#64748b]">
+                Showing tasks &amp; activity for{" "}
+                <strong className="text-[#0f172a]">{employeeNameMap[assignedFilter] || "selected employee"}</strong>
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 rounded-full border-[#e8dcc8] px-3 text-xs"
+                onClick={() => setAssignedFilter("")}
+              >
+                Show all
+              </Button>
+            </>
+          ) : (
+            <span className="text-xs text-[#64748b]">
+              Showing every employee&apos;s tasks (select one to track activity).
+            </span>
+          )}
+        </div>
+      ) : null}
 
       {isEmployee ? (
         <div className="space-y-3">
