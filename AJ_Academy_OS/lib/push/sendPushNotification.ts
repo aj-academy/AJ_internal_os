@@ -3,7 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFirebaseAdminMessaging, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { safePushTargetUrl } from "@/lib/push/safeTargetUrl";
-import { absolutePushClickUrl, firebaseSendErrorInfo } from "@/lib/push/webPushLink";
+import { firebaseSendErrorInfo } from "@/lib/push/webPushLink";
 
 
 export type PushNotificationInput = {
@@ -184,14 +184,14 @@ export async function sendPushNotification(input: PushNotificationInput): Promis
     return result;
   }
 
-  // Data-only payload → SW showNotification (avoids duplicate with notification payload)
+  // Data-only payload → SW showNotification (no notification{} key = no browser auto-duplicate)
   const dataPayload: Record<string, string> = {
     title,
     body: message,
+    targetUrl,
     url: targetUrl,
     type,
     notificationId: result.notificationId ?? "",
-    priority,
     source: "ajos-fcm",
   };
 
@@ -202,10 +202,8 @@ export async function sendPushNotification(input: PushNotificationInput): Promis
       await messaging.send({
         token: device.token,
         data: dataPayload,
-        android: { priority: priority === "high" ? "high" : "normal" },
         webpush: {
           headers: { Urgency: priority === "high" ? "high" : "normal" },
-          fcmOptions: { link: absolutePushClickUrl(targetUrl) },
         },
       });
       result.succeeded += 1;

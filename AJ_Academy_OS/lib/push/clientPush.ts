@@ -337,20 +337,27 @@ export async function subscribeForegroundMessages(
     const data = payload.data || {};
     const title = data.title || payload.notification?.title || "AJ OS";
     const body = data.body || payload.notification?.body || "";
-    const url = data.url || "/employee/dashboard";
+    const url = data.targetUrl || data.url || "/employee/notifications";
     console.info("[AJOS FCM] Foreground message received");
     onPayload({ title, body, url });
 
-    if (showSystem && typeof Notification !== "undefined" && Notification.permission === "granted") {
+    // Hidden/background tab: still show a system notification (do not rely on refresh).
+    const mustShowSystem =
+      showSystem ||
+      (typeof document !== "undefined" && document.visibilityState !== "visible");
+
+    if (mustShowSystem && typeof Notification !== "undefined" && Notification.permission === "granted") {
       void navigator.serviceWorker.ready
         .then((reg) =>
           reg.showNotification(title, {
-            body: body || "Open AJ OS to view details.",
+            body: body || "You have a new notification.",
             icon: "/icons/icon-192x192.png?v=3",
             badge: "/icons/icon-192x192.png?v=3",
             silent: false,
-            tag: String(data.notificationId || data.type || "ajos-fg").slice(0, 64),
-            data: { url },
+            tag: String(data.notificationId || data.type || `ajos-fg-${Date.now()}`).slice(0, 64),
+            data: { url, targetUrl: url },
+            // SW NotificationOptions — not all fields are in TS DOM typings
+            ...({ renotify: true, requireInteraction: true } as NotificationOptions),
           }),
         )
         .catch(() => {

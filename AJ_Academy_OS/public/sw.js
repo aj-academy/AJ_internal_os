@@ -1,9 +1,10 @@
-/* AJ Academy — PWA service worker + FCM background handler */
-const CACHE_VERSION = "aj-academy-v7-fcm";
+/* AJ Academy — PWA service worker + FCM background handler (single root worker) */
+const CACHE_VERSION = "aj-academy-v8-fcm-bg";
 const ICON_QUERY = "?v=3";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const ICON_URL = `/icons/icon-192x192.png${ICON_QUERY}`;
+const BADGE_URL = ICON_URL; // badge-72 not shipped; reuse 192
 
 const PRECACHE_URLS = [
   "/offline.html",
@@ -14,18 +15,83 @@ const PRECACHE_URLS = [
   `/favicon.ico${ICON_QUERY}`,
 ];
 
+/** Always log FCM lifecycle (no tokens / secrets). */
 function fcmLog(...args) {
   try {
-    if (self.__AJOS_FCM_DEBUG__) console.log("[AJOS SW]", ...args);
+    console.log("[AJOS SW]", ...args);
   } catch {
     /* ignore */
   }
 }
 
+function isSafeInternalUrl(url) {
+  if (typeof url !== "string") return false;
+  const t = url.trim();
+  if (!t.startsWith("/") || t.startsWith("//")) return false;
+  if (/^[a-z]+:/i.test(t)) return false;
+  if (t.includes("\\")) return false;
+  return true;
+}
+
+const recentFcmTags = new Set();
+
+/**
+ * Show one system notification per notificationId/tag (prevents push + onBackgroundMessage duplicates).
+ */
+function showFcmSystemNotification(data, fallbackTitle) {
+  const title = data.title || fallbackTitle || "AJ OS";
+  const body = data.body || data.message || "You have a new notification.";
+  const rawUrl = data.targetUrl || data.url || "/employee/notifications";
+  const url = isSafeInternalUrl(rawUrl) ? rawUrl : "/employee/notifications";
+  const tag = String(data.notificationId || data.tag || `aj-os-${Date.now()}`).slice(0, 64);
+
+  if (recentFcmTags.has(tag)) {
+    fcmLog("showNotification skipped (duplicate tag)", tag);
+    return Promise.resolve();
+  }
+  recentFcmTags.add(tag);
+  setTimeout(() => recentFcmTags.delete(tag), 60_000);
+
+  fcmLog("showNotification called", { title, tag, url });
+  return self.registration
+    .showNotification(title, {
+      body,
+      icon: ICON_URL,
+      badge: BADGE_URL,
+      silent: false,
+      renotify: true,
+      requireInteraction: true,
+      tag,
+      data: {
+        url,
+        targetUrl: url,
+        notificationId: data.notificationId || "",
+        type: data.type || "",
+        source: data.source || "ajos-fcm",
+      },
+    })
+    .then(() => fcmLog("notification displayed", tag));
+}
+
+function extractFcmData(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  // FCM web push often nests fields under data
+  const nested = raw.data && typeof raw.data === "object" ? raw.data : null;
+  const data = nested ? { ...raw, ...nested } : { ...raw };
+  const isFcm =
+    Boolean(raw.from) ||
+    Boolean(raw.fcmMessageId) ||
+    data.source === "ajos-fcm" ||
+    Boolean(data.title && (data.body || data.message)) ||
+    Boolean(data.notificationId);
+  if (!isFcm && !nested) return null;
+  return data;
+}
+
 /* Public Firebase config for Messaging inside this worker */
 try {
   importScripts("/api/push/sw-config");
-  fcmLog("Worker loaded; config script imported");
+  fcmLog("service worker loaded");
 } catch (e) {
   console.warn("[AJOS SW] sw-config import failed", e);
 }
@@ -37,34 +103,22 @@ try {
   if (cfg && cfg.apiKey && cfg.projectId && cfg.appId && cfg.messagingSenderId) {
     firebase.initializeApp(cfg);
     const messaging = firebase.messaging();
-    messaging.onBackgroundMessage((payload) => {
-      fcmLog("Background payload received");
+    fcmLog("Firebase initialised");
+
+    messaging.onBackgroundMessage(async (payload) => {
+      fcmLog("background payload received");
       const data = (payload && payload.data) || {};
-      const title = data.title || (payload.notification && payload.notification.title) || "AJ OS";
-      const body =
-        data.body || (payload.notification && payload.notification.body) || "Open AJ OS to view details.";
-      const rawUrl = data.url || data.targetUrl || "/employee/dashboard";
-      const url = isSafeInternalUrl(rawUrl) ? rawUrl : "/employee/dashboard";
-      const tag = String(data.tag || data.notificationId || data.type || "ajos-fcm").slice(0, 64);
-      return self.registration.showNotification(title, {
-        body,
-        icon: ICON_URL,
-        badge: ICON_URL,
-        tag,
-        renotify: true,
-        silent: false,
-        data: {
-          url,
-          notificationId: data.notificationId || "",
-          type: data.type || "",
-          source: data.source || "ajos-fcm",
-        },
-      }).then(() => fcmLog("Notification displayed"));
+      // Merge notification block if present (should be data-only from server)
+      if (payload.notification) {
+        data.title = data.title || payload.notification.title;
+        data.body = data.body || payload.notification.body;
+      }
+      await showFcmSystemNotification(data, "AJ OS");
     });
-    fcmLog("Firebase messaging initialised");
+
     self.__AJOS_FCM_READY__ = true;
   } else {
-    fcmLog("Firebase config incomplete — FCM background handler skipped");
+    fcmLog("Firebase config incomplete — background handler not attached");
   }
 } catch (e) {
   console.warn("[AJOS SW] Firebase messaging init failed", e);
@@ -123,8 +177,7 @@ async function networkOnly(request) {
 
 async function networkFirstShell(request) {
   try {
-    const response = await fetch(request);
-    return response;
+    return await fetch(request);
   } catch {
     const offline = await caches.match("/offline.html");
     if (offline) return offline;
@@ -177,7 +230,6 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(networkFirstShell(request));
-    return;
   }
 });
 
@@ -188,86 +240,71 @@ self.addEventListener("message", (event) => {
 });
 
 /**
- * Reminder Web Push (non-FCM) only.
- * FCM is handled by onBackgroundMessage above — do not double-show.
+ * Native push fallback for FCM data-only messages.
+ *
+ * Failure we fixed: previously we SKIPPED FCM here when Firebase was ready,
+ * relying only on onBackgroundMessage. Firebase often delivers to onMessage
+ * when any AJ OS client exists (even a hidden tab), so no Windows toast appeared
+ * until the user refreshed and loaded Supabase in-app rows.
+ *
+ * Now we show from push as well; showFcmSystemNotification dedupes by tag.
+ * Reminder Web Push (non-FCM) still uses this path exclusively.
  */
-function resolvePushPayload(event) {
-  const defaults = {
-    title: "AJ OS",
-    body: "",
-    url: "/employee/dashboard",
-    tag: "ajos",
-    source: "",
-  };
-  try {
-    if (!event.data) return defaults;
-    const raw = event.data.json();
-    if (
-      self.__AJOS_FCM_READY__ &&
-      (raw?.from || raw?.fcmMessageId || raw?.data?.source === "ajos-fcm" || raw?.source === "ajos-fcm")
-    ) {
-      return { ...defaults, source: "ajos-fcm-skip" };
-    }
-    const data = raw?.data && typeof raw.data === "object" ? { ...raw, ...raw.data } : raw;
-    return {
-      title: data.title || raw.notification?.title || defaults.title,
-      body: data.body || data.message || raw.notification?.body || defaults.body,
-      url: data.url || data.link_path || data.click_action || defaults.url,
-      tag: data.tag || data.notificationId || data.type || defaults.tag,
-      source: data.source || "",
-      notificationId: data.notificationId || "",
-      type: data.type || "",
-    };
-  } catch {
-    try {
-      const text = event.data?.text?.() || "";
-      if (text) return { ...defaults, body: text.slice(0, 180) };
-    } catch {
-      /* ignore */
-    }
-    return defaults;
-  }
-}
-
-function isSafeInternalUrl(url) {
-  if (typeof url !== "string") return false;
-  const t = url.trim();
-  if (!t.startsWith("/") || t.startsWith("//")) return false;
-  if (/^[a-z]+:/i.test(t)) return false;
-  if (t.includes("\\")) return false;
-  return true;
-}
-
 self.addEventListener("push", (event) => {
-  const payload = resolvePushPayload(event);
-  if (payload.source === "ajos-fcm-skip") {
-    fcmLog("push event skipped (FCM handled by onBackgroundMessage)");
-    return;
-  }
-  const targetUrl = isSafeInternalUrl(payload.url) ? payload.url : "/employee/dashboard";
   event.waitUntil(
-    self.registration.showNotification(payload.title || "AJ OS", {
-      body: payload.body || "Open AJ OS to view details.",
-      icon: ICON_URL,
-      badge: ICON_URL,
-      tag: String(payload.tag || "ajos").slice(0, 64),
-      renotify: true,
-      silent: false,
-      data: {
-        url: targetUrl,
-        notificationId: payload.notificationId || "",
-        type: payload.type || "",
-        source: payload.source || "",
-      },
-    }).then(() => fcmLog("Reminder/local push notification displayed")),
+    (async () => {
+      let raw = null;
+      try {
+        raw = event.data ? event.data.json() : null;
+      } catch {
+        raw = null;
+      }
+
+      const fcmData = extractFcmData(raw);
+      if (fcmData) {
+        fcmLog("push event FCM data received");
+        await showFcmSystemNotification(fcmData, "AJ OS");
+        return;
+      }
+
+      // Legacy reminder / non-FCM web push
+      let title = "AJ OS";
+      let body = "Open AJ OS to view details.";
+      let url = "/employee/dashboard";
+      let tag = `ajos-${Date.now()}`;
+      try {
+        if (raw) {
+          title = raw.title || title;
+          body = raw.body || raw.message || body;
+          url = isSafeInternalUrl(raw.url || raw.link_path) ? raw.url || raw.link_path : url;
+          tag = String(raw.tag || tag).slice(0, 64);
+        }
+      } catch {
+        /* ignore */
+      }
+      fcmLog("push event non-FCM notification");
+      await self.registration.showNotification(title, {
+        body,
+        icon: ICON_URL,
+        badge: BADGE_URL,
+        silent: false,
+        renotify: true,
+        requireInteraction: true,
+        tag,
+        data: { url },
+      });
+    })(),
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
-  fcmLog("Notification clicked");
+  fcmLog("notification clicked");
   event.notification.close();
-  const rawUrl = event.notification.data?.url || "/employee/dashboard";
-  const url = isSafeInternalUrl(rawUrl) ? rawUrl : "/employee/dashboard";
+  const rawUrl =
+    event.notification.data?.targetUrl ||
+    event.notification.data?.url ||
+    "/employee/notifications";
+  const url = isSafeInternalUrl(rawUrl) ? rawUrl : "/employee/notifications";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
