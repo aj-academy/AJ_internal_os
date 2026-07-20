@@ -1,4 +1,5 @@
 import { formatInr } from "@/components/finance/financeHelpers";
+import type { SchemaGap } from "@/lib/reports/types";
 
 export { formatInr };
 
@@ -13,6 +14,24 @@ export function isMissingTable(msg: string, tableHint: string) {
 
 export function friendlyReportsError(e: unknown) {
   return e instanceof Error ? e.message : String(e);
+}
+
+export function formatCallDuration(seconds: number | null | undefined) {
+  if (seconds == null || Number.isNaN(seconds)) return "— (not recorded)";
+  const m = Math.floor(seconds / 60);
+  const s = Math.abs(seconds % 60);
+  return `~${m}m ${s}s`;
+}
+
+export function gapForObject(gaps: SchemaGap[], objectHint: string) {
+  const h = objectHint.toLowerCase();
+  return gaps.find((g) => g.object.toLowerCase().includes(h));
+}
+
+export function formatSchemaGap(gap: SchemaGap) {
+  const parts = [`${gap.kind.replace(/_/g, " ").toUpperCase()}: ${gap.object}`, gap.reason];
+  if (gap.migration) parts.push(`Required migration: ${gap.migration}`);
+  return parts.join(" — ");
 }
 
 export function monthKey(d: Date) {

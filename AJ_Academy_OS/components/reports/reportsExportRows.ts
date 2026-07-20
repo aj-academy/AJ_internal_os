@@ -1,10 +1,12 @@
 import { normalizeStatus } from "@/components/student-lead-master/studentMasterHelpers";
 import { normalizeProjectStatus } from "@/components/project-master/projectHelpers";
 import type { ReportsTabId } from "@/components/reports/reportsConfig";
-import { formatInr, minutesToHoursLabel } from "@/components/reports/reportsHelpers";
+import { formatCallDuration, formatInr, minutesToHoursLabel } from "@/components/reports/reportsHelpers";
 import type { ExportRow } from "@/components/reports/reportsExport";
 import type { FinanceTransactionRow } from "@/types/finance";
 import type { ProjectRow } from "@/types/project";
+import type { ReportActivity, ReportCallSession, ReportFollowup } from "@/lib/reports/types";
+import type { DailyEmployeeRow } from "@/components/reports/ReportsCrmPanels";
 
 export type ReportDataTab = Exclude<ReportsTabId, "export">;
 export type ExportScope = "filtered" | "all";
@@ -12,8 +14,12 @@ export type ExportScope = "filtered" | "all";
 export const EXPORT_DATA_TABS: ReportDataTab[] = [
   "overview",
   "employees",
+  "daily",
   "attendance",
   "clients",
+  "calls",
+  "followups",
+  "timeline",
   "projects",
   "tasks",
   "finance",
@@ -38,6 +44,11 @@ type ClientLite = {
   service_interest: string | null;
   proposal_status: string | null;
   budget: number | null;
+  final_fee?: number | null;
+  fee_quoted?: number | null;
+  admission_status?: string | null;
+  payment_status?: string | null;
+  interested_program?: string | null;
 };
 
 type TaskLite = {
@@ -72,6 +83,10 @@ export type ReportExportContext = {
   filteredProjects: ProjectRow[];
   filteredTasks: TaskLite[];
   filteredAttendance: AttendanceLite[];
+  callSessions: ReportCallSession[];
+  followups: ReportFollowup[];
+  timeline: ReportActivity[];
+  dailyEmployeeRows: DailyEmployeeRow[];
   employeeNameMap: Record<string, string>;
   perEmployeeTaskCounts: Record<string, { total: number; done: number }>;
   perEmployeeAttendanceRate: Record<string, number>;
@@ -85,6 +100,18 @@ export type ReportExportContext = {
   topPerformers: { p: ProfileLite; score: number; tc: { total: number; done: number } }[];
   bestRevenueProject?: { name: string; amt: number };
   bestRevenueClient?: { name: string; amt: number };
+  overviewExtras?: {
+    presentToday: number;
+    checkedIn: number;
+    checkedOut: number;
+    calls: number;
+    connected: number;
+    pendingFollowups: number;
+    admissions: number;
+    revenue: number;
+    pendingTasks: number;
+    avgProductivity: number;
+  };
 };
 
 export function buildReportExportRows(tab: ReportDataTab, scope: ExportScope, ctx: ReportExportContext): ExportRow[] {
@@ -130,9 +157,67 @@ export function buildReportExportRows(tab: ReportDataTab, scope: ExportScope, ct
       company: c.company_name || "—",
       status: normalizeStatus(String(c.status)),
       source: c.source || "—",
-      service: c.service_interest || "—",
+      service: c.service_interest || c.interested_program || "—",
       proposal: c.proposal_status || "—",
+      admission_status: c.admission_status || "—",
+      final_fee: c.final_fee ?? "",
+      payment_status: c.payment_status || "—",
       budget: c.budget ?? "",
+    }));
+  }
+
+  if (tab === "calls") {
+    return ctx.callSessions.map((c) => ({
+      employee: c.employee_name || ctx.employeeNameMap[c.employee_id] || c.employee_id,
+      lead: c.lead_name || c.lead_id,
+      time: c.started_at,
+      duration: formatCallDuration(c.approximate_duration_seconds),
+      outcome: c.call_outcome || c.session_status || "—",
+      remarks: c.notes || "—",
+      next_follow_up: c.next_action || "—",
+    }));
+  }
+
+  if (tab === "followups") {
+    return ctx.followups.map((f) => ({
+      lead: f.lead_name || f.client_id,
+      date: f.follow_up_date || "—",
+      type: f.follow_up_type || "—",
+      status: f.status || "—",
+      bucket: f.followup_bucket || "—",
+      assignee: f.assigned_employee_name || f.assigned_employee_id || "—",
+      notes: f.notes || f.reason || "—",
+    }));
+  }
+
+  if (tab === "timeline") {
+    return ctx.timeline.map((t) => ({
+      occurred_at: t.occurred_at,
+      source: t.source,
+      actor: t.actor_name || "—",
+      title: t.title,
+      entity: t.entity_label || "—",
+      detail: t.detail || "—",
+    }));
+  }
+
+  if (tab === "daily") {
+    return ctx.dailyEmployeeRows.map((r) => ({
+      employee: r.name,
+      department: r.department || "—",
+      attendance: r.attendance,
+      working_hours: r.workingHours,
+      calls: r.calls,
+      connected: r.connected,
+      busy: r.busy,
+      wrong_number: r.wrongNumber,
+      interested: r.interested,
+      admissions: r.admissions,
+      revenue: r.revenue,
+      tasks: `${r.tasksDone}/${r.tasksTotal}`,
+      crm_updates: r.crmUpdates,
+      followups: r.followups,
+      remarks: r.remarks || "—",
     }));
   }
 
@@ -230,14 +315,25 @@ export function buildReportExportRows(tab: ReportDataTab, scope: ExportScope, ct
     ];
   }
 
+  const x = ctx.overviewExtras;
   return [
     {
       total_employees: ctx.profiles.length,
       active_employees: ctx.activeEmployeesCount,
+      employees_present_today: x?.presentToday ?? "",
+      checked_in_today: x?.checkedIn ?? "",
+      checked_out_today: x?.checkedOut ?? "",
+      todays_calls: x?.calls ?? "",
+      connected_calls: x?.connected ?? "",
+      pending_followups: x?.pendingFollowups ?? "",
+      admissions: x?.admissions ?? "",
+      revenue: x?.revenue ?? "",
       total_clients: ctx.clients.length,
       total_projects: ctx.projects.length,
       total_tasks: ctx.taskStats.total,
       completed_tasks: ctx.taskStats.completed,
+      pending_tasks: x?.pendingTasks ?? "",
+      avg_productivity: x?.avgProductivity ?? ctx.productivityScore,
       attendance_rate_pct: ctx.attendanceRateOverall,
       monthly_revenue: ctx.financeStats.revThis,
       monthly_expense: ctx.financeStats.expThis,

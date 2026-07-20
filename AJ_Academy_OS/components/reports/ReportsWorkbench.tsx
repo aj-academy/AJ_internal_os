@@ -10,17 +10,36 @@ import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { MobileRecordCard } from "@/components/ui/MobileRecordCard";
 import { ResponsiveDataView } from "@/components/ui/ResponsiveDataView";
 import { normalizeStatus } from "@/components/student-lead-master/studentMasterHelpers";
-import { TX_SELECT } from "@/components/finance/financeHelpers";
-import { PROJECT_SELECT, normalizeProjectStatus } from "@/components/project-master/projectHelpers";
+import { normalizeProjectStatus } from "@/components/project-master/projectHelpers";
 import { REPORTS_TAB_LABELS, REPORTS_TAB_ORDER, type ReportsTabId } from "@/components/reports/reportsConfig";
-import { formatInr, friendlyReportsError, isMissingTable, minutesToHoursLabel, monthKey, todayISO } from "@/components/reports/reportsHelpers";
-import { exportMultiSheetExcel, exportRowsAsCsv, exportRowsAsExcel, exportRowsAsPdf } from "@/components/reports/reportsExport";
+import { formatInr, friendlyReportsError, gapForObject, minutesToHoursLabel, monthKey, todayISO } from "@/components/reports/reportsHelpers";
+import { exportMultiSheetExcel } from "@/components/reports/reportsExport";
+import { exportReportWithMeta } from "@/components/reports/reportsExportMeta";
 import {
   buildReportExportRows,
   EXPORT_DATA_TABS,
   type ReportDataTab,
   type ReportExportContext,
 } from "@/components/reports/reportsExportRows";
+import {
+  CallReportPanel,
+  DailyEmployeePanel,
+  FollowupReportPanel,
+  ProductivityWeightsNote,
+  ReportsSchemaNotices,
+  TimelineReportPanel,
+  type DailyEmployeeRow,
+} from "@/components/reports/ReportsCrmPanels";
+import { resolveReportDateRange, type ReportDatePreset } from "@/lib/reports/dateRange";
+import { computeProductivityScore } from "@/lib/reports/productivity";
+import type {
+  ReportActivity,
+  ReportCallSession,
+  ReportClientLite,
+  ReportFollowup,
+  ReportsDataPayload,
+  SchemaGap,
+} from "@/lib/reports/types";
 import type { FinanceTransactionRow } from "@/types/finance";
 import type { ProjectRow } from "@/types/project";
 
@@ -33,19 +52,7 @@ type ProfileLite = {
   status: string | null;
 };
 
-type ClientLite = {
-  id: string;
-  name: string;
-  company_name: string | null;
-  status: string | null;
-  source: string | null;
-  service_interest: string | null;
-  proposal_status: string | null;
-  budget: number | null;
-  converted_at: string | null;
-  lost_reason: string | null;
-  created_at: string;
-};
+type ClientLite = ReportClientLite;
 
 type TaskLite = {
   id: string;
@@ -103,6 +110,14 @@ export function ReportsWorkbench() {
   const [exportBusy, setExportBusy] = useState<string | null>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
 
+  const [datePreset, setDatePreset] = useState<ReportDatePreset>("this_month");
+  const [customFrom, setCustomFrom] = useState(() => new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10));
+  const [customTo, setCustomTo] = useState(todayISO);
+  const [globalEmployeeId, setGlobalEmployeeId] = useState("");
+  const [globalDepartment, setGlobalDepartment] = useState("");
+  const [globalLeadSource, setGlobalLeadSource] = useState("");
+  const [globalCourse, setGlobalCourse] = useState("");
+
   const [profiles, setProfiles] = useState<ProfileLite[]>([]);
   const [clients, setClients] = useState<ClientLite[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
@@ -111,106 +126,54 @@ export function ReportsWorkbench() {
   const [financeTx, setFinanceTx] = useState<FinanceTransactionRow[]>([]);
   const [projectPayments, setProjectPayments] = useState<{ amount: number; payment_status: string; project_id: string }[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamRow[]>([]);
+  const [callSessions, setCallSessions] = useState<ReportCallSession[]>([]);
+  const [followups, setFollowups] = useState<ReportFollowup[]>([]);
+  const [timeline, setTimeline] = useState<ReportActivity[]>([]);
+  const [schemaGaps, setSchemaGaps] = useState<SchemaGap[]>([]);
+  const [reportMeta, setReportMeta] = useState<ReportsDataPayload["meta"] | null>(null);
+
+  const activeRange = useMemo(
+    () => resolveReportDateRange(datePreset, customFrom, customTo),
+    [customFrom, customTo, datePreset],
+  );
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    const safe = async <T,>(label: string, fn: () => Promise<{ data: T | null; error: { message: string } | null }>, fallback: T): Promise<T> => {
-      try {
-        const { data, error } = await fn();
-        if (error) {
-          if (isMissingTable(error.message, label)) return fallback;
-          throw new Error(error.message);
-        }
-        return (data as T) ?? fallback;
-      } catch (e) {
-        const msg = friendlyReportsError(e);
-        if (isMissingTable(msg, label)) return fallback;
-        throw e;
-      }
-    };
-
     try {
-      const [pr, cl, pj, tk, att, fin, pay, tm] = await Promise.all([
-        safe(
-          "profiles",
-          async () =>
-            await supabase
-              .from("profiles")
-              .select("id,full_name,email,role,department,status")
-              .order("full_name")
-              .limit(800)
-              .returns<ProfileLite[]>(),
-          [],
-        ),
-        safe(
-          "clients",
-          async () =>
-            await supabase
-              .from("clients")
-              .select("id,name,company_name,status,source,service_interest,proposal_status,budget,converted_at,lost_reason,created_at")
-              .order("updated_at", { ascending: false })
-              .limit(1200)
-              .returns<ClientLite[]>(),
-          [],
-        ),
-        safe(
-          "projects",
-          async () =>
-            await supabase.from("projects").select(PROJECT_SELECT).order("updated_at", { ascending: false }).limit(600).returns<ProjectRow[]>(),
-          [],
-        ),
-        safe(
-          "tasks",
-          async () =>
-            await supabase.from("tasks").select("id,assigned_to,status,priority,due_date,project_id").limit(4000).returns<TaskLite[]>(),
-          [],
-        ),
-        safe(
-          "attendance_records",
-          async () =>
-            await supabase
-              .from("attendance_records")
-              .select("id,employee_id,attendance_date,check_in_time,check_out_time,status,total_working_minutes,check_in_address")
-              .gte("attendance_date", new Date(Date.now() - 62 * 86400000).toISOString().slice(0, 10))
-              .order("attendance_date", { ascending: false })
-              .limit(4000)
-              .returns<AttendanceLite[]>(),
-          [],
-        ),
-        safe(
-          "finance_transactions",
-          async () =>
-            await supabase.from("finance_transactions").select(TX_SELECT).order("transaction_date", { ascending: false }).limit(2000).returns<FinanceTransactionRow[]>(),
-          [],
-        ),
-        safe(
-          "project_payments",
-          async () =>
-            await supabase.from("project_payments").select("amount,payment_status,project_id").limit(2000).returns<{ amount: number; payment_status: string; project_id: string }[]>(),
-          [],
-        ),
-        safe(
-          "project_team_members",
-          async () => await supabase.from("project_team_members").select("project_id,profile_id").limit(5000).returns<TeamRow[]>(),
-          [],
-        ),
-      ]);
+      const params = new URLSearchParams({
+        preset: datePreset,
+        from: activeRange.from,
+        to: activeRange.to,
+      });
+      if (globalEmployeeId) params.set("employeeId", globalEmployeeId);
+      if (globalDepartment) params.set("department", globalDepartment);
+      if (globalLeadSource) params.set("leadSource", globalLeadSource);
+      if (globalCourse) params.set("course", globalCourse);
 
-      setProfiles(pr);
-      setClients(cl);
-      setProjects(pj);
-      setTasks(tk);
-      setAttendance(att);
-      setFinanceTx(fin);
-      setProjectPayments(pay);
-      setTeamMembers(tm);
+      const res = await fetch(`/api/reports/data?${params.toString()}`, { credentials: "same-origin" });
+      const json = (await res.json()) as ReportsDataPayload & { error?: string };
+      if (!res.ok) throw new Error(json.error || `Reports API failed (${res.status})`);
+
+      setProfiles(json.profiles || []);
+      setClients(json.clients || []);
+      setProjects((json.projects || []) as ProjectRow[]);
+      setTasks(json.tasks || []);
+      setAttendance(json.attendance || []);
+      setFinanceTx((json.financeTx || []) as FinanceTransactionRow[]);
+      setProjectPayments(json.projectPayments || []);
+      setTeamMembers(json.teamMembers || []);
+      setCallSessions(json.callSessions || []);
+      setFollowups(json.followups || []);
+      setTimeline(json.timeline || []);
+      setSchemaGaps(json.gaps || []);
+      setReportMeta(json.meta || null);
     } catch (e) {
       setLoadError(friendlyReportsError(e));
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, [activeRange.from, activeRange.to, datePreset, globalCourse, globalDepartment, globalEmployeeId, globalLeadSource]);
 
   useEffect(() => {
     void (async () => {
@@ -237,6 +200,8 @@ export function ReportsWorkbench() {
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records" }, () => void loadAll())
       .on("postgres_changes", { event: "*", schema: "public", table: "finance_transactions" }, () => void loadAll())
       .on("postgres_changes", { event: "*", schema: "public", table: "project_payments" }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "lead_call_sessions" }, () => void loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "lead_followups" }, () => void loadAll())
       .subscribe();
     return () => {
       void supabase.removeChannel(ch);
@@ -306,11 +271,67 @@ export function ReportsWorkbench() {
   const attendanceToday = useMemo(() => {
     const d = todayISO();
     const rows = attendance.filter((a) => String(a.attendance_date).slice(0, 10) === d);
-    const present = rows.filter((a) => (a.status || "").toLowerCase() === "present").length;
+    const present = rows.filter((a) => {
+      const s = (a.status || "").toLowerCase();
+      return s === "present" || s.includes("late") || Boolean(a.check_in_time);
+    }).length;
     const absent = rows.filter((a) => (a.status || "").toLowerCase() === "absent").length;
     const late = rows.filter((a) => (a.status || "").toLowerCase().includes("late")).length;
-    return { present, absent, late, rows };
+    const checkedIn = rows.filter((a) => Boolean(a.check_in_time)).length;
+    const checkedOut = rows.filter((a) => Boolean(a.check_out_time)).length;
+    return { present, absent, late, checkedIn, checkedOut, rows };
   }, [attendance]);
+
+  const callStats = useMemo(() => {
+    const total = callSessions.length;
+    const outcomeOf = (pred: (o: string) => boolean) =>
+      callSessions.filter((c) => pred((c.call_outcome || "").toLowerCase())).length;
+    const connected = outcomeOf((o) => o.includes("connect") || o.includes("answered") || o === "interested" || o.includes("admission"));
+    const busy = outcomeOf((o) => o.includes("busy"));
+    const wrong = outcomeOf((o) => o.includes("wrong"));
+    const interested = outcomeOf((o) => o.includes("interest"));
+    return { total, connected, busy, wrong, interested };
+  }, [callSessions]);
+
+  const followupStats = useMemo(() => {
+    const pending = followups.filter((f) => {
+      const b = (f.followup_bucket || "").toLowerCase();
+      const s = (f.status || "").toLowerCase();
+      return b === "pending" || b === "today" || b === "overdue" || s === "pending";
+    }).length;
+    const completed = followups.filter((f) => {
+      const b = (f.followup_bucket || "").toLowerCase();
+      const s = (f.status || "").toLowerCase();
+      return b === "completed" || ["completed", "done", "closed"].includes(s);
+    }).length;
+    return { total: followups.length, pending, completed };
+  }, [followups]);
+
+  const admissionStats = useMemo(() => {
+    let admissions = 0;
+    let cancelled = 0;
+    let pendingFees = 0;
+    let revenue = 0;
+    clients.forEach((c) => {
+      const adm = (c.admission_status || "").toLowerCase();
+      const st = normalizeStatus(String(c.status));
+      const pay = (c.payment_status || "").toLowerCase();
+      const isAdmitted =
+        ["admitted", "enrolled", "joined"].includes(adm) || st === "Converted" || Boolean(c.converted_at);
+      if (["cancelled", "canceled", "withdrawn"].includes(adm)) cancelled += 1;
+      else if (isAdmitted) {
+        admissions += 1;
+        revenue += Number(c.final_fee ?? c.fee_quoted ?? 0);
+      }
+      if (["pending", "partial", "due"].includes(pay)) pendingFees += Number(c.final_fee ?? c.fee_quoted ?? 0);
+    });
+    return { admissions, cancelled, pendingFees, revenue };
+  }, [clients]);
+
+  const crmUpdateCount = useMemo(
+    () => timeline.filter((t) => t.source === "lead").length,
+    [timeline],
+  );
 
   const attendanceRateOverall = useMemo(() => {
     if (!attendance.length) return 0;
@@ -586,10 +607,236 @@ export function ReportsWorkbench() {
   }, [tasks]);
 
   const productivityScore = useMemo(() => {
-    const t = taskStats.total ? (taskStats.completed / taskStats.total) * 50 : 0;
-    const a = Math.min(50, attendanceRateOverall * 0.5);
-    return Math.round(Math.min(100, t + a));
-  }, [attendanceRateOverall, taskStats]);
+    const { score } = computeProductivityScore({
+      callsDone: callStats.connected || callStats.total,
+      crmUpdates: crmUpdateCount,
+      followupsDone: followupStats.completed,
+      taskCompletionRatio: taskStats.total ? taskStats.completed / taskStats.total : 0,
+      admissions: admissionStats.admissions,
+      attendanceRatio: attendanceRateOverall / 100,
+    });
+    return score;
+  }, [admissionStats.admissions, attendanceRateOverall, callStats.connected, callStats.total, crmUpdateCount, followupStats.completed, taskStats.completed, taskStats.total]);
+
+  const teamPerformance = useMemo(() => {
+    const byEmp: Record<
+      string,
+      { calls: number; admissions: number; revenue: number; followupsPending: number; score: number; name: string }
+    > = {};
+    profiles.forEach((p) => {
+      byEmp[p.id] = {
+        calls: 0,
+        admissions: 0,
+        revenue: 0,
+        followupsPending: 0,
+        score: 0,
+        name: p.full_name || p.email || p.id.slice(0, 8),
+      };
+    });
+    callSessions.forEach((c) => {
+      if (!byEmp[c.employee_id]) return;
+      byEmp[c.employee_id].calls += 1;
+    });
+    clients.forEach((c) => {
+      if (!c.assigned_to || !byEmp[c.assigned_to]) return;
+      const adm = (c.admission_status || "").toLowerCase();
+      const st = normalizeStatus(String(c.status));
+      const isAdmitted =
+        ["admitted", "enrolled", "joined"].includes(adm) || st === "Converted" || Boolean(c.converted_at);
+      if (isAdmitted) {
+        byEmp[c.assigned_to].admissions += 1;
+        byEmp[c.assigned_to].revenue += Number(c.final_fee ?? c.fee_quoted ?? 0);
+      }
+    });
+    followups.forEach((f) => {
+      const id = f.assigned_employee_id;
+      if (!id || !byEmp[id]) return;
+      const b = (f.followup_bucket || "").toLowerCase();
+      const s = (f.status || "").toLowerCase();
+      if (b === "pending" || b === "overdue" || s === "pending") byEmp[id].followupsPending += 1;
+    });
+    Object.keys(byEmp).forEach((id) => {
+      const tc = perEmployeeTaskCounts[id] || { total: 0, done: 0 };
+      const empCalls = callSessions.filter((c) => c.employee_id === id);
+      const empCrm = timeline.filter((t) => t.actor_id === id && t.source === "lead").length;
+      const empFuDone = followups.filter((f) => {
+        if (f.assigned_employee_id !== id) return false;
+        const s = (f.status || "").toLowerCase();
+        return ["completed", "done", "closed"].includes(s) || f.followup_bucket === "completed";
+      }).length;
+      const { score } = computeProductivityScore({
+        callsDone: empCalls.length,
+        crmUpdates: empCrm,
+        followupsDone: empFuDone,
+        taskCompletionRatio: tc.total ? tc.done / tc.total : 0,
+        admissions: byEmp[id].admissions,
+        attendanceRatio: (perEmployeeAttendanceRate[id] ?? 0) / 100,
+      });
+      byEmp[id].score = score;
+    });
+    const ranked = Object.entries(byEmp)
+      .map(([id, v]) => ({ id, ...v }))
+      .filter((x) => x.calls + x.admissions + x.followupsPending + (perEmployeeTaskCounts[x.id]?.total || 0) > 0)
+      .sort((a, b) => b.score - a.score);
+    return {
+      rows: ranked,
+      top: ranked[0] || null,
+      least: ranked.length ? ranked[ranked.length - 1] : null,
+      totals: {
+        calls: callStats.total,
+        admissions: admissionStats.admissions,
+        revenue: admissionStats.revenue + financeStats.rev,
+        pendingFollowups: followupStats.pending,
+        avgProductivity: ranked.length ? Math.round(ranked.reduce((a, r) => a + r.score, 0) / ranked.length) : productivityScore,
+      },
+    };
+  }, [
+    admissionStats.admissions,
+    admissionStats.revenue,
+    callSessions,
+    callStats.total,
+    clients,
+    financeStats.rev,
+    followupStats.pending,
+    followups,
+    perEmployeeAttendanceRate,
+    perEmployeeTaskCounts,
+    productivityScore,
+    profiles,
+    timeline,
+  ]);
+
+  const dailyEmployeeRows = useMemo((): DailyEmployeeRow[] => {
+    return profiles
+      .filter((p) => (p.status || "active").toLowerCase() === "active")
+      .map((p) => {
+        const attRows = attendance.filter((a) => a.employee_id === p.id);
+        const latest = attRows[0];
+        const mins = attRows.reduce((a, r) => a + Number(r.total_working_minutes || 0), 0);
+        const calls = callSessions.filter((c) => c.employee_id === p.id);
+        const oc = (pred: (o: string) => boolean) =>
+          calls.filter((c) => pred((c.call_outcome || "").toLowerCase())).length;
+        const tc = perEmployeeTaskCounts[p.id] || { total: 0, done: 0 };
+        const empClients = clients.filter((c) => c.assigned_to === p.id);
+        let admissions = 0;
+        let revenue = 0;
+        empClients.forEach((c) => {
+          const adm = (c.admission_status || "").toLowerCase();
+          const st = normalizeStatus(String(c.status));
+          if (["admitted", "enrolled", "joined"].includes(adm) || st === "Converted" || c.converted_at) {
+            admissions += 1;
+            revenue += Number(c.final_fee ?? c.fee_quoted ?? 0);
+          }
+        });
+        const crmUpdates = timeline.filter((t) => t.actor_id === p.id && t.source === "lead").length;
+        const fu = followups.filter((f) => f.assigned_employee_id === p.id).length;
+        const remarks = calls
+          .map((c) => c.notes)
+          .filter(Boolean)
+          .slice(0, 2)
+          .join("; ");
+        return {
+          employeeId: p.id,
+          name: p.full_name || p.email || p.id.slice(0, 8),
+          department: p.department || "",
+          attendance: latest?.status || (latest?.check_in_time ? "Checked in" : "—"),
+          workingHours: minutesToHoursLabel(mins || latest?.total_working_minutes),
+          calls: calls.length,
+          connected: oc((o) => o.includes("connect") || o.includes("answered")),
+          busy: oc((o) => o.includes("busy")),
+          wrongNumber: oc((o) => o.includes("wrong")),
+          interested: oc((o) => o.includes("interest")),
+          admissions,
+          revenue,
+          tasksDone: tc.done,
+          tasksTotal: tc.total,
+          crmUpdates,
+          followups: fu,
+          remarks,
+        };
+      })
+      .filter((r) => r.calls + r.tasksTotal + r.followups + r.admissions + r.crmUpdates > 0 || r.attendance !== "—");
+  }, [attendance, callSessions, clients, followups, perEmployeeTaskCounts, profiles, timeline]);
+
+  const leadSourceReport = useMemo(() => {
+    const m: Record<string, { generated: number; interested: number; admissions: number; revenue: number }> = {};
+    clients.forEach((c) => {
+      const k = c.source || "Unknown";
+      if (!m[k]) m[k] = { generated: 0, interested: 0, admissions: 0, revenue: 0 };
+      m[k].generated += 1;
+      const st = normalizeStatus(String(c.status)).toLowerCase();
+      const stage = (c.lead_stage || "").toLowerCase();
+      if (st.includes("interest") || stage.includes("interest") || (c.interested_program || c.service_interest)) {
+        m[k].interested += 1;
+      }
+      const adm = (c.admission_status || "").toLowerCase();
+      if (["admitted", "enrolled", "joined"].includes(adm) || normalizeStatus(String(c.status)) === "Converted" || c.converted_at) {
+        m[k].admissions += 1;
+        m[k].revenue += Number(c.final_fee ?? c.fee_quoted ?? 0);
+      }
+    });
+    return Object.entries(m)
+      .map(([source, v]) => ({
+        source,
+        ...v,
+        conversion: v.generated ? Math.round((v.admissions / v.generated) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => b.generated - a.generated);
+  }, [clients]);
+
+  const courseAdmissionReport = useMemo(() => {
+    const m: Record<string, { admissions: number; revenue: number; pendingFees: number; cancelled: number }> = {};
+    clients.forEach((c) => {
+      const course = c.interested_program || c.service_interest || "Unspecified";
+      if (!m[course]) m[course] = { admissions: 0, revenue: 0, pendingFees: 0, cancelled: 0 };
+      const adm = (c.admission_status || "").toLowerCase();
+      const pay = (c.payment_status || "").toLowerCase();
+      if (["cancelled", "canceled", "withdrawn"].includes(adm)) m[course].cancelled += 1;
+      const isAdmitted =
+        ["admitted", "enrolled", "joined"].includes(adm) ||
+        normalizeStatus(String(c.status)) === "Converted" ||
+        Boolean(c.converted_at);
+      if (isAdmitted) {
+        m[course].admissions += 1;
+        m[course].revenue += Number(c.final_fee ?? c.fee_quoted ?? 0);
+      }
+      if (["pending", "partial", "due"].includes(pay)) {
+        m[course].pendingFees += Number(c.final_fee ?? c.fee_quoted ?? 0);
+      }
+    });
+    return Object.entries(m)
+      .map(([course, v]) => ({ course, ...v }))
+      .sort((a, b) => b.admissions - a.admissions || b.revenue - a.revenue);
+  }, [clients]);
+
+  const revenueByEmployee = useMemo(() => {
+    const m: Record<string, { admissions: number; revenue: number; pendingFees: number }> = {};
+    clients.forEach((c) => {
+      const id = c.assigned_to || "unassigned";
+      if (!m[id]) m[id] = { admissions: 0, revenue: 0, pendingFees: 0 };
+      const adm = (c.admission_status || "").toLowerCase();
+      const pay = (c.payment_status || "").toLowerCase();
+      const isAdmitted =
+        ["admitted", "enrolled", "joined"].includes(adm) ||
+        normalizeStatus(String(c.status)) === "Converted" ||
+        Boolean(c.converted_at);
+      if (isAdmitted) {
+        m[id].admissions += 1;
+        m[id].revenue += Number(c.final_fee ?? c.fee_quoted ?? 0);
+      }
+      if (["pending", "partial", "due"].includes(pay)) {
+        m[id].pendingFees += Number(c.final_fee ?? c.fee_quoted ?? 0);
+      }
+    });
+    return Object.entries(m)
+      .map(([id, v]) => ({
+        id,
+        name: id === "unassigned" ? "Unassigned" : employeeNameMap[id] || id.slice(0, 8),
+        ...v,
+        avgRevenue: v.admissions ? Math.round((v.revenue / v.admissions) * 100) / 100 : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [clients, employeeNameMap]);
 
   const exportContext = useMemo<ReportExportContext>(
     () => ({
@@ -604,6 +851,10 @@ export function ReportsWorkbench() {
       filteredProjects,
       filteredTasks,
       filteredAttendance,
+      callSessions,
+      followups,
+      timeline,
+      dailyEmployeeRows,
       employeeNameMap,
       perEmployeeTaskCounts,
       perEmployeeAttendanceRate,
@@ -617,14 +868,35 @@ export function ReportsWorkbench() {
       topPerformers,
       bestRevenueProject,
       bestRevenueClient,
+      overviewExtras: {
+        presentToday: attendanceToday.present,
+        checkedIn: attendanceToday.checkedIn,
+        checkedOut: attendanceToday.checkedOut,
+        calls: callStats.total,
+        connected: callStats.connected,
+        pendingFollowups: followupStats.pending,
+        admissions: admissionStats.admissions,
+        revenue: admissionStats.revenue + financeStats.rev,
+        pendingTasks: taskStats.pending + taskStats.inProg,
+        avgProductivity: teamPerformance.totals.avgProductivity,
+      },
     }),
     [
       activeEmployees.length,
+      admissionStats.admissions,
+      admissionStats.revenue,
       attendance,
       attendanceRateOverall,
+      attendanceToday.checkedIn,
+      attendanceToday.checkedOut,
+      attendanceToday.present,
       bestRevenueClient,
       bestRevenueProject,
+      callSessions,
+      callStats.connected,
+      callStats.total,
       clients,
+      dailyEmployeeRows,
       distinctDepts,
       employeeNameMap,
       filteredAttendance,
@@ -634,6 +906,8 @@ export function ReportsWorkbench() {
       filteredTasks,
       financeStats,
       financeTx,
+      followupStats.pending,
+      followups,
       perEmployeeAttendanceRate,
       perEmployeeProjects,
       perEmployeeTaskCounts,
@@ -642,6 +916,8 @@ export function ReportsWorkbench() {
       projects,
       taskStats,
       tasks,
+      teamPerformance.totals.avgProductivity,
+      timeline,
       topPerformers,
     ],
   );
@@ -675,15 +951,16 @@ export function ReportsWorkbench() {
       const slug = tab.replace(/_/g, "-");
       const scopeSlug = scope === "all" ? "full" : "filtered";
       const base = `aj-academy-${slug}-${scopeSlug}-${stamp}`;
-      const title = `AJ Academy — ${REPORTS_TAB_LABELS[tab]}${scope === "all" ? " (full data)" : ""}`;
       try {
-        if (format === "csv") {
-          exportRowsAsCsv(`${base}.csv`, rows);
-        } else if (format === "excel") {
-          await exportRowsAsExcel(`${base}.xlsx`, rows);
-        } else {
-          await exportRowsAsPdf(title, `${base}.pdf`, rows);
-        }
+        await exportReportWithMeta(format, base, rows, {
+          companyName: reportMeta?.companyName || "AJ Academy",
+          reportName: REPORTS_TAB_LABELS[tab],
+          generatedAt: reportMeta?.generatedAt || new Date().toISOString(),
+          generatedBy: reportMeta?.generatedBy || null,
+          dateFrom: activeRange.from,
+          dateTo: activeRange.to,
+          summary: `${rows.length} row(s) · scope ${scope}`,
+        });
         setExportMessage(`Exported ${rows.length} row(s) — ${REPORTS_TAB_LABELS[tab]} (${scope === "all" ? "all data" : "filtered"}).`);
       } catch (e) {
         setExportMessage(friendlyReportsError(e));
@@ -691,7 +968,7 @@ export function ReportsWorkbench() {
         setExportBusy(null);
       }
     },
-    [exportContext],
+    [activeRange.from, activeRange.to, exportContext, reportMeta],
   );
 
   const runExportAllWorkbook = useCallback(async () => {
@@ -722,7 +999,10 @@ export function ReportsWorkbench() {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-3xl font-semibold text-[#0f172a]">Reports &amp; Analytics</h2>
-          <p className="mt-1 text-xs text-[#64748b] sm:text-sm">View real-time business insights, company analytics and operational reports.</p>
+          <p className="mt-1 text-xs text-[#64748b] sm:text-sm">
+            Live Supabase data · SQL-filtered range {activeRange.from} → {activeRange.to}
+            {reportMeta?.generatedBy ? ` · Viewer: ${reportMeta.generatedBy}` : ""}
+          </p>
         </div>
         <Button variant="outline" className="h-9 rounded-full border-[#e8dcc8]" disabled={loading} onClick={() => void loadAll()}>
           Refresh data
@@ -730,6 +1010,93 @@ export function ReportsWorkbench() {
       </header>
 
       {loadError ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-800">{loadError}</div> : null}
+      <ReportsSchemaNotices gaps={schemaGaps.filter((g) => g.kind !== "missing_activity")} />
+
+      <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-3">
+        <label className="text-xs text-[#64748b]">
+          Period
+          <select
+            className="mt-1 block h-9 rounded-lg border border-[#dbe6f3] bg-white px-2 text-sm"
+            value={datePreset}
+            onChange={(e) => setDatePreset(e.target.value as ReportDatePreset)}
+          >
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="this_week">This week</option>
+            <option value="this_month">This month</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        {datePreset === "custom" ? (
+          <>
+            <label className="text-xs text-[#64748b]">
+              From
+              <Input type="date" className="mt-1 h-9 w-[150px]" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+            </label>
+            <label className="text-xs text-[#64748b]">
+              To
+              <Input type="date" className="mt-1 h-9 w-[150px]" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+            </label>
+          </>
+        ) : null}
+        <label className="text-xs text-[#64748b]">
+          Employee
+          <select
+            className="mt-1 block h-9 min-w-[160px] rounded-lg border border-[#dbe6f3] bg-white px-2 text-sm"
+            value={globalEmployeeId}
+            onChange={(e) => setGlobalEmployeeId(e.target.value)}
+          >
+            <option value="">All employees</option>
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.full_name || p.email || p.id.slice(0, 8)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-[#64748b]">
+          Department
+          <select
+            className="mt-1 block h-9 min-w-[140px] rounded-lg border border-[#dbe6f3] bg-white px-2 text-sm"
+            value={globalDepartment}
+            onChange={(e) => setGlobalDepartment(e.target.value)}
+          >
+            <option value="">All departments</option>
+            {distinctDepts.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-[#64748b]">
+          Lead source
+          <select
+            className="mt-1 block h-9 min-w-[140px] rounded-lg border border-[#dbe6f3] bg-white px-2 text-sm"
+            value={globalLeadSource}
+            onChange={(e) => setGlobalLeadSource(e.target.value)}
+          >
+            <option value="">All sources</option>
+            {clientSourceOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-[#64748b]">
+          Course / program
+          <Input
+            className="mt-1 h-9 w-[160px]"
+            placeholder="Exact match"
+            value={globalCourse}
+            onChange={(e) => setGlobalCourse(e.target.value)}
+          />
+        </label>
+        <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+          Branch filter: unavailable (no org branch column on profiles/clients)
+        </div>
+      </div>
 
       <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-2">
         <div className="flex min-w-max gap-2">
@@ -765,15 +1132,26 @@ export function ReportsWorkbench() {
         <div className="space-y-6">
           <div className="stat-cards-grid-5">
             <StatCard title="Total employees" value={profiles.length} loading={loading} />
-            <StatCard title="Active employees" value={activeEmployees.length} loading={loading} />
-            <StatCard title="Total clients" value={clients.length} loading={loading} />
-            <StatCard title="Active projects" value={projectStats.active} loading={loading} />
-            <StatCard title="Total tasks" value={taskStats.total} loading={loading} />
-            <StatCard title="Completed tasks" value={taskStats.completed} loading={loading} />
-            <StatCard title="Monthly revenue" value={formatInr(financeStats.revThis)} loading={loading} />
-            <StatCard title="Monthly expenses" value={formatInr(financeStats.expThis)} loading={loading} />
-            <StatCard title="Net profit (all tx)" value={formatInr(financeStats.net)} loading={loading} />
-            <StatCard title="Attendance rate %" value={`${attendanceRateOverall}%`} loading={loading} subtitle="Last ~60d records" />
+            <StatCard title="Employees present" value={attendanceToday.present} loading={loading} subtitle="Today" />
+            <StatCard title="Checked in" value={attendanceToday.checkedIn} loading={loading} subtitle="Today" />
+            <StatCard title="Checked out" value={attendanceToday.checkedOut} loading={loading} subtitle="Today" />
+            <StatCard
+              title="Today's calls"
+              value={gapForObject(schemaGaps, "lead_call") && !callSessions.length ? "Missing table" : callStats.total}
+              loading={loading}
+            />
+            <StatCard title="Connected calls" value={callStats.connected} loading={loading} />
+            <StatCard title="Pending follow-ups" value={followupStats.pending} loading={loading} />
+            <StatCard title="Admissions" value={admissionStats.admissions} loading={loading} />
+            <StatCard
+              title="Revenue"
+              value={formatInr(admissionStats.revenue + financeStats.rev)}
+              loading={loading}
+              subtitle="Fees + income tx in range"
+            />
+            <StatCard title="Tasks completed" value={taskStats.completed} loading={loading} />
+            <StatCard title="Pending tasks" value={taskStats.pending + taskStats.inProg} loading={loading} />
+            <StatCard title="Avg productivity" value={teamPerformance.totals.avgProductivity} loading={loading} />
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
@@ -783,7 +1161,7 @@ export function ReportsWorkbench() {
                 {monthlyRevTrend.map(([k, v]) => (
                   <BarRow key={k} label={k} value={v} max={Math.max(1, ...monthlyRevTrend.map((x) => x[1]))} />
                 ))}
-                {!monthlyRevTrend.length ? <p className="text-xs text-[#64748b]">No finance transactions yet.</p> : null}
+                {!monthlyRevTrend.length ? <p className="text-xs text-[#64748b]">No finance transactions in range.</p> : null}
               </div>
             </div>
             <div className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
@@ -825,6 +1203,33 @@ export function ReportsWorkbench() {
           </div>
         </div>
       ) : null}
+
+      {activeTab === "calls" ? (
+        <CallReportPanel
+          loading={loading}
+          calls={callSessions}
+          callGap={gapForObject(schemaGaps, "lead_call") || gapForObject(schemaGaps, "v_report_call")}
+          durationNote={reportMeta?.durationNote || "Duration from approximate_duration_seconds only."}
+        />
+      ) : null}
+
+      {activeTab === "followups" ? (
+        <FollowupReportPanel
+          loading={loading}
+          followups={followups}
+          gap={gapForObject(schemaGaps, "lead_follow") || gapForObject(schemaGaps, "v_report_follow")}
+        />
+      ) : null}
+
+      {activeTab === "timeline" ? (
+        <TimelineReportPanel
+          loading={loading}
+          timeline={timeline}
+          gap={gapForObject(schemaGaps, "employee_timeline") || gapForObject(schemaGaps, "lead_activit")}
+        />
+      ) : null}
+
+      {activeTab === "daily" ? <DailyEmployeePanel loading={loading} rows={dailyEmployeeRows} /> : null}
 
       {activeTab === "employees" ? (
         <div className="space-y-4">
@@ -1074,12 +1479,15 @@ export function ReportsWorkbench() {
             <div className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
               <p className="text-sm font-semibold text-[#0f172a]">Lead source report</p>
               <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto text-sm">
-                {sourceBreakdown.map(([k, v]) => (
-                  <li key={k} className="flex justify-between">
-                    <span>{k}</span>
-                    <span className="font-medium">{v}</span>
+                {leadSourceReport.map((r) => (
+                  <li key={r.source} className="flex justify-between gap-2">
+                    <span>{r.source}</span>
+                    <span className="text-xs text-[#64748b]">
+                      Gen {r.generated} · Int {r.interested} · Adm {r.admissions} · {formatInr(r.revenue)} · {r.conversion}%
+                    </span>
                   </li>
                 ))}
+                {!leadSourceReport.length ? <li className="text-xs text-[#64748b]">No leads.</li> : null}
               </ul>
             </div>
             <div className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
@@ -1102,6 +1510,20 @@ export function ReportsWorkbench() {
                     <span>{v}</span>
                   </li>
                 ))}
+              </ul>
+            </div>
+            <div className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
+              <p className="text-sm font-semibold text-[#0f172a]">Admission by course</p>
+              <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto text-sm">
+                {courseAdmissionReport.map((r) => (
+                  <li key={r.course} className="flex justify-between gap-2">
+                    <span>{r.course}</span>
+                    <span className="text-xs text-[#64748b]">
+                      Adm {r.admissions} · {formatInr(r.revenue)} · Pending {formatInr(r.pendingFees)} · Cancelled {r.cancelled}
+                    </span>
+                  </li>
+                ))}
+                {!courseAdmissionReport.length ? <li className="text-xs text-[#64748b]">No admission/course data.</li> : null}
               </ul>
             </div>
             <div className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
@@ -1376,14 +1798,28 @@ export function ReportsWorkbench() {
       {activeTab === "finance" ? (
         <div className="space-y-4">
           <div className="stat-cards-grid-6">
-            <StatCard title="Total revenue" value={formatInr(financeStats.rev)} loading={loading} />
+            <StatCard title="Total revenue" value={formatInr(financeStats.rev + admissionStats.revenue)} loading={loading} subtitle="Tx + admission fees" />
             <StatCard title="Total expenses" value={formatInr(financeStats.exp)} loading={loading} />
             <StatCard title="Net profit" value={formatInr(financeStats.net)} loading={loading} />
-            <StatCard title="Pending dues" value={formatInr(financeStats.pendingDues)} loading={loading} />
+            <StatCard title="Pending dues" value={formatInr(financeStats.pendingDues + admissionStats.pendingFees)} loading={loading} />
             <StatCard title="Monthly revenue" value={formatInr(financeStats.revThis)} loading={loading} />
             <StatCard title="Monthly expense" value={formatInr(financeStats.expThis)} loading={loading} />
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
+              <p className="text-sm font-semibold text-[#0f172a]">Revenue by employee (admissions)</p>
+              <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto text-sm">
+                {revenueByEmployee.slice(0, 20).map((r) => (
+                  <li key={r.id} className="flex justify-between gap-2">
+                    <span>{r.name}</span>
+                    <span className="text-xs text-[#64748b]">
+                      Adm {r.admissions} · {formatInr(r.revenue)} · Pend {formatInr(r.pendingFees)} · Avg {formatInr(r.avgRevenue)}
+                    </span>
+                  </li>
+                ))}
+                {!revenueByEmployee.length ? <li className="text-xs text-[#64748b]">No admission fee rows.</li> : null}
+              </ul>
+            </div>
             <div className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
               <p className="text-sm font-semibold text-[#0f172a]">Revenue by client (transactions)</p>
               <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto text-sm">
@@ -1436,10 +1872,51 @@ export function ReportsWorkbench() {
       {activeTab === "performance" ? (
         <div className="space-y-4">
           <div className="stat-cards-grid">
-            <StatCard title="Productivity score" value={productivityScore} loading={loading} subtitle="Tasks + attendance blend" />
-            <StatCard title="Task completion %" value={taskStats.total ? Math.round((taskStats.completed / taskStats.total) * 1000) / 10 : 0} loading={loading} />
-            <StatCard title="Revenue growth (MoM)" value={`${financeStats.growth}%`} loading={loading} />
-            <StatCard title="Attendance %" value={`${attendanceRateOverall}%`} loading={loading} />
+            <StatCard title="Productivity score" value={productivityScore} loading={loading} subtitle="Weighted formula" />
+            <StatCard title="Avg team productivity" value={teamPerformance.totals.avgProductivity} loading={loading} />
+            <StatCard title="Total calls" value={teamPerformance.totals.calls} loading={loading} />
+            <StatCard title="Admissions" value={teamPerformance.totals.admissions} loading={loading} />
+            <StatCard title="Revenue" value={formatInr(teamPerformance.totals.revenue)} loading={loading} />
+            <StatCard title="Pending follow-ups" value={teamPerformance.totals.pendingFollowups} loading={loading} />
+            <StatCard
+              title="Top performer"
+              value={teamPerformance.top?.name || "—"}
+              loading={loading}
+              subtitle={teamPerformance.top ? `Score ${teamPerformance.top.score}` : undefined}
+            />
+            <StatCard
+              title="Least active"
+              value={teamPerformance.least?.name || "—"}
+              loading={loading}
+              subtitle={teamPerformance.least ? `Score ${teamPerformance.least.score}` : undefined}
+            />
+          </div>
+          <ProductivityWeightsNote />
+          <div className="overflow-x-auto rounded-[20px] border border-[#dbe6f3]">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-[#f8fbff] text-xs uppercase text-[#64748b]">
+                <tr>
+                  <th className="px-3 py-2">Employee</th>
+                  <th className="px-3 py-2">Calls</th>
+                  <th className="px-3 py-2">Admissions</th>
+                  <th className="px-3 py-2">Revenue</th>
+                  <th className="px-3 py-2">Pending FUs</th>
+                  <th className="px-3 py-2">Productivity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamPerformance.rows.slice(0, 50).map((r) => (
+                  <tr key={r.id} className="border-t border-[#eef2f7]">
+                    <td className="px-3 py-2">{r.name}</td>
+                    <td className="px-3 py-2">{r.calls}</td>
+                    <td className="px-3 py-2">{r.admissions}</td>
+                    <td className="px-3 py-2">{formatInr(r.revenue)}</td>
+                    <td className="px-3 py-2">{r.followupsPending}</td>
+                    <td className="px-3 py-2 font-semibold">{r.score}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 text-sm">
@@ -1633,6 +2110,9 @@ function ReportExportBar({
             onClick={() => onExport("csv")}
           >
             {busyFormat === "csv" ? "CSV…" : "CSV"}
+          </Button>
+          <Button type="button" variant="outline" className={pillClass} disabled={disabled} onClick={() => window.print()}>
+            Print
           </Button>
         </div>
       </div>

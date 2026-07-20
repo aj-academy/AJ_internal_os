@@ -175,6 +175,13 @@ Run **`analytics_reporting_schema.sql`** after attendance, tasks, CRM, and `lead
 - APIs: `POST /api/analytics/query`, `POST|PATCH /api/analytics/eod`
 - Full module docs: `AJ_Academy_OS/docs/REPORTS_ANALYTICS.md`
 
+Also run **`reports_analytics_schema.sql`** after `lead_call_workflow_schema.sql` (and ideally after `student_lead_master_aux_schema.sql` + `student_master_columns_patch.sql` for follow-ups / admissions). Safe to re-run. Adds:
+
+- Indexes on attendance / tasks / clients for date and filter queries
+- Views **`v_report_call_sessions`**, **`v_report_followups`**, **`v_report_lead_activities`**, **`v_report_admissions`** (each skipped with a NOTICE if base table/columns are missing)
+- RPC **`reports_schema_status()`** (admin-only) — probes which report tables/columns/views exist
+- API: `GET /api/reports/data` (admin session + service role) with SQL-side date / employee / department / lead-source / course filters. Call duration uses **`approximate_duration_seconds` only** (never invented). Organizational **branch** filter is unavailable (no branch column on profiles/clients).
+
 **Attendance camera / location:** Employee layout shows a one-time popup asking for camera + location (saved in browser localStorage per user). `Permissions-Policy` must allow `camera=(self)` and `geolocation=(self)` (see `lib/security/headers.ts`). Restart the Next server after header changes.
 
 ### College Visits

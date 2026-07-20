@@ -33,6 +33,7 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 5c9b) aj_reminders_rls_recursion_fix.sql (fixes infinite recursion in aj_reminders ↔ assignees RLS — run if save fails with recursion error)
 5c10) lead_call_workflow_schema.sql (Student Lead call sessions, live calling lock, outcome workflow, follow-up extras — after employee_student_master_rls + crm_owner_isolation; safe re-run)
 5c11) analytics_reporting_schema.sql (Reports & Analytics indexes + work_summaries EOD columns + analytics_employee_day_rollups RPC — after attendance + lead_call + tasks + CRM)
+5c12) reports_analytics_schema.sql (Reports views/indexes + reports_schema_status RPC — after lead_call_workflow_schema.sql; followups/admissions views skip gracefully if aux/columns missing)
 
 6) task_notifications_columns.sql
 7) in_app_notifications.sql
