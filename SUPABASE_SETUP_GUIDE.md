@@ -166,6 +166,15 @@ Run **`lead_call_workflow_schema.sql`** after `employee_student_master_rls.sql` 
 
 App APIs (staff session): `POST /api/leads/call/start`, `POST /api/leads/call/complete`, `GET /api/leads/call/pending`, `GET /api/leads/call/live`. Student Master mobile cards show Call / WhatsApp / Follow-up as primary actions; after dialer return, employees must confirm call outcome (web apps cannot detect whether a normal phone call was answered).
 
+### Reports & Analytics
+
+Run **`analytics_reporting_schema.sql`** after attendance, tasks, CRM, and `lead_call_workflow_schema.sql` (safe to re-run). Adds EOD columns on `work_summaries`, query indexes, and optional `analytics_employee_day_rollups` RPC.
+
+- Admin: sidebar **Reports & Analytics** → `/admin/reports` (`AnalyticsWorkbench`)
+- Employee: **My Reports** → `/employee/reports` (own data only)
+- APIs: `POST /api/analytics/query`, `POST|PATCH /api/analytics/eod`
+- Full module docs: `AJ_Academy_OS/docs/REPORTS_ANALYTICS.md`
+
 **Attendance camera / location:** Employee layout shows a one-time popup asking for camera + location (saved in browser localStorage per user). `Permissions-Policy` must allow `camera=(self)` and `geolocation=(self)` (see `lib/security/headers.ts`). Restart the Next server after header changes.
 
 ### College Visits

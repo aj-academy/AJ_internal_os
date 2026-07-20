@@ -16,7 +16,7 @@ const adminSidebarItems = [
   { label: "Reimbursements", href: "/admin/reimbursements" },
   { label: "Company Policies", href: "/admin/policies" },
   { label: "Portfolio", href: "/admin/portfolio" },
-  { label: "Reports", href: "/admin/reports" },
+  { label: "Reports & Analytics", href: "/admin/reports" },
   { label: "Settings", href: "/admin/settings" },
   { label: "Notification Diagnostics", href: "/admin/notification-diagnostics" },
 ];

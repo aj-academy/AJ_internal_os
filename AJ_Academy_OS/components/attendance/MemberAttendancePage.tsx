@@ -56,6 +56,8 @@ interface CheckoutFormState {
   pendingWork: string;
   challenges: string;
   tomorrowPlan: string;
+  supportRequired: string;
+  additionalRemarks: string;
 }
 
 const initialCheckoutForm: CheckoutFormState = {
@@ -63,6 +65,8 @@ const initialCheckoutForm: CheckoutFormState = {
   pendingWork: "",
   challenges: "",
   tomorrowPlan: "",
+  supportRequired: "",
+  additionalRemarks: "",
 };
 
 function getTodayLocalDate() {
@@ -500,8 +504,11 @@ export function MemberAttendancePage({
       setMessage({ type: "error", text: "You have already checked out for today." });
       return;
     }
-    if (!checkoutForm.completedWork.trim() || !checkoutForm.pendingWork.trim()) {
-      setMessage({ type: "error", text: "Please fill completed work and pending work before check out." });
+    if (!checkoutForm.completedWork.trim() || !checkoutForm.pendingWork.trim() || !checkoutForm.tomorrowPlan.trim()) {
+      setMessage({
+        type: "error",
+        text: "End of Day requires today's achievement, pending work, and tomorrow's plan.",
+      });
       return;
     }
 
@@ -540,10 +547,28 @@ export function MemberAttendancePage({
         pending_work: checkoutForm.pendingWork,
         challenges: checkoutForm.challenges,
         tomorrow_plan: checkoutForm.tomorrowPlan,
+        support_required: checkoutForm.supportRequired || null,
+        additional_remarks: checkoutForm.additionalRemarks || null,
         status: "submitted",
       });
 
-      if (summaryError) throw summaryError;
+      if (summaryError) {
+        if (/support_required|additional_remarks|column/i.test(summaryError.message)) {
+          const { error: fbErr } = await supabase.from("work_summaries").insert({
+            employee_id: employeeId,
+            attendance_id: latestToday.id,
+            summary_date: getTodayLocalDate(),
+            completed_work: checkoutForm.completedWork,
+            pending_work: checkoutForm.pendingWork,
+            challenges: checkoutForm.challenges,
+            tomorrow_plan: checkoutForm.tomorrowPlan,
+            status: "submitted",
+          });
+          if (fbErr) throw fbErr;
+        } else {
+          throw summaryError;
+        }
+      }
 
       await loadAttendanceData(employeeId);
       setCheckoutForm(initialCheckoutForm);
@@ -676,6 +701,16 @@ export function MemberAttendancePage({
               label="Tomorrow Plan"
               value={checkoutForm.tomorrowPlan}
               onChange={(value) => setCheckoutForm((prev) => ({ ...prev, tomorrowPlan: value }))}
+            />
+            <TextArea
+              label="Support Required"
+              value={checkoutForm.supportRequired}
+              onChange={(value) => setCheckoutForm((prev) => ({ ...prev, supportRequired: value }))}
+            />
+            <TextArea
+              label="Additional Remarks"
+              value={checkoutForm.additionalRemarks}
+              onChange={(value) => setCheckoutForm((prev) => ({ ...prev, additionalRemarks: value }))}
             />
           </div>
           <div className="mt-4">

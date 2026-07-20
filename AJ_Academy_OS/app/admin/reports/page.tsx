@@ -1,5 +1,5 @@
-import { ReportsWorkbench } from "@/components/reports/ReportsWorkbench";
+import { AnalyticsWorkbench } from "@/components/analytics/AnalyticsWorkbench";
 
-export default function AdminReportsPage() {
-  return <ReportsWorkbench />;
+export default function AdminReportsAnalyticsPage() {
+  return <AnalyticsWorkbench mode="admin" />;
 }

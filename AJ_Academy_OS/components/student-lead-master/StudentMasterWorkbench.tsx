@@ -1426,6 +1426,15 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       }
 
       if (!isAdmin && editId) {
+        if (!String(saveForm.status || "").trim()) {
+          throw new Error("Lead status is required before saving.");
+        }
+        if (!String(saveForm.notes || "").trim()) {
+          throw new Error("Remarks are required before saving. Document the call / conversation outcome.");
+        }
+        if (!String(saveForm.follow_up_date || "").trim()) {
+          throw new Error("Next follow-up date is required before saving.");
+        }
         const base = buildPayload(saveForm, { full: false }) as Record<string, unknown>;
         const limited = pickEmployeePayload(base);
         const previous = clients.find((cRow) => cRow.id === editId);
