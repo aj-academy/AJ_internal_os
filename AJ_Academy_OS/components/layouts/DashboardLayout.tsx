@@ -8,6 +8,7 @@ import { Sidebar, type SidebarItem } from "@/components/layouts/Sidebar";
 import { Topbar } from "@/components/layouts/Topbar";
 import { useSystemPreferences } from "@/hooks/useSystemPreferences";
 import { ReminderAlertsWatcher } from "@/components/reminders/ReminderAlertsWatcher";
+import { NotificationPresence } from "@/components/notifications/NotificationPresence";
 
 interface DashboardLayoutProps {
   roleLabel: string;
@@ -106,6 +107,7 @@ export function DashboardLayout({
             <div className="aj-page">{children}</div>
           </main>
           <ReminderAlertsWatcher />
+          <NotificationPresence />
         </div>
 
         <SheetContent

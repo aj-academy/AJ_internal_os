@@ -37,6 +37,7 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 
 6) task_notifications_columns.sql
 7) in_app_notifications.sql
+7b) in_app_notifications_realtime.sql (Supabase Realtime on in_app_notifications — bell sound + PWA badge sync when tasks are assigned; run after 7)
 8) profiles_rls_fix.sql   *** REQUIRED for login (RLS + get_my_profile RPC) ***
 8b) add_role_and_sync_profiles.sql  *** after Auth users exist — fills role column + links Auth → profiles ***
 8c) add_employee_role.sql  *** run if User Master fails with profiles_role_check for employee role ***

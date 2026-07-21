@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { playNotificationSound } from "@/lib/notifications/notificationSound";
+import { setNotificationBadge } from "@/lib/notifications/appBadge";
 import { Button } from "@/components/ui/button";
 import { resolveNotificationHref } from "@/lib/notificationLinks";
 
@@ -84,6 +85,10 @@ export function InAppNotificationsBell({ fallbackTaskHref }: { fallbackTaskHref:
   }, [load, supabase, userId]);
 
   const unread = useMemo(() => rows.filter((r) => !r.read_at).length, [rows]);
+
+  useEffect(() => {
+    void setNotificationBadge(unread);
+  }, [unread]);
 
   const markRead = async (id: string) => {
     await supabase.from("in_app_notifications").update({ read_at: new Date().toISOString() }).eq("id", id);

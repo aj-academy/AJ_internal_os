@@ -22,6 +22,7 @@ import { OfflineBanner } from "@/components/pwa/OfflineBanner";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { MobileInstallHelp } from "@/components/pwa/MobileInstallHelp";
 import { ForegroundPushListener } from "@/components/push/ForegroundPushListener";
+import { registerNotificationSoundUnlock } from "@/lib/notifications/notificationSound";
 import { isPwaStandalone, markPwaInstallComplete } from "@/lib/pwa/install-state";
 
 type PwaContextValue = {
@@ -76,6 +77,8 @@ export function PwaProvider({ children }: { children: ReactNode }) {
       markPwaInstallComplete();
     }
   }, []);
+
+  useEffect(() => registerNotificationSoundUnlock(), []);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);

@@ -145,3 +145,17 @@ end;
 $$;
 
 grant execute on function public.create_task_completed_notification(uuid) to authenticated;
+
+-- Realtime (bell + badge updates without refresh)
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables p
+    where p.pubname = 'supabase_realtime'
+      and p.schemaname = 'public'
+      and p.tablename = 'in_app_notifications'
+  ) then
+    alter publication supabase_realtime add table public.in_app_notifications;
+  end if;
+end $$;

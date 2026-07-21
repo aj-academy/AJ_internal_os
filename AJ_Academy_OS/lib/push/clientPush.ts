@@ -1,6 +1,7 @@
 "use client";
 
 import { getToken, deleteToken, onMessage, type Unsubscribe } from "firebase/messaging";
+import { unlockNotificationAudio } from "@/lib/notifications/notificationSound";
 import {
   getFirebaseMessaging,
   getFirebaseVapidKey,
@@ -339,6 +340,7 @@ export async function subscribeForegroundMessages(
     const body = data.body || payload.notification?.body || "";
     const url = data.targetUrl || data.url || "/employee/notifications";
     console.info("[AJOS FCM] Foreground message received");
+    unlockNotificationAudio();
     onPayload({ title, body, url });
 
     // Hidden/background tab: still show a system notification (do not rely on refresh).

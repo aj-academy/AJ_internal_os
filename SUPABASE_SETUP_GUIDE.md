@@ -63,6 +63,7 @@ Run files from **`AJ_Academy_SB`** in order (`DATABASE_SETUP_ORDER.txt`):
 5. `aj_academy_roles_patch.sql`  
 6. `task_notifications_columns.sql`  
 7. `in_app_notifications.sql`  
+7b. **`in_app_notifications_realtime.sql`** (recommended — Realtime INSERT for bell chime + taskbar badge when a task is assigned while the dashboard is open)
 8. **`profiles_rls_fix.sql`** (required — fixes login redirect loop)  
 8c. **`profiles_rls_tighten.sql`** (recommended — limits who can read other users' profiles)  
 8f. **`security_rls_access_fix.sql`** (run if admin dashboard / Student Master show **0 records** after 8c — restores admin RLS on profiles, clients, tasks, projects, finance, attendance, Student Master aux tables)  
@@ -213,6 +214,8 @@ Run **`project_master_schema.sql`** after `schema.sql` and task schema (see `DAT
 **Employee Lead Contact shows “—” / “(limited)” / ID placeholders on My Tasks?** Deploy + re-run **`tasks_linked_lead_access.sql`**. Prefer the app path: `/api/tasks/linked-crm` (needs **`SUPABASE_SERVICE_ROLE_KEY`** on the server) loads full Student Master columns for leads linked on the user’s tasks. Also ensures `get_my_task_linked_clients` RPC matches `client_ids` reliably. If the lead was deleted by admin but the task remains, re-run **`crm_delete_fix.sql`** (cleans task links) or delete the orphan task after the employee DELETE policy is applied.
 
 **Employee task notification opens wrong page / dashboard?** Run **`task_notification_employee_link_fix.sql`**. Older installs linked employees to `/student/my-tasks` (blocked by the student layout). The app also remaps those links client-side; the SQL fixes new notifications and backfills old ones.
+
+**Task assigned — no chime / no taskbar badge (1, 2, 3)?** Install AJ OS as a PWA (Chrome → Install app) so Windows shows the numbered badge on the taskbar icon. Run **`in_app_notifications_realtime.sql`** so the bell chime fires while the dashboard is open. When the app is minimized, FCM + the service worker show a Windows toast (OS sound); custom chime plays when the app is in the foreground after the employee has clicked once on the dashboard.
 
 **Pin Student Lead / College Visit into CRM (not Dashboard)?** Run **`employee_crm_pins.sql`** after `tasks_linked_lead_access.sql` + `crm_owner_isolation.sql`. From My Tasks → Student Lead / College Visit, multi-select → **Pin selected to Student Master / College Visits**. That stores entity pins in `employee_crm_pins` and merges them into employee **Student Master → All Students** / **College Visits** (via `/api/tasks/crm-pins`). **Project** tasks still use **`employee_task_pins_section_patch.sql`** + **Pin selected to dashboard** (Dashboard → My tasks). View opens the same Edit student / Edit college form as CRM; Activity opens separately.
 

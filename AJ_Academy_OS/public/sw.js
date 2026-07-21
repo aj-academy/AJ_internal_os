@@ -1,5 +1,5 @@
 /* AJ Academy — PWA service worker + FCM background handler (single root worker) */
-const CACHE_VERSION = "aj-academy-v8-fcm-bg";
+const CACHE_VERSION = "aj-academy-v9-notify-badge";
 const ICON_QUERY = "?v=3";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
@@ -34,6 +34,30 @@ function isSafeInternalUrl(url) {
 }
 
 const recentFcmTags = new Set();
+let badgeCount = 0;
+
+function isBadgeApiAvailable() {
+  return typeof self.navigator !== "undefined" && "setAppBadge" in self.navigator;
+}
+
+async function applyAppBadge(count) {
+  if (!isBadgeApiAvailable()) return;
+  const n = Math.max(0, Math.floor(count));
+  try {
+    if (n <= 0) {
+      await self.navigator.clearAppBadge?.();
+    } else {
+      await self.navigator.setAppBadge(n);
+    }
+  } catch {
+    /* unsupported */
+  }
+}
+
+async function incrementAppBadge() {
+  badgeCount += 1;
+  await applyAppBadge(badgeCount);
+}
 
 /**
  * Show one system notification per notificationId/tag (prevents push + onBackgroundMessage duplicates).
@@ -70,7 +94,10 @@ function showFcmSystemNotification(data, fallbackTitle) {
         source: data.source || "ajos-fcm",
       },
     })
-    .then(() => fcmLog("notification displayed", tag));
+    .then(() => {
+      fcmLog("notification displayed", tag);
+      return incrementAppBadge();
+    });
 }
 
 function extractFcmData(raw) {
@@ -236,6 +263,12 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
+    return;
+  }
+  if (event.data?.type === "BADGE_SYNC") {
+    const n = Math.max(0, Math.floor(Number(event.data.count) || 0));
+    badgeCount = n;
+    event.waitUntil(applyAppBadge(n));
   }
 });
 
@@ -293,6 +326,7 @@ self.addEventListener("push", (event) => {
         tag,
         data: { url },
       });
+      await incrementAppBadge();
     })(),
   );
 });

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { subscribeForegroundMessages } from "@/lib/push/clientPush";
+import { onForegroundPushAlert } from "@/components/notifications/NotificationPresence";
 import { safeRelativePath } from "@/lib/security/safeRedirect";
 
 type Toast = { title: string; body: string; url: string };
@@ -22,6 +23,7 @@ export function ForegroundPushListener() {
     void (async () => {
       const result = await subscribeForegroundMessages((payload) => {
         if (cancelled) return;
+        onForegroundPushAlert();
         setToast({
           title: payload.title || "AJ OS",
           body: payload.body || "",
