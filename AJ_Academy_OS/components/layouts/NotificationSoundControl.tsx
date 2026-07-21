@@ -50,15 +50,16 @@ export function NotificationSoundControl() {
       <Button
         type="button"
         variant="outline"
-        size="icon"
         className={[
-          "touch-target rounded-full border-[#e8dcc8] bg-white",
+          "touch-target gap-1.5 rounded-full border-[#e8dcc8] bg-white px-2.5 sm:px-3",
           mutedNow || !settings.enabled ? "text-[#94a3b8]" : "text-[#2563eb]",
         ].join(" ")}
         onClick={() => setOpen((v) => !v)}
         aria-label="Notification sound settings"
+        title="Notification sound"
       >
         {mutedNow || !settings.enabled ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+        <span className="hidden text-xs font-medium sm:inline">Sound</span>
       </Button>
 
       {open ? (

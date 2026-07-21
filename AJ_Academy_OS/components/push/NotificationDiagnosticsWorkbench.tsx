@@ -12,6 +12,10 @@ import {
 } from "@/lib/push/clientPush";
 import { getFirebasePublicConfig, getFirebaseVapidKey } from "@/lib/firebase/client";
 import { isPwaStandalone } from "@/lib/pwa/install-state";
+import {
+  playNotificationSound,
+  unlockNotificationAudio,
+} from "@/lib/notifications/notificationSound";
 
 type Health = {
   firebaseClientConfigured?: boolean;
@@ -211,13 +215,32 @@ export function NotificationDiagnosticsWorkbench() {
           })}>
             Save Token to Supabase
           </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="bg-[#2563eb] text-white hover:bg-[#1d4ed8]"
+            disabled={busy}
+            onClick={() =>
+              void run("sound", async () => {
+                unlockNotificationAudio();
+                playNotificationSound(true);
+                pushLog(true, "Played AJ OS chime (in-app). If silent, click the speaker icon in the top bar → Test sound.");
+              })
+            }
+          >
+            Play Test Sound (AJ OS chime)
+          </Button>
           <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run("local", async () => {
+            unlockNotificationAudio();
+            playNotificationSound(true);
             const r = await showLocalTestNotification();
-            pushLog(r.ok, r.ok ? "Local notification shown" : r.error || "Local failed");
+            pushLog(r.ok, r.ok ? "Local notification + chime shown" : r.error || "Local failed");
           })}>
             Display Local Browser Notification
           </Button>
           <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run("test", async () => {
+            unlockNotificationAudio();
+            playNotificationSound(true);
             const r = await sendTestPush();
             pushLog(r.ok, r.ok ? `Test API: ${JSON.stringify(r.detail)}` : r.error || "Test failed");
           })}>
@@ -285,13 +308,23 @@ export function NotificationDiagnosticsWorkbench() {
       </section>
 
       <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-950">
-        <p className="font-semibold">Sound checklist</p>
-        <p className="mt-1">
-          Web apps cannot force a custom notification tone. Default OS sound only — set <code>silent: false</code> (done).
-        </p>
-        <ul className="mt-2 list-disc space-y-1 pl-4">
-          <li>Windows: Settings → System → Notifications → on; Chrome allowed; sounds allowed; Focus / DND off</li>
-          <li>Android: Chrome/PWA notifications on; category not Silent; battery unrestricted; DND off</li>
+        <p className="font-semibold">Sound — where the options are</p>
+        <ul className="mt-2 list-disc space-y-1.5 pl-4">
+          <li>
+            <strong>In-app chime (when AJ OS is open):</strong> click the{" "}
+            <strong>speaker icon</strong> next to the bell in the top bar →{" "}
+            <strong>Test sound</strong> / volume. Or use{" "}
+            <strong>Play Test Sound (AJ OS chime)</strong> above.
+          </li>
+          <li>
+            <strong>When minimized:</strong> Windows plays its own default toast sound only (browsers
+            block custom app tones in the background). There is no separate “pick a tone” option for PWAs.
+          </li>
+          <li>
+            Windows: Settings → System → Notifications → allow Chrome / AJ Academy OS → turn{" "}
+            <em>Play a sound</em> on; Focus assist / Do Not Disturb off.
+          </li>
+          <li>Android: notifications on; category not Silent; battery unrestricted; DND off.</li>
         </ul>
       </section>
 
