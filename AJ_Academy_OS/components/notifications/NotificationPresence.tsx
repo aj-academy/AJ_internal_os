@@ -8,6 +8,8 @@ import {
   registerNotificationSoundUnlock,
   unlockNotificationAudio,
 } from "@/lib/notifications/notificationSound";
+import { enablePushNotifications } from "@/lib/push/clientPush";
+import { NotificationEnablePrompt } from "@/components/notifications/NotificationEnablePrompt";
 
 /**
  * Keeps PWA app-icon badge in sync and unlocks notification audio after login.
@@ -36,6 +38,11 @@ export function NotificationPresence() {
   useEffect(() => {
     const teardownUnlock = registerNotificationSoundUnlock();
     void syncUnreadBadge();
+
+    // If permission already granted, keep FCM device row active after login.
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      void enablePushNotifications({ notificationsAfterLogout: true });
+    }
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
@@ -79,7 +86,7 @@ export function NotificationPresence() {
     };
   }, [syncUnreadBadge]);
 
-  return null;
+  return <NotificationEnablePrompt />;
 }
 
 /** Play chime when a push payload arrives in the foreground (task assigned, etc.). */

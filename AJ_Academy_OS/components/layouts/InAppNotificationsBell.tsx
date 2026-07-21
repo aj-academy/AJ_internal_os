@@ -66,6 +66,14 @@ export function InAppNotificationsBell({ fallbackTaskHref }: { fallbackTaskHref:
     });
   }, [load]);
 
+  // Polling fallback when Realtime is not enabled on in_app_notifications
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 15_000);
+    return () => window.clearInterval(id);
+  }, [load]);
+
   useEffect(() => {
     if (!userId) return;
     const ch = supabase

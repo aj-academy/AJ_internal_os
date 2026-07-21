@@ -1715,6 +1715,16 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       } catch {
         /* optional RPC */
       }
+      try {
+        void fetch("/api/push/event", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "task_assigned", taskId }),
+        });
+      } catch {
+        /* ignore */
+      }
       leadBulk.clearSelection();
       setBulkAssignTo("");
       setSuccess(

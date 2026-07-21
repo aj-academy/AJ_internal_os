@@ -4,5 +4,5 @@ export const OFFLINE_BANNER_MESSAGE =
 export const PWA_ONLINE_EVENT = "aj-academy-online";
 export const SW_URL = "/sw.js";
 /** Bump when PWA identity or service worker changes — triggers one-time cache/SW reset on devices. */
-export const PWA_BUILD_VERSION = "aj-academy-notify-4";
+export const PWA_BUILD_VERSION = "aj-academy-notify-5";
 export const PWA_BUILD_STORAGE_KEY = "aj-academy-pwa-build";

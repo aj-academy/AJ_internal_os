@@ -6,7 +6,10 @@ import { ClipboardList, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { resolveNotificationHref } from "@/lib/notificationLinks";
-import { playNotificationSound } from "@/lib/notifications/notificationSound";
+import {
+  playNotificationSound,
+  unlockNotificationAudio,
+} from "@/lib/notifications/notificationSound";
 
 type TaskNotif = {
   id: string;
@@ -16,6 +19,7 @@ type TaskNotif = {
 };
 
 const SHOWN_KEY = "bb_task_notif_shown";
+const POLL_MS = 12_000;
 
 function loadShownIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -34,6 +38,14 @@ function markShown(id: string) {
   sessionStorage.setItem(SHOWN_KEY, JSON.stringify(Array.from(set).slice(-50)));
 }
 
+function isTaskAssignmentNotif(title: string, type?: string | null) {
+  const t = (type ?? "").toLowerCase();
+  if (t === "task_assigned" || t === "visit_assigned") return true;
+  return (title ?? "").toLowerCase().includes("new task assigned")
+    || (title ?? "").toLowerCase().includes("new customer visit assigned")
+    || (title ?? "").toLowerCase().includes("visit assigned");
+}
+
 /** Popup when a new task is assigned to the signed-in user (bell updates via realtime too). */
 export function TaskAssignmentPopup({ fallbackTaskHref = "/employee/my-tasks" }: { fallbackTaskHref?: string }) {
   const supabase = createClient();
@@ -44,8 +56,9 @@ export function TaskAssignmentPopup({ fallbackTaskHref = "/employee/my-tasks" }:
     const shown = loadShownIds();
     if (shown.has(row.id)) return;
     markShown(row.id);
-    setPopup(row);
+    unlockNotificationAudio();
     playNotificationSound();
+    setPopup(row);
   }, []);
 
   const checkRecentUnread = useCallback(async () => {
@@ -56,14 +69,16 @@ export function TaskAssignmentPopup({ fallbackTaskHref = "/employee/my-tasks" }:
 
     const { data, error } = await supabase
       .from("in_app_notifications")
-      .select("id,title,body,link_path,read_at,created_at")
+      .select("id,type,title,body,link_path,read_at,created_at")
       .eq("user_id", uid)
       .is("read_at", null)
       .order("created_at", { ascending: false })
-      .limit(5);
+      .limit(8);
 
     if (error) return;
-    const taskRow = (data ?? []).find((n) => (n.title ?? "").toLowerCase().includes("new task assigned"));
+    const taskRow = (data ?? []).find((n) =>
+      isTaskAssignmentNotif(n.title ?? "", (n as { type?: string }).type),
+    );
     if (taskRow) {
       showIfNew({
         id: taskRow.id,
@@ -76,6 +91,14 @@ export function TaskAssignmentPopup({ fallbackTaskHref = "/employee/my-tasks" }:
 
   useEffect(() => {
     void checkRecentUnread();
+  }, [checkRecentUnread]);
+
+  // Polling fallback when Realtime publication is missing / disconnected
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") void checkRecentUnread();
+    }, POLL_MS);
+    return () => window.clearInterval(id);
   }, [checkRecentUnread]);
 
   useEffect(() => {
@@ -100,13 +123,13 @@ export function TaskAssignmentPopup({ fallbackTaskHref = "/employee/my-tasks" }:
           (payload) => {
             const row = payload.new as {
               id?: string;
+              type?: string;
               title?: string;
               body?: string | null;
               link_path?: string | null;
             };
             if (!row.id) return;
-            const title = (row.title ?? "").toLowerCase();
-            if (!title.includes("new task assigned")) return;
+            if (!isTaskAssignmentNotif(row.title ?? "", row.type)) return;
             showIfNew({
               id: row.id,
               title: row.title ?? "New task",
