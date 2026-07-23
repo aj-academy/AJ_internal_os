@@ -311,20 +311,18 @@ export function NotificationDiagnosticsWorkbench() {
         <p className="font-semibold">Sound — where the options are</p>
         <ul className="mt-2 list-disc space-y-1.5 pl-4">
           <li>
-            <strong>In-app chime (when AJ OS is open):</strong> click the{" "}
-            <strong>speaker icon</strong> next to the bell in the top bar →{" "}
-            <strong>Test sound</strong> / volume. Or use{" "}
-            <strong>Play Test Sound (AJ OS chime)</strong> above.
+            <strong>In-app chime (when AJ OS is open or minimized but still running):</strong> click the{" "}
+            <strong>speaker icon</strong> next to the bell → <strong>Test sound</strong>. Or use{" "}
+            <strong>Play Test Sound (AJ OS chime)</strong> above. After a push, the service worker asks the open tab to play this chime.
           </li>
           <li>
-            <strong>When minimized:</strong> Windows plays its own default toast sound only (browsers
-            block custom app tones in the background). There is no separate “pick a tone” option for PWAs.
+            <strong>Windows / Edge toast sound:</strong> your screenshot shows toasts via Edge. Open{" "}
+            <strong>Windows Settings → System → Notifications → Microsoft Edge</strong> and turn on{" "}
+            <em>Play a sound when a notification arrives</em>. Also turn Focus assist / Do Not Disturb off.
           </li>
           <li>
-            Windows: Settings → System → Notifications → allow Chrome / AJ Academy OS → turn{" "}
-            <em>Play a sound</em> on; Focus assist / Do Not Disturb off.
+            If Edge is fully closed (no AJ OS tab in memory), only the Windows toast sound can play — not the AJ OS chime.
           </li>
-          <li>Android: notifications on; category not Silent; battery unrestricted; DND off.</li>
         </ul>
       </section>
 

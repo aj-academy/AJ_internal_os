@@ -1,5 +1,5 @@
 /* AJ Academy — PWA service worker + FCM background handler (single root worker) */
-const CACHE_VERSION = "aj-academy-v9-notify-badge";
+const CACHE_VERSION = "aj-academy-v10-bg-sound";
 const ICON_QUERY = "?v=3";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
@@ -59,6 +59,29 @@ async function incrementAppBadge() {
   await applyAppBadge(badgeCount);
 }
 
+/** Ask any open (even minimized) AJ OS tab to play the in-app chime — OS toast sound is often muted in Edge/Windows. */
+async function pingClientsToPlaySound() {
+  try {
+    const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const client of list) {
+      client.postMessage({ type: "AJOS_PLAY_NOTIFICATION_SOUND" });
+    }
+    fcmLog("pinged clients to play sound", list.length);
+  } catch {
+    /* ignore */
+  }
+}
+
+function buildNotificationTag(data) {
+  const id = String(data.notificationId || data.tag || "").trim();
+  if (id) return id.slice(0, 64);
+  // Stable tag so push + onBackgroundMessage don't show two toasts (empty id was using Date.now())
+  const raw = `${data.type || "n"}|${data.title || ""}|${data.body || data.message || ""}`;
+  let hash = 0;
+  for (let i = 0; i < raw.length; i += 1) hash = (hash * 31 + raw.charCodeAt(i)) >>> 0;
+  return `ajos-${hash.toString(16)}`.slice(0, 64);
+}
+
 /**
  * Show one system notification per notificationId/tag (prevents push + onBackgroundMessage duplicates).
  */
@@ -67,7 +90,7 @@ function showFcmSystemNotification(data, fallbackTitle) {
   const body = data.body || data.message || "You have a new notification.";
   const rawUrl = data.targetUrl || data.url || "/employee/notifications";
   const url = isSafeInternalUrl(rawUrl) ? rawUrl : "/employee/notifications";
-  const tag = String(data.notificationId || data.tag || `aj-os-${Date.now()}`).slice(0, 64);
+  const tag = buildNotificationTag(data);
 
   if (recentFcmTags.has(tag)) {
     fcmLog("showNotification skipped (duplicate tag)", tag);
@@ -94,9 +117,10 @@ function showFcmSystemNotification(data, fallbackTitle) {
         source: data.source || "ajos-fcm",
       },
     })
-    .then(() => {
+    .then(async () => {
       fcmLog("notification displayed", tag);
-      return incrementAppBadge();
+      await incrementAppBadge();
+      await pingClientsToPlaySound();
     });
 }
 
@@ -327,6 +351,7 @@ self.addEventListener("push", (event) => {
         data: { url },
       });
       await incrementAppBadge();
+      await pingClientsToPlaySound();
     })(),
   );
 });

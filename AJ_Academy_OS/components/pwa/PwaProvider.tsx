@@ -22,7 +22,11 @@ import { OfflineBanner } from "@/components/pwa/OfflineBanner";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { MobileInstallHelp } from "@/components/pwa/MobileInstallHelp";
 import { ForegroundPushListener } from "@/components/push/ForegroundPushListener";
-import { registerNotificationSoundUnlock } from "@/lib/notifications/notificationSound";
+import {
+  playNotificationSound,
+  registerNotificationSoundUnlock,
+  unlockNotificationAudio,
+} from "@/lib/notifications/notificationSound";
 import { isPwaStandalone, markPwaInstallComplete } from "@/lib/pwa/install-state";
 
 type PwaContextValue = {
@@ -79,6 +83,25 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => registerNotificationSoundUnlock(), []);
+
+  // Service worker → play AJ OS chime when a push toast is shown (works while minimized if tab still open)
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    const onMessage = (event: MessageEvent) => {
+      const type = (event.data as { type?: string } | null)?.type;
+      if (type === "AJOS_PLAY_NOTIFICATION_SOUND") {
+        unlockNotificationAudio();
+        playNotificationSound();
+        return;
+      }
+      if (type === "AJOS_NAVIGATE") {
+        const url = (event.data as { url?: string }).url;
+        if (typeof url === "string" && url.startsWith("/")) router.push(url);
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, [router]);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
