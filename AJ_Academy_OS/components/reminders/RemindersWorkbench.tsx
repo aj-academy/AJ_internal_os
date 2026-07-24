@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarDays, Check, Clock, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CrmFlash } from "@/components/ui/CrmFlash";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
@@ -382,8 +383,8 @@ export function RemindersWorkbench({
           (additive only). Existing CRM tables are not modified.
         </div>
       ) : null}
-      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</div> : null}
-      {success ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{success}</div> : null}
+      {error ? <CrmFlash tone="error" message={error} onDismiss={() => setError(null)} /> : null}
+      {success ? <CrmFlash tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
 
       <div className="flex flex-wrap gap-2">
         {TABS.map((t) => (

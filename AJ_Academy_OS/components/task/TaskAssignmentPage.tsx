@@ -4,6 +4,7 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { CrmFlash } from "@/components/ui/CrmFlash";
 import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Input } from "@/components/ui/input";
@@ -247,7 +248,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     setProjectOptions(
       (data ?? []).map((row: { id: string; project_name: string | null; project_code: string | null }) => ({
         id: row.id,
-        label: [row.project_code, row.project_name].filter(Boolean).join(" Â· ") || row.id.slice(0, 8),
+        label: [row.project_code, row.project_name].filter(Boolean).join("  ·  ") || row.id.slice(0, 8),
       })),
     );
   }, [supabase]);
@@ -537,7 +538,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         projectLabelMap = Object.fromEntries(
           (projects ?? []).map((p: { id: string; project_name: string | null; project_code: string | null }) => [
             p.id,
-            [p.project_code, p.project_name].filter(Boolean).join(" Â· ") || p.id.slice(0, 8),
+            [p.project_code, p.project_name].filter(Boolean).join("  ·  ") || p.id.slice(0, 8),
           ]),
         );
       }
@@ -573,7 +574,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                   fullMap[row.id] = row;
                   return [
                     row.id,
-                    [row.college_name, row.location].filter(Boolean).join(" Â· ") || row.id.slice(0, 8),
+                    [row.college_name, row.location].filter(Boolean).join("  ·  ") || row.id.slice(0, 8),
                   ];
                 }),
               );
@@ -635,7 +636,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         setLinkedLeadById((prev) => ({ ...prev, ...fullMap }));
         if (missingClientIds.some((id) => !detailMap[id])) {
           console.warn(
-            "My Tasks: some linked leads still missing â€” re-run AJ_Academy_SB/tasks_linked_lead_access.sql and ensure SUPABASE_SERVICE_ROLE_KEY is set.",
+            "My Tasks: some linked leads still missing - re-run AJ_Academy_SB/tasks_linked_lead_access.sql and ensure SUPABASE_SERVICE_ROLE_KEY is set.",
           );
         }
       } else if (!clientIds.length) {
@@ -665,7 +666,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           (colleges ?? []).map((c) => {
             const row = c as unknown as CollegeVisitRow;
             fullMap[row.id] = row;
-            return [row.id, [row.college_name, row.location].filter(Boolean).join(" Â· ") || row.id.slice(0, 8)];
+            return [row.id, [row.college_name, row.location].filter(Boolean).join("  ·  ") || row.id.slice(0, 8)];
           }),
         );
         setLinkedCollegeById(fullMap);
@@ -849,7 +850,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       employees.map((employee) => {
         const name = employee.full_name || employee.email || "Unnamed";
         const dept = employee.department?.trim();
-        const label = dept ? `${name} â€” ${dept}` : name;
+        const label = dept ? `${name} - ${dept}` : name;
         return { id: employee.id, label };
       }),
     [employees],
@@ -960,7 +961,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       } catch (e) {
         console.warn("create_task_assignment_notification", e);
       }
-      // Non-blocking FCM — never fails the assignment
+      // Non-blocking FCM - never fails the assignment
       try {
         void fetch("/api/push/event", {
           method: "POST",
@@ -1659,7 +1660,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           );
         }
         messages.push(
-          `${n} ${entityType === "lead" ? "student lead(s)" : "college(s)"} saved to ${json.destination ?? (entityType === "lead" ? "Student Master → All Students" : "College Visits")}.`,
+          `${n} ${entityType === "lead" ? "student lead(s)" : "college(s)"} saved to ${json.destination ?? (entityType === "lead" ? "Student Master  ->  All Students" : "College Visits")}.`,
         );
         if (json.warning) messages.push(json.warning);
       };
@@ -1697,13 +1698,13 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                 : toReadableTaskError(pinError),
             );
           }
-          messages.push(`${projectIds.length} project task(s) pinned to Dashboard → My tasks.`);
+          messages.push(`${projectIds.length} project task(s) pinned to Dashboard  ->  My tasks.`);
         } else {
           const n = typeof pinnedCount === "number" ? pinnedCount : Number(pinnedCount) || projectIds.length;
           if (n <= 0) {
             throw new Error("Could not pin project tasks to the dashboard.");
           }
-          messages.push(`${n} project task(s) pinned to Dashboard → My tasks.`);
+          messages.push(`${n} project task(s) pinned to Dashboard  ->  My tasks.`);
         }
       }
 
@@ -1873,7 +1874,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           taskId,
           actorId: currentUserId,
           activityType: "progress_update",
-          notes: notes.join(" Â· ") || "Task updated.",
+          notes: notes.join("  ·  ") || "Task updated.",
           metadata: { status, progress },
         });
       }
@@ -1959,7 +1960,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           </h2>
           <p className="mt-1 text-sm text-[#64748b]">
             {isStudent
-              ? "Work assigned to you by admins, mentors, or freelancers. Update progress and mark tasks complete â€” you cannot assign tasks to others."
+              ? "Work assigned to you by admins, mentors, or freelancers. Update progress and mark tasks complete - you cannot assign tasks to others."
               : isPortalAssignee && !isEmployee
                 ? "Work assigned to you by admins. Update progress and mark tasks complete."
               : isEmployee
@@ -1995,8 +1996,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         </div>
       ) : null}
 
-      {error ? <Alert tone="error" text={error} /> : null}
-      {success ? <Alert tone="success" text={success} /> : null}
+      {error ? <CrmFlash tone="error" message={error} onDismiss={() => setError(null)} /> : null}
+      {success ? <CrmFlash tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
 
       <div className="stat-cards-grid">
         <LeadSummaryCard title="Total Tasks" value={summary.total} loading={loading} />
@@ -2017,10 +2018,10 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       <TableSearchBar
         value={searchText}
         onChange={setSearchText}
-        placeholder="Search task titleâ€¦"
+        placeholder="Search task title..."
         showClear={filtersActive}
         onClear={clearTableFilters}
-        hint={`Showing ${paginatedRows.length} of ${filteredRows.length} task(s)${linkTypeFilter !== "all" ? ` Â· ${LINK_TYPE_TABS.find((t) => t.id === linkTypeFilter)?.label ?? ""}` : ""}`}
+        hint={`Showing ${paginatedRows.length} of ${filteredRows.length} task(s)${linkTypeFilter !== "all" ? `  ·  ${LINK_TYPE_TABS.find((t) => t.id === linkTypeFilter)?.label ?? ""}` : ""}`}
       />
 
       {isAdmin ? (
@@ -2092,8 +2093,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           </div>
           <p className="text-sm text-[#64748b]">
             {employeeDelegatedView
-              ? `Work you delegated â€” track status and activity (read-only). (${filteredRows.length} shown)`
-              : `Work assigned to you â€” call/WhatsApp/email linked student leads, update progress, and open View / Activity. (${filteredRows.length} shown)`}
+              ? `Work you delegated - track status and activity (read-only). (${filteredRows.length} shown)`
+              : `Work assigned to you - call/WhatsApp/email linked student leads, update progress, and open View / Activity. (${filteredRows.length} shown)`}
           </p>
         </div>
       ) : null}
@@ -2150,7 +2151,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       {linkTypeFilter === "lead" ? (
         <div className="space-y-2">
           <p className="text-xs font-medium text-[#64748b]">
-            Student Lead tasks - one row per linked lead. View opens the Student Master edit form; Activity opens history separately. Pin selected saves leads into Student Master → All Students.
+            Student Lead tasks - one row per linked lead. View opens the Student Master edit form; Activity opens history separately. Pin selected saves leads into Student Master {"->"} All Students.
           </p>
           <TaskSubsectionLeadsTable
             rows={subsectionLeadRows}
@@ -2355,7 +2356,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                 aria-label="Close"
                 className="touch-target flex items-center justify-center rounded-full border border-[#e8dcc8] bg-white p-2 text-[#3d3428] shadow-sm transition hover:bg-[#faf3e3] active:scale-95"
               >
-                <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">Ã—</span>
+                <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">Ã - </span>
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
@@ -2394,7 +2395,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                     ? "Pick category â†’ department â†’ person. Employees show name and department."
                     : departmentAssigner
                     ? "Only active students in your department are listed."
-                    : "Pick Student, Freelancer, Mentor, or Employee â€” then department and person."
+                    : "Pick Student, Freelancer, Mentor, or Employee - then department and person."
                 }
                 submitting={submitting}
                 onChange={(next) => {
@@ -2429,17 +2430,3 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   );
 }
 
-function Alert({ tone, text }: { tone: "error" | "success"; text: string }) {
-  return (
-    <div
-      className={[
-        "rounded-xl border px-4 py-2 text-sm",
-        tone === "error"
-          ? "border-rose-200 bg-rose-50 text-rose-700"
-          : "border-emerald-200 bg-emerald-50 text-emerald-700",
-      ].join(" ")}
-    >
-      {text}
-    </div>
-  );
-}

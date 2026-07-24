@@ -196,7 +196,7 @@ export function CallOutcomeModal({
             {session.session_status === "stale" ? " · Session marked stale (still editable)" : ""}
           </p>
           <p className="mt-1 text-[11px] text-[#94a3b8]">
-            The app cannot detect whether the phone call was answered â€” confirm the outcome yourself.
+            The app cannot detect whether the phone call was answered - confirm the outcome yourself.
           </p>
         </div>
 
@@ -208,7 +208,7 @@ export function CallOutcomeModal({
               value={outcome}
               onChange={(e) => setOutcome(e.target.value as CallOutcome | "")}
             >
-              <option value="">Select outcomeâ€¦</option>
+              <option value="">Select outcome...</option>
               {CALL_OUTCOMES.map((o) => (
                 <option key={o} value={o}>
                   {o}
@@ -249,7 +249,7 @@ export function CallOutcomeModal({
                 value={leadStatus}
                 onChange={(e) => setLeadStatus(e.target.value)}
               >
-                <option value="">â€”</option>
+                <option value="">-</option>
                 {statusOptions.map((s) => (
                   <option key={s} value={s}>
                     {s}
@@ -264,7 +264,7 @@ export function CallOutcomeModal({
                 value={leadStage}
                 onChange={(e) => setLeadStage(e.target.value)}
               >
-                <option value="">â€”</option>
+                <option value="">-</option>
                 {stageOptions.map((s) => (
                   <option key={s} value={s}>
                     {s}
@@ -281,7 +281,7 @@ export function CallOutcomeModal({
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
             >
-              <option value="">â€”</option>
+              <option value="">-</option>
               {CRM_PRIORITIES.map((p) => (
                 <option key={p} value={p}>
                   {p}
@@ -339,7 +339,7 @@ export function CallOutcomeModal({
               className="w-full rounded-lg border border-[#e2e8f0] px-3 py-2 text-sm"
               value={durationMinutes}
               onChange={(e) => setDurationMinutes(e.target.value)}
-              placeholder="Optional â€” or calculated from start/end"
+              placeholder="Optional - or calculated from start/end"
             />
           </label>
 
@@ -452,7 +452,7 @@ export function CallOutcomeModal({
               onClick={() => void handleSubmit()}
               disabled={submitting}
             >
-              {submitting ? "Savingâ€¦" : "Save call outcome"}
+              {submitting ? "Saving..." : "Save call outcome"}
             </Button>
           </div>
         </div>

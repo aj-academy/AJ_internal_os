@@ -18,6 +18,7 @@ import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
+import { CrmFlash } from "@/components/ui/CrmFlash";
 import { PROJECT_PRIORITIES, PROJECT_STATUSES, PROJECT_TAB_IDS, TAB_LABELS } from "@/components/project-master/projectConfig";
 import { ProjectFormPanel, type ProjectFormValue } from "@/components/project-master/ProjectFormPanel";
 import {
@@ -495,8 +496,8 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
         </div>
       ) : null}
 
-      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-800">{error}</div> : null}
-      {success ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">{success}</div> : null}
+      {error ? <CrmFlash tone="error" message={error} onDismiss={() => setError(null)} /> : null}
+      {success ? <CrmFlash tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
 
       <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-2">
         <div className="flex min-w-max gap-2">

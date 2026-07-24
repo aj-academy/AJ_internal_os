@@ -15,6 +15,7 @@ import { buildCsv, downloadCsv, parseCsv } from "@/lib/csv";
 import { formatDateTimeIST, todayDateIST } from "@/lib/datetime";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CrmFlash } from "@/components/ui/CrmFlash";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { TablePagination } from "@/components/ui/TablePagination";
@@ -687,8 +688,8 @@ export function EmployeeLeadManagement() {
         </div>
       </header>
 
-      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</div> : null}
-      {success ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{success}</div> : null}
+      {error ? <CrmFlash tone="error" message={error} onDismiss={() => setError(null)} /> : null}
+      {success ? <CrmFlash tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
 
       {pickForTask ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#c9a227] bg-[#fef3c7] px-4 py-3">

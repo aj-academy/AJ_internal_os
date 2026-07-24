@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CrmFlash } from "@/components/ui/CrmFlash";
 import {
   DEFAULT_PORTFOLIO_HTML,
   DEFAULT_PORTFOLIO_PLACEHOLDERS,
@@ -224,8 +225,8 @@ export function PortfolioAdminWorkbench() {
           Run <strong>AJ_Academy_SB/portfolio_schema.sql</strong> in Supabase SQL Editor, then refresh.
         </div>
       ) : null}
-      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-800">{error}</div> : null}
-      {success ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">{success}</div> : null}
+      {error ? <CrmFlash tone="error" message={error} onDismiss={() => setError(null)} /> : null}
+      {success ? <CrmFlash tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-[#64748b]">

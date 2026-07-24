@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Download, FileText, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { CrmFlash } from "@/components/ui/CrmFlash";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { TablePagination } from "@/components/ui/TablePagination";
@@ -2160,8 +2161,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         </div>
       </header>
 
-      {error ? <Banner tone="error" message={error} /> : null}
-      {success ? <Banner tone="success" message={success} /> : null}
+      {error ? <Banner tone="error" message={error} onDismiss={() => setError(null)} /> : null}
+      {success ? <Banner tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
 
       <LeadCallLiveDashboard stats={callLiveStats} live={callLiveRows} isAdmin={isAdmin} />
 
@@ -2654,12 +2655,16 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   );
 }
 
-function Banner({ tone, message }: { tone: "error" | "success"; message: string }) {
-  const styles =
-    tone === "error"
-      ? "border-rose-200 bg-rose-50 text-rose-800"
-      : "border-emerald-200 bg-emerald-50 text-emerald-800";
-  return <div className={`rounded-xl border px-4 py-2 text-sm ${styles}`}>{message}</div>;
+function Banner({
+  tone,
+  message,
+  onDismiss,
+}: {
+  tone: "error" | "success";
+  message: string;
+  onDismiss?: () => void;
+}) {
+  return <CrmFlash tone={tone} message={message} onDismiss={onDismiss} />;
 }
 
 function BarBlock({

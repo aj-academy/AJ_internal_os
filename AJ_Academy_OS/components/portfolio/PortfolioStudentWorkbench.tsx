@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CrmFlash } from "@/components/ui/CrmFlash";
 import {
   downloadHtmlFile,
   formatPlaceholderLabel,
@@ -144,8 +145,8 @@ export function PortfolioStudentWorkbench() {
         <p className="mt-1 text-xs text-[#64748b]">Template: {template.title}</p>
       </div>
 
-      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-800">{error}</div> : null}
-      {success ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">{success}</div> : null}
+      {error ? <CrmFlash tone="error" message={error} onDismiss={() => setError(null)} /> : null}
+      {success ? <CrmFlash tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
 
       <div className="grid gap-6 xl:grid-cols-2">
         <div className="space-y-4 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-4">

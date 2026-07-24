@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
+import { CrmFlash } from "@/components/ui/CrmFlash";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { REIMBURSEMENT_TAB_LABELS, REIMBURSEMENT_TAB_ORDER } from "@/components/reimbursement/reimbursementConfig";
@@ -308,8 +309,8 @@ export function ReimbursementsAdminWorkbench() {
           Run <strong>finance_schema.sql</strong> then <strong>reimbursement_schema_patch.sql</strong> in Supabase, then refresh.
         </div>
       ) : null}
-      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-800">{error}</div> : null}
-      {success ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">{success}</div> : null}
+      {error ? <CrmFlash tone="error" message={error} onDismiss={() => setError(null)} /> : null}
+      {success ? <CrmFlash tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
 
       <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-2">
         <div className="flex min-w-max gap-2">
