@@ -4591,11 +4591,11 @@ function ProfileModal({
   return (
     <>
       <button type="button" aria-label="Close" className="fixed inset-0 z-[60] bg-slate-900/40" onClick={onClose} />
-      <div className="fixed inset-y-6 right-4 z-[61] mx-auto flex w-full max-w-2xl flex-col overflow-hidden rounded-[24px] border border-[#e8dcc8] bg-white shadow-2xl sm:right-10">
-        <div className="flex items-start justify-between border-b border-[#e8edf5] px-5 py-4">
-          <div>
-            <h3 className="text-xl font-semibold text-[#0f172a]">{displayLeadName(lead) || "—"}</h3>
-            <p className="text-sm text-[#64748b]">{lead.company_name || "—"}</p>
+      <div className="fixed inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[61] mx-auto flex w-auto max-w-2xl flex-col overflow-hidden rounded-[20px] border border-[#e8dcc8] bg-white shadow-2xl sm:inset-y-6 sm:right-10 sm:left-auto sm:w-full sm:rounded-[24px]">
+        <div className="flex items-start justify-between gap-3 border-b border-[#e8edf5] px-4 py-3 sm:px-5 sm:py-4">
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-lg font-semibold text-[#0f172a] sm:text-xl">{displayLeadName(lead) || "—"}</h3>
+            <p className="truncate text-sm text-[#64748b]">{lead.company_name || "—"}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               <LeadStatusBadge status={normalizeStatus(lead.status)} />
               {lead.client_code ? (
@@ -4605,14 +4605,14 @@ function ProfileModal({
               ) : null}
             </div>
           </div>
-          <button type="button" className="text-sm text-[#64748b]" onClick={onClose}>
+          <button type="button" className="shrink-0 rounded-lg px-2 py-1 text-sm text-[#64748b] hover:bg-[#f8fafc]" onClick={onClose}>
             Close
           </button>
         </div>
-        <div className="flex-1 space-y-6 overflow-y-auto px-5 py-4 text-sm">
+        <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4 text-sm sm:space-y-6 sm:px-5">
           <section className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase text-[#94a3b8]">Basic details</h4>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[#475569]">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-[#94a3b8]">Basic details</h4>
+            <div className="divide-y divide-[#f1f5f9] rounded-xl border border-[#e8edf5] bg-[#fcfcfd]">
               <Dt label="Industry" value={lead.industry} />
               <Dt label="Source" value={lead.source} />
               <Dt label="Priority" value={lead.priority} />
@@ -4620,21 +4620,21 @@ function ProfileModal({
               <Dt label="Budget" value={budgetTxt} />
               <Dt label="Expected start" value={lead.expected_start_date} />
               <Dt label="Assigned to" value={lead.assigned_to ? employeeMap[lead.assigned_to] || lead.assigned_to : null} />
-            </dl>
+            </div>
           </section>
 
           <section className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase text-[#94a3b8]">Contact</h4>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[#475569]">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-[#94a3b8]">Contact</h4>
+            <div className="divide-y divide-[#f1f5f9] rounded-xl border border-[#e8edf5] bg-[#fcfcfd]">
               <Dt label="Phone" value={lead.phone} />
               <Dt label="WhatsApp" value={lead.whatsapp} />
               <Dt label="Email" value={lead.email} />
-            </dl>
+            </div>
           </section>
 
           <section className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase text-[#94a3b8]">Counselling details</h4>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[#475569]">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-[#94a3b8]">Counselling details</h4>
+            <div className="divide-y divide-[#f1f5f9] rounded-xl border border-[#e8edf5] bg-[#fcfcfd]">
               <Dt label="City" value={lead.city} />
               <Dt label="Current profile" value={lead.current_profile} />
               <Dt label="Interested program" value={lead.interested_program || lead.service_interest} />
@@ -4650,12 +4650,12 @@ function ProfileModal({
               <Dt label="Preferred batch" value={lead.preferred_batch} />
               <Dt label="Joining timeline" value={lead.joining_timeline} />
               <Dt label="Program budget" value={formatMoney(lead.budget)} />
-            </dl>
+            </div>
           </section>
 
           <section className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase text-[#94a3b8]">Employee outreach</h4>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[#475569]">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-[#94a3b8]">Employee outreach</h4>
+            <div className="divide-y divide-[#f1f5f9] rounded-xl border border-[#e8edf5] bg-[#fcfcfd]">
               <Dt
                 label="Phone call"
                 value={lead.phone_called ? `Done${lead.phone_called_at ? ` · ${formatDateTimeIST(String(lead.phone_called_at))}` : ""}` : "Pending"}
@@ -4669,7 +4669,7 @@ function ProfileModal({
                 value={lead.email_sent ? `Done${lead.email_sent_at ? ` · ${formatDateTimeIST(String(lead.email_sent_at))}` : ""}` : "Pending"}
               />
               <Dt label="Last contacted" value={lead.last_contacted_at ? formatDateTimeIST(String(lead.last_contacted_at)) : null} />
-            </dl>
+            </div>
           </section>
 
           <section className="space-y-2">
@@ -4768,11 +4768,12 @@ function ProfileModal({
 }
 
 function Dt({ label, value }: { label: string; value?: string | null }) {
+  const display = value == null || String(value).trim() === "" ? "—" : String(value);
   return (
-    <>
-      <dt className="text-xs uppercase text-[#94a3b8]">{label}</dt>
-      <dd className="font-medium text-[#1e293b]">{value || "—"}</dd>
-    </>
+    <div className="grid grid-cols-[7.25rem_minmax(0,1fr)] items-start gap-x-3 px-3 py-2.5 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-x-4 sm:px-3.5">
+      <p className="pt-0.5 text-[10px] font-semibold uppercase leading-snug tracking-wide text-[#94a3b8]">{label}</p>
+      <p className="min-w-0 break-words text-sm font-medium leading-snug text-[#1e293b] [overflow-wrap:anywhere]">{display}</p>
+    </div>
   );
 }
 
