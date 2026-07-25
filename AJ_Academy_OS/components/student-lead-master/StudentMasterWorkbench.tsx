@@ -2198,8 +2198,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         </div>
       ) : null}
 
-      <div className="-mx-1 overflow-x-auto px-1">
-        <div className="inline-flex min-w-full gap-2 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-2 sm:min-w-0 sm:flex sm:flex-wrap">
+      <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-2">
+        <div className="flex min-w-max gap-2">
           {visibleTabIds.map((tabId) => (
             <button
               key={tabId}
