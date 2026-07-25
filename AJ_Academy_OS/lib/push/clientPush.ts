@@ -232,6 +232,12 @@ export async function enablePushNotifications(opts?: {
     /* ignore */
   }
 
+  try {
+    localStorage.setItem("ajos_fcm_this_device_registered_v2", "1");
+  } catch {
+    /* ignore */
+  }
+
   return { ok: true, tokenPresent: true };
 }
 

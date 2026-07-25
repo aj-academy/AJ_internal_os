@@ -10,6 +10,7 @@ import {
   sendTestPush,
   type PushPermissionStatus,
 } from "@/lib/push/clientPush";
+import { markThisDevicePushRegistered } from "@/lib/push/mobilePush";
 
 function statusLabel(status: PushPermissionStatus): string {
   switch (status) {
@@ -54,6 +55,7 @@ export function PushDeviceSettings() {
     setMsg(null);
     const result = await enablePushNotifications({ notificationsAfterLogout: afterLogout });
     if (result.ok) {
+      markThisDevicePushRegistered();
       setStatus("enabled");
       setMsg("Notifications enabled on this device. They continue after normal logout.");
     } else {
@@ -95,9 +97,12 @@ export function PushDeviceSettings() {
           <p className="mt-1 text-xs text-[#64748b]">
             Receive AJ OS alerts when the tab is closed or you are logged out. Full details open only after you sign in.
           </p>
-          <p className="mt-2 text-xs font-medium text-[#334155]">
-            Status: <span className="text-[#0f172a]">{statusLabel(status)}</span>
-          </p>
+        <p className="mt-2 text-xs font-medium text-[#334155]">
+          Status: <span className="text-[#0f172a]">{statusLabel(status)}</span>
+        </p>
+        <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-snug text-amber-950">
+          Phone and laptop are separate devices. Enabling on a laptop does not turn on alerts on your phone — open AJ OS on the phone and tap Enable Notifications there too.
+        </p>
         </div>
       </div>
 
