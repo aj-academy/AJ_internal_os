@@ -66,7 +66,6 @@ export function InAppNotificationsBell({ fallbackTaskHref }: { fallbackTaskHref:
     });
   }, [load]);
 
-  // Polling fallback when Realtime is not enabled on in_app_notifications
   useEffect(() => {
     const id = window.setInterval(() => {
       if (document.visibilityState === "visible") void load();
@@ -127,7 +126,7 @@ export function InAppNotificationsBell({ fallbackTaskHref }: { fallbackTaskHref:
         type="button"
         variant="outline"
         size="icon"
-        className="touch-target relative rounded-full border-[#e8dcc8] bg-white text-[#3d3428]"
+        className="touch-target relative h-9 w-9 rounded-full border-[#e8dcc8] bg-white text-[#3d3428] sm:h-10 sm:w-10"
         onClick={() => {
           setOpen((o) => !o);
           void load();
@@ -142,61 +141,69 @@ export function InAppNotificationsBell({ fallbackTaskHref }: { fallbackTaskHref:
         ) : null}
       </Button>
       {open ? (
-        <div className="absolute left-1/2 z-50 mt-2 w-[min(100vw-2rem,400px)] -translate-x-1/2 rounded-xl border border-[#dbe6f3] bg-white py-2 shadow-lg sm:left-auto sm:right-0 sm:translate-x-0">
-          <div className="flex items-center justify-between border-b border-[#eef2ff] px-3 pb-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">
-              Notifications{unread > 0 ? ` (${unread} new)` : ""}
-            </p>
-            {unread > 0 ? (
-              <button type="button" className="text-xs font-medium text-[#2563eb] hover:underline" onClick={() => void clearAll()}>
-                Clear all
-              </button>
-            ) : null}
-          </div>
-          <div className="max-h-[min(70vh,420px)] overflow-y-auto">
-            {!rows.length ? (
-              <p className="px-3 py-6 text-center text-sm text-[#64748b]">No notifications yet.</p>
-            ) : (
-              rows.map((n) => {
-                const href = resolveNotificationHref(n.link_path, fallbackTaskHref);
-                const label = actionLabel(n.type, href);
-                return (
-                  <div
-                    key={n.id}
-                    className={[
-                      "border-b border-[#f1f5f9] px-3 py-3 last:border-0",
-                      n.read_at ? "opacity-70" : "bg-[#f8fbff]",
-                    ].join(" ")}
-                  >
-                    <p className="text-sm font-semibold text-[#0f172a]">{n.title}</p>
-                    {n.body ? <p className="mt-0.5 text-xs text-[#64748b]">{n.body}</p> : null}
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Link
-                        href={href}
-                        className="inline-flex h-8 items-center rounded-lg border border-[#dbe6f3] bg-white px-3 text-xs font-medium text-[#334155] hover:bg-[#f8fbff]"
-                        onClick={() => {
-                          if (!n.read_at) void markRead(n.id);
-                          setOpen(false);
-                        }}
-                      >
-                        {label}
-                      </Link>
-                      {!n.read_at ? (
-                        <button
-                          type="button"
-                          className="text-xs text-[#64748b] hover:text-[#0f172a] hover:underline"
-                          onClick={() => void markRead(n.id)}
+        <>
+          <button
+            type="button"
+            aria-label="Close notifications"
+            className="fixed inset-0 z-[70] bg-slate-900/35 sm:hidden"
+            onClick={() => setOpen(false)}
+          />
+          <div className="fixed inset-x-3 top-[max(4.25rem,calc(env(safe-area-inset-top)+3.5rem))] z-[71] flex max-h-[min(75vh,520px)] flex-col overflow-hidden rounded-2xl border border-[#dbe6f3] bg-white shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[min(100vw-2rem,380px)] sm:max-h-[min(70vh,420px)] sm:rounded-xl sm:shadow-lg">
+            <div className="flex items-center justify-between border-b border-[#eef2ff] px-3 py-2.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">
+                Notifications{unread > 0 ? ` (${unread} new)` : ""}
+              </p>
+              {unread > 0 ? (
+                <button type="button" className="text-xs font-medium text-[#2563eb] hover:underline" onClick={() => void clearAll()}>
+                  Clear all
+                </button>
+              ) : null}
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {!rows.length ? (
+                <p className="px-3 py-6 text-center text-sm text-[#64748b]">No notifications yet.</p>
+              ) : (
+                rows.map((n) => {
+                  const href = resolveNotificationHref(n.link_path, fallbackTaskHref);
+                  const label = actionLabel(n.type, href);
+                  return (
+                    <div
+                      key={n.id}
+                      className={[
+                        "border-b border-[#f1f5f9] px-3 py-3 last:border-0",
+                        n.read_at ? "opacity-70" : "bg-[#f8fbff]",
+                      ].join(" ")}
+                    >
+                      <p className="text-sm font-semibold text-[#0f172a]">{n.title}</p>
+                      {n.body ? <p className="mt-0.5 break-words text-xs text-[#64748b]">{n.body}</p> : null}
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Link
+                          href={href}
+                          className="inline-flex h-8 items-center rounded-lg border border-[#dbe6f3] bg-white px-3 text-xs font-medium text-[#334155] hover:bg-[#f8fbff]"
+                          onClick={() => {
+                            if (!n.read_at) void markRead(n.id);
+                            setOpen(false);
+                          }}
                         >
-                          Dismiss
-                        </button>
-                      ) : null}
+                          {label}
+                        </Link>
+                        {!n.read_at ? (
+                          <button
+                            type="button"
+                            className="text-xs text-[#64748b] hover:text-[#0f172a] hover:underline"
+                            onClick={() => void markRead(n.id)}
+                          >
+                            Dismiss
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                );
-              })
-            )}
+                  );
+                })
+              )}
+            </div>
           </div>
-        </div>
+        </>
       ) : null}
     </div>
   );

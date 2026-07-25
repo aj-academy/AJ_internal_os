@@ -2135,26 +2135,26 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
 
   return (
     <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-3xl font-semibold text-[#0f172a]">Student Master</h2>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-2xl font-semibold text-[#0f172a] sm:text-3xl">Student Master</h2>
           <p className="mt-1 text-sm text-[#64748b]">
             {isAdmin
               ? "Track every employee's student leads. Use the Owner / Assignee filter to review one person. Employees only see their own leads."
-              : "Your assigned student leads only — counselling follow-ups, fees and admissions."}
+              : "Your assigned student leads only - counselling follow-ups, fees and admissions."}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
           <Button
             variant="outline"
             disabled={loading}
             onClick={() => void reload()}
-            className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
+            className="h-10 rounded-full border-[#e8dcc8] bg-[#f8fbff] sm:h-9"
           >
             Refresh
           </Button>
           {canWriteOwnLeads ? (
-            <Button data-requires-online onClick={openCreate} className="h-9 rounded-full bg-[#c9a227] px-5 text-white hover:bg-[#b8921f]">
+            <Button data-requires-online onClick={openCreate} className="h-10 rounded-full bg-[#c9a227] px-4 text-white hover:bg-[#b8921f] sm:h-9 sm:px-5">
               + Add Student
             </Button>
           ) : null}
@@ -2198,8 +2198,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-2">
-        <div className="flex min-w-max gap-2">
+      <div className="-mx-1 overflow-x-auto px-1">
+        <div className="inline-flex min-w-full gap-2 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-2 sm:min-w-0 sm:flex sm:flex-wrap">
           {visibleTabIds.map((tabId) => (
             <button
               key={tabId}
@@ -2207,8 +2207,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
               onClick={() => setActiveTab(tabId)}
               className={
                 activeTab === tabId
-                  ? "rounded-xl bg-[#c9a227] px-3 py-2 text-sm font-semibold text-white shadow-md"
-                  : "rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[#475569] hover:bg-[#eaf1ff]"
+                  ? "shrink-0 whitespace-nowrap rounded-xl bg-[#c9a227] px-3 py-2 text-sm font-semibold text-white shadow-md"
+                  : "shrink-0 whitespace-nowrap rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[#475569] hover:bg-[#eaf1ff]"
               }
             >
               {tabLabels[tabId]}
@@ -2289,15 +2289,15 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       {activeTab === "all-leads" ? (
         <div className="space-y-3">
           {!pickForTask ? (
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
-                className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
+                className="h-10 rounded-full border-[#e8dcc8] bg-[#f8fbff] text-xs sm:h-9 sm:text-sm"
                 onClick={handleDownloadStudentTemplate}
               >
-                <FileText className="mr-1 h-4 w-4" />
-                Import template
+                <FileText className="mr-1 h-4 w-4 shrink-0" />
+                <span className="truncate">Import template</span>
               </Button>
               <input
                 ref={importFileRef}
@@ -2313,18 +2313,18 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
+                  className="h-10 rounded-full border-[#e8dcc8] bg-[#f8fbff] text-xs sm:h-9 sm:text-sm"
                   disabled={importing}
                   onClick={() => importFileRef.current?.click()}
                 >
-                  <Upload className="mr-1 h-4 w-4" />
+                  <Upload className="mr-1 h-4 w-4 shrink-0" />
                   {importing ? "Importing…" : "Import"}
                 </Button>
               ) : null}
               <Button
                 type="button"
                 variant="outline"
-                className="h-9 rounded-full border-[#e8dcc8] bg-[#f8fbff]"
+                className="col-span-2 h-10 rounded-full border-[#e8dcc8] bg-[#f8fbff] text-xs sm:col-span-1 sm:h-9 sm:text-sm"
                 disabled={!rowsForExport.length}
                 onClick={handleExportStudents}
                 title={
@@ -2335,12 +2335,14 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
                       : "Export all rows in All Students"
                 }
               >
-                <Download className="mr-1 h-4 w-4" />
-                {leadBulk.selectedCount > 0
-                  ? `Export selected (${rowsForExport.length})`
-                  : filtersActive
-                    ? `Export filtered (${rowsForExport.length})`
-                    : `Export${rowsForExport.length ? ` (${rowsForExport.length})` : ""}`}
+                <Download className="mr-1 h-4 w-4 shrink-0" />
+                <span className="truncate">
+                  {leadBulk.selectedCount > 0
+                    ? `Export selected (${rowsForExport.length})`
+                    : filtersActive
+                      ? `Export filtered (${rowsForExport.length})`
+                      : `Export${rowsForExport.length ? ` (${rowsForExport.length})` : ""}`}
+                </span>
               </Button>
             </div>
           ) : null}

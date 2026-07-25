@@ -473,20 +473,20 @@ export function PendingCallOutcomeBanner({
   if (!sessions.length) return null;
   const first = sessions[0];
   return (
-    <div className="rounded-2xl border border-[#bfdbfe] bg-[#eff6ff] px-4 py-3 text-sm text-[#1e3a5f]">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+    <div className="rounded-2xl border border-[#bfdbfe] bg-[#eff6ff] px-3 py-3 text-sm text-[#1e3a5f] sm:px-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <p className="font-semibold">Pending call updates ({sessions.length})</p>
           <p className="mt-0.5 text-[#334155]">
             You started a call with <strong>{first.lead_name || "a lead"}</strong>. Please update the call outcome.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" className="bg-[#1e3a5f] text-white" onClick={() => onUpdate(first)}>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+          <Button type="button" size="sm" className="h-10 bg-[#1e3a5f] text-white sm:h-8" onClick={() => onUpdate(first)}>
             Update outcome
           </Button>
           {onDismiss ? (
-            <Button type="button" size="sm" variant="outline" onClick={onDismiss}>
+            <Button type="button" size="sm" variant="outline" className="h-10 sm:h-8" onClick={onDismiss}>
               Hide
             </Button>
           ) : null}
@@ -529,9 +529,9 @@ export function LeadCallLiveDashboard({
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         {cards.map((c) => (
-          <div key={c.label} className={`rounded-xl border px-3 py-2 ${c.color}`}>
-            <p className="text-[10px] font-semibold uppercase tracking-wide opacity-80">{c.label}</p>
-            <p className="text-xl font-semibold">{c.value}</p>
+          <div key={c.label} className={`rounded-xl border px-2.5 py-2 sm:px-3 ${c.color}`}>
+            <p className="text-[10px] font-semibold uppercase leading-tight tracking-wide opacity-80">{c.label}</p>
+            <p className="mt-0.5 text-lg font-semibold sm:text-xl">{c.value}</p>
           </div>
         ))}
       </div>
