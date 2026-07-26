@@ -13,6 +13,16 @@ const employeeSidebarItems = [
   { label: "Student Master", href: "/employee/student-master" },
   { label: "College Visits", href: "/employee/college-visits" },
   { label: "Leave & Permission", href: "/employee/leave" },
+  {
+    label: "My HR & Payroll",
+    href: "/employee/hr-payroll/leave",
+    children: [
+      { label: "My Leave", href: "/employee/hr-payroll/leave" },
+      { label: "My Payslips", href: "/employee/hr-payroll/payslips" },
+      { label: "My Salary Structure", href: "/employee/hr-payroll/salary" },
+      { label: "Salary Queries", href: "/employee/hr-payroll/queries" },
+    ],
+  },
   { label: "Reimbursement", href: "/employee/reimbursement" },
   { label: "Company Policies", href: "/employee/policies" },
   { label: "My Profile", href: "/employee/profile" },

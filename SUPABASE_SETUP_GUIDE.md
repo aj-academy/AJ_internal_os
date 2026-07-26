@@ -185,6 +185,83 @@ Also run **`reports_analytics_schema.sql`** after `lead_call_workflow_schema.sql
 
 **Attendance camera / location:** Employee layout shows a one-time popup asking for camera + location (saved in browser localStorage per user). `Permissions-Policy` must allow `camera=(self)` and `geolocation=(self)` (see `lib/security/headers.ts`). Restart the Next server after header changes.
 
+### HR, Attendance & Payroll (module in progress — phased build)
+
+A full audit precedes implementation: see **`PAYROLL_MODULE_AUDIT.md`** (repo root) for the feature inventory, database mapping, and phased plan. The module **reuses** existing `attendance_records`, `profiles` / `employee_details` / `employee_profile_details` (bank/PAN), `permission_requests`, `in_app_notifications` + FCM, and the private storage + signed-URL pattern. It does **not** create a second attendance system and does **not** modify the check-in/check-out flow.
+
+**Phase 1 — Attendance integrity & review.** Run **`hr_payroll_01_attendance_integrity.sql`** after `schema.sql` + `attendance_module.sql` (safe to re-run):
+
+- De-duplicates `attendance_records` and adds **UNIQUE(employee_id, attendance_date)** (re-points `work_summaries` to the surviving row before deleting duplicates).
+- Creates **`attendance_corrections`** (review/correction queue) with RLS: employees read their own; admins manage all.
+- **Activates `audit_logs`**: enables RLS with an admin-read policy and adds target/actor/module indexes. The app now writes real audit rows via `lib/hr/auditLog.ts` (service role); `logSecurityEvent` remains for console-level events.
+
+App surface (Phase 1):
+
+- Admin sidebar **HR, Attendance & Payroll → Attendance Review** (`/admin/hr-payroll/attendance-review`).
+- API **`GET/POST/PATCH /api/hr/attendance/review`** (admin session + service role): list attendance issues (missing check-out, late, short hours) with a date/employee filter; raise a correction with a mandatory reason; approve (applies revised values + recomputes working minutes) or reject. Every action is audited (`attendance_correction_requested/approved/rejected`).
+- Status derivation is pure and reusable: `lib/hr/attendanceStatus.ts` (`deriveAttendanceForDay`). Each day uses the **effective-dated** `attendance_policies` row for that date (Phase 2); falls back to a clearly-labelled built-in default if the migration is not applied yet.
+
+**Phase 2 — Attendance policies (effective-dated).** Run **`hr_payroll_02_attendance_policies.sql`** after Phase 1 (safe to re-run):
+
+- Table **`attendance_policies`**: office hours, grace minutes, full/half-day thresholds, max break, late/early/missing-checkout rules, weekly-off days, holiday/WFH/permission behaviour, overtime knobs, attendance rounding, salary-day method (`calendar_days` / `fixed_30` / `working_days` / `configured_days`).
+- **Effective dating:** publishing a new version closes the previous open policy (`effective_to = day before`) so locked payroll can still resolve the historical policy by date. Only one open-ended (`effective_to is null`) policy is allowed.
+- Seeds one active policy from existing `attendance_settings` and/or `system_settings.attendance` JSON when present.
+- RPC **`resolve_attendance_policy(date)`** (SQL helper) + app resolver `lib/hr/attendancePolicy.ts`.
+
+App surface (Phase 2):
+
+- Admin sidebar **Attendance Policies** (`/admin/hr-payroll/attendance-policies`).
+- API **`GET/POST/PATCH /api/hr/attendance/policies`** (admin session): list + resolve active policy; publish a new version (audited); update name/notes of an existing version.
+- Attendance Review now loads the policy effective on each attendance date (not a hardcoded default).
+
+**Phase 3 — Holiday calendar.** Run **`hr_payroll_03_holidays.sql`** (safe to re-run). Table **`holidays`** (date, name, public/company/optional, paid flag). Nothing is seeded — add holidays via **Admin → HR, Attendance & Payroll → Holiday Calendar** (`/admin/hr-payroll/holidays`). API `GET(staff)/POST/PATCH/DELETE(admin) /api/hr/holidays` — all writes audited. Holidays are excluded from chargeable leave days and feed attendance/payroll calculations.
+
+**Phase 4 — Leave management (fresh module).** Run **`hr_payroll_04_leave_management.sql`** (safe to re-run; needs `btree_gist` extension, enabled by the script):
+
+- **`leave_types`** — seeded with NAMES + paid/unpaid flags only (CL, SL, EL, PL, LWP, CO, WFH, ML, PTL, OTH). **Annual entitlements default to 0** and must be configured in the admin UI — no policy numbers are invented. WFH is `counts_as_presence` (attendance credit, no balance burn).
+- **`leave_balances`** — per employee/type/year (opening + accrued + adjusted − used). Balance rows are created on first approval; until then the configured annual entitlement acts as the available grant.
+- **`leave_applications`** — with a DB **exclusion constraint** preventing overlapping pending/approved requests per employee. Half-day supported (single date). Chargeable days **exclude weekly offs (per effective policy) and holidays**.
+- Legacy `leave_requests` (attendance_module.sql) is **deprecated and untouched**.
+- RLS: employees insert/read/cancel their own; admins manage everything.
+
+App surface (Phase 4):
+
+- Admin sidebar **Leave Management** (`/admin/hr-payroll/leave-management`) — Requests tab (approve/reject with remarks; approval burns balance, rejection doesn't) + Leave Types tab (configure entitlements/notice/flags).
+- Employee sidebar **My Leave (HR)** (`/employee/hr-payroll/leave`) — balances, apply (validates type rules, notice period, document requirement, balance, overlap), history, cancel pending.
+- APIs: `GET/POST/PATCH /api/hr/leave/applications` (staff session; employees see only their own), `GET/POST/PATCH /api/hr/leave/types` (read staff, write admin). All approve/reject/cancel/config actions are audited (`leave_applied/approved/rejected/cancelled`, `leave_type_updated`).
+- Attendance Review now treats configured holidays as holiday context when deriving statuses.
+
+**Phase 5 — Employee salary structures.** Run **`hr_payroll_05_salary_structures.sql`**. Table **`employee_salary_structures`** (effective-dated; one open row per employee). Adds **`uan_number` / `esi_number`** on `employee_profile_details` when that table exists. Admin UI: `/admin/hr-payroll/salary-structures`. API `GET/POST /api/hr/salary/structures` (employees can read own; admin writes). Change reason required; previous open version is closed on publish.
+
+**Phase 6 — Payroll settings.** Run **`hr_payroll_06_payroll_settings.sql`**. Table **`payroll_settings`** (effective-dated). Seeds company name/address/logo/currency from `system_settings.company` when present (default brand **AJ Academy**). Statutory deductions **default OFF** and labelled `not_verified`. Admin UI: `/admin/hr-payroll/payroll-settings`. API `GET/POST /api/hr/payroll/settings`.
+
+**Phase 7 — Payroll calculation engine.** Run **`hr_payroll_07_payroll_engine.sql`**. Tables **`payroll_periods`** + **`payroll_items`** store reproducible results (policy/settings/structure snapshots, attendance totals, component breakdown). Server engine: `lib/hr/payrollEngine.ts` + `POST /api/hr/payroll/calculate`. Uses real attendance, approved leave, holidays, salary structures, and payroll settings. Missing salary structure → error (not zero salary). Unresolved missing check-outs block when clearance is required. Locked/approved periods cannot be recalculated (approve/lock UI arrives in Phase 8). Admin UI: `/admin/hr-payroll/monthly-payroll`.
+
+**Phases 8–10 — Workflow, adjustments, approve/lock/reopen.** Run **`hr_payroll_08_10_workflow_adjustments.sql`** after Phase 7:
+
+- Adds workflow columns on `payroll_periods` (`approved_by/at`, `locked_by/at`, `reopened_by/at`, `reopen_reason`, `paid_by/at`, `payment_reference`).
+- Table **`salary_adjustments`**: pending → approved/rejected/cancelled. **Only approved** adjustments are applied on recalculation. Types cover incentives, bonus, reimbursements, advance/loan recovery, penalties, etc.
+- API `POST /api/hr/payroll/workflow` — status transitions with audit. **Reopen requires Super Admin + reason** and returns the period to `draft`. Approve/lock blocked when employee calculation errors remain. Lock freezes item statuses.
+- API `GET/POST/PATCH /api/hr/payroll/adjustments` — create pending, approve/reject/cancel (audited). Blocked against approved/locked/paid periods.
+- Engine includes approved adjustments in gross/deductions/net and snapshots them in `input_snapshot`.
+- Admin UI: **Monthly Payroll** workflow buttons; **Salary Adjustments** (`/admin/hr-payroll/salary-adjustments`).
+
+**Phases 11–13 — Payslips, employee portal, reports & salary queries.** Run **`hr_payroll_11_13_payslips_queries.sql`** after Phases 8–10:
+
+- Tables **`payslips`** (PDF metadata + snapshot) and **`salary_queries`**. Private Storage bucket **`payslips`** (not public; no authenticated storage policies — uploads/downloads via service-role signed URLs, ~120s).
+- Generate only after payroll is **approved / locked / paid**. Release makes slips visible to the employee. Regenerated slips stay employee-visible only when previously released (`released_at` set).
+- APIs: `GET/POST /api/hr/payslips` (list, signed download, generate, release); `GET/POST/PATCH /api/hr/salary/queries`; `GET /api/hr/payroll/reports` (register, bank transfer with optional mask, attendance, LOP, department, audit, etc.; CSV/Excel/PDF from UI).
+- Admin UI: **Payslips**, **Salary Queries**, **Payroll Reports**. Employee sidebar group **My HR & Payroll**: Leave, Payslips, Salary Structure, Salary Queries.
+
+**Phase 14 — Notifications & idempotent automation.** Run **`hr_payroll_14_automation.sql`**:
+
+- Table **`payroll_automation_jobs`** with unique `idempotency_key` (safe daily re-runs).
+- In-app + FCM via `sendPushNotification` (generic copy — no salary amounts): leave submit/approve/reject, payslip release, salary query updates, cutoff reminders.
+- On **lock**, if Payroll Settings → **Auto-generate & release payslips on lock**, enqueues one generate job per period and processes it.
+- Cron: `GET/POST /api/hr/payroll/cron/process` with `Authorization: Bearer $CRON_SECRET` (also `x-cron-secret`). Scheduled in `vercel.json` at `15 4 * * *`. Admin can run/list via `GET/POST /api/hr/payroll/automation`.
+
+**Phase 15 — Security review & test matrix.** See repo root **`PAYROLL_SECURITY_AND_TEST_MATRIX.md`** (RLS/storage review, authz matrix, full A–J test cases, sign-off checklist).
+
 ### College Visits
 
 Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / profiles), then **`college_visits_visited_by_patch.sql`** (adds `visited_by` / `visited_by_name` for who visited), then **`college_visits_proposal_patch.sql`** (Proposal Tracker: link + PDF columns and `college-visit-proposals` storage bucket), then **`college_visits_contacts_patch.sql`** (multiple contacts: name / role / alternate phones / email JSON + primary sync), then **`proposals_file_upload_patch.sql`** (unified private `proposals` bucket + file columns on `clients` and `college_visits` for PDF/DOC/DOCX upload on Add/Edit), then **`proposals_multi_file_patch.sql`** (multi-file attachments table for Student/College proposals), then **`crm_owner_isolation.sql`**, then **`crm_delete_fix.sql`**. Adds:

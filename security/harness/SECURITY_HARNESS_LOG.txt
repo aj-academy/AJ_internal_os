@@ -219,17 +219,34 @@ MONITORING
 
 
 ================================================================================
+7b. HR PAYROLL MODULE (Phases 1–15) — 2026-07-26
+================================================================================
+
+  - Payslips bucket is PRIVATE; downloads only via short-lived service-role signed URLs
+  - Employee payslip SELECT requires released_at; APIs enforce same rule
+  - Payroll automation jobs use unique idempotency_key + claim status transitions
+  - Cron /api/hr/payroll/cron/process gated by CRON_SECRET
+  - Push copy for payroll/leave must not include salary amounts or bank data
+  - Full matrix: PAYROLL_SECURITY_AND_TEST_MATRIX.md
+  - SQL: hr_payroll_01 … hr_payroll_14_automation.sql (see DATABASE_SETUP_ORDER.txt)
+
+
+================================================================================
 8. DEPLOYMENT CHECKLIST
 ================================================================================
 
 [ ] Run profiles_rls_tighten.sql in Supabase
 [ ] Run storage_rls_tighten.sql in Supabase
+[ ] Run hr_payroll_01 … hr_payroll_14_automation.sql (payroll module)
+[ ] Confirm Storage bucket `payslips` is private (no public / authenticated object policies)
+[ ] Set CRON_SECRET in Vercel (reminders + payroll crons)
 [ ] Set GMAIL_OUTREACH_APP_PASSWORD in Vercel / .env.local
 [ ] Supabase Auth: enable email confirmation + review session/JWT settings
 [ ] Redeploy AJ_Academy_OS
 [ ] Test login as admin, employee, student
 [ ] Test Student Master Send email
 [ ] Confirm /api/health/supabase returns 403 for non-admin
+[ ] Spot-check payroll: calculate → approve → lock → payslip release → employee download
 
 
 ================================================================================

@@ -69,6 +69,41 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 11) attendance_delete_grants.sql (optional — admin delete attendance)
 11b) remove_leave_requests_module.sql (optional — drops leave_requests; use permission_requests only)
 
+HR, Attendance & Payroll module (run in order, after attendance_module.sql + schema.sql):
+12) hr_payroll_01_attendance_integrity.sql
+    - De-duplicates attendance_records and adds UNIQUE(employee_id, attendance_date).
+    - Creates attendance_corrections (review/correction queue) with RLS.
+    - Activates audit_logs (RLS admin-read + indexes) so the app records a real audit trail.
+    - Safe to re-run. Does NOT modify the check-in/check-out flow.
+13) hr_payroll_02_attendance_policies.sql
+    - Creates attendance_policies (effective-dated company policy).
+    - Seeds from attendance_settings / system_settings.attendance when present.
+    - Adds resolve_attendance_policy(date) helper.
+    - Safe to re-run. Policy changes do not rewrite historical attendance.
+14) hr_payroll_03_holidays.sql
+    - Creates holidays (company calendar). Nothing seeded — add holidays in the admin UI.
+15) hr_payroll_04_leave_management.sql
+    - Fresh leave module: leave_types (seeded names only, entitlements = 0 until
+      configured), leave_balances, leave_applications (+ overlap exclusion via btree_gist).
+    - Legacy leave_requests is DEPRECATED and untouched.
+    - Only APPROVED leave affects attendance/payroll.
+16) hr_payroll_05_salary_structures.sql
+    - employee_salary_structures (effective-dated) + UAN/ESI columns on employee_profile_details.
+17) hr_payroll_06_payroll_settings.sql
+    - payroll_settings (effective-dated company branding + salary-day method).
+    - Statutory deductions default OFF / not_verified.
+18) hr_payroll_07_payroll_engine.sql
+    - payroll_periods + payroll_items (calculation storage with input snapshots).
+19) hr_payroll_08_10_workflow_adjustments.sql
+    - Workflow actor/timestamp columns on payroll_periods.
+    - salary_adjustments (approval-gated; only approved rows enter calculation).
+20) hr_payroll_11_13_payslips_queries.sql
+    - payslips + salary_queries tables; private `payslips` storage bucket (signed URLs only).
+    - Admin: Payslips / Salary Queries / Payroll Reports; Employee: My Payslips / Salary / Queries.
+21) hr_payroll_14_automation.sql
+    - payroll_automation_jobs (idempotent keys) for cutoff reminders, auto payslip generate, release notify.
+    - Cron: /api/hr/payroll/cron/process (CRON_SECRET); see PAYROLL_SECURITY_AND_TEST_MATRIX.md.
+
 DO NOT run rls-policies.sql — it is legacy Birthmark Brahma (employee/manager) and breaks AJ Academy login.
 
 Skip legacy BB-only scripts unless you need CRM/finance / Student Master:

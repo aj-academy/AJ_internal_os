@@ -5,6 +5,10 @@
     {
       "path": "/api/reminders/cron/process-alerts",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/hr/payroll/cron/process",
+      "schedule": "15 4 * * *"
     }
   ]
 }

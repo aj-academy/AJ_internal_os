@@ -4,6 +4,23 @@ import { requireRole } from "@/lib/auth/requireRole";
 const adminSidebarItems = [
   { label: "Dashboard", href: "/admin/dashboard" },
   { label: "Attendance System", href: "/admin/attendance" },
+  {
+    label: "HR, Attendance & Payroll",
+    href: "/admin/hr-payroll/attendance-review",
+    children: [
+      { label: "Attendance Review", href: "/admin/hr-payroll/attendance-review" },
+      { label: "Attendance Policies", href: "/admin/hr-payroll/attendance-policies" },
+      { label: "Leave Management", href: "/admin/hr-payroll/leave-management" },
+      { label: "Holiday Calendar", href: "/admin/hr-payroll/holidays" },
+      { label: "Salary Structures", href: "/admin/hr-payroll/salary-structures" },
+      { label: "Payroll Settings", href: "/admin/hr-payroll/payroll-settings" },
+      { label: "Salary Adjustments", href: "/admin/hr-payroll/salary-adjustments" },
+      { label: "Monthly Payroll", href: "/admin/hr-payroll/monthly-payroll" },
+      { label: "Payslips", href: "/admin/hr-payroll/payslips" },
+      { label: "Salary Queries", href: "/admin/hr-payroll/salary-queries" },
+      { label: "Payroll Reports", href: "/admin/hr-payroll/reports" },
+    ],
+  },
   { label: "Counselling", href: "/admin/counselling" },
   { label: "Reminders & Calendar", href: "/admin/reminders" },
   { label: "User Master", href: "/admin/employee-master" },
