@@ -123,7 +123,7 @@ export default async function StudentDashboardPage() {
       icon: MessageCircle,
     },
     {
-      title: "Company Policies",
+      title: "Student Policies",
       description: "Read and acknowledge policies published by admin.",
       href: "/student/policies",
       icon: Shield,
@@ -217,7 +217,7 @@ export default async function StudentDashboardPage() {
         <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wide text-[#64748b]">Policies</p>
           <p className="mt-2 text-2xl font-semibold text-[#0f172a]">{policyCount}</p>
-          <p className="mt-1 text-xs text-[#64748b]">Published company policies</p>
+          <p className="mt-1 text-xs text-[#64748b]">Published student policies</p>
         </article>
         <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-5 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wide text-[#64748b]">Quick link</p>

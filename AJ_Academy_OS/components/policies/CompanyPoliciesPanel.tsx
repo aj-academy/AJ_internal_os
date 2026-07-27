@@ -4,7 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, Loader2 } from "lucide-react";
 import type { CompanyPolicy } from "@/types/company-policy";
 
-export function CompanyPoliciesPanel() {
+export function CompanyPoliciesPanel({
+  title = "Company policies",
+  subtitle = "Official policy documents shared by admin. Pending policies must be accepted when you log in.",
+}: {
+  title?: string;
+  subtitle?: string;
+} = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [policies, setPolicies] = useState<CompanyPolicy[]>([]);
@@ -36,10 +42,8 @@ export function CompanyPoliciesPanel() {
   return (
     <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <div>
-        <h2 className="text-3xl font-semibold text-[#0f172a]">Company policies</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Official policy documents shared by admin. Pending policies must be accepted when you log in.
-        </p>
+        <h2 className="text-3xl font-semibold text-[#0f172a]">{title}</h2>
+        <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
       </div>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}

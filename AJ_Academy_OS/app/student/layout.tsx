@@ -10,7 +10,7 @@ const studentSidebarItems = [
   { label: "My Portfolio", href: "/student/portfolio" },
   { label: "My Counselling", href: "/student/counselling" },
   { label: "Leave & Permission", href: "/student/leave" },
-  { label: "Company Policies", href: "/student/policies" },
+  { label: "Student Policies", href: "/student/policies" },
   { label: "My Profile", href: "/student/profile" },
 ];
 
