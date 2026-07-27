@@ -9,6 +9,7 @@ import {
   nextCollegeVisitSelect,
 } from "@/components/college-visits/collegeVisitsHelpers";
 import { buildPayloadFromApi, mapCollegeVisitRow, parseCollegeVisitBody } from "@/lib/collegeVisitsApi";
+import { appendOutcomeRemarkLog } from "@/lib/outcomeRemarks";
 
 function stripUnavailableColumns(payload: Record<string, unknown>, errorMsg: string) {
   const next = { ...payload };
@@ -126,6 +127,9 @@ export async function POST(request: Request) {
   void profile;
   const payload = buildPayloadFromApi(parsed.form, user.id, false);
   payload.assigned_to = user.id;
+  if (parsed.form.last_outcome_remarks.trim()) {
+    payload.last_outcome_remarks = appendOutcomeRemarkLog(null, parsed.form.last_outcome_remarks);
+  }
 
   const supabase = await createClient();
   let insertPayload: Record<string, unknown> = { ...payload, created_by: user.id, assigned_to: user.id };

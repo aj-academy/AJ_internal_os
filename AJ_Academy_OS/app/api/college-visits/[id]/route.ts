@@ -10,6 +10,7 @@ import {
 } from "@/components/college-visits/collegeVisitsHelpers";
 import { buildPayloadFromApi, mapCollegeVisitRow, parseCollegeVisitBody } from "@/lib/collegeVisitsApi";
 import { deleteOwnedCollegeVisits } from "@/lib/crmOwnedDelete";
+import { appendOutcomeRemarkLog } from "@/lib/outcomeRemarks";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -182,6 +183,14 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const prevRow = prev as Record<string, unknown> | null;
+  const incomingOutcome = String(parsed.form.last_outcome_remarks ?? "").trim();
+  const existingOutcome = String(prevRow?.last_outcome_remarks ?? "").trim();
+  // Append-only remarks log. Empty incoming value must not erase existing logs.
+  if (incomingOutcome) {
+    updatePayload.last_outcome_remarks = appendOutcomeRemarkLog(existingOutcome, incomingOutcome);
+  } else if (prevRow) {
+    updatePayload.last_outcome_remarks = prevRow.last_outcome_remarks ?? null;
+  }
   const activities: Record<string, unknown>[] = [];
   if (prevRow) {
     const trackedKeys = TRACKED_FIELDS.map((f) => f.key);

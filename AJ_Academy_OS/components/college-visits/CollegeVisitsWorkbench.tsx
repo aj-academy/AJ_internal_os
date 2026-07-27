@@ -94,6 +94,7 @@ import {
   type CollegeVisitFormValue,
   type CollegeVisitRow,
 } from "@/components/college-visits/collegeVisitsHelpers";
+import { parseOutcomeRemarkEntries } from "@/lib/outcomeRemarks";
 import { ProposalFileUpload, uploadProposalFile } from "@/components/shared/ProposalFileUpload";
 import type { ProposalFileMeta, ProposalStoredFile } from "@/lib/proposalFiles";
 
@@ -175,6 +176,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [proposalSubmitting, setProposalSubmitting] = useState(false);
   const [pendingProposalFiles, setPendingProposalFiles] = useState<File[]>([]);
   const [proposalFiles, setProposalFiles] = useState<ProposalStoredFile[]>([]);
+  const [editingOutcomeHistory, setEditingOutcomeHistory] = useState<string | null>(null);
   const [proposalFileMeta, setProposalFileMeta] = useState<ProposalFileMeta>({
     proposal_file_name: null,
     proposal_file_path: null,
@@ -750,6 +752,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const openCreate = () => {
     setEditId(null);
     setForm(emptyCollegeVisitForm(currentUserId));
+    setEditingOutcomeHistory(null);
     setPendingProposalFiles([]);
     setProposalFiles([]);
     setProposalFileMeta({
@@ -769,7 +772,11 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const openEdit = (row: CollegeVisitRow) => {
     setEditId(row.id);
-    setForm(collegeVisitRowToForm(row));
+    const nextForm = collegeVisitRowToForm(row);
+    // Append-only outcome input: keep existing logs separate and keep input empty for new update.
+    nextForm.last_outcome_remarks = "";
+    setForm(nextForm);
+    setEditingOutcomeHistory(row.last_outcome_remarks ?? null);
     setPendingProposalFiles([]);
     setProposalFileMeta({
       proposal_file_name: row.proposal_file_name ?? null,
@@ -1819,6 +1826,7 @@ return (
         onChange={setForm}
         onClose={() => setPanelOpen(false)}
         onSubmit={() => void handleSave()}
+        existingOutcomeHistory={editingOutcomeHistory}
         visitStatusOptions={cvLists.visitStatuses}
         mouStatusOptions={cvLists.mouStatuses}
         finalStatusOptions={cvLists.finalStatuses}
@@ -1940,6 +1948,24 @@ return (
                 <p>
                   <span className="font-semibold text-[#3d3428]">Whom visited to the college:</span> {viewVisit.visited_by || "-"}
                 </p>
+              </div>
+              <div className="mb-4 space-y-2 rounded-xl border border-[#e8dcc8] bg-[#fefcf8] p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6b5d4d]">Outcome / remarks history</p>
+                {parseOutcomeRemarkEntries(viewVisit.last_outcome_remarks).length ? (
+                  <div className="max-h-44 space-y-2 overflow-y-auto">
+                    {parseOutcomeRemarkEntries(viewVisit.last_outcome_remarks)
+                      .slice()
+                      .reverse()
+                      .map((entry, idx) => (
+                        <div key={`${entry.timestamp ?? "legacy"}-${idx}`} className="rounded-lg border border-[#e8dcc8] bg-white px-2.5 py-2">
+                          <p className="text-[11px] font-semibold text-[#a68b2e]">{entry.timestamp ?? "Existing remark"}</p>
+                          <p className="mt-1 whitespace-pre-wrap text-xs text-[#3d3428]">{entry.text}</p>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-[#8a7a65]">No outcome remarks yet.</p>
+                )}
               </div>
               <p className="mb-2 text-xs text-[#64748b]">
                 Open <span className="font-semibold text-[#3d3428]">Activity</span> for the full timeline, or{" "}

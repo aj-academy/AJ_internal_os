@@ -66,6 +66,7 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 10k1d) proposals_multi_file_patch.sql (multiple proposal files per student/college entity — after proposals_file_upload_patch.sql)
 10k2) crm_owner_isolation.sql (employee own-only SM + CV; admin tracking SELECT/ALL — re-run after security_rls_access_fix.sql)
 10k3) crm_delete_fix.sql (delete_owned_clients / delete_owned_college_visits RPCs; admin bypass + strip_task_client_ids — after crm_owner_isolation.sql)
+10k3b) (No SQL) College Visits outcome remarks history is append-only in app/API (timestamped entries saved in existing `last_outcome_remarks`).
 10e) system_settings_rls_fix.sql (admin can save departments / settings — run if RLS error on delete; also required for Student Master / College Visits / Project Master / Finance Settings + Admin System Settings)
 11) attendance_delete_grants.sql (optional — admin delete attendance)
 11b) remove_leave_requests_module.sql (optional — drops leave_requests; use permission_requests only)

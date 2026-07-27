@@ -24,6 +24,7 @@ import {
   type CollegeContact,
   type CollegeVisitFormValue,
 } from "@/components/college-visits/collegeVisitsHelpers";
+import { parseOutcomeRemarkEntries } from "@/lib/outcomeRemarks";
 import { useSuppressBackdropClose } from "@/lib/useSuppressBackdropClose";
 
 interface OwnerOption {
@@ -42,6 +43,7 @@ interface CollegeVisitFormPanelProps {
   onClose: () => void;
   onSubmit: () => void;
   proposalUploadSlot?: ReactNode;
+  existingOutcomeHistory?: string | null;
   visitStatusOptions?: readonly string[];
   mouStatusOptions?: readonly string[];
   finalStatusOptions?: readonly string[];
@@ -85,6 +87,7 @@ export function CollegeVisitFormPanel({
   onClose,
   onSubmit,
   proposalUploadSlot,
+  existingOutcomeHistory = null,
   visitStatusOptions,
   mouStatusOptions,
   finalStatusOptions,
@@ -100,6 +103,7 @@ export function CollegeVisitFormPanel({
 
   const contacts = ensureFormContacts(value.contacts);
   const leadScore = computeCollegeLeadScore({ ...value, contacts });
+  const outcomeHistory = parseOutcomeRemarkEntries(existingOutcomeHistory);
 
   const setContact = (id: string, patch: Partial<CollegeContact>) => {
     updateContacts(
@@ -421,8 +425,31 @@ export function CollegeVisitFormPanel({
               </div>
               <label className="grid gap-1">
                 <span className="font-medium text-[#334155]">Last outcome / remarks</span>
-                <textarea className="min-h-[72px] w-full rounded-lg border border-[#e8dcc8] bg-white px-3 py-2" value={value.last_outcome_remarks} onChange={(e) => onChange({ ...value, last_outcome_remarks: e.target.value })} />
+                <textarea
+                  className="min-h-[72px] w-full rounded-lg border border-[#e8dcc8] bg-white px-3 py-2"
+                  value={value.last_outcome_remarks}
+                  onChange={(e) => onChange({ ...value, last_outcome_remarks: e.target.value })}
+                  placeholder="Type new update here. On Save, it is added as a new date-time entry and old updates stay intact."
+                />
               </label>
+              <div className="space-y-2 rounded-xl border border-[#f0e6d4] bg-[#fefcf8] p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#6b5d4d]">Outcome history (saved logs)</p>
+                {outcomeHistory.length === 0 ? (
+                  <p className="text-xs text-[#8a7a65]">No saved outcome logs yet.</p>
+                ) : (
+                  <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
+                    {outcomeHistory
+                      .slice()
+                      .reverse()
+                      .map((entry, idx) => (
+                        <div key={`${entry.timestamp ?? "legacy"}-${idx}`} className="rounded-lg border border-[#e8dcc8] bg-white px-3 py-2">
+                          <p className="text-[11px] font-semibold text-[#a68b2e]">{entry.timestamp ?? "Existing remark"}</p>
+                          <p className="mt-1 whitespace-pre-wrap text-xs text-[#3d3428]">{entry.text}</p>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
             </section>
 
             <section className="space-y-2">
