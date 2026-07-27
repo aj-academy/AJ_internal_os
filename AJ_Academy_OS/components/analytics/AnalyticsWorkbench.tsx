@@ -516,7 +516,6 @@ export function AnalyticsWorkbench({
               { key: "mobile", label: "Mobile" },
               { key: "date", label: "Date" },
               { key: "time", label: "Time" },
-              { key: "durationSec", label: "Duration (s)" },
               { key: "outcome", label: "Outcome" },
               { key: "remarks", label: "Remarks" },
               { key: "nextFollowUp", label: "Next Follow-up" },

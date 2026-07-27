@@ -692,6 +692,12 @@ async function buildCalls(
     rows = rows.filter((r) => r.course.toLowerCase().includes(filters.course.toLowerCase()));
   }
 
+  // Strip technical fields before UI/export so PDF never receives id / employeeId / startedAt.
+  const publicRows = rows.map(({ id: _id, employeeId: _eid, startedAt: _at, course: _course, durationSec, ...rest }) => ({
+    ...rest,
+    duration: durationSec == null ? "-" : `${durationSec}s`,
+  }));
+
   const page = filters.page || 1;
   const pageSize = filters.pageSize || 50;
   const start = (page - 1) * pageSize;
@@ -700,11 +706,11 @@ async function buildCalls(
       ...meta,
       note: "Includes Student Lead call sessions and College Visits dialer Phone Call logs.",
     },
-    total: rows.length,
+    total: publicRows.length,
     page,
     pageSize,
-    rows: rows.slice(start, start + pageSize),
-    allRows: rows,
+    rows: publicRows.slice(start, start + pageSize),
+    allRows: publicRows,
   };
 }
 
