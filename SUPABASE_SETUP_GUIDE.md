@@ -174,6 +174,7 @@ Run **`analytics_reporting_schema.sql`** after attendance, tasks, CRM, and `lead
 - Admin: sidebar **Reports & Analytics** → `/admin/reports` (`AnalyticsWorkbench`)
 - Employee: **My Reports** → `/employee/reports` (own data only)
 - APIs: `POST /api/analytics/query`, `POST|PATCH /api/analytics/eod`
+- Call Activity includes sessions by all staff roles (`admin`, `super_admin`, `employee`, `mentor`, `freelancer`) unless Employee filter is applied.
 - Full module docs: `AJ_Academy_OS/docs/REPORTS_ANALYTICS.md`
 
 Also run **`reports_analytics_schema.sql`** after `lead_call_workflow_schema.sql` (and ideally after `student_lead_master_aux_schema.sql` + `student_master_columns_patch.sql` for follow-ups / admissions). Safe to re-run. Adds:

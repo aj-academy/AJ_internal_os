@@ -98,8 +98,9 @@ export async function runAnalyticsQuery(
   }
 
   const profileMap = Object.fromEntries(profiles.map((p) => [p.id, p]));
-  const employeeIds = profiles.filter((p) => p.role === "employee" || filters.employeeId).map((p) => p.id);
-  const scopeIds = filters.employeeId ? [filters.employeeId] : employeeIds.length ? employeeIds : profiles.map((p) => p.id);
+  // Analytics should include all operational staff roles (admin/super_admin/employee/mentor/freelancer),
+  // not only "employee", otherwise real call activity done by admins disappears.
+  const scopeIds = filters.employeeId ? [filters.employeeId] : profiles.map((p) => p.id);
 
   const meta = {
     from,
