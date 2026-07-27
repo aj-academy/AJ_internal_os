@@ -495,21 +495,27 @@ export function AnalyticsWorkbench({
       ) : null}
 
       {section === "calls" ? (
-        <DataTable
-          columns={[
-            { key: "employee", label: "Employee" },
-            { key: "leadName", label: "Lead" },
-            { key: "mobile", label: "Mobile" },
-            { key: "date", label: "Date" },
-            { key: "time", label: "Time" },
-            { key: "durationSec", label: "Duration (s)" },
-            { key: "outcome", label: "Outcome" },
-            { key: "remarks", label: "Remarks" },
-            { key: "nextFollowUp", label: "Next Follow-up" },
-            { key: "status", label: "Status" },
-          ]}
-          rows={((data?.rows || []) as Record<string, unknown>[]) ?? []}
-        />
+        <div className="space-y-3">
+          <p className="text-xs text-[#64748b]">
+            Includes Student Lead call sessions and College Visits dialer Phone Call logs.
+          </p>
+          <DataTable
+            columns={[
+              { key: "employee", label: "Employee" },
+              { key: "source", label: "Source" },
+              { key: "leadName", label: "Lead / College" },
+              { key: "mobile", label: "Mobile" },
+              { key: "date", label: "Date" },
+              { key: "time", label: "Time" },
+              { key: "durationSec", label: "Duration (s)" },
+              { key: "outcome", label: "Outcome" },
+              { key: "remarks", label: "Remarks" },
+              { key: "nextFollowUp", label: "Next Follow-up" },
+              { key: "status", label: "Status" },
+            ]}
+            rows={((data?.rows || []) as Record<string, unknown>[]) ?? []}
+          />
+        </div>
       ) : null}
 
       {section === "followups" ? (

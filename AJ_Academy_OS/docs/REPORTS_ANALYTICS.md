@@ -16,7 +16,7 @@ Legacy `ReportsWorkbench` remains in the codebase under `components/reports/` fo
 1. Dashboard Overview — KPIs, charts, accountability alerts  
 2. Daily Employee Report — per-employee scorecard  
 3. Team Performance — team rollups + top/least performers  
-4. Call Activity — `lead_call_sessions` detail  
+4. Call Activity — Student Master `lead_call_sessions` **plus** College Visits dialer `Phone Call` rows from `college_visit_activities`  
 5. Follow-up Report — `lead_followups` + client follow-up dates  
 6. Task Completion — `tasks`  
 7. Lead Conversion — by `clients.source`  
@@ -74,7 +74,7 @@ Employee Student Master saves require:
 
 1. Admin opens Reports & Analytics → Overview loads with live KPIs.  
 2. Filter one employee → Daily / Timeline update.  
-3. Call Activity shows sessions from `lead_call_sessions`.  
+3. Call Activity shows Student Master call sessions and College Visits Phone Call logs (IST day bounds).
 4. Employee My Reports only shows self.  
 5. Export CSV / Excel / PDF from Download Centre.  
 6. Checkout EOD requires achievement, pending, tomorrow plan.  

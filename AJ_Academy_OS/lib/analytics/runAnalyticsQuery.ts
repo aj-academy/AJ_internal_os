@@ -161,8 +161,10 @@ async function buildAggregates(
   const [
     attendanceRes,
     callsRes,
+    collegeCallsRes,
     tasksRes,
     activitiesRes,
+    collegeActsRes,
     followupsRes,
     clientsRes,
   ] = await Promise.all([
@@ -175,10 +177,18 @@ async function buildAggregates(
       .limit(5000),
     supabase
       .from("lead_call_sessions")
-      .select("id,employee_id,lead_id,phone_number,started_at,ended_at,approximate_duration_seconds,call_outcome,remarks,session_status")
+      .select("id,employee_id,lead_id,phone_number,started_at,ended_at,approximate_duration_seconds,call_outcome,notes,session_status")
       .gte("started_at", fromTs)
       .lte("started_at", toTs)
       .in("employee_id", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
+      .limit(8000),
+    supabase
+      .from("college_visit_activities")
+      .select("id,created_by,created_at,activity_type,notes,college_visit_id")
+      .eq("activity_type", "Phone Call")
+      .gte("created_at", fromTs)
+      .lte("created_at", toTs)
+      .in("created_by", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
       .limit(8000),
     supabase
       .from("tasks")
@@ -188,6 +198,13 @@ async function buildAggregates(
     supabase
       .from("lead_activities")
       .select("id,client_id,activity_type,notes,created_at,created_by")
+      .gte("created_at", fromTs)
+      .lte("created_at", toTs)
+      .in("created_by", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
+      .limit(8000),
+    supabase
+      .from("college_visit_activities")
+      .select("id,college_visit_id,activity_type,notes,created_at,created_by")
       .gte("created_at", fromTs)
       .lte("created_at", toTs)
       .in("created_by", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
@@ -208,9 +225,35 @@ async function buildAggregates(
   ]);
 
   const attendance = attendanceRes.data ?? [];
-  const calls = callsRes.data ?? [];
+  const leadCalls = callsRes.data ?? [];
+  const collegePhoneCalls = collegeCallsRes.data ?? [];
+  // Normalize college dialer logs into the same shape used for call KPIs.
+  const calls = [
+    ...leadCalls.map((c) => ({
+      id: c.id,
+      employee_id: c.employee_id,
+      started_at: c.started_at,
+      call_outcome: c.call_outcome,
+    })),
+    ...collegePhoneCalls.map((c) => ({
+      id: `cv:${c.id}`,
+      employee_id: c.created_by || "",
+      started_at: c.created_at,
+      call_outcome: "Phone Call",
+    })),
+  ];
   const allTasks = tasksRes.data ?? [];
-  const activities = activitiesRes.data ?? [];
+  const activities = [
+    ...(activitiesRes.data ?? []),
+    ...(collegeActsRes.data ?? []).map((a) => ({
+      id: `cvact:${a.id}`,
+      client_id: a.college_visit_id,
+      activity_type: a.activity_type,
+      notes: a.notes,
+      created_at: a.created_at,
+      created_by: a.created_by,
+    })),
+  ];
   const followups = (followupsRes.data ?? []).filter((f) => {
     const eid = f.assigned_employee_id;
     return !eid || scopeIds.includes(eid);
@@ -360,9 +403,9 @@ async function buildAggregates(
 
   const callsByDay = days.map((d) => ({
     date: d,
-    calls: calls.filter((c) => (c.started_at || "").slice(0, 10) === d).length,
+    calls: calls.filter((c) => istDateKeyFromIso(c.started_at) === d).length,
     connected: calls.filter(
-      (c) => (c.started_at || "").slice(0, 10) === d && isConnectedOutcome(c.call_outcome),
+      (c) => istDateKeyFromIso(c.started_at) === d && isConnectedOutcome(c.call_outcome),
     ).length,
   }));
 
@@ -474,6 +517,43 @@ async function buildAggregates(
   };
 }
 
+function parsePhoneFromCallNotes(notes: string | null | undefined): string {
+  const m = String(notes || "").match(/Called\s+(\d[\d\s-]{6,}\d)/i);
+  return m?.[1]?.replace(/\s+/g, "") || "-";
+}
+
+function istDateKeyFromIso(iso: string | null | undefined): string {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+function istTimeFromIso(iso: string | null | undefined): string {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleTimeString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+type CallActivityRow = {
+  id: string;
+  employeeId: string;
+  employee: string;
+  leadName: string;
+  mobile: string;
+  date: string;
+  time: string;
+  durationSec: number | null;
+  outcome: string;
+  remarks: string;
+  nextFollowUp: string;
+  status: string;
+  course: string;
+  source: string;
+  startedAt: string;
+};
+
 async function buildCalls(
   supabase: SupabaseClient,
   filters: AnalyticsFilters,
@@ -481,28 +561,77 @@ async function buildCalls(
   scopeIds: string[],
   meta: Record<string, unknown>,
 ) {
-  const { data } = await supabase
-    .from("lead_call_sessions")
-    .select(
-      "id,employee_id,lead_id,phone_number,started_at,ended_at,approximate_duration_seconds,call_outcome,remarks,session_status,employee_name",
-    )
-    .gte("started_at", isoStartOfDay(filters.from))
-    .lte("started_at", isoEndOfDay(filters.to))
-    .in("employee_id", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
-    .order("started_at", { ascending: false })
-    .limit(2000);
+  const fromTs = isoStartOfDay(filters.from);
+  const toTs = isoEndOfDay(filters.to);
+  const emptyScope = scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"];
 
-  const leadIds = [...new Set((data ?? []).map((r) => r.lead_id).filter(Boolean))];
-  const { data: leads } = leadIds.length
-    ? await supabase
-        .from("clients")
-        .select("id,lead_name,name,phone,interested_program,follow_up_date,status,source")
-        .in("id", leadIds)
-    : { data: [] as { id: string; lead_name?: string | null; name?: string | null; phone?: string | null; interested_program?: string | null; follow_up_date?: string | null; status?: string | null; source?: string | null }[] };
+  const [sessionsRes, collegeCallRes] = await Promise.all([
+    supabase
+      .from("lead_call_sessions")
+      .select(
+        "id,employee_id,lead_id,phone_number,started_at,ended_at,approximate_duration_seconds,call_outcome,notes,session_status,employee_name",
+      )
+      .gte("started_at", fromTs)
+      .lte("started_at", toTs)
+      .in("employee_id", emptyScope)
+      .order("started_at", { ascending: false })
+      .limit(2000),
+    // College Visits dialer logs Phone Call into college_visit_activities (not lead_call_sessions).
+    supabase
+      .from("college_visit_activities")
+      .select("id,college_visit_id,activity_type,notes,created_by,created_at")
+      .eq("activity_type", "Phone Call")
+      .gte("created_at", fromTs)
+      .lte("created_at", toTs)
+      .in("created_by", emptyScope)
+      .order("created_at", { ascending: false })
+      .limit(2000),
+  ]);
+
+  const data = sessionsRes.data ?? [];
+  const collegeCalls = collegeCallRes.data ?? [];
+
+  const leadIds = [...new Set(data.map((r) => r.lead_id).filter(Boolean))];
+  const visitIds = [...new Set(collegeCalls.map((r) => r.college_visit_id).filter(Boolean))];
+
+  const [{ data: leads }, { data: visits }] = await Promise.all([
+    leadIds.length
+      ? supabase
+          .from("clients")
+          .select("id,lead_name,name,phone,interested_program,follow_up_date,status,source")
+          .in("id", leadIds)
+      : Promise.resolve({
+          data: [] as {
+            id: string;
+            lead_name?: string | null;
+            name?: string | null;
+            phone?: string | null;
+            interested_program?: string | null;
+            follow_up_date?: string | null;
+            status?: string | null;
+            source?: string | null;
+          }[],
+        }),
+    visitIds.length
+      ? supabase
+          .from("college_visits")
+          .select("id,college_name,next_follow_up_date,visit_status,contact_number")
+          .in("id", visitIds)
+      : Promise.resolve({
+          data: [] as {
+            id: string;
+            college_name?: string | null;
+            next_follow_up_date?: string | null;
+            visit_status?: string | null;
+            contact_number?: string | null;
+          }[],
+        }),
+  ]);
 
   const leadMap = Object.fromEntries((leads ?? []).map((l) => [l.id, l]));
+  const visitMap = Object.fromEntries((visits ?? []).map((v) => [v.id, v]));
 
-  let rows = (data ?? []).map((r) => {
+  const sessionRows: CallActivityRow[] = data.map((r) => {
     const lead = leadMap[r.lead_id];
     return {
       id: r.id,
@@ -510,17 +639,44 @@ async function buildCalls(
       employee: r.employee_name || nameOf(profileMap[r.employee_id]),
       leadName: lead?.lead_name || lead?.name || "-",
       mobile: r.phone_number || lead?.phone || "-",
-      date: (r.started_at || "").slice(0, 10),
-      time: r.started_at ? new Date(r.started_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "-",
+      date: istDateKeyFromIso(r.started_at),
+      time: istTimeFromIso(r.started_at),
       durationSec: r.approximate_duration_seconds ?? null,
       outcome: r.call_outcome || "-",
-      remarks: r.remarks || "-",
+      remarks: r.notes || "-",
       nextFollowUp: lead?.follow_up_date || "-",
       status: r.session_status || lead?.status || "-",
       course: lead?.interested_program || "-",
-      source: lead?.source || "-",
+      source: "Student Lead",
+      startedAt: r.started_at,
     };
   });
+
+  const collegeRows: CallActivityRow[] = collegeCalls.map((r) => {
+    const visit = visitMap[r.college_visit_id];
+    const eid = r.created_by || "";
+    return {
+      id: `cv-call:${r.id}`,
+      employeeId: eid,
+      employee: nameOf(profileMap[eid]),
+      leadName: visit?.college_name || "College visit",
+      mobile: parsePhoneFromCallNotes(r.notes) || visit?.contact_number || "-",
+      date: istDateKeyFromIso(r.created_at),
+      time: istTimeFromIso(r.created_at),
+      durationSec: null,
+      outcome: "Phone Call",
+      remarks: r.notes || "-",
+      nextFollowUp: visit?.next_follow_up_date || "-",
+      status: visit?.visit_status || "College Visit",
+      course: "-",
+      source: "College Visit",
+      startedAt: r.created_at,
+    };
+  });
+
+  let rows = [...sessionRows, ...collegeRows].sort((a, b) =>
+    String(b.startedAt).localeCompare(String(a.startedAt)),
+  );
 
   if (filters.search) {
     rows = rows.filter(
@@ -528,7 +684,8 @@ async function buildCalls(
         r.employee.toLowerCase().includes(filters.search) ||
         r.leadName.toLowerCase().includes(filters.search) ||
         r.mobile.toLowerCase().includes(filters.search) ||
-        r.outcome.toLowerCase().includes(filters.search),
+        r.outcome.toLowerCase().includes(filters.search) ||
+        r.source.toLowerCase().includes(filters.search),
     );
   }
   if (filters.course) {
@@ -539,7 +696,10 @@ async function buildCalls(
   const pageSize = filters.pageSize || 50;
   const start = (page - 1) * pageSize;
   return {
-    meta,
+    meta: {
+      ...meta,
+      note: "Includes Student Lead call sessions and College Visits dialer Phone Call logs.",
+    },
     total: rows.length,
     page,
     pageSize,
@@ -895,7 +1055,7 @@ async function buildTimeline(
   const fromTs = isoStartOfDay(filters.from);
   const toTs = isoEndOfDay(filters.to);
 
-  const [att, calls, acts, tasks, fus, eod] = await Promise.all([
+  const [att, calls, acts, collegeActs, tasks, fus, eod] = await Promise.all([
     supabase
       .from("attendance_records")
       .select("attendance_date,check_in_time,check_out_time,status,total_working_minutes")
@@ -904,7 +1064,7 @@ async function buildTimeline(
       .lte("attendance_date", filters.to),
     supabase
       .from("lead_call_sessions")
-      .select("started_at,ended_at,call_outcome,phone_number,lead_id,remarks")
+      .select("started_at,ended_at,call_outcome,phone_number,lead_id,notes")
       .eq("employee_id", employeeId)
       .gte("started_at", fromTs)
       .lte("started_at", toTs)
@@ -913,6 +1073,14 @@ async function buildTimeline(
     supabase
       .from("lead_activities")
       .select("created_at,activity_type,notes,client_id")
+      .eq("created_by", employeeId)
+      .gte("created_at", fromTs)
+      .lte("created_at", toTs)
+      .order("created_at", { ascending: true })
+      .limit(500),
+    supabase
+      .from("college_visit_activities")
+      .select("created_at,activity_type,notes,college_visit_id")
       .eq("created_by", employeeId)
       .gte("created_at", fromTs)
       .lte("created_at", toTs)
@@ -964,17 +1132,24 @@ async function buildTimeline(
   }
 
   const leadIds = [...new Set((calls.data ?? []).map((c) => c.lead_id).filter(Boolean))];
-  const { data: leadNames } = leadIds.length
-    ? await supabase.from("clients").select("id,lead_name,name").in("id", leadIds)
-    : { data: [] as { id: string; lead_name?: string | null; name?: string | null }[] };
+  const visitIds = [...new Set((collegeActs.data ?? []).map((a) => a.college_visit_id).filter(Boolean))];
+  const [{ data: leadNames }, { data: visitNames }] = await Promise.all([
+    leadIds.length
+      ? supabase.from("clients").select("id,lead_name,name").in("id", leadIds)
+      : Promise.resolve({ data: [] as { id: string; lead_name?: string | null; name?: string | null }[] }),
+    visitIds.length
+      ? supabase.from("college_visits").select("id,college_name").in("id", visitIds)
+      : Promise.resolve({ data: [] as { id: string; college_name?: string | null }[] }),
+  ]);
   const lmap = Object.fromEntries((leadNames ?? []).map((l) => [l.id, l.lead_name || l.name || "Lead"]));
+  const vmap = Object.fromEntries((visitNames ?? []).map((v) => [v.id, v.college_name || "College"]));
 
   for (const c of calls.data ?? []) {
     events.push({
       at: c.started_at,
       kind: "call",
       title: `Called ${lmap[c.lead_id] || c.phone_number || "candidate"}`,
-      detail: [c.call_outcome, c.remarks].filter(Boolean).join(" · "),
+      detail: [c.call_outcome, c.notes].filter(Boolean).join(" · "),
     });
   }
   for (const a of acts.data ?? []) {
@@ -982,6 +1157,14 @@ async function buildTimeline(
       at: a.created_at,
       kind: "crm",
       title: a.activity_type || "CRM update",
+      detail: a.notes || undefined,
+    });
+  }
+  for (const a of collegeActs.data ?? []) {
+    events.push({
+      at: a.created_at,
+      kind: "college",
+      title: `${a.activity_type || "College update"} · ${vmap[a.college_visit_id] || "College"}`,
       detail: a.notes || undefined,
     });
   }
