@@ -55,6 +55,7 @@ import {
 import {
   defaultCollegeVisitSettingsLists,
   fetchCollegeVisitSettingsLists,
+  persistCollegeVisitSettingsLists,
   type CollegeVisitSettingsLists,
 } from "@/lib/collegeVisitSettings";
 import {
@@ -191,6 +192,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [outreachDone, setOutreachDone] = useState<Record<string, CollegeOutreachFlags>>({});
   const [whatsAppTemplates, setWhatsAppTemplates] = useState<string[]>([]);
   const [cvLists, setCvLists] = useState<CollegeVisitSettingsLists>(() => defaultCollegeVisitSettingsLists());
+  const [addingPipeline, setAddingPipeline] = useState(false);
   const [whatsAppComposeVisit, setWhatsAppComposeVisit] = useState<CollegeVisitRow | null>(null);
   const [whatsAppSubmitting, setWhatsAppSubmitting] = useState(false);
   const [emailComposeVisit, setEmailComposeVisit] = useState<CollegeVisitRow | null>(null);
@@ -620,7 +622,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     const q = searchText.trim().toLowerCase();
     if (q) {
       list = list.filter((v) =>
-        `${v.college_name} ${v.location ?? ""} ${v.contact_number ?? ""} ${v.email ?? ""} ${v.connected_person_name ?? ""} ${v.source_reference ?? ""}`
+        `${v.college_name} ${v.location ?? ""} ${v.contact_number ?? ""} ${v.email ?? ""} ${v.connected_person_name ?? ""} ${v.source_reference ?? ""} ${v.visit_status ?? ""} ${v.mou_signed_status ?? ""} ${v.final_status ?? ""} ${v.priority ?? ""} ${v.follow_up_stage ?? ""} ${v.proposal_status ?? ""} ${v.visited_by_name ?? ""}`
           .toLowerCase()
           .includes(q),
       );
@@ -634,11 +636,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     return list;
   }, [visits, searchText, fltVisitStatus, fltPriority, fltOwner, fltFinalStatus, fltFollowUpDue]);
 
-  /** Admin employee tracker: owner only (ignores search/column filters) for Overview cards. */
-  const trackerVisits = useMemo(() => {
-    if (!isDbAdmin || !fltOwner) return visits;
-    return visits.filter((v) => (v.assigned_to ?? "") === fltOwner);
-  }, [visits, fltOwner, isDbAdmin]);
+  /** Overview uses the same search + filters as other subsections. */
+  const trackerVisits = useMemo(() => filteredVisits, [filteredVisits]);
 
   const filtersActive = Boolean(
     searchText.trim() || fltVisitStatus || fltPriority || fltOwner || fltFinalStatus || fltFollowUpDue,
@@ -728,6 +727,23 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       setError(friendlyCollegeVisitError(e));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleAddPipeline = async (name: string) => {
+    if (!isDbAdmin) throw new Error("Only admins can add pipeline stages.");
+    setAddingPipeline(true);
+    setError(null);
+    try {
+      const nextLists: CollegeVisitSettingsLists = {
+        ...cvLists,
+        visitStatuses: [...cvLists.visitStatuses, name],
+      };
+      const saved = await persistCollegeVisitSettingsLists(nextLists);
+      setCvLists(saved);
+      setSuccess(`Pipeline "${name}" added. New column and dropdown options are ready.`);
+    } finally {
+      setAddingPipeline(false);
     }
   };
 
@@ -1241,6 +1257,21 @@ return (
         </div>
       ) : null}
 
+      {activeTab !== "settings" ? (
+        <TableSearchBar
+          value={searchText}
+          onChange={setSearchText}
+          placeholder="Search college, location, contact, email, status…"
+          showClear={filtersActive}
+          onClear={clearTableFilters}
+          hint={
+            activeTab === "all-colleges"
+              ? `Showing ${pageRows.length} of ${filteredVisits.length} college(s) | page ${page}/${totalPages}`
+              : `Showing ${filteredVisits.length} of ${visits.length} college(s)${searchText.trim() ? " (filtered)" : ""} · ${CV_TAB_LABELS[activeTab]}`
+          }
+        />
+      ) : null}
+
       {activeTab === "overview" ? <CollegeOverviewPanel visits={trackerVisits} loading={loading} /> : null}
 
       {activeTab === "follow-ups" ? (
@@ -1251,8 +1282,12 @@ return (
         <CollegePipelineBoard
           visits={filteredVisits}
           canEdit={isAdmin}
+          canAddPipeline={isDbAdmin}
           statusOptions={cvLists.visitStatuses}
           onChangeStatus={(row, s) => void changePipelineStatus(row, s)}
+          onOpen={setViewVisit}
+          onAddPipeline={handleAddPipeline}
+          addingPipeline={addingPipeline}
         />
       ) : null}
 
@@ -1335,15 +1370,6 @@ return (
               </Button>
             </div>
           ) : null}
-
-          <TableSearchBar
-            value={searchText}
-            onChange={setSearchText}
-            placeholder="Search college, location, contact, email..."
-            showClear={filtersActive}
-            onClear={clearTableFilters}
-            hint={`Showing ${pageRows.length} of ${filteredVisits.length} college(s) | page ${page}/${totalPages}`}
-          />
 
           {!pickForTask && visitBulk.selectedCount > 0 ? (
             <BulkSelectionBar selectedCount={visitBulk.selectedCount} onClear={visitBulk.clearSelection}>

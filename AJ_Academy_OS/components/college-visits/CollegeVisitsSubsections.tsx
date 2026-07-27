@@ -245,60 +245,144 @@ export function CollegeFollowUpsPanel({
 export function CollegePipelineBoard({
   visits,
   canEdit,
+  canAddPipeline = false,
   statusOptions,
   onChangeStatus,
+  onOpen,
+  onAddPipeline,
+  addingPipeline = false,
 }: {
   visits: CollegeVisitRow[];
   canEdit: boolean;
+  /** Admin can create a new pipeline stage (saved to system settings). */
+  canAddPipeline?: boolean;
   statusOptions?: readonly string[];
   onChangeStatus: (row: CollegeVisitRow, status: string) => void;
+  onOpen?: (row: CollegeVisitRow) => void;
+  onAddPipeline?: (name: string) => Promise<void> | void;
+  addingPipeline?: boolean;
 }) {
   const statuses = statusOptions?.length ? statusOptions : VISIT_STATUSES;
+  const [newStage, setNewStage] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const submitNewPipeline = async () => {
+    const name = newStage.trim().replace(/\s+/g, " ");
+    if (!name) {
+      setLocalError("Enter a pipeline stage name.");
+      return;
+    }
+    if (statuses.some((s) => s.toLowerCase() === name.toLowerCase())) {
+      setLocalError(`"${name}" already exists.`);
+      return;
+    }
+    if (!onAddPipeline) return;
+    setLocalError(null);
+    try {
+      await onAddPipeline(name);
+      setNewStage("");
+    } catch (e) {
+      setLocalError(e instanceof Error ? e.message : "Could not add pipeline.");
+    }
+  };
+
   return (
-    <div className="overflow-x-auto pb-2">
-      <div className="flex h-[min(70vh,720px)] min-h-[360px] min-w-[980px] gap-3">
-        {statuses.map((statusCol) => {
-          const col = visits.filter((v) => v.visit_status === statusCol);
-          return (
-            <div
-              key={statusCol}
-              className="flex min-h-0 min-w-[240px] flex-1 flex-col rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-3"
-            >
-              <p className="mb-3 shrink-0 text-xs font-semibold uppercase tracking-wide text-[#475569]">
-                {statusCol} | {col.length}
-              </p>
-              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1">
-                {col.length === 0 ? (
-                  <p className="px-1 text-xs text-[#94a3b8]">No colleges in this stage.</p>
-                ) : null}
-                {col.map((card) => (
-                  <div key={card.id} className="rounded-xl border border-white bg-white p-3 shadow-sm">
-                    <p className="font-semibold text-slate-900">{card.college_name}</p>
-                    <p className="text-xs text-slate-500">{card.location || ""}</p>
-                    <div className="mt-2 space-y-1 text-xs text-slate-700">
-                      <p>Priority {card.priority || "-"}</p>
-                      <p>MOU {card.mou_signed_status || "-"}</p>
-                      <p>Next FU {formatDisplayDate(card.next_follow_up_date)}</p>
+    <div className="space-y-3">
+      {canAddPipeline ? (
+        <div className="flex flex-col gap-2 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] px-4 py-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <label className="min-w-[12rem] flex-1 text-sm">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#64748b]">
+              Add pipeline
+            </span>
+            <input
+              type="text"
+              value={newStage}
+              onChange={(e) => {
+                setNewStage(e.target.value);
+                setLocalError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void submitNewPipeline();
+                }
+              }}
+              placeholder="e.g. Proposal Sent, Negotiation…"
+              disabled={addingPipeline}
+              className="h-9 w-full rounded-lg border border-[#dbe6f3] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c9a227]"
+            />
+          </label>
+          <Button
+            type="button"
+            className="h-9 shrink-0 rounded-full bg-[#c9a227] px-4 text-white hover:bg-[#b8921f]"
+            disabled={addingPipeline || !newStage.trim()}
+            onClick={() => void submitNewPipeline()}
+          >
+            {addingPipeline ? "Saving…" : "+ Add pipeline"}
+          </Button>
+          <p className="w-full text-xs text-[#64748b]">
+            New stages save automatically and appear as a column and in each college card dropdown.
+          </p>
+          {localError ? <p className="w-full text-xs font-medium text-rose-600">{localError}</p> : null}
+        </div>
+      ) : null}
+
+      <div className="overflow-x-auto pb-2">
+        <div className="flex h-[min(70vh,720px)] min-h-[360px] min-w-[980px] gap-3">
+          {statuses.map((statusCol) => {
+            const col = visits.filter((v) => v.visit_status === statusCol);
+            return (
+              <div
+                key={statusCol}
+                className="flex min-h-0 min-w-[240px] flex-1 flex-col rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-3"
+              >
+                <p className="mb-3 shrink-0 text-xs font-semibold uppercase tracking-wide text-[#475569]">
+                  {statusCol} | {col.length}
+                </p>
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1">
+                  {col.length === 0 ? (
+                    <p className="px-1 text-xs text-[#94a3b8]">No colleges in this stage.</p>
+                  ) : null}
+                  {col.map((card) => (
+                    <div key={card.id} className="rounded-xl border border-white bg-white p-3 shadow-sm">
+                      <p className="font-semibold text-slate-900">{card.college_name}</p>
+                      <p className="text-xs text-slate-500">{card.location || ""}</p>
+                      <div className="mt-2 space-y-1 text-xs text-slate-700">
+                        <p>Priority {card.priority || "-"}</p>
+                        <p>MOU {card.mou_signed_status || "-"}</p>
+                        <p>Next FU {formatDisplayDate(card.next_follow_up_date)}</p>
+                      </div>
+                      {canEdit ? (
+                        <select
+                          className="mt-2 h-8 w-full rounded-lg border border-[#dbe6f3] px-2 text-xs"
+                          value={card.visit_status}
+                          onChange={(e) => onChangeStatus(card, e.target.value)}
+                        >
+                          {statuses.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                      {onOpen ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="mt-2 h-8 w-full rounded-lg border-[#dbe6f3] text-xs font-semibold text-[#334155] hover:bg-[#f8fbff]"
+                          onClick={() => onOpen(card)}
+                        >
+                          View
+                        </Button>
+                      ) : null}
                     </div>
-                    {canEdit ? (
-                      <select
-                        className="mt-2 h-8 w-full rounded-lg border border-[#dbe6f3] px-2 text-xs"
-                        value={card.visit_status}
-                        onChange={(e) => onChangeStatus(card, e.target.value)}
-                      >
-                        {statuses.map((opt) => (
-                          <option key={opt} value={opt}>
-                            {opt}
-                          </option>
-                        ))}
-                      </select>
-                    ) : null}
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
