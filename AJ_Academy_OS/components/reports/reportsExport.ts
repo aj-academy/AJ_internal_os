@@ -60,6 +60,30 @@ export type PdfExportOptions = {
   logoDataUrl?: string | null;
 };
 
+/** Keep only human-facing Call Activity fields for CSV/Excel/PDF. */
+export function formatCallActivityExportRows(rows: ExportRow[]): ExportRow[] {
+  return rows.map((r) => {
+    const duration = r.durationSec;
+    const durationLabel =
+      duration == null || duration === "" || duration === "-"
+        ? "-"
+        : `${duration}s`;
+    return {
+      Employee: safeText(r.employee),
+      Source: safeText(r.source),
+      "Lead / College": safeText(r.leadName),
+      Mobile: safeText(r.mobile),
+      Date: safeText(r.date),
+      Time: safeText(r.time),
+      Duration: durationLabel,
+      Outcome: safeText(r.outcome),
+      Remarks: safeText(r.remarks),
+      "Next Follow-up": safeText(r.nextFollowUp),
+      Status: safeText(r.status),
+    };
+  });
+}
+
 export async function exportRowsAsPdf(
   title: string,
   filename: string,
@@ -74,19 +98,20 @@ export async function exportRowsAsPdf(
       return set;
     }, new Set<string>()),
   );
-  const pdf = new jsPDF({ orientation: "landscape" });
-  let y = 14;
+  const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  let y = 28;
   if (options?.logoDataUrl) {
     try {
-      pdf.addImage(options.logoDataUrl, "PNG", 14, 8, 18, 18);
-      y = 28;
+      pdf.addImage(options.logoDataUrl, "PNG", 28, 16, 28, 28);
+      y = 48;
     } catch {
       /* ignore invalid logo */
     }
   }
   pdf.setFontSize(14);
-  pdf.text(title, options?.logoDataUrl ? 36 : 14, y);
-  y += 6;
+  pdf.text(title, options?.logoDataUrl ? 64 : 28, y);
+  y += 14;
   pdf.setFontSize(9);
   const metaLines = [
     options?.generatedAt ? `Generated: ${options.generatedAt}` : null,
@@ -95,15 +120,60 @@ export async function exportRowsAsPdf(
     options?.summary ? `Summary: ${options.summary}` : null,
   ].filter(Boolean) as string[];
   metaLines.forEach((line) => {
-    pdf.text(line, 14, y);
-    y += 5;
+    pdf.text(line, 28, y);
+    y += 12;
   });
+
+  const usableWidth = pageWidth - 40;
+  const colCount = Math.max(1, headers.length);
+  // Weight columns so text-heavy fields get more space without crushing others.
+  const weights = headers.map((header) => {
+    const key = header.toLowerCase();
+    if (key.includes("remark") || key.includes("lead") || key.includes("college")) return 2.2;
+    if (key.includes("employee")) return 1.4;
+    if (key.includes("follow") || key.includes("status") || key.includes("outcome") || key.includes("source")) return 1.1;
+    return 1;
+  });
+  const weightSum = weights.reduce((a, b) => a + b, 0) || 1;
+  const columnStyles = Object.fromEntries(
+    weights.map((w, idx) => [idx, { cellWidth: Math.max(36, Math.floor((usableWidth * w) / weightSum)) }]),
+  );
+
   autoTable(pdf, {
     head: [headers.map(prettifyHeader)],
     body: rows.map((row) => headers.map((header) => safeText(row[header]))),
-    startY: Math.max(22, y + 2),
-    styles: { fontSize: 8 },
-    headStyles: { fillColor: [201, 162, 39] },
+    startY: Math.max(40, y + 6),
+    margin: { left: 20, right: 20, top: 24, bottom: 24 },
+    tableWidth: usableWidth,
+    styles: {
+      fontSize: 7,
+      cellPadding: 3,
+      overflow: "linebreak",
+      valign: "top",
+      minCellHeight: 14,
+    },
+    headStyles: {
+      fillColor: [201, 162, 39],
+      textColor: [255, 255, 255],
+      fontSize: 7,
+      fontStyle: "bold",
+      overflow: "linebreak",
+      valign: "middle",
+    },
+    bodyStyles: {
+      textColor: [51, 65, 85],
+    },
+    alternateRowStyles: {
+      fillColor: [250, 252, 255],
+    },
+    columnStyles,
+    didDrawPage: (data) => {
+      pdf.setFontSize(8);
+      pdf.setTextColor(120);
+      pdf.text(`Page ${data.pageNumber}`, pageWidth - 20, pdf.internal.pageSize.getHeight() - 12, {
+        align: "right",
+      });
+    },
   });
   pdf.save(filename);
 }

@@ -29,6 +29,7 @@ import {
   exportRowsAsCsv,
   exportRowsAsExcel,
   exportRowsAsPdf,
+  formatCallActivityExportRows,
   type ExportRow,
 } from "@/components/reports/reportsExport";
 
@@ -214,7 +215,7 @@ export function AnalyticsWorkbench({
       let title = ANALYTICS_SECTION_LABELS[section];
 
       if (section === "calls") {
-        rows = ((data?.allRows || data?.rows || []) as ExportRow[]) ?? [];
+        rows = formatCallActivityExportRows(((data?.allRows || data?.rows || []) as ExportRow[]) ?? []);
       } else if (section === "followups" || section === "tasks") {
         rows = ((data?.rows || []) as ExportRow[]) ?? [];
       } else if (section === "conversion") {
@@ -227,7 +228,9 @@ export function AnalyticsWorkbench({
         rows = ((data?.rows || []) as ExportRow[]) ?? [];
       } else if (section === "download") {
         const daily = ((data?.daily as { employees?: ExportRow[] })?.employees || []) as ExportRow[];
-        const callRows = ((data?.calls as { allRows?: ExportRow[] })?.allRows || []) as ExportRow[];
+        const callRows = formatCallActivityExportRows(
+          ((data?.calls as { allRows?: ExportRow[] })?.allRows || []) as ExportRow[],
+        );
         const taskRows = ((data?.tasks as { rows?: ExportRow[] })?.rows || []) as ExportRow[];
         const eodRows = ((data?.eod as { rows?: ExportRow[] })?.rows || []) as ExportRow[];
         await exportMultiSheetExcel(`AJ_OS_Analytics_${stamp}.xlsx`, [
@@ -252,7 +255,13 @@ export function AnalyticsWorkbench({
 
       if (fmt === "csv") exportRowsAsCsv(`AJ_OS_${section}_${stamp}.csv`, rows);
       else if (fmt === "xlsx") await exportRowsAsExcel(`AJ_OS_${section}_${stamp}.xlsx`, [...metaPrefix, ...rows]);
-      else await exportRowsAsPdf(`AJ OS — ${title}`, `AJ_OS_${section}_${stamp}.pdf`, rows);
+      else {
+        await exportRowsAsPdf(`AJ OS — ${title}`, `AJ_OS_${section}_${stamp}.pdf`, rows, {
+          generatedAt: new Date().toLocaleString("en-IN"),
+          dateRange: `${filters.from} → ${filters.to}`,
+          summary: `${rows.length} row(s)`,
+        });
+      }
     } finally {
       setExportBusy(null);
     }
