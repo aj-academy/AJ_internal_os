@@ -27,6 +27,7 @@ import {
   type CollegeVisitSettingsLists,
 } from "@/lib/collegeVisitSettings";
 import { useSuppressBackdropClose } from "@/lib/useSuppressBackdropClose";
+import { formatActivityValue, resolveActorName } from "@/lib/activityDisplay";
 
 function countBy(rows: CollegeVisitRow[], key: (r: CollegeVisitRow) => string) {
   const m = new Map<string, number>();
@@ -916,13 +917,12 @@ export function CollegeActivityTimeline({
               <p className="text-xs text-[#64748b]">{formatDisplayDate(a.created_at)}</p>
             </div>
             <p className="mt-1 text-xs text-[#64748b]">
-              {visit?.college_name || a.college_visit_id.slice(0, 8)} | by{" "}
-              {a.created_by ? ownerNameMap[a.created_by] || a.created_by.slice(0, 8) : "-"}
+              {visit?.college_name || "College"} | by {resolveActorName(a.created_by, ownerNameMap)}
             </p>
             {a.notes ? <p className="mt-2 text-[#334155]">{a.notes}</p> : null}
             {a.old_value || a.new_value ? (
               <p className="mt-1 text-xs text-[#64748b]">
-                {a.old_value || "-"} {"->"} {a.new_value || "-"}
+                {formatActivityValue(a.old_value, ownerNameMap)} {"->"} {formatActivityValue(a.new_value, ownerNameMap)}
               </p>
             ) : null}
           </div>

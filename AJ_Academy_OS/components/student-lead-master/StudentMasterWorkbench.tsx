@@ -73,6 +73,7 @@ import {
   STUDENT_MASTER_DATA_COLUMN_COUNT,
 } from "@/components/student-lead-master/studentMasterCsv";
 import { formatDateTimeIST, formatDisplayDate } from "@/lib/datetime";
+import { formatActivityValue, resolveActorName } from "@/lib/activityDisplay";
 import { persistInterestedPrograms } from "@/lib/studentPrograms";
 import { useSuppressBackdropClose } from "@/lib/useSuppressBackdropClose";
 import {
@@ -4111,10 +4112,15 @@ function ActivityTable({
                   </tr>
                 ) : (
                   rows.map((ar) => {
-                    const detail = [ar.notes, ar.old_value || ar.new_value ? `${ar.old_value ?? "?"} → ${ar.new_value ?? "?"}` : ""]
+                    const detail = [
+                      ar.notes,
+                      ar.old_value || ar.new_value
+                        ? `${formatActivityValue(ar.old_value, employeeNameMap)} → ${formatActivityValue(ar.new_value, employeeNameMap)}`
+                        : "",
+                    ]
                       .filter(Boolean)
                       .join(" · ");
-                    const by = ar.created_by ? employeeNameMap[ar.created_by] || ar.created_by.slice(0, 8) : "—";
+                    const by = resolveActorName(ar.created_by, employeeNameMap);
                     return (
                       <tr key={ar.id} className="border-t border-[#f1f5f9]">
                         <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600">{formatDateTimeIST(String(ar.created_at))}</td>
@@ -4142,10 +4148,15 @@ function ActivityTable({
             </p>
           ) : (
             rows.map((ar) => {
-              const detail = [ar.notes, ar.old_value || ar.new_value ? `${ar.old_value ?? "?"} → ${ar.new_value ?? "?"}` : ""]
+              const detail = [
+                ar.notes,
+                ar.old_value || ar.new_value
+                  ? `${formatActivityValue(ar.old_value, employeeNameMap)} → ${formatActivityValue(ar.new_value, employeeNameMap)}`
+                  : "",
+              ]
                 .filter(Boolean)
                 .join(" · ");
-              const by = ar.created_by ? employeeNameMap[ar.created_by] || ar.created_by.slice(0, 8) : "—";
+              const by = resolveActorName(ar.created_by, employeeNameMap);
               const leadName = clientMap[ar.client_id] ? displayLeadName(clientMap[ar.client_id]) || "—" : "Unknown lead";
               return (
                 <MobileRecordCard
@@ -4746,9 +4757,9 @@ function ProfileModal({
                     {a.notes ? <p className="mt-1 text-[#475569]">{a.notes}</p> : null}
                     {a.old_value || a.new_value ? (
                       <p className="mt-1 text-[#64748b]">
-                        {a.old_value ? `From: ${a.old_value}` : ""}
+                        {a.old_value ? `From: ${formatActivityValue(a.old_value, employeeMap)}` : ""}
                         {a.old_value && a.new_value ? " → " : ""}
-                        {a.new_value ? `To: ${a.new_value}` : ""}
+                        {a.new_value ? `To: ${formatActivityValue(a.new_value, employeeMap)}` : ""}
                       </p>
                     ) : null}
                   </li>

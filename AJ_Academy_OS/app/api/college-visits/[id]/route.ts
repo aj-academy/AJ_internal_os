@@ -28,6 +28,107 @@ function stripUnavailableColumns(payload: Record<string, unknown>, errorMsg: str
   return next;
 }
 
+const TRACKED_FIELDS: { key: string; label: string }[] = [
+  { key: "college_name", label: "College name" },
+  { key: "location", label: "Location" },
+  { key: "contact_number", label: "Contact number" },
+  { key: "email", label: "Email" },
+  { key: "connected_person_name", label: "Contact person" },
+  { key: "connected_person_role", label: "Contact role" },
+  { key: "visit_status", label: "Visit status" },
+  { key: "visited_by_name", label: "Whom visited to the college" },
+  { key: "visit_date", label: "Visit date" },
+  { key: "mou_signed_status", label: "MOU status" },
+  { key: "follow_up_stage", label: "Follow-up stage" },
+  { key: "last_follow_up_date", label: "Last follow-up date" },
+  { key: "next_follow_up_date", label: "Next follow-up date" },
+  { key: "priority", label: "Priority" },
+  { key: "description", label: "Description" },
+  { key: "last_outcome_remarks", label: "Outcome remarks" },
+  { key: "lead_score", label: "Lead score" },
+  { key: "final_status", label: "Final status" },
+  { key: "source_reference", label: "Source" },
+  { key: "proposal_status", label: "Proposal status" },
+  { key: "proposal_amount", label: "Proposal amount" },
+  { key: "proposal_sent_date", label: "Proposal sent date" },
+  { key: "proposal_link", label: "Proposal link" },
+  { key: "proposal_pdf_url", label: "Proposal PDF" },
+  { key: "contacts", label: "Contacts" },
+];
+
+function normalizeForCompare(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function normalizeDateText(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.slice(0, 10);
+}
+
+function formatContacts(value: unknown): string {
+  if (!Array.isArray(value)) return "—";
+  const items = value
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return "";
+      const row = item as Record<string, unknown>;
+      const name = String(row.name ?? "").trim();
+      const role = String(row.role ?? "").trim();
+      const phones = Array.isArray(row.phones)
+        ? row.phones.map((p) => String(p ?? "").trim()).filter(Boolean).join(" / ")
+        : "";
+      const email = String(row.email ?? "").trim();
+      const main = [role, name].filter(Boolean).join(" · ") || "Contact";
+      const extras = [phones, email].filter(Boolean).join(" | ");
+      return extras ? `${main} (${extras})` : main;
+    })
+    .filter(Boolean);
+  return items.length ? items.join("; ") : "—";
+}
+
+async function loadProfileNameMap(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ids: string[],
+): Promise<Record<string, string>> {
+  const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+  if (!unique.length) return {};
+  const { data } = await supabase
+    .from("profiles")
+    .select("id,full_name,email")
+    .in("id", unique);
+  const out: Record<string, string> = {};
+  for (const row of data ?? []) {
+    const r = row as { id: string; full_name?: string | null; email?: string | null };
+    out[r.id] = r.full_name?.trim() || r.email?.trim() || "Team member";
+  }
+  return out;
+}
+
+function formatTrackedValue(
+  key: string,
+  value: unknown,
+  nameMap: Record<string, string>,
+): string {
+  if (value == null || value === "") return "—";
+  if (key === "contacts") return formatContacts(value);
+  if (key === "proposal_amount") return String(value);
+  if (key.endsWith("_date") || key === "visit_date") {
+    const d = normalizeDateText(value);
+    return d || "—";
+  }
+  if (key === "assigned_to" || key === "assigned_by" || key === "visited_by") {
+    const raw = String(value).trim();
+    return nameMap[raw] || "Team member";
+  }
+  return String(value);
+}
+
 export async function PATCH(request: Request, context: RouteContext) {
   const { response, user, profile } = await requireStaffApiSession();
   if (response || !user) return response!;
@@ -82,40 +183,35 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const prevRow = prev as Record<string, unknown> | null;
   const activities: Record<string, unknown>[] = [];
-  if (prevRow && String(prevRow.assigned_to ?? "") !== String(payload.assigned_to ?? "")) {
-    activities.push({
-      college_visit_id: id,
-      activity_type: "Owner Changed",
-      old_value: String(prevRow.assigned_to ?? "Unassigned"),
-      new_value: String(payload.assigned_to ?? "Unassigned"),
-      created_by: user.id,
-    });
-  }
-  if (prevRow && String(prevRow.visit_status ?? "") !== String(payload.visit_status ?? "")) {
-    activities.push({
-      college_visit_id: id,
-      activity_type: "Visit Status Changed",
-      old_value: String(prevRow.visit_status ?? ""),
-      new_value: String(payload.visit_status ?? ""),
-      created_by: user.id,
-    });
-  }
-  const proposalTouched =
-    prevRow &&
-    (String(prevRow.proposal_status ?? "") !== String(payload.proposal_status ?? "") ||
-      String(prevRow.proposal_link ?? "") !== String(payload.proposal_link ?? "") ||
-      String(prevRow.proposal_pdf_url ?? "") !== String(payload.proposal_pdf_url ?? "") ||
-      String(prevRow.proposal_amount ?? "") !== String(payload.proposal_amount ?? "") ||
-      String(prevRow.proposal_sent_date ?? "").slice(0, 10) !== String(payload.proposal_sent_date ?? "").slice(0, 10));
-  if (proposalTouched) {
-    activities.push({
-      college_visit_id: id,
-      activity_type: "Proposal Updated",
-      old_value: String(prevRow.proposal_status ?? "Not Sent"),
-      new_value: String(payload.proposal_status ?? "Not Sent"),
-      notes: [payload.proposal_link ? "link" : null, payload.proposal_pdf_url ? "pdf" : null].filter(Boolean).join("+") || null,
-      created_by: user.id,
-    });
+  if (prevRow) {
+    const trackedKeys = TRACKED_FIELDS.map((f) => f.key);
+    const nameCandidateIds: string[] = [];
+    for (const key of trackedKeys) {
+      const oldVal = prevRow[key];
+      const newVal = updatePayload[key];
+      if (key === "assigned_to" || key === "assigned_by" || key === "visited_by") {
+        if (oldVal) nameCandidateIds.push(String(oldVal));
+        if (newVal) nameCandidateIds.push(String(newVal));
+      }
+    }
+    const profileNameMap = await loadProfileNameMap(supabase, nameCandidateIds);
+    for (const field of TRACKED_FIELDS) {
+      if (!Object.prototype.hasOwnProperty.call(updatePayload, field.key)) continue;
+      const oldVal = prevRow[field.key];
+      const newVal = updatePayload[field.key];
+      const changed =
+        field.key.endsWith("_date") || field.key === "visit_date"
+          ? normalizeDateText(oldVal) !== normalizeDateText(newVal)
+          : normalizeForCompare(oldVal) !== normalizeForCompare(newVal);
+      if (!changed) continue;
+      activities.push({
+        college_visit_id: id,
+        activity_type: `${field.label} updated`,
+        old_value: formatTrackedValue(field.key, oldVal, profileNameMap),
+        new_value: formatTrackedValue(field.key, newVal, profileNameMap),
+        created_by: user.id,
+      });
+    }
   }
   if (activities.length) {
     await supabase.from("college_visit_activities").insert(activities);

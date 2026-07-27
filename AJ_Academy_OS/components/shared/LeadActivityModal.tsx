@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import { formatDateTimeIST } from "@/lib/datetime";
+import { formatActivityValue, resolveActorName } from "@/lib/activityDisplay";
 
 export type LeadActivityItem = {
   id: string;
@@ -54,14 +55,14 @@ export function LeadActivityModal({
           ) : (
             <ul className="space-y-3">
               {activities.map((a) => {
-                const by = a.created_by ? employeeNameMap[a.created_by] || "Team member" : "—";
+                const by = resolveActorName(a.created_by, employeeNameMap);
                 return (
                   <li key={a.id} className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
                     <p className="text-sm font-medium text-[#0f172a]">{a.activity_type || "Activity"}</p>
                     {a.notes ? <p className="mt-1 whitespace-pre-wrap text-xs text-[#64748b]">{a.notes}</p> : null}
                     {a.old_value || a.new_value ? (
                       <p className="mt-0.5 text-xs text-[#64748b]">
-                        {a.old_value} → {a.new_value}
+                        {formatActivityValue(a.old_value, employeeNameMap)} → {formatActivityValue(a.new_value, employeeNameMap)}
                       </p>
                     ) : null}
                     <p className="mt-1 text-[11px] text-[#94a3b8]">
