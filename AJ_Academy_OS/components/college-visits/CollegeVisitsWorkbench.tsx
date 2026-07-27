@@ -829,6 +829,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       const base = collegeVisitRowToForm(proposalRow);
       const formRow: CollegeVisitFormValue = {
         ...base,
+        // Do not resend full remark history — PATCH treats empty as "keep existing append-only log".
+        last_outcome_remarks: "",
         proposal_status: proposalDraft.status || "Not Sent",
         proposal_amount: proposalDraft.amount,
         proposal_sent_date: proposalDraft.sent_date,
@@ -879,8 +881,11 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...form, assigned_to: payload.assigned_to ?? "" }),
         });
-        const json = (await res.json()) as { error?: string };
+        const json = (await res.json()) as { visit?: CollegeVisitRow; error?: string };
         if (!res.ok) throw new Error(json.error ?? "Update failed.");
+        if (json.visit?.last_outcome_remarks != null) {
+          setEditingOutcomeHistory(json.visit.last_outcome_remarks);
+        }
         if (filesToUpload.length) {
           for (const file of filesToUpload) {
             const uploaded = await uploadProposalFile({

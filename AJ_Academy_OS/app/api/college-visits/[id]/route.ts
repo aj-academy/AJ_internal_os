@@ -164,7 +164,19 @@ export async function PATCH(request: Request, context: RouteContext) {
   // Never transfer ownership via edit — share via College Visit tasks only.
   delete payload.assigned_to;
 
+  const prevRow = prev as Record<string, unknown> | null;
   let updatePayload: Record<string, unknown> = { ...payload };
+
+  // Append-only remarks log MUST run before UPDATE so previous remarks are never overwritten.
+  // Empty or identical incoming (e.g. proposal-only PATCH that resends the full form) keeps existing logs.
+  const incomingOutcome = String(parsed.form.last_outcome_remarks ?? "").trim();
+  const existingOutcome = String(prevRow?.last_outcome_remarks ?? "").trim();
+  if (incomingOutcome && incomingOutcome !== existingOutcome) {
+    updatePayload.last_outcome_remarks = appendOutcomeRemarkLog(existingOutcome, incomingOutcome);
+  } else if (prevRow) {
+    updatePayload.last_outcome_remarks = prevRow.last_outcome_remarks ?? null;
+  }
+
   let select = COLLEGE_VISIT_SELECT;
   let { data, error } = await supabase.from("college_visits").update(updatePayload).eq("id", id).select(select).single();
 
@@ -182,15 +194,6 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: error?.message ?? "Could not update college visit." }, { status: 400 });
   }
 
-  const prevRow = prev as Record<string, unknown> | null;
-  const incomingOutcome = String(parsed.form.last_outcome_remarks ?? "").trim();
-  const existingOutcome = String(prevRow?.last_outcome_remarks ?? "").trim();
-  // Append-only remarks log. Empty incoming value must not erase existing logs.
-  if (incomingOutcome) {
-    updatePayload.last_outcome_remarks = appendOutcomeRemarkLog(existingOutcome, incomingOutcome);
-  } else if (prevRow) {
-    updatePayload.last_outcome_remarks = prevRow.last_outcome_remarks ?? null;
-  }
   const activities: Record<string, unknown>[] = [];
   if (prevRow) {
     const trackedKeys = TRACKED_FIELDS.map((f) => f.key);
