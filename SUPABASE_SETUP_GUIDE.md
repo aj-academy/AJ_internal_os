@@ -327,6 +327,8 @@ Requires `aj_academy_platform_expansion.sql`, `mentor_department_tasks.sql` (the
 
 Students see `/student/my-tasks` and dashboard task preview **without** employee CRM columns (Linked To, Lead Contact, lead/college/project tabs). Columns focus on title, assigner, priority, status, dates, and progress.
 
+**Delete selected permission denied?** Run **`tasks_student_delete_own.sql`** so students can delete tasks assigned to them.
+
 ### Reimbursement (admin + employee / mentor / freelancer)
 
 Run **`finance_schema.sql`**, then **`reimbursement_schema_patch.sql`**, then **`portal_expense_claims_rls.sql`**.

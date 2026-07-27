@@ -2161,14 +2161,16 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
               {pinButtonLabel}
             </Button>
           ) : null}
-          <Button
-            type="button"
-            size="sm"
-            className="h-7 rounded-lg bg-rose-600 px-3 text-xs text-white hover:bg-rose-700"
-            onClick={() => void handleBulkDeleteTasks()}
-          >
-            Delete selected
-          </Button>
+          {(isEmployee || isStudent || canManageTasks) ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 rounded-lg bg-rose-600 px-3 text-xs text-white hover:bg-rose-700"
+              onClick={() => void handleBulkDeleteTasks()}
+            >
+              Delete selected
+            </Button>
+          ) : null}
         </BulkSelectionBar>
       ) : null}
 
