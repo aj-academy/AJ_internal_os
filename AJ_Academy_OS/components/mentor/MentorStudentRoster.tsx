@@ -17,6 +17,10 @@ type MentorStudentRosterProps = {
   department: string | null;
 };
 
+/**
+ * Same-department active students only — matches get_department_task_assignees()
+ * used by Assign Tasks (case/whitespace-insensitive department match).
+ */
 export async function MentorStudentRoster({ mentorId, department }: MentorStudentRosterProps) {
   const supabase = await createClient();
   const dept = department?.trim() ?? "";
@@ -24,23 +28,32 @@ export async function MentorStudentRoster({ mentorId, department }: MentorStuden
   let students: StudentRow[] = [];
 
   if (dept) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id,full_name,email,department,course,status,assigned_mentor_id")
-      .eq("role", "student")
-      .ilike("department", dept)
-      .order("full_name", { ascending: true })
-      .limit(100);
-    students = (data ?? []) as StudentRow[];
-  } else {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id,full_name,email,department,course,status,assigned_mentor_id")
-      .eq("role", "student")
-      .eq("assigned_mentor_id", mentorId)
-      .order("full_name", { ascending: true })
-      .limit(100);
-    students = (data ?? []) as StudentRow[];
+    const { data: assignees, error: rpcError } = await supabase.rpc("get_department_task_assignees");
+
+    if (!rpcError && Array.isArray(assignees) && assignees.length) {
+      const ids = (assignees as { id: string }[]).map((a) => a.id).filter(Boolean);
+      if (ids.length) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("id,full_name,email,department,course,status,assigned_mentor_id")
+          .in("id", ids)
+          .order("full_name", { ascending: true });
+        students = (data ?? []) as StudentRow[];
+      }
+    } else {
+      // Fallback if RPC missing: active students, case-insensitive department match
+      const { data } = await supabase
+        .from("profiles")
+        .select("id,full_name,email,department,course,status,assigned_mentor_id")
+        .eq("role", "student")
+        .ilike("status", "active")
+        .ilike("department", dept)
+        .order("full_name", { ascending: true })
+        .limit(100);
+      students = ((data ?? []) as StudentRow[]).filter(
+        (s) => (s.department ?? "").trim().toLowerCase() === dept.toLowerCase(),
+      );
+    }
   }
 
   const assignedCount = students.filter((s) => s.assigned_mentor_id === mentorId).length;
@@ -56,8 +69,8 @@ export async function MentorStudentRoster({ mentorId, department }: MentorStuden
             <h2 className="text-lg font-semibold text-[#3d3428]">Student roster</h2>
             <p className="text-sm text-[#6b5d4d]">
               {dept
-                ? `Students in your department (${dept}). ${assignedCount} assigned to you as primary mentor.`
-                : "Students assigned to you as primary mentor. Set your department in User Master to see your full batch."}
+                ? `Active students in your department (${dept}). ${assignedCount} assigned to you as primary mentor.`
+                : "Set your department in User Master to see active students in that department (same list as Assign Tasks)."}
             </p>
           </div>
         </div>

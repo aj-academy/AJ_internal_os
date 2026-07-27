@@ -318,8 +318,14 @@ Task popups use `in_app_notifications` (fallback `/freelancer/my-tasks`).
 
 ### Mentor portal
 
-Mentors use `/mentor/*` for attendance (selfie), **Assign Tasks**, counselling, **Reimbursement**, **My Profile**, and dashboard **student roster**.  
-Requires `aj_academy_platform_expansion.sql`, `mentor_department_tasks.sql`.
+Mentors use `/mentor/*` for attendance (selfie), **Assign Tasks**, **My Tasks**, counselling, **Reimbursement**, **My Profile**, and dashboard **student roster**.  
+Requires `aj_academy_platform_expansion.sql`, `mentor_department_tasks.sql` (then `freelancer_department_tasks.sql` if freelancers also assign).
+
+**Department scoping:** Roster and Assign Tasks both use `get_department_task_assignees()` — only **active students** whose `profiles.department` matches the mentor/freelancer department (case/whitespace-insensitive). Mentors assign simple department tasks (no CRM lead/college/project link required).
+
+### Student My Tasks
+
+Students see `/student/my-tasks` and dashboard task preview **without** employee CRM columns (Linked To, Lead Contact, lead/college/project tabs). Columns focus on title, assigner, priority, status, dates, and progress.
 
 ### Reimbursement (admin + employee / mentor / freelancer)
 

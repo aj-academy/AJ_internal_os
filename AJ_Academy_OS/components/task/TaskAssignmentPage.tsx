@@ -311,15 +311,21 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         return;
       }
       if (selfProfile?.department) {
+        const dept = selfProfile.department.trim();
         const { data, error: profilesError } = await supabase
           .from("profiles")
           .select("id,full_name,email,department,role")
           .eq("role", "student")
-          .eq("department", selfProfile.department)
-          .or("status.is.null,status.eq.active")
+          .ilike("status", "active")
+          .ilike("department", dept)
           .order("full_name", { ascending: true });
         if (profilesError) throw new Error(profilesError.message);
-        setEmployees((data ?? []) as ProfileOption[]);
+        const normalized = dept.toLowerCase();
+        setEmployees(
+          ((data ?? []) as ProfileOption[]).filter(
+            (s) => (s.department ?? "").trim().toLowerCase() === normalized,
+          ),
+        );
         return;
       }
       setEmployees([]);
@@ -1142,6 +1148,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   };
 
   const validateAssignmentLink = (): string | null => {
+    // Mentors/freelancers assign department work without CRM lead/college/project links.
+    if (departmentAssigner) return null;
     if (!form.assignment_type) return "Choose whether this task is linked to Leads, Colleges, or a Project.";
     if (form.assignment_type === "lead" && !selectedClientIds.length) {
       return "Select at least one lead from Student Master.";
@@ -1156,6 +1164,14 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   };
 
   const buildLinkPayload = () => {
+    if (departmentAssigner) {
+      return {
+        assignment_type: null as null,
+        project_id: null as string | null,
+        client_ids: [] as string[],
+        college_visit_ids: [] as string[],
+      };
+    }
     if (form.assignment_type === "project") {
       return {
         assignment_type: "project" as const,
@@ -1265,7 +1281,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         return;
       }
       if (!form.assigned_to.trim()) {
-        setError("Select an employee to assign this task to (yourself or a teammate).");
+        setError(
+          departmentAssigner
+            ? "Select a student in your department to assign this task to."
+            : "Select an employee to assign this task to (yourself or a teammate).",
+        );
         return;
       }
       const linkError = validateAssignmentLink();
@@ -1390,7 +1410,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       return;
     }
     if (!form.assigned_to.trim()) {
-      setError("Select an employee to assign this task to.");
+      setError(
+        departmentAssigner
+          ? "Select a student in your department to assign this task to."
+          : "Select an employee to assign this task to.",
+      );
       return;
     }
     const linkError = validateAssignmentLink();
@@ -2240,7 +2264,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             !canManageTasks && !employeeDelegatedView ? (task) => setCompleteTask(task) : undefined
           }
           linkTypePreset={linkTypeFilter}
-          showLeadOutreach
+          showLinkedColumn={!isStudent}
+          showLeadOutreach={isEmployee || isAdmin}
           currentUserId={currentUserId}
           supabase={supabase}
           onLeadOutreachUpdated={() => void reload()}
@@ -2356,7 +2381,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                 aria-label="Close"
                 className="touch-target flex items-center justify-center rounded-full border border-[#e8dcc8] bg-white p-2 text-[#3d3428] shadow-sm transition hover:bg-[#faf3e3] active:scale-95"
               >
-                <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">Ã - </span>
+                <span className="flex h-5 w-5 items-center justify-center text-lg font-semibold leading-none">×</span>
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
@@ -2392,7 +2417,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                 assigneeLockedToSelf={false}
                 assigneeHelperText={
                   isEmployee
-                    ? "Pick category â†’ department â†’ person. Employees show name and department."
+                    ? "Pick category → department → person. Employees show name and department."
                     : departmentAssigner
                     ? "Only active students in your department are listed."
                     : "Pick Student, Freelancer, Mentor, or Employee - then department and person."

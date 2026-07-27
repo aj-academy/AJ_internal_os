@@ -30,6 +30,8 @@ interface TaskTableProps {
   readOnlyList?: boolean;
   /** Filter preset drives Linked To label and Lead Contact column. */
   linkTypePreset?: TaskAssignmentType | "all";
+  /** CRM Linked To column — hide for student My Tasks. */
+  showLinkedColumn?: boolean;
   statusFilter: TaskStatus | "";
   setStatusFilter: (value: TaskStatus | "") => void;
   priorityFilter: TaskPriority | "";
@@ -112,6 +114,7 @@ export function TaskTable({
   showDepartment = false,
   readOnlyList = false,
   linkTypePreset = "all",
+  showLinkedColumn = true,
   statusFilter,
   setStatusFilter,
   priorityFilter,
@@ -143,8 +146,9 @@ export function TaskTable({
   const showAssignedTo = assigneeColumn === "assigned-to";
   const showAssignedBy = assigneeColumn === "assigned-by";
   const showSelection = Boolean(selection);
+  const showLinked = showLinkedColumn;
   const showContact =
-    showLeadOutreach && (linkTypePreset === "all" || linkTypePreset === "lead");
+    showLeadOutreach && showLinked && (linkTypePreset === "all" || linkTypePreset === "lead");
   const linkedHeader =
     linkTypePreset === "project"
       ? "Project"
@@ -154,12 +158,17 @@ export function TaskTable({
           ? "Student Lead(s)"
           : "Linked To";
   const columnCount =
-    8 +
+    7 +
+    (showLinked ? 1 : 0) +
     (showSelection ? 1 : 0) +
     (showAssignedTo || showAssignedBy ? 1 : 0) +
     (showDepartment ? 1 : 0) +
     (showContact ? 1 : 0);
-  const minWidth = showAssignedTo || showAssignedBy ? "1280px" : "1100px";
+  const minWidth = !showLinked
+    ? "960px"
+    : showAssignedTo || showAssignedBy
+      ? "1280px"
+      : "1100px";
   const emptyMessage = tableMissing
     ? "Tasks will appear here after the database script is applied and you refresh."
     : "No tasks found for current filters.";
@@ -197,7 +206,9 @@ export function TaskTable({
                     </th>
                   ) : null}
                   <TableHeaderCell label="Task Title" className="px-4 py-3 text-center" />
-                  <TableHeaderCell label={linkedHeader} className="px-4 py-3 text-center" />
+                  {showLinked ? (
+                    <TableHeaderCell label={linkedHeader} className="px-4 py-3 text-center" />
+                  ) : null}
                   {showContact ? (
                     <TableHeaderCell label="Lead Contact" className="px-4 py-3 text-center" />
                   ) : null}
@@ -291,25 +302,27 @@ export function TaskTable({
                             </td>
                           ) : null}
                           <td className="px-4 py-3.5 align-middle font-medium text-[#0f172a]">{task.title}</td>
-                          <td className="max-w-[200px] px-4 py-3.5 align-middle text-xs text-[#475569]">
-                            {task.assignment_type === "project" && task.project_label ? (
-                              <span className="font-medium text-[#0f172a]">{task.project_label}</span>
-                            ) : task.assignment_type === "lead" && task.linked_lead_labels?.length ? (
-                              <span title={task.linked_lead_labels.join(", ")}>
-                                {task.linked_lead_labels.length === 1
-                                  ? task.linked_lead_labels[0]
-                                  : `${task.linked_lead_labels.length} leads`}
-                              </span>
-                            ) : task.assignment_type === "college" && task.linked_college_labels?.length ? (
-                              <span title={task.linked_college_labels.join(", ")}>
-                                {task.linked_college_labels.length === 1
-                                  ? task.linked_college_labels[0]
-                                  : `${task.linked_college_labels.length} colleges`}
-                              </span>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
+                          {showLinked ? (
+                            <td className="max-w-[200px] px-4 py-3.5 align-middle text-xs text-[#475569]">
+                              {task.assignment_type === "project" && task.project_label ? (
+                                <span className="font-medium text-[#0f172a]">{task.project_label}</span>
+                              ) : task.assignment_type === "lead" && task.linked_lead_labels?.length ? (
+                                <span title={task.linked_lead_labels.join(", ")}>
+                                  {task.linked_lead_labels.length === 1
+                                    ? task.linked_lead_labels[0]
+                                    : `${task.linked_lead_labels.length} leads`}
+                                </span>
+                              ) : task.assignment_type === "college" && task.linked_college_labels?.length ? (
+                                <span title={task.linked_college_labels.join(", ")}>
+                                  {task.linked_college_labels.length === 1
+                                    ? task.linked_college_labels[0]
+                                    : `${task.linked_college_labels.length} colleges`}
+                                </span>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                          ) : null}
                           {showContact ? (
                             <td className="px-4 py-3.5 align-middle">
                               {task.assignment_type === "lead" && task.linked_leads?.length && currentUserId && supabase ? (
@@ -526,7 +539,7 @@ export function TaskTable({
                   onToggleSelect={showSelection ? () => selection!.onToggle(task.id) : undefined}
                   selectAriaLabel={`Select task ${task.title}`}
                   previewFields={[
-                    { label: linkedHeader, value: linkedLabel(task) },
+                    ...(showLinked ? [{ label: linkedHeader, value: linkedLabel(task) }] : []),
                     { label: "Priority", value: task.priority },
                     { label: "Status", value: task.status },
                     { label: "Due", value: formatDisplayDate(task.due_date, "—") },
@@ -537,7 +550,7 @@ export function TaskTable({
                   ]}
                   detailFields={[
                     { label: "Task Title", value: task.title },
-                    { label: linkedHeader, value: linkedLabel(task) },
+                    ...(showLinked ? [{ label: linkedHeader, value: linkedLabel(task) }] : []),
                     ...(showAssignedTo ? [{ label: "Assigned To", value: assignee }] : []),
                     ...(showAssignedBy
                       ? [{ label: "Assigned By", value: task.assigner_display_name || "—" }]

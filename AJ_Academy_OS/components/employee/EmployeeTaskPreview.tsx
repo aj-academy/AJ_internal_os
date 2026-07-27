@@ -280,6 +280,82 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
   const th = "px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-[#64748b]";
   const td = "px-3 py-2 text-sm text-[#334155]";
 
+  if (receiveOnly) {
+    const previewRows = rows.slice(0, 8);
+    return (
+      <section
+        className="scroll-mt-24 rounded-[22px] border border-[#e8dcc8] bg-white p-5 shadow-[0_8px_18px_rgba(15,23,42,0.06)]"
+        id="my-tasks-preview"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#6b5d4d]">My tasks</p>
+            <h3 className="mt-1 text-lg font-semibold text-[#3d3428]">Assigned to you</h3>
+            <p className="mt-1 text-sm text-[#6b5d4d]">
+              Work from your mentor, freelancers, or admins. Open My Tasks to update progress or mark complete.
+            </p>
+          </div>
+          <Link
+            href={tasksHref}
+            className="inline-flex h-9 items-center gap-1 rounded-full bg-[#c9a227] px-4 text-sm font-medium text-white hover:bg-[#b8921f]"
+          >
+            Open My Tasks
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+
+        <div className="mt-4">
+          {loading ? (
+            <div className="rounded-xl border border-[#f0e6d4] p-4 text-sm text-[#6b5d4d]">Loading tasks...</div>
+          ) : previewRows.length === 0 ? (
+            <div className="flex items-start gap-3 rounded-xl border border-[#f0e6d4] p-4 text-sm text-[#6b5d4d]">
+              <ClipboardList className="mt-0.5 h-5 w-5 shrink-0 text-[#c9a227]" />
+              <div>
+                <p className="font-medium text-[#3d3428]">No tasks yet</p>
+                <p className="mt-1">When your mentor assigns work, it will show here and on My Tasks.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-[#f0e6d4]">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[520px] text-sm">
+                  <thead className="bg-[#faf3e3]">
+                    <tr>
+                      <th className={th}>Task</th>
+                      <th className={th}>Status</th>
+                      <th className={th}>Priority</th>
+                      <th className={th}>Progress</th>
+                      <th className={th}>Due</th>
+                      <th className={th}> </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#f0e6d4]">
+                    {previewRows.map((task) => (
+                      <tr key={task.id} className="hover:bg-[#fffbeb]">
+                        <td className={`${td} max-w-[16rem] truncate font-medium text-[#3d3428]`} title={task.title}>
+                          {task.title}
+                        </td>
+                        <td className={td}>{task.status}</td>
+                        <td className={td}>{task.priority}</td>
+                        <td className={td}>{task.progress}%</td>
+                        <td className={td}>{task.due_date ? formatDisplayDate(task.due_date) : "-"}</td>
+                        <td className={td}>
+                          <Link href={tasksHref} className="text-xs font-semibold text-[#a68b2e] hover:underline">
+                            Open
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="scroll-mt-24 rounded-[22px] border border-[#dbe6f3] bg-white p-5 shadow-[0_8px_18px_rgba(15,23,42,0.06)]" id="my-tasks-preview">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -287,9 +363,7 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
           <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">My tasks</p>
           <h3 className="mt-1 text-lg font-semibold text-[#0f172a]">Dashboard pins</h3>
           <p className="mt-1 text-sm text-[#64748b]">
-            {receiveOnly
-              ? "Tasks assigned to you by admins, mentors, or freelancers."
-              : "Project task pins appear here. Student Lead / College Visit pins save into Student Master and College Visits instead."}
+            Project task pins appear here. Student Lead / College Visit pins save into Student Master and College Visits instead.
           </p>
         </div>
         <Link
@@ -310,9 +384,7 @@ export function EmployeeTaskPreview({ tasksHref = "/employee/my-tasks", receiveO
             <div>
               <p className="font-medium text-[#334155]">No tasks yet</p>
               <p className="mt-1">
-                {receiveOnly
-                  ? "When someone assigns you work, it will show here and on My Tasks."
-                  : "Open My Tasks → Project to pin project tasks here. Pin Student Lead / College Visit rows into Student Master / College Visits."}
+                Open My Tasks → Project to pin project tasks here. Pin Student Lead / College Visit rows into Student Master / College Visits.
               </p>
             </div>
           </div>
