@@ -204,6 +204,7 @@ function emptyForm(
     lead_stage: "",
     status: statuses.includes("New") ? "New" : (statuses[0] ?? "New"),
     priority: priorities.includes("Warm") ? "Warm" : (priorities[0] ?? "Warm"),
+    primary_objection: "",
     follow_up_date: "",
     follow_up_time: "",
     follow_up_type: "",
@@ -1295,6 +1296,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       lead_stage: lead.lead_stage ?? "",
       status: normalizeStatus(String(lead.status)),
       priority: lead.priority ?? "Warm",
+      primary_objection: lead.primary_objection ?? "",
       follow_up_date: lead.follow_up_date ? String(lead.follow_up_date).slice(0, 10) : "",
       follow_up_time: lead.follow_up_time ? String(lead.follow_up_time).slice(0, 5) : "",
       follow_up_type: lead.follow_up_type ?? "",
@@ -1368,6 +1370,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       final_fee: numOrNull(v.final_fee),
       payment_status: v.payment_status.trim() || null,
       admission_status: v.admission_status.trim() || null,
+      primary_objection: v.primary_objection.trim() || null,
     };
 
     if (!opts.full) {
@@ -4644,6 +4647,7 @@ function ProfileModal({
               <Dt label="Industry" value={lead.industry} />
               <Dt label="Source" value={lead.source} />
               <Dt label="Priority" value={lead.priority} />
+              <Dt label="Primary objection" value={lead.primary_objection} />
               <Dt label="Lead score" value={scoreTxt} />
               <Dt label="Budget" value={budgetTxt} />
               <Dt label="Expected start" value={lead.expected_start_date} />

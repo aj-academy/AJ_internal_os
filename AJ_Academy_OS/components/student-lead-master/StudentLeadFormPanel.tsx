@@ -19,6 +19,7 @@ import {
   PAYMENT_PLANS,
   PAYMENT_STATUSES,
   PREFERRED_BATCHES,
+  PRIMARY_OBJECTIONS,
   SKILL_LEVELS,
   YES_NO_OPTIONS,
   type CrmProposalStatus,
@@ -56,6 +57,7 @@ export interface StudentLeadFormValue {
   lead_stage: string;
   status: string;
   priority: string;
+  primary_objection: string;
   follow_up_date: string;
   follow_up_time: string;
   follow_up_type: string;
@@ -386,6 +388,57 @@ export function StudentLeadFormPanel({
                 ))}
               </select>
             </Field>
+            <Field label="Primary objection">
+              <select
+                className={selectClass}
+                value={
+                  value.primary_objection &&
+                  !(PRIMARY_OBJECTIONS as readonly string[]).includes(value.primary_objection)
+                    ? "Other"
+                    : value.primary_objection
+                }
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (next === "Other") {
+                    onChange({
+                      ...value,
+                      primary_objection:
+                        value.primary_objection &&
+                        !(PRIMARY_OBJECTIONS as readonly string[]).includes(value.primary_objection)
+                          ? value.primary_objection
+                          : "Other",
+                    });
+                    return;
+                  }
+                  onChange({ ...value, primary_objection: next });
+                }}
+              >
+                <option value="">Select objection</option>
+                {PRIMARY_OBJECTIONS.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {value.primary_objection === "Other" ||
+            (value.primary_objection &&
+              !(PRIMARY_OBJECTIONS as readonly string[]).includes(value.primary_objection)) ? (
+              <Field label="Objection details">
+                <Input
+                  value={
+                    value.primary_objection === "Other" ? "" : value.primary_objection
+                  }
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      primary_objection: e.target.value.trim() || "Other",
+                    })
+                  }
+                  placeholder="Type the exact objection"
+                />
+              </Field>
+            ) : null}
             <Field label="Next follow-up date">
               <Input type="date" value={value.follow_up_date} onChange={(e) => onChange({ ...value, follow_up_date: e.target.value })} />
             </Field>

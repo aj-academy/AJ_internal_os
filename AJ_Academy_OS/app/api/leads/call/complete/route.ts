@@ -21,6 +21,7 @@ type Body = {
   leadStatus?: string | null;
   priority?: string | null;
   lostReason?: string | null;
+  primaryObjection?: string | null;
   scheduleFollowUp?: boolean;
   followUpDate?: string | null;
   followUpTime?: string | null;
@@ -198,6 +199,9 @@ export async function POST(request: Request) {
   };
   if (priority) clientPatch.priority = priority;
   if (lostReason) clientPatch.lost_reason = lostReason;
+  const primaryObjection =
+    typeof body.primaryObjection === "string" ? body.primaryObjection.trim() : "";
+  if (primaryObjection) clientPatch.primary_objection = primaryObjection;
   if (outcome === "Connected – Admission Confirmed") {
     clientPatch.admission_status = "Admitted";
     clientPatch.converted_at = endedAt;
@@ -308,6 +312,19 @@ export async function POST(request: Request) {
       notes: notes || null,
       old_value: [lead.status, lead.lead_stage].filter(Boolean).join(" / "),
       new_value: [leadStatus, leadStage].filter(Boolean).join(" / "),
+      created_by: user.id,
+      call_session_id: sessionId,
+    });
+  }
+
+  if (primaryObjection) {
+    activityRows.push({
+      client_id: lead.id,
+      activity_type: "Primary objection updated",
+      title: "Primary objection",
+      notes: primaryObjection,
+      old_value: null,
+      new_value: primaryObjection,
       created_by: user.id,
       call_session_id: sessionId,
     });

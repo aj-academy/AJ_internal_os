@@ -9,7 +9,7 @@ import {
   type CallOutcome,
   type LeadCallSessionRow,
 } from "@/lib/leadCallWorkflow";
-import { CRM_LEAD_STATUSES, CRM_PRIORITIES, LEAD_STAGES } from "@/components/student-lead-master/studentMasterConfig";
+import { CRM_LEAD_STATUSES, CRM_PRIORITIES, LEAD_STAGES, PRIMARY_OBJECTIONS } from "@/components/student-lead-master/studentMasterConfig";
 
 type EmployeeOption = { id: string; label: string };
 
@@ -51,6 +51,7 @@ export function CallOutcomeModal({
   const [leadStatus, setLeadStatus] = useState("");
   const [leadStage, setLeadStage] = useState("");
   const [priority, setPriority] = useState("");
+  const [primaryObjection, setPrimaryObjection] = useState("");
   const [scheduleFollowUp, setScheduleFollowUp] = useState(false);
   const [followUpDate, setFollowUpDate] = useState(todayISO());
   const [followUpTime, setFollowUpTime] = useState("10:00");
@@ -76,6 +77,7 @@ export function CallOutcomeModal({
     setLeadStatus(currentStatus || "");
     setLeadStage(currentStage || "");
     setPriority(currentPriority || "");
+    setPrimaryObjection("");
     setScheduleFollowUp(false);
     setFollowUpDate(todayISO());
     setFollowUpTime("10:00");
@@ -162,6 +164,7 @@ export function CallOutcomeModal({
       leadStatus: leadStatus || null,
       leadStage: leadStage || null,
       priority: priority || null,
+      primaryObjection: primaryObjection.trim() || null,
       scheduleFollowUp: needFollowUp,
       followUpDate: needFollowUp ? followUpDate : null,
       followUpTime: needFollowUp ? followUpTime : null,
@@ -295,6 +298,47 @@ export function CallOutcomeModal({
               ))}
             </select>
           </label>
+
+          <label className="block space-y-1">
+            <span className="text-xs font-semibold text-[#334155]">Primary objection</span>
+            <select
+              className="w-full rounded-lg border border-[#e2e8f0] px-3 py-2 text-sm"
+              value={
+                primaryObjection && !(PRIMARY_OBJECTIONS as readonly string[]).includes(primaryObjection)
+                  ? "Other"
+                  : primaryObjection
+              }
+              onChange={(e) => setPrimaryObjection(e.target.value)}
+            >
+              <option value="">None / not discussed</option>
+              {PRIMARY_OBJECTIONS.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </label>
+          {primaryObjection === "Other" ? (
+            <label className="block space-y-1">
+              <span className="text-xs font-semibold text-[#334155]">Objection details</span>
+              <input
+                className="w-full rounded-lg border border-[#e2e8f0] px-3 py-2 text-sm"
+                value=""
+                onChange={(e) => setPrimaryObjection(e.target.value.trim() || "Other")}
+                placeholder="Type the exact objection"
+              />
+            </label>
+          ) : primaryObjection && !(PRIMARY_OBJECTIONS as readonly string[]).includes(primaryObjection) ? (
+            <label className="block space-y-1">
+              <span className="text-xs font-semibold text-[#334155]">Objection details</span>
+              <input
+                className="w-full rounded-lg border border-[#e2e8f0] px-3 py-2 text-sm"
+                value={primaryObjection}
+                onChange={(e) => setPrimaryObjection(e.target.value.trim() || "Other")}
+                placeholder="Type the exact objection"
+              />
+            </label>
+          ) : null}
 
           {rules?.requireLostReason ? (
             <label className="block space-y-1">

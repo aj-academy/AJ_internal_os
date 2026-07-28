@@ -83,6 +83,20 @@ export const YES_NO_OPTIONS = ["Yes", "No"] as const;
 
 export const DECISION_MAKERS = ["Self", "Parent", "Spouse", "Guardian", "Other"] as const;
 
+/** Common objections shown in Add/Edit Student + after-call update. */
+export const PRIMARY_OBJECTIONS = [
+  "Fees / Budget",
+  "Need parent approval",
+  "Comparing other institutes",
+  "Time / Busy schedule",
+  "Job guarantee concern",
+  "Course relevance / interest",
+  "Location / Online preference",
+  "Not ready to join now",
+  "Already enrolled elsewhere",
+  "Other",
+] as const;
+
 export const PREFERRED_BATCHES = [
   "Offline",
   "Online",
