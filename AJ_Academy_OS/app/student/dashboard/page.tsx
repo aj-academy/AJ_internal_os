@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AppLogo } from "@/components/branding/AppLogo";
-import { CalendarClock, CalendarDays, ClipboardList, GraduationCap, MessageCircle, Shield, User } from "lucide-react";
+import { CalendarClock, CalendarDays, ClipboardList, FolderOpen, GraduationCap, MessageCircle, Shield, User } from "lucide-react";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { createClient } from "@/lib/supabase/server";
 import { EmployeeTaskPreview } from "@/components/employee/EmployeeTaskPreview";
@@ -115,6 +115,12 @@ export default async function StudentDashboardPage() {
       description: "View and complete work assigned to you by mentors and admins.",
       href: "/student/my-tasks",
       icon: ClipboardList,
+    },
+    {
+      title: "My Portfolio",
+      description: "Fill the active portfolio template, preview on A4/laptop/phone, and download.",
+      href: "/student/portfolio",
+      icon: FolderOpen,
     },
     {
       title: "My Counselling",
