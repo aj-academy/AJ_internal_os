@@ -42,6 +42,11 @@ import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { CollegeVisitFormPanel } from "@/components/college-visits/CollegeVisitFormPanel";
 import {
+  CollegeCallOutcomeModal,
+  CollegePendingCallBanner,
+  type CollegePendingCall,
+} from "@/components/college-visits/CollegeCallOutcomeModal";
+import {
   downloadCollegeVisitImportTemplate,
   exportCollegeVisitsCsv,
   collegeVisitFileToMatrix,
@@ -212,6 +217,9 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [whatsAppTargetPhone, setWhatsAppTargetPhone] = useState("");
   /** Role-column selection: which contact Call / WhatsApp / Email should use. */
   const [selectedOutreachContactByVisit, setSelectedOutreachContactByVisit] = useState<Record<string, string>>({});
+  const [pendingCollegeCall, setPendingCollegeCall] = useState<CollegePendingCall | null>(null);
+  const [collegeCallOutcomeOpen, setCollegeCallOutcomeOpen] = useState(false);
+  const [collegeCallOutcomeSubmitting, setCollegeCallOutcomeSubmitting] = useState(false);
 
   const loadProposalFiles = useCallback(async (entityType: "student" | "college", entityId: string) => {
     try {
@@ -370,15 +378,97 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       setOutreachPicker(null);
       markOutreach(row.id, { phoneCalled: true });
       window.location.href = `tel:${phone}`;
+      const pending: CollegePendingCall = {
+        visit: row,
+        phone,
+        targetLabel: targetLabel?.trim() || undefined,
+        startedAt: new Date().toISOString(),
+      };
+      setPendingCollegeCall(pending);
+      setCollegeCallOutcomeOpen(true);
       try {
         const who = targetLabel?.trim() ? ` (${targetLabel.trim()})` : "";
         await logCollegeActivity(row.id, "Phone Call", `Called ${phone}${who}`);
-        setSuccess("Call started and logged to activity.");
+        setSuccess("Call started — please update the call outcome and status.");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not log call.");
       }
     },
     [logCollegeActivity, markOutreach],
+  );
+
+  const submitCollegeCallOutcome = useCallback(
+    async (payload: {
+      visitId: string;
+      callOutcome: string;
+      notes: string;
+      visitStatus: string;
+      followUpStage: string;
+      finalStatus: string;
+      priority: string;
+      nextFollowUpDate: string;
+      scheduleFollowUp: boolean;
+    }): Promise<{ ok: true } | { ok: false; error: string }> => {
+      if (!currentUserId) return { ok: false, error: "Not signed in." };
+      const row =
+        visits.find((v) => v.id === payload.visitId) ||
+        (pendingCollegeCall?.visit.id === payload.visitId ? pendingCollegeCall.visit : null);
+      if (!row) return { ok: false, error: "College visit not found. Refresh and try again." };
+
+      setCollegeCallOutcomeSubmitting(true);
+      setError(null);
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const remarkLine = `Call: ${payload.callOutcome} — ${payload.notes}`;
+        const formRow = {
+          ...collegeVisitRowToForm(row),
+          visit_status: payload.visitStatus,
+          follow_up_stage: payload.followUpStage,
+          final_status: payload.finalStatus || row.final_status || "Open",
+          priority: payload.priority || row.priority || "Warm",
+          last_follow_up_date: today,
+          next_follow_up_date: payload.scheduleFollowUp ? payload.nextFollowUpDate : row.next_follow_up_date?.slice(0, 10) || "",
+          last_outcome_remarks: remarkLine,
+        };
+        const built = buildCollegeVisitPayload(formRow, { userId: currentUserId, isDbAdmin });
+        const res = await fetch(`/api/college-visits/${row.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...formRow, assigned_to: built.assigned_to ?? "" }),
+        });
+        const json = (await res.json()) as { error?: string };
+        if (!res.ok) throw new Error(json.error ?? "Could not save call outcome.");
+
+        await logCollegeActivity(
+          row.id,
+          "Call Outcome",
+          [
+            payload.callOutcome,
+            payload.notes,
+            `Visit status: ${payload.visitStatus}`,
+            payload.followUpStage ? `Follow-up stage: ${payload.followUpStage}` : null,
+            payload.scheduleFollowUp && payload.nextFollowUpDate
+              ? `Next follow-up: ${payload.nextFollowUpDate}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        );
+
+        setPendingCollegeCall(null);
+        setCollegeCallOutcomeOpen(false);
+        setSuccess(`Call outcome saved — ${payload.callOutcome}`);
+        await reload();
+        return { ok: true };
+      } catch (e) {
+        const msg = friendlyCollegeVisitError(e);
+        setError(msg);
+        return { ok: false, error: msg };
+      } finally {
+        setCollegeCallOutcomeSubmitting(false);
+      }
+    },
+    [currentUserId, visits, pendingCollegeCall, isDbAdmin, logCollegeActivity, reload],
   );
 
   const requestCollegePhone = useCallback(
@@ -1225,6 +1315,14 @@ return (
 
       {error ? <CrmFlash tone="error" message={error} onDismiss={() => setError(null)} /> : null}
       {success ? <CrmFlash tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
+
+      {!collegeCallOutcomeOpen ? (
+        <CollegePendingCallBanner
+          pending={pendingCollegeCall}
+          onUpdate={() => setCollegeCallOutcomeOpen(true)}
+          onDismiss={() => setPendingCollegeCall(null)}
+        />
+      ) : null}
 
       {pickForTask ? (
         <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#c9a227] bg-[#fef3c7] px-3 py-2">
@@ -2175,6 +2273,16 @@ return (
           </div>
         </>
       ) : null}
+
+      <CollegeCallOutcomeModal
+        open={collegeCallOutcomeOpen}
+        pending={pendingCollegeCall}
+        visitStatusOptions={cvLists.visitStatuses}
+        finalStatusOptions={cvLists.finalStatuses}
+        submitting={collegeCallOutcomeSubmitting}
+        onClose={() => setCollegeCallOutcomeOpen(false)}
+        onSubmit={submitCollegeCallOutcome}
+      />
     </section>
   );
 }
