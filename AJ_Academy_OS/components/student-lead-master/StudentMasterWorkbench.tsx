@@ -1053,7 +1053,9 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     return () => window.clearInterval(t);
   }, [currentUserId, refreshCallWorkflow]);
 
-  const submitCallOutcome = async (payload: Record<string, unknown>) => {
+  const submitCallOutcome = async (
+    payload: Record<string, unknown>,
+  ): Promise<{ ok: true } | { ok: false; error: string }> => {
     setCallOutcomeSubmitting(true);
     setError(null);
     try {
@@ -1064,14 +1066,18 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       });
       const json = (await res.json()) as { error?: string; ok?: boolean };
       if (!res.ok || !json.ok) {
-        setError(json.error || "Could not save call outcome.");
-        return;
+        const msg = json.error || "Could not save call outcome.";
+        setError(msg);
+        return { ok: false, error: msg };
       }
       setCallOutcomeSession(null);
       setSuccess("Call outcome saved.");
       await Promise.all([silentRefreshCrm(), refreshCallWorkflow()]);
+      return { ok: true };
     } catch (e) {
-      setError(friendlyError(e));
+      const msg = friendlyError(e);
+      setError(msg);
+      return { ok: false, error: msg };
     } finally {
       setCallOutcomeSubmitting(false);
     }

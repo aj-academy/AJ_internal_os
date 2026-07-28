@@ -24,7 +24,7 @@ type CallOutcomeModalProps = {
   employeeOptions: EmployeeOption[];
   submitting?: boolean;
   onClose: () => void;
-  onSubmit: (payload: Record<string, unknown>) => Promise<void> | void;
+  onSubmit: (payload: Record<string, unknown>) => Promise<{ ok: true } | { ok: false; error: string }>;
 };
 
 function todayISO() {
@@ -153,7 +153,7 @@ export function CallOutcomeModal({
       ? Math.round(Number(durationMinutes) * 60)
       : null;
 
-    await onSubmit({
+    const result = await onSubmit({
       sessionId: session.id,
       callOutcome: outcome,
       notes: notes.trim(),
@@ -176,6 +176,12 @@ export function CallOutcomeModal({
       approximateDurationSeconds: Number.isFinite(durationSeconds as number) ? durationSeconds : null,
       endedAt: new Date().toISOString(),
     });
+    if (!result.ok) {
+      setLocalError(result.error || "Could not save call outcome.");
+      return;
+    }
+    // Close immediately after a successful save.
+    onClose();
   };
 
   return (
