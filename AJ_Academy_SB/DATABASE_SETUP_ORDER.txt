@@ -120,6 +120,7 @@ After SQL: create users in Authentication, then insert profiles rows (see SUPABA
 Optional email notifications:
   Set RESEND_API_KEY (+ TASK_EMAIL_FROM) in AJ_Academy_OS env to send counselling schedule emails.
   Set GMAIL_OUTREACH_USER (+ GMAIL_OUTREACH_APP_PASSWORD) for Student Master outreach from ajacademy.co.in@gmail.com.
+  For College Visits provider-based email compose (Zoho/Gmail), set ZOHO_MAIL_FROM + ZOHO_CLIENT_ID + ZOHO_CLIENT_SECRET + ZOHO_REFRESH_TOKEN (and optional ZOHO_SMTP_HOST/ZOHO_SMTP_PORT).
 
 Security harness log: security/harness/SECURITY_HARNESS_LOG.txt
 Recommended: profiles_rls_tighten.sql, storage_rls_tighten.sql

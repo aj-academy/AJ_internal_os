@@ -12,6 +12,7 @@ import { whatsAppHref } from "@/components/employee/leads/employeeLeadConfig";
 import { StudentOutreachButtons } from "@/components/student-lead-master/StudentOutreachButtons";
 import { WhatsAppComposeModal } from "@/components/shared/WhatsAppComposeModal";
 import { EmailComposeModal } from "@/components/shared/EmailComposeModal";
+import type { EmailComposeSubmitPayload } from "@/components/shared/EmailComposeModal";
 import { LeadActivityModal, type LeadActivityItem } from "@/components/shared/LeadActivityModal";
 import {
   fetchWhatsAppTemplates,
@@ -109,6 +110,11 @@ type OutreachPickerState =
   | { mode: "whatsapp"; row: CollegeVisitRow; targets: CollegeOutreachTarget[] }
   | { mode: "email"; row: CollegeVisitRow; targets: CollegeOutreachTarget[] };
 
+type EmailProviderPickerState = {
+  row: CollegeVisitRow;
+  target: CollegeOutreachTarget | null;
+};
+
 type AppRole = "admin" | "employee";
 
 interface ProfileMini {
@@ -200,6 +206,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [emailComposeVisit, setEmailComposeVisit] = useState<CollegeVisitRow | null>(null);
   const [emailSubmitting, setEmailSubmitting] = useState(false);
   const [emailComposeTarget, setEmailComposeTarget] = useState<CollegeOutreachTarget | null>(null);
+  const [emailComposeProvider, setEmailComposeProvider] = useState<"zoho" | "gmail">("zoho");
+  const [emailProviderPicker, setEmailProviderPicker] = useState<EmailProviderPickerState | null>(null);
   const [outreachPicker, setOutreachPicker] = useState<OutreachPickerState | null>(null);
   const [whatsAppTargetPhone, setWhatsAppTargetPhone] = useState("");
   /** Role-column selection: which contact Call / WhatsApp / Email should use. */
@@ -461,24 +469,46 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     [logCollegeActivity, markOutreach, whatsAppComposeVisit, whatsAppTargetPhone],
   );
 
-  const openCollegeEmailCompose = useCallback((row: CollegeVisitRow, target?: CollegeOutreachTarget) => {
-    const email = (target?.email || row.email || "").trim();
-    if (!email) {
-      const withEmail = collegeOutreachTargets(row).find((t) => t.email.trim());
-      if (!withEmail?.email) {
-        setError("No email address on this college.");
+  const openCollegeEmailCompose = useCallback(
+    (row: CollegeVisitRow, target?: CollegeOutreachTarget, provider: "zoho" | "gmail" = "zoho") => {
+      const email = (target?.email || row.email || "").trim();
+      if (!email) {
+        const withEmail = collegeOutreachTargets(row).find((t) => t.email.trim());
+        if (!withEmail?.email) {
+          setError("No email address on this college.");
+          return;
+        }
+        setEmailComposeTarget(withEmail);
+        setEmailComposeProvider(provider);
+        setEmailComposeVisit(row);
+        setError(null);
+        setOutreachPicker(null);
+        setEmailProviderPicker(null);
         return;
       }
-      setEmailComposeTarget(withEmail);
-      setEmailComposeVisit(row);
       setError(null);
       setOutreachPicker(null);
-      return;
-    }
-    setError(null);
+      setEmailProviderPicker(null);
+      setEmailComposeProvider(provider);
+      setEmailComposeTarget(
+        target ?? {
+          key: "primary",
+          contactId: "",
+          personLabel: row.connected_person_name || "Contact",
+          role: row.connected_person_role || "",
+          phone: "",
+          email,
+        },
+      );
+      setEmailComposeVisit(row);
+    },
+    [],
+  );
+
+  const requestEmailProviderPicker = useCallback((row: CollegeVisitRow, target?: CollegeOutreachTarget | null) => {
     setOutreachPicker(null);
-    setEmailComposeTarget(target ?? { key: "primary", contactId: "", personLabel: row.connected_person_name || "Contact", role: row.connected_person_role || "", phone: "", email });
-    setEmailComposeVisit(row);
+    setError(null);
+    setEmailProviderPicker({ row, target: target ?? null });
   }, []);
 
   const requestCollegeEmail = useCallback(
@@ -490,23 +520,23 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         return;
       }
       if (!shouldShowCollegeOutreachPicker(uniq)) {
-        openCollegeEmailCompose(row, uniq[0]);
+        requestEmailProviderPicker(row, uniq[0]);
         return;
       }
       setOutreachPicker({ mode: "email", row, targets: uniq });
     },
-    [openCollegeEmailCompose, outreachContactIdFor],
+    [outreachContactIdFor, requestEmailProviderPicker],
   );
 
   const handleCollegeEmailSend = useCallback(
-    async (message: string) => {
+    async (payload: EmailComposeSubmitPayload) => {
       if (!emailComposeVisit) return;
-      const email = (emailComposeTarget?.email || emailComposeVisit.email || "").trim();
+      const email = (payload.to || emailComposeTarget?.email || emailComposeVisit.email || "").trim();
       if (!email) {
         setError("No email address on this college.");
         return;
       }
-      const trimmed = message.trim();
+      const trimmed = payload.message.trim();
       if (!trimmed) {
         setError("Enter a message before sending email.");
         return;
@@ -518,15 +548,20 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
       setEmailSubmitting(true);
       setError(null);
-      const subject = `AJ Academy follow-up for ${emailComposeVisit.college_name}${
-        emailComposeTarget?.personLabel ? ` (${emailComposeTarget.personLabel})` : ""
-      }`;
+      const subject = payload.subject.trim();
 
       try {
         const mailRes = await fetch("/api/outreach/send-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ to: email, subject, body: trimmed }),
+          body: JSON.stringify({
+            provider: payload.provider,
+            to: email,
+            cc: payload.cc,
+            subject,
+            body: trimmed,
+            attachments: payload.attachments,
+          }),
         });
         const mailPayload = (await mailRes.json().catch(() => ({}))) as { error?: string };
         if (!mailRes.ok) {
@@ -536,7 +571,11 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         }
 
         markOutreach(emailComposeVisit.id, { emailSent: true });
-        await logCollegeActivity(emailComposeVisit.id, "Email", formatEmailActivityNotes(trimmed));
+        await logCollegeActivity(
+          emailComposeVisit.id,
+          "Email",
+          formatEmailActivityNotes(`${subject}\n\n${trimmed}`),
+        );
         setEmailComposeVisit(null);
         setEmailComposeTarget(null);
         setSuccess("Email sent and logged to activity.");
@@ -2018,14 +2057,22 @@ return (
           }
           email={emailComposeTarget?.email?.trim() || emailComposeVisit.email?.trim() || ""}
           templates={[]}
+          advanced
+          providerOptions={["zoho", "gmail"]}
+          defaultProvider={emailComposeProvider}
+          defaultSubject={`AJ Academy follow-up for ${emailComposeVisit.college_name}${
+            emailComposeTarget?.personLabel ? ` (${emailComposeTarget.personLabel})` : ""
+          }`}
           submitting={emailSubmitting}
           onClose={() => {
             if (!emailSubmitting) {
               setEmailComposeVisit(null);
               setEmailComposeTarget(null);
+              setEmailComposeProvider("zoho");
             }
           }}
-          onSend={(message) => void handleCollegeEmailSend(message)}
+          onSend={() => undefined}
+          onSendDetailed={(payload) => void handleCollegeEmailSend(payload)}
         />
       ) : null}
 
@@ -2059,7 +2106,7 @@ return (
                     const label = collegeOutreachTargetLabel(t);
                     if (outreachPicker.mode === "phone") void handleCollegePhoneClick(outreachPicker.row, t.phone, label);
                     else if (outreachPicker.mode === "whatsapp") openCollegeWhatsAppCompose(outreachPicker.row, t.phone);
-                    else openCollegeEmailCompose(outreachPicker.row, t);
+                    else requestEmailProviderPicker(outreachPicker.row, t);
                   }}
                 >
                   <span className="text-[10px] font-semibold uppercase tracking-wide text-[#a68b2e]">
@@ -2077,6 +2124,51 @@ return (
               variant="outline"
               className="mt-3 w-full rounded-xl border-[#e8dcc8]"
               onClick={() => setOutreachPicker(null)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </>
+      ) : null}
+      {emailProviderPicker ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close"
+            className="fixed inset-0 z-[60] bg-slate-900/40"
+            onClick={() => setEmailProviderPicker(null)}
+          />
+          <div className="fixed left-1/2 top-1/2 z-[70] w-[min(100vw-2rem,24rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[#e8dcc8] bg-white p-4 shadow-xl">
+            <h3 className="text-base font-semibold text-[#3d3428]">Choose mail provider</h3>
+            <p className="mt-1 text-xs text-[#6b5d4d]">
+              {emailProviderPicker.row.college_name} · select how you want to send this email.
+            </p>
+            <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                className="h-10 rounded-xl bg-[#0ea5e9] text-white hover:bg-[#0284c7]"
+                onClick={() =>
+                  openCollegeEmailCompose(emailProviderPicker.row, emailProviderPicker.target ?? undefined, "zoho")
+                }
+              >
+                Zoho Mail
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 rounded-xl border-[#e8dcc8]"
+                onClick={() =>
+                  openCollegeEmailCompose(emailProviderPicker.row, emailProviderPicker.target ?? undefined, "gmail")
+                }
+              >
+                Gmail
+              </Button>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 w-full rounded-xl border-[#e8dcc8]"
+              onClick={() => setEmailProviderPicker(null)}
             >
               Cancel
             </Button>

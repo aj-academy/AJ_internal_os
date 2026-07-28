@@ -2,6 +2,15 @@ import nodemailer from "nodemailer";
 
 export const DEFAULT_OUTREACH_EMAIL_FROM = "AJ Academy <ajacademy.co.in@gmail.com>";
 export const DEFAULT_OUTREACH_GMAIL_USER = "ajacademy.co.in@gmail.com";
+export const DEFAULT_OUTREACH_ZOHO_USER = "support@ajacademy.co.in";
+
+export type OutreachEmailProvider = "gmail" | "zoho";
+
+type OutreachAttachment = {
+  filename: string;
+  contentType?: string;
+  contentBase64: string;
+};
 
 export function getOutreachEmailFrom() {
   return process.env.OUTREACH_EMAIL_FROM?.trim() || DEFAULT_OUTREACH_EMAIL_FROM;
@@ -11,13 +20,28 @@ export function getOutreachGmailUser() {
   return process.env.GMAIL_OUTREACH_USER?.trim() || DEFAULT_OUTREACH_GMAIL_USER;
 }
 
+export function getOutreachZohoUser() {
+  return process.env.ZOHO_MAIL_FROM?.trim() || process.env.ZOHO_OUTREACH_USER?.trim() || DEFAULT_OUTREACH_ZOHO_USER;
+}
+
 type SendOutreachEmailInput = {
+  provider: OutreachEmailProvider;
   to: string;
+  cc?: string;
   subject: string;
   text: string;
+  attachments?: OutreachAttachment[];
 };
 
-export async function sendOutreachEmail({ to, subject, text }: SendOutreachEmailInput) {
+function buildNodemailerAttachments(attachments: OutreachAttachment[] = []) {
+  return attachments.map((a) => ({
+    filename: a.filename,
+    contentType: a.contentType || "application/octet-stream",
+    content: Buffer.from(a.contentBase64, "base64"),
+  }));
+}
+
+function makeGmailTransporter() {
   const pass = process.env.GMAIL_OUTREACH_APP_PASSWORD?.trim();
   if (!pass) {
     return {
@@ -26,19 +50,55 @@ export async function sendOutreachEmail({ to, subject, text }: SendOutreachEmail
         "Gmail outreach is not configured. Set GMAIL_OUTREACH_APP_PASSWORD in .env.local (or Vercel env) for ajacademy.co.in@gmail.com.",
     };
   }
+  return {
+    ok: true as const,
+    transporter: nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: getOutreachGmailUser(), pass },
+    }),
+  };
+}
 
-  const user = getOutreachGmailUser();
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: { user, pass },
-  });
+function makeZohoTransporter() {
+  const user = getOutreachZohoUser();
+  const clientId = process.env.ZOHO_CLIENT_ID?.trim();
+  const clientSecret = process.env.ZOHO_CLIENT_SECRET?.trim();
+  const refreshToken = process.env.ZOHO_REFRESH_TOKEN?.trim();
+  if (!clientId || !clientSecret || !refreshToken || !user) {
+    return {
+      ok: false as const,
+      error: "Zoho Mail is not configured. Set ZOHO_MAIL_FROM, ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, ZOHO_REFRESH_TOKEN.",
+    };
+  }
+  return {
+    ok: true as const,
+    transporter: nodemailer.createTransport({
+      host: process.env.ZOHO_SMTP_HOST?.trim() || "smtp.zoho.in",
+      port: Number(process.env.ZOHO_SMTP_PORT?.trim() || "465"),
+      secure: true,
+      auth: {
+        type: "OAuth2",
+        user,
+        clientId,
+        clientSecret,
+        refreshToken,
+      },
+    }),
+  };
+}
+
+export async function sendOutreachEmail({ provider, to, cc, subject, text, attachments = [] }: SendOutreachEmailInput) {
+  const transporterResult = provider === "zoho" ? makeZohoTransporter() : makeGmailTransporter();
+  if (!transporterResult.ok) return transporterResult;
 
   try {
-    await transporter.sendMail({
+    await transporterResult.transporter.sendMail({
       from: getOutreachEmailFrom(),
       to,
+      cc: cc?.trim() || undefined,
       subject,
       text,
+      attachments: buildNodemailerAttachments(attachments),
     });
     return { ok: true as const };
   } catch (error) {

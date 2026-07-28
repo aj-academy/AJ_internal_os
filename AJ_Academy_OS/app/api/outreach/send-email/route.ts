@@ -1,13 +1,22 @@
 import { NextResponse } from "next/server";
 import { requireStaffApiSession, enforceRateLimit } from "@/lib/security";
-import { sendOutreachEmail } from "@/lib/email/outreachEmail";
+import { sendOutreachEmail, type OutreachEmailProvider } from "@/lib/email/outreachEmail";
 import { MAX_EMAIL_MESSAGE_LENGTH } from "@/lib/whatsappOutreach";
 import { isValidEmail } from "@/lib/security/validate";
 
+type AttachmentPayload = {
+  filename?: string;
+  contentType?: string;
+  contentBase64?: string;
+};
+
 type Body = {
+  provider?: OutreachEmailProvider;
   to?: string;
+  cc?: string;
   subject?: string;
   body?: string;
+  attachments?: AttachmentPayload[];
 };
 
 export async function POST(request: Request) {
@@ -32,6 +41,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Valid recipient email is required." }, { status: 400 });
   }
 
+  const provider: OutreachEmailProvider = payload.provider === "zoho" ? "zoho" : "gmail";
+  const cc = (payload.cc ?? "").trim();
+  if (cc) {
+    const ccList = cc
+      .split(",")
+      .map((v) => v.trim().toLowerCase())
+      .filter(Boolean);
+    if (!ccList.every((v) => isValidEmail(v))) {
+      return NextResponse.json({ error: "CC must contain valid email addresses (comma separated)." }, { status: 400 });
+    }
+  }
+
   const subject = (payload.subject ?? "").trim();
   if (!subject || subject.length > 200) {
     return NextResponse.json({ error: "Subject is required (max 200 characters)." }, { status: 400 });
@@ -48,7 +69,27 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = await sendOutreachEmail({ to, subject, text });
+  const attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
+  if (attachments.length > 5) {
+    return NextResponse.json({ error: "Maximum 5 attachments allowed." }, { status: 400 });
+  }
+  const normalizedAttachments = attachments.map((a) => ({
+    filename: String(a.filename ?? "").trim(),
+    contentType: String(a.contentType ?? "application/octet-stream"),
+    contentBase64: String(a.contentBase64 ?? "").trim(),
+  }));
+  if (normalizedAttachments.some((a) => !a.filename || !a.contentBase64)) {
+    return NextResponse.json({ error: "Each attachment must include filename and content." }, { status: 400 });
+  }
+
+  const result = await sendOutreachEmail({
+    provider,
+    to,
+    cc,
+    subject,
+    text,
+    attachments: normalizedAttachments,
+  });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });
   }
