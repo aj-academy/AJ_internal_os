@@ -24,6 +24,10 @@ export function getOutreachZohoUser() {
   return process.env.ZOHO_MAIL_FROM?.trim() || process.env.ZOHO_OUTREACH_USER?.trim() || DEFAULT_OUTREACH_ZOHO_USER;
 }
 
+export function getZohoAccountsBaseUrl() {
+  return process.env.ZOHO_ACCOUNTS_BASE_URL?.trim() || "https://accounts.zoho.in";
+}
+
 type SendOutreachEmailInput = {
   provider: OutreachEmailProvider;
   to: string;
@@ -82,6 +86,7 @@ function makeZohoTransporter() {
         clientId,
         clientSecret,
         refreshToken,
+        accessUrl: `${getZohoAccountsBaseUrl().replace(/\/+$/, "")}/oauth/v2/token`,
       },
     }),
   };
