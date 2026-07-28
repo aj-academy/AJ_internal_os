@@ -110,9 +110,19 @@ export async function sendOutreachEmail({ provider, to, cc, subject, text, attac
   const transporterResult = provider === "zoho" ? makeZohoTransporter() : makeGmailTransporter();
   if (!transporterResult.ok) return transporterResult;
 
+  // Zoho SMTP only allows sending as the authenticated mailbox (or an alias on that account).
+  // Using Gmail From with Zoho auth causes: 553 Sender is not allowed to relay emails.
+  const from =
+    provider === "zoho"
+      ? `AJ Academy <${getOutreachZohoUser()}>`
+      : getOutreachEmailFrom();
+  const replyTo =
+    provider === "zoho" ? process.env.ZOHO_MAIL_REPLY_TO?.trim() || getOutreachZohoUser() : undefined;
+
   try {
     await transporterResult.transporter.sendMail({
-      from: getOutreachEmailFrom(),
+      from,
+      replyTo,
       to,
       cc: cc?.trim() || undefined,
       subject,

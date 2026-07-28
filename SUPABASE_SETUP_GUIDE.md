@@ -54,6 +54,7 @@ FCM setup checklist: **`AJ_Academy_OS/docs/FCM_PUSH.md`**. SQL: **`AJ_Academy_SB
 For College Visits Email compose (provider switch), Gmail and Zoho can both be configured. Zoho supports:
 - Recommended: SMTP app password (`ZOHO_MAIL_FROM`, `ZOHO_SMTP_PASSWORD`)
 - Alternative: SMTP OAuth2 (`ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, `ZOHO_REFRESH_TOKEN`, `ZOHO_MAIL_FROM`)
+- Zoho sends use `ZOHO_MAIL_FROM` as the From address (must match the authenticated mailbox). Optional `ZOHO_MAIL_REPLY_TO`.
 
 ---
 
