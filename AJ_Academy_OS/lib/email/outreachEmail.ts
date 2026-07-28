@@ -65,13 +65,27 @@ function makeGmailTransporter() {
 
 function makeZohoTransporter() {
   const user = getOutreachZohoUser();
+  const smtpPassword = process.env.ZOHO_SMTP_PASSWORD?.trim();
+  if (user && smtpPassword) {
+    return {
+      ok: true as const,
+      transporter: nodemailer.createTransport({
+        host: process.env.ZOHO_SMTP_HOST?.trim() || "smtp.zoho.in",
+        port: Number(process.env.ZOHO_SMTP_PORT?.trim() || "465"),
+        secure: true,
+        auth: { user, pass: smtpPassword },
+      }),
+    };
+  }
+
   const clientId = process.env.ZOHO_CLIENT_ID?.trim();
   const clientSecret = process.env.ZOHO_CLIENT_SECRET?.trim();
   const refreshToken = process.env.ZOHO_REFRESH_TOKEN?.trim();
   if (!clientId || !clientSecret || !refreshToken || !user) {
     return {
       ok: false as const,
-      error: "Zoho Mail is not configured. Set ZOHO_MAIL_FROM, ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, ZOHO_REFRESH_TOKEN.",
+      error:
+        "Zoho Mail is not configured. Set ZOHO_MAIL_FROM and either ZOHO_SMTP_PASSWORD (recommended) or OAuth keys (ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, ZOHO_REFRESH_TOKEN).",
     };
   }
   return {

@@ -25,6 +25,7 @@ GMAIL_OUTREACH_USER=ajacademy.co.in@gmail.com
 GMAIL_OUTREACH_APP_PASSWORD=your-gmail-app-password
 OUTREACH_EMAIL_FROM="AJ Academy <ajacademy.co.in@gmail.com>"
 ZOHO_MAIL_FROM=support@ajacademy.co.in
+ZOHO_SMTP_PASSWORD=your-zoho-app-password
 ZOHO_CLIENT_ID=your-zoho-client-id
 ZOHO_CLIENT_SECRET=your-zoho-client-secret
 ZOHO_REFRESH_TOKEN=your-zoho-refresh-token
@@ -50,7 +51,9 @@ FCM setup checklist: **`AJ_Academy_OS/docs/FCM_PUSH.md`**. SQL: **`AJ_Academy_SB
 
 `GMAIL_OUTREACH_APP_PASSWORD` is required for Student Master outreach emails (sent from `ajacademy.co.in@gmail.com`). Create an [App Password](https://myaccount.google.com/apppasswords) on that Google account (2-Step Verification must be on).
 
-For College Visits Email compose (provider switch), Gmail and Zoho can both be configured. Zoho uses SMTP OAuth2 (`ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, `ZOHO_REFRESH_TOKEN`, `ZOHO_MAIL_FROM`).
+For College Visits Email compose (provider switch), Gmail and Zoho can both be configured. Zoho supports:
+- Recommended: SMTP app password (`ZOHO_MAIL_FROM`, `ZOHO_SMTP_PASSWORD`)
+- Alternative: SMTP OAuth2 (`ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, `ZOHO_REFRESH_TOKEN`, `ZOHO_MAIL_FROM`)
 
 ---
 
