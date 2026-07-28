@@ -3228,9 +3228,14 @@ function AllLeadsTable({
                                     : ""}
                                 </span>
                               ) : lead.last_call_outcome ? (
-                                <span className="max-w-[12rem] truncate text-[10px] font-normal text-[#64748b]" title={lead.last_call_outcome}>
-                                  Last: {lead.last_call_outcome}
-                                  {typeof lead.total_call_attempts === "number" ? ` · ${lead.total_call_attempts} attempts` : ""}
+                                <span className="max-w-[14rem] whitespace-normal text-[11px] font-medium leading-snug text-[#475569]">
+                                  Last call: {lead.last_call_outcome}
+                                  {lead.last_contacted_at
+                                    ? ` · ${formatDateTimeIST(String(lead.last_contacted_at))}`
+                                    : ""}
+                                  {typeof lead.total_call_attempts === "number"
+                                    ? ` · ${lead.total_call_attempts} attempts`
+                                    : ""}
                                 </span>
                               ) : null}
                             </div>
@@ -3323,8 +3328,12 @@ function AllLeadsTable({
                               <button type="button" className="font-semibold text-teal-700 hover:underline" onClick={() => onAddFollow(lead)}>
                                 Follow-up
                               </button>
-                              <button type="button" className="font-semibold text-violet-700 hover:underline" onClick={() => onOpenActivity(lead)}>
-                                Activity
+                              <button
+                                type="button"
+                                className="font-semibold text-violet-700 hover:underline"
+                                onClick={() => onOpenActivity(lead)}
+                              >
+                                Call History
                               </button>
                               {isAdmin && !isClosedLeadStatus(String(lead.status)) && (
                                 <button type="button" className="font-semibold text-emerald-700 hover:underline" onClick={() => onConvert(lead)}>
