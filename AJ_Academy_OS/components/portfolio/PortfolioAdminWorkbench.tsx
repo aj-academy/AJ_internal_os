@@ -14,6 +14,10 @@ import {
   SAMPLE_PORTFOLIO_VALUES,
 } from "@/lib/portfolio";
 import type { PortfolioTemplate } from "@/types/portfolio";
+import {
+  PortfolioPreviewPanel,
+  type PortfolioPreviewMode,
+} from "@/components/portfolio/PortfolioPreviewPanel";
 
 export function PortfolioAdminWorkbench() {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -31,6 +35,7 @@ export function PortfolioAdminWorkbench() {
   const [schemaMissing, setSchemaMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<PortfolioPreviewMode>("laptop");
 
   const selected = useMemo(
     () => templates.find((t) => t.id === selectedId) ?? null,
@@ -370,23 +375,14 @@ export function PortfolioAdminWorkbench() {
           </div>
         </div>
 
-        <div className="space-y-3 rounded-2xl border border-[#dbe6f3] bg-white p-4">
-          <div>
-            <h3 className="text-lg font-semibold text-[#0f172a]">Preview</h3>
-            <p className="text-xs text-[#64748b]">Sample placeholder data — updates as you type or upload.</p>
-          </div>
-          <div className="min-h-[420px] overflow-hidden rounded-xl border border-[#dbe6f3] bg-[#f8fafc]">
-            {templateFormat === "pdf" && fileUrl ? (
-              <iframe title="PDF template preview" src={fileUrl} className="h-[520px] w-full" />
-            ) : previewHtml ? (
-              <iframe title="HTML preview" srcDoc={previewHtml} className="h-[520px] w-full bg-white" sandbox="" />
-            ) : (
-              <p className="p-8 text-center text-sm text-[#64748b]">
-                Enter HTML code or upload a file to see a live preview here.
-              </p>
-            )}
-          </div>
-        </div>
+        <PortfolioPreviewPanel
+          mode={previewMode}
+          onModeChange={setPreviewMode}
+          previewHtml={templateFormat === "pdf" && fileUrl ? null : previewHtml}
+          pdfUrl={templateFormat === "pdf" ? fileUrl : null}
+          emptyText="Enter HTML code or upload a file to see a live preview here."
+          subtitle="Sample placeholder data — updates as you type or upload."
+        />
       </div>
     </section>
   );

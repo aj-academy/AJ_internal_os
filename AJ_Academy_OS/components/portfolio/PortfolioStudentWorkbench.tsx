@@ -13,6 +13,10 @@ import {
   renderPortfolioDocument,
 } from "@/lib/portfolio";
 import type { PortfolioTemplate, StudentPortfolioEntry } from "@/types/portfolio";
+import {
+  PortfolioPreviewPanel,
+  type PortfolioPreviewMode,
+} from "@/components/portfolio/PortfolioPreviewPanel";
 
 export function PortfolioStudentWorkbench() {
   const [template, setTemplate] = useState<PortfolioTemplate | null>(null);
@@ -22,6 +26,7 @@ export function PortfolioStudentWorkbench() {
   const [schemaMissing, setSchemaMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<PortfolioPreviewMode>("laptop");
 
   const fields = useMemo(() => template?.placeholder_fields ?? [], [template]);
 
@@ -192,30 +197,18 @@ export function PortfolioStudentWorkbench() {
           </div>
         </div>
 
-        <div className="space-y-3 rounded-2xl border border-[#dbe6f3] bg-white p-4">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">Preview</h3>
-            <p className="text-xs text-[#64748b]">Live preview with your entries and AJ Academy credits.</p>
-          </div>
-          <div className="min-h-[420px] overflow-hidden rounded-xl border border-[#dbe6f3] bg-[#f8fafc]">
-            {template.template_format === "pdf" && template.file_url && !template.html_content?.trim() ? (
-              <div className="space-y-3 p-4">
-                <p className="text-sm text-[#64748b]">Reference template (PDF):</p>
-                <iframe title="PDF reference" src={template.file_url} className="h-[360px] w-full rounded-lg border" />
-                <p className="text-xs text-[#94a3b8]">
-                  Your downloaded portfolio will be generated from the fields you fill, with AJ Academy branding.
-                </p>
-                {previewHtml ? (
-                  <iframe title="Generated preview" srcDoc={previewHtml} className="h-[280px] w-full rounded-lg border bg-white" sandbox="" />
-                ) : null}
-              </div>
-            ) : previewHtml ? (
-              <iframe title="Portfolio preview" srcDoc={previewHtml} className="h-[520px] w-full bg-white" sandbox="" />
-            ) : (
-              <p className="p-8 text-center text-sm text-[#64748b]">Fill in fields to see your portfolio preview.</p>
-            )}
-          </div>
-        </div>
+        <PortfolioPreviewPanel
+          mode={previewMode}
+          onModeChange={setPreviewMode}
+          previewHtml={previewHtml}
+          pdfUrl={
+            template.template_format === "pdf" && template.file_url && !template.html_content?.trim()
+              ? template.file_url
+              : null
+          }
+          emptyText="Fill in fields to see your portfolio preview."
+          subtitle="Live preview with your entries and AJ Academy credits."
+        />
       </div>
     </section>
   );
