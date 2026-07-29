@@ -94,5 +94,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: result.error }, { status: 502 });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    provider: result.provider,
+    from: result.from,
+  });
 }

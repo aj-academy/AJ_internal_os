@@ -88,6 +88,7 @@ import { StudentOutreachButtons } from "@/components/student-lead-master/Student
 import { whatsAppHref } from "@/components/employee/leads/employeeLeadConfig";
 import { WhatsAppComposeModal } from "@/components/shared/WhatsAppComposeModal";
 import { EmailComposeModal } from "@/components/shared/EmailComposeModal";
+import type { EmailComposeSubmitPayload } from "@/components/shared/EmailComposeModal";
 import { LeadActivityModal } from "@/components/shared/LeadActivityModal";
 import {
   fetchEmailTemplates,
@@ -404,6 +405,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const [whatsAppSubmitting, setWhatsAppSubmitting] = useState(false);
   const [emailTemplates, setEmailTemplates] = useState<string[]>([]);
   const [emailComposeLead, setEmailComposeLead] = useState<CrmClientRow | null>(null);
+  const [emailComposeProvider, setEmailComposeProvider] = useState<"zoho" | "gmail">("zoho");
+  const [emailProviderPickerLead, setEmailProviderPickerLead] = useState<CrmClientRow | null>(null);
   const [emailSubmitting, setEmailSubmitting] = useState(false);
   const [activityModalLead, setActivityModalLead] = useState<CrmClientRow | null>(null);
   const [activityModalRows, setActivityModalRows] = useState<ActivityRow[]>([]);
@@ -1183,24 +1186,38 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     setActivityModalLoading(false);
   };
 
-  const openEmailCompose = (lead: CrmClientRow) => {
+  const openEmailCompose = (lead: CrmClientRow, provider: "zoho" | "gmail" = "zoho") => {
     if (!canContactLead(lead)) return;
     const email = lead.email?.trim();
     if (!email) {
       setError("No email address on this student.");
       return;
     }
+    setError(null);
+    setEmailProviderPickerLead(null);
+    setEmailComposeProvider(provider);
     setEmailComposeLead(lead);
   };
 
-  const handleEmailSend = async (message: string) => {
-    if (!emailComposeLead || !currentUserId) return;
-    const email = emailComposeLead.email?.trim();
+  const requestEmailProviderPicker = (lead: CrmClientRow) => {
+    if (!canContactLead(lead)) return;
+    const email = lead.email?.trim();
     if (!email) {
       setError("No email address on this student.");
       return;
     }
-    const trimmed = message.trim();
+    setError(null);
+    setEmailProviderPickerLead(lead);
+  };
+
+  const handleEmailSend = async (payload: EmailComposeSubmitPayload) => {
+    if (!emailComposeLead || !currentUserId) return;
+    const email = (payload.to || emailComposeLead.email || "").trim();
+    if (!email) {
+      setError("No email address on this student.");
+      return;
+    }
+    const trimmed = payload.message.trim();
     if (!trimmed) {
       setError("Enter a message before sending email.");
       return;
@@ -1214,26 +1231,46 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     setError(null);
     const lead = emailComposeLead;
     const now = new Date().toISOString();
-    const activityNotes = formatEmailActivityNotes(trimmed);
-    const subject = `AJ Academy follow-up for ${displayLeadName(lead)}`;
+    const subject = payload.subject.trim() || `AJ Academy follow-up for ${displayLeadName(lead)}`;
 
+    let sentFrom = "";
     try {
       const mailRes = await fetch("/api/outreach/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: email, subject, body: trimmed }),
+        body: JSON.stringify({
+          provider: payload.provider,
+          to: email,
+          cc: payload.cc,
+          subject,
+          body: trimmed,
+          attachments: payload.attachments,
+        }),
       });
-      const mailPayload = (await mailRes.json().catch(() => ({}))) as { error?: string };
+      const mailPayload = (await mailRes.json().catch(() => ({}))) as {
+        error?: string;
+        from?: string;
+        provider?: string;
+      };
       if (!mailRes.ok) {
         setError(mailPayload.error || "Could not send email.");
         setEmailSubmitting(false);
         return;
       }
+      sentFrom = mailPayload.from?.trim() || "";
     } catch {
       setError("Could not reach the email server.");
       setEmailSubmitting(false);
       return;
     }
+
+    const activityNotes = formatEmailActivityNotes(trimmed, {
+      provider: payload.provider,
+      from: sentFrom,
+      to: email,
+      cc: payload.cc,
+      subject,
+    });
 
     patchClientLocal(lead.id, { email_sent: true, email_sent_at: now, last_contacted_at: now });
     let updateError = (
@@ -1271,7 +1308,9 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       return;
     }
     setEmailComposeLead(null);
-    setSuccess("Email sent from ajacademy.co.in@gmail.com and saved to activity history.");
+    setSuccess(
+      `Email sent via ${payload.provider === "zoho" ? "Zoho" : "Gmail"} and saved to activity history (visible to admin & employee).`,
+    );
     setEmailSubmitting(false);
   };
 
@@ -2414,7 +2453,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
             canEditLead={canEditLead}
             onPhoneClick={(lead) => void handlePhoneClick(lead)}
             onWhatsAppClick={(lead) => openWhatsAppCompose(lead)}
-            onEmailClick={(lead) => openEmailCompose(lead)}
+            onEmailClick={(lead) => requestEmailProviderPicker(lead)}
             onOpenActivity={(lead) => void openActivityForLead(lead)}
             onProfile={setProfileLead}
             onEdit={(leadRecord) => {
@@ -2639,12 +2678,62 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
           leadName={displayLeadName(emailComposeLead)}
           email={String(emailComposeLead.email || "")}
           templates={emailTemplates}
+          advanced
+          providerOptions={["zoho", "gmail"]}
+          defaultProvider={emailComposeProvider}
+          defaultSubject={`AJ Academy follow-up for ${displayLeadName(emailComposeLead)}`}
           submitting={emailSubmitting}
           onClose={() => {
-            if (!emailSubmitting) setEmailComposeLead(null);
+            if (!emailSubmitting) {
+              setEmailComposeLead(null);
+              setEmailComposeProvider("zoho");
+            }
           }}
-          onSend={(message) => void handleEmailSend(message)}
+          onSend={() => undefined}
+          onSendDetailed={(payload) => void handleEmailSend(payload)}
         />
+      ) : null}
+
+      {emailProviderPickerLead ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close"
+            className="fixed inset-0 z-[60] bg-slate-900/40"
+            onClick={() => setEmailProviderPickerLead(null)}
+          />
+          <div className="fixed left-1/2 top-1/2 z-[70] w-[min(100vw-2rem,24rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[#e8dcc8] bg-white p-4 shadow-xl">
+            <h3 className="text-base font-semibold text-[#3d3428]">Choose mail provider</h3>
+            <p className="mt-1 text-xs text-[#6b5d4d]">
+              {displayLeadName(emailProviderPickerLead)} · select how you want to send this email.
+            </p>
+            <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                className="h-10 rounded-xl bg-[#0ea5e9] text-white hover:bg-[#0284c7]"
+                onClick={() => openEmailCompose(emailProviderPickerLead, "zoho")}
+              >
+                Zoho Mail
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 rounded-xl border-[#e8dcc8]"
+                onClick={() => openEmailCompose(emailProviderPickerLead, "gmail")}
+              >
+                Gmail
+              </Button>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 w-full rounded-xl border-[#e8dcc8]"
+              onClick={() => setEmailProviderPickerLead(null)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </>
       ) : null}
 
       <LeadActivityModal

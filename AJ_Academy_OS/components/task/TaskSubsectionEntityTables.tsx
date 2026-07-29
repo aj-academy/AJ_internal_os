@@ -10,6 +10,7 @@ import { displayLeadName, type CrmClientRow } from "@/components/student-lead-ma
 import { StudentOutreachButtons } from "@/components/student-lead-master/StudentOutreachButtons";
 import { WhatsAppComposeModal } from "@/components/shared/WhatsAppComposeModal";
 import { EmailComposeModal } from "@/components/shared/EmailComposeModal";
+import type { EmailComposeSubmitPayload } from "@/components/shared/EmailComposeModal";
 import {
   anyCollegeOutreachEmail,
   anyCollegeOutreachPhone,
@@ -36,8 +37,10 @@ import {
   mapClientRowToTaskLinkedLead,
   type TaskLinkedLead,
 } from "@/lib/taskLeadOutreach";
+import { formatEmailActivityNotes, MAX_EMAIL_MESSAGE_LENGTH } from "@/lib/whatsappOutreach";
+import { logTaskActivity } from "@/lib/taskActivities";
 import { formatDisplayDate } from "@/lib/datetime";
-import type { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client";
 import type { TaskRecord } from "@/types/task";
 import type { CSSProperties } from "react";
 
@@ -248,6 +251,10 @@ export function TaskSubsectionLeadsTable({
 
   const [waTarget, setWaTarget] = useState<{ taskId: string; lead: TaskLinkedLead } | null>(null);
   const [emailTarget, setEmailTarget] = useState<{ taskId: string; lead: TaskLinkedLead } | null>(null);
+  const [emailComposeProvider, setEmailComposeProvider] = useState<"zoho" | "gmail">("zoho");
+  const [emailProviderPicker, setEmailProviderPicker] = useState<{ taskId: string; lead: TaskLinkedLead } | null>(
+    null,
+  );
   const [outreachBusy, setOutreachBusy] = useState(false);
 
   const th =
@@ -395,7 +402,7 @@ export function TaskSubsectionLeadsTable({
                         email={lead.email}
                         emailSent={lead.email_sent}
                         onEmailClick={
-                          outreachOk && linked ? () => setEmailTarget({ taskId: task.id, lead: linked }) : undefined
+                          outreachOk && linked ? () => setEmailProviderPicker({ taskId: task.id, lead: linked }) : undefined
                         }
                       />
                     </div>
@@ -526,41 +533,130 @@ export function TaskSubsectionLeadsTable({
         leadName={emailTarget?.lead.name ?? ""}
         email={emailTarget?.lead.email ?? ""}
         templates={[]}
+        advanced
+        providerOptions={["zoho", "gmail"]}
+        defaultProvider={emailComposeProvider}
+        defaultSubject={emailTarget ? `AJ Academy follow-up for ${emailTarget.lead.name}` : ""}
         submitting={outreachBusy}
-        onClose={() => !outreachBusy && setEmailTarget(null)}
-        onSend={(message) => {
+        onClose={() => {
+          if (!outreachBusy) {
+            setEmailTarget(null);
+            setEmailComposeProvider("zoho");
+          }
+        }}
+        onSend={() => undefined}
+        onSendDetailed={(payload) => {
           void (async () => {
             if (!emailTarget || !currentUserId || !supabase) return;
-            const trimmed = message.trim();
+            const trimmed = payload.message.trim();
             if (!trimmed) {
               onOutreachError?.("Enter a message.");
               return;
             }
-            const to = emailTarget.lead.email?.trim();
+            if (trimmed.length > MAX_EMAIL_MESSAGE_LENGTH) {
+              onOutreachError?.(`Message is too long (max ${MAX_EMAIL_MESSAGE_LENGTH} characters).`);
+              return;
+            }
+            const to = (payload.to || emailTarget.lead.email || "").trim();
             if (!to) {
               onOutreachError?.("No email address.");
               return;
             }
             setOutreachBusy(true);
             try {
-              window.location.href = `mailto:${encodeURIComponent(to)}?body=${encodeURIComponent(trimmed)}`;
+              const subject = payload.subject.trim() || `AJ Academy follow-up for ${emailTarget.lead.name}`;
+              const res = await fetch("/api/outreach/send-email", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  provider: payload.provider,
+                  to,
+                  cc: payload.cc,
+                  subject,
+                  body: trimmed,
+                  attachments: payload.attachments,
+                }),
+              });
+              const json = (await res.json()) as { error?: string; from?: string };
+              if (!res.ok) throw new Error(json.error ?? "Email failed.");
+
+              const notes = formatEmailActivityNotes(trimmed, {
+                provider: payload.provider,
+                from: json.from,
+                to,
+                cc: payload.cc,
+                subject,
+              });
               await logTaskLeadEmail(supabase, {
                 taskId: emailTarget.taskId,
                 lead: emailTarget.lead,
                 userId: currentUserId,
-                subject: trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed,
+                subject,
+                notes,
               });
-              onOutreachSuccess?.("Email logged on lead and task activity.");
+              onOutreachSuccess?.(
+                `Email sent via ${payload.provider === "zoho" ? "Zoho" : "Gmail"} and logged on lead & task activity.`,
+              );
               onOutreachUpdated?.();
               setEmailTarget(null);
             } catch (e) {
-              onOutreachError?.(e instanceof Error ? e.message : "Could not log email.");
+              onOutreachError?.(e instanceof Error ? e.message : "Could not send email.");
             } finally {
               setOutreachBusy(false);
             }
           })();
         }}
       />
+
+      {emailProviderPicker ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close"
+            className="fixed inset-0 z-[60] bg-slate-900/40"
+            onClick={() => setEmailProviderPicker(null)}
+          />
+          <div className="fixed left-1/2 top-1/2 z-[70] w-[min(100vw-2rem,24rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[#e8dcc8] bg-white p-4 shadow-xl">
+            <h3 className="text-base font-semibold text-[#3d3428]">Choose mail provider</h3>
+            <p className="mt-1 text-xs text-[#6b5d4d]">
+              {emailProviderPicker.lead.name} · select how you want to send this email.
+            </p>
+            <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                className="h-10 rounded-xl bg-[#0ea5e9] text-white hover:bg-[#0284c7]"
+                onClick={() => {
+                  setEmailComposeProvider("zoho");
+                  setEmailTarget(emailProviderPicker);
+                  setEmailProviderPicker(null);
+                }}
+              >
+                Zoho Mail
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 rounded-xl border-[#e8dcc8]"
+                onClick={() => {
+                  setEmailComposeProvider("gmail");
+                  setEmailTarget(emailProviderPicker);
+                  setEmailProviderPicker(null);
+                }}
+              >
+                Gmail
+              </Button>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 w-full rounded-xl border-[#e8dcc8]"
+              onClick={() => setEmailProviderPicker(null)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -574,6 +670,11 @@ export function TaskSubsectionCollegesTable({
   onActivityCollege,
   onEditCollege,
   selection,
+  currentUserId,
+  supabase,
+  onOutreachUpdated,
+  onOutreachError,
+  onOutreachSuccess,
 }: {
   rows: TaskCollegeFlatRow[];
   ownerNameMap: Record<string, string>;
@@ -582,6 +683,11 @@ export function TaskSubsectionCollegesTable({
   onActivityCollege: (task: TaskRecord, college: CollegeVisitRow) => void;
   onEditCollege: (task: TaskRecord, college: CollegeVisitRow, collegeLoaded: boolean) => void;
   selection?: SubsectionSelection;
+  currentUserId?: string;
+  supabase?: ReturnType<typeof createClient>;
+  onOutreachUpdated?: () => void;
+  onOutreachError?: (msg: string) => void;
+  onOutreachSuccess?: (msg: string) => void;
 }) {
   const {
     paginatedItems: pageRows,
@@ -594,9 +700,22 @@ export function TaskSubsectionCollegesTable({
   } = usePagination(rows, 25);
 
   const [contactByRow, setContactByRow] = useState<Record<string, string>>({});
+  const [emailTarget, setEmailTarget] = useState<{
+    taskId: string;
+    college: CollegeVisitRow;
+    email: string;
+  } | null>(null);
+  const [emailComposeProvider, setEmailComposeProvider] = useState<"zoho" | "gmail">("zoho");
+  const [emailProviderPicker, setEmailProviderPicker] = useState<{
+    taskId: string;
+    college: CollegeVisitRow;
+    email: string;
+  } | null>(null);
+  const [emailBusy, setEmailBusy] = useState(false);
   const th = TABLE_DATA_TH;
   const td = TABLE_DATA_TD;
   const colSpan = 25 + (selection ? 1 : 0);
+  const canEmail = Boolean(currentUserId);
 
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
@@ -739,8 +858,19 @@ export function TaskSubsectionCollegesTable({
                         email={email}
                         emailSent={false}
                         onEmailClick={() => {
-                          if (!email) return;
-                          window.location.href = `mailto:${email}`;
+                          if (!email || !canEmail) {
+                            if (!email) onOutreachError?.("No email address on this college.");
+                            return;
+                          }
+                          const contactEmail =
+                            selectedContact?.email?.trim() ||
+                            college.email?.trim() ||
+                            email;
+                          setEmailProviderPicker({
+                            taskId: task.id,
+                            college,
+                            email: contactEmail,
+                          });
                         }}
                       />
                     </td>
@@ -845,6 +975,153 @@ export function TaskSubsectionCollegesTable({
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
       />
+
+      {emailTarget ? (
+        <EmailComposeModal
+          open={Boolean(emailTarget)}
+          leadName={emailTarget.college.college_name}
+          email={emailTarget.email}
+          templates={[]}
+          advanced
+          providerOptions={["zoho", "gmail"]}
+          defaultProvider={emailComposeProvider}
+          defaultSubject={`AJ Academy follow-up for ${emailTarget.college.college_name}`}
+          submitting={emailBusy}
+          onClose={() => {
+            if (!emailBusy) {
+              setEmailTarget(null);
+              setEmailComposeProvider("zoho");
+            }
+          }}
+          onSend={() => undefined}
+          onSendDetailed={(payload: EmailComposeSubmitPayload) => {
+            void (async () => {
+              if (!emailTarget || !currentUserId) return;
+              const trimmed = payload.message.trim();
+              if (!trimmed) {
+                onOutreachError?.("Enter a message.");
+                return;
+              }
+              if (trimmed.length > MAX_EMAIL_MESSAGE_LENGTH) {
+                onOutreachError?.(`Message is too long (max ${MAX_EMAIL_MESSAGE_LENGTH} characters).`);
+                return;
+              }
+              const to = (payload.to || emailTarget.email || "").trim();
+              if (!to) {
+                onOutreachError?.("No email address.");
+                return;
+              }
+              setEmailBusy(true);
+              try {
+                const subject =
+                  payload.subject.trim() || `AJ Academy follow-up for ${emailTarget.college.college_name}`;
+                const res = await fetch("/api/outreach/send-email", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    provider: payload.provider,
+                    to,
+                    cc: payload.cc,
+                    subject,
+                    body: trimmed,
+                    attachments: payload.attachments,
+                  }),
+                });
+                const json = (await res.json()) as { error?: string; from?: string };
+                if (!res.ok) throw new Error(json.error ?? "Email failed.");
+
+                const notes = formatEmailActivityNotes(trimmed, {
+                  provider: payload.provider,
+                  from: json.from,
+                  to,
+                  cc: payload.cc,
+                  subject,
+                });
+
+                const actRes = await fetch(`/api/college-visits/${emailTarget.college.id}/activities`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ activity_type: "Email", notes }),
+                });
+                if (!actRes.ok) {
+                  const actJson = (await actRes.json().catch(() => ({}))) as { error?: string };
+                  throw new Error(actJson.error || "Email sent but could not log college activity.");
+                }
+
+                if (supabase) {
+                  await logTaskActivity(supabase, {
+                    taskId: emailTarget.taskId,
+                    actorId: currentUserId,
+                    activityType: "college_email",
+                    notes: `Email to ${emailTarget.college.college_name}: ${subject}`,
+                    metadata: { college_visit_id: emailTarget.college.id },
+                  });
+                }
+
+                onOutreachSuccess?.(
+                  `Email sent via ${payload.provider === "zoho" ? "Zoho" : "Gmail"} and logged for admin & employee tracking.`,
+                );
+                onOutreachUpdated?.();
+                setEmailTarget(null);
+              } catch (e) {
+                onOutreachError?.(e instanceof Error ? e.message : "Could not send email.");
+              } finally {
+                setEmailBusy(false);
+              }
+            })();
+          }}
+        />
+      ) : null}
+
+      {emailProviderPicker ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close"
+            className="fixed inset-0 z-[60] bg-slate-900/40"
+            onClick={() => setEmailProviderPicker(null)}
+          />
+          <div className="fixed left-1/2 top-1/2 z-[70] w-[min(100vw-2rem,24rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[#e8dcc8] bg-white p-4 shadow-xl">
+            <h3 className="text-base font-semibold text-[#3d3428]">Choose mail provider</h3>
+            <p className="mt-1 text-xs text-[#6b5d4d]">
+              {emailProviderPicker.college.college_name} · select how you want to send this email.
+            </p>
+            <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                className="h-10 rounded-xl bg-[#0ea5e9] text-white hover:bg-[#0284c7]"
+                onClick={() => {
+                  setEmailComposeProvider("zoho");
+                  setEmailTarget(emailProviderPicker);
+                  setEmailProviderPicker(null);
+                }}
+              >
+                Zoho Mail
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 rounded-xl border-[#e8dcc8]"
+                onClick={() => {
+                  setEmailComposeProvider("gmail");
+                  setEmailTarget(emailProviderPicker);
+                  setEmailProviderPicker(null);
+                }}
+              >
+                Gmail
+              </Button>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 w-full rounded-xl border-[#e8dcc8]"
+              onClick={() => setEmailProviderPicker(null)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

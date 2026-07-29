@@ -97,7 +97,7 @@ export async function logTaskLeadWhatsApp(
 
 export async function logTaskLeadEmail(
   supabase: ReturnType<typeof createClient>,
-  opts: { taskId: string; lead: TaskLinkedLead; userId: string; subject: string },
+  opts: { taskId: string; lead: TaskLinkedLead; userId: string; subject: string; notes?: string },
 ) {
   const now = new Date().toISOString();
   const { error: clientError } = await supabase
@@ -109,7 +109,7 @@ export async function logTaskLeadEmail(
   await supabase.from("lead_activities").insert({
     client_id: opts.lead.id,
     activity_type: "Email",
-    notes: opts.subject,
+    notes: opts.notes?.trim() || opts.subject,
     created_by: opts.userId,
   });
 
@@ -117,7 +117,7 @@ export async function logTaskLeadEmail(
     taskId: opts.taskId,
     actorId: opts.userId,
     activityType: "lead_email",
-    notes: `Email to ${opts.lead.name}`,
+    notes: `Email to ${opts.lead.name}: ${opts.subject}`,
     metadata: { client_id: opts.lead.id },
   });
 }

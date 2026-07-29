@@ -129,7 +129,11 @@ export async function sendOutreachEmail({ provider, to, cc, subject, text, attac
       text,
       attachments: buildNodemailerAttachments(attachments),
     });
-    return { ok: true as const };
+    return {
+      ok: true as const,
+      provider,
+      from: provider === "zoho" ? getOutreachZohoUser() : getOutreachGmailUser(),
+    };
   } catch (error) {
     return {
       ok: false as const,

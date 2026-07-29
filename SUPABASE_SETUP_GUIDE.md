@@ -55,6 +55,8 @@ For College Visits Email compose (provider switch), Gmail and Zoho can both be c
 - Recommended: SMTP app password (`ZOHO_MAIL_FROM`, `ZOHO_SMTP_PASSWORD`)
 - Alternative: SMTP OAuth2 (`ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, `ZOHO_REFRESH_TOKEN`, `ZOHO_MAIL_FROM`)
 - Zoho sends use `ZOHO_MAIL_FROM` as the From address (must match the authenticated mailbox). Optional `ZOHO_MAIL_REPLY_TO`.
+- Student Master and Task outreach email now support Zoho/Gmail provider selection with the same `/api/outreach/send-email` endpoint.
+- Outreach API responses include `provider` + `from` metadata so Activity Timeline logs show the actual sender mailbox for admin/employee tracking.
 
 ---
 

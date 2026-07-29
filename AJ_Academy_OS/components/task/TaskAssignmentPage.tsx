@@ -2213,6 +2213,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             onViewCollege={(_task, college, collegeLoaded) => openCollegeEdit(college, collegeLoaded)}
             onActivityCollege={(_task, college) => void openCollegeActivity(college)}
             onEditCollege={(_task, college, collegeLoaded) => openCollegeEdit(college, collegeLoaded)}
+            currentUserId={currentUserId}
+            supabase={supabase}
+            onOutreachUpdated={() => void reload()}
+            onOutreachError={setError}
+            onOutreachSuccess={setSuccess}
             selection={{
               allSelected: taskSelection.allSelected,
               someSelected: taskSelection.someSelected,

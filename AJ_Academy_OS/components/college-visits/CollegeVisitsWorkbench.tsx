@@ -653,7 +653,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
             attachments: payload.attachments,
           }),
         });
-        const mailPayload = (await mailRes.json().catch(() => ({}))) as { error?: string };
+        const mailPayload = (await mailRes.json().catch(() => ({}))) as { error?: string; from?: string };
         if (!mailRes.ok) {
           setError(mailPayload.error || "Could not send email.");
           setEmailSubmitting(false);
@@ -664,11 +664,19 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         await logCollegeActivity(
           emailComposeVisit.id,
           "Email",
-          formatEmailActivityNotes(`${subject}\n\n${trimmed}`),
+          formatEmailActivityNotes(trimmed, {
+            provider: payload.provider,
+            from: mailPayload.from,
+            to: email,
+            cc: payload.cc,
+            subject,
+          }),
         );
         setEmailComposeVisit(null);
         setEmailComposeTarget(null);
-        setSuccess("Email sent and logged to activity.");
+        setSuccess(
+          `Email sent via ${payload.provider === "zoho" ? "Zoho" : "Gmail"} and logged to activity (visible to admin & employee).`,
+        );
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not send email.");
       } finally {

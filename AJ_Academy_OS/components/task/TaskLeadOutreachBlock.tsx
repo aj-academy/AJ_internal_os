@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { StudentOutreachButtons } from "@/components/student-lead-master/StudentOutreachButtons";
 import { WhatsAppComposeModal } from "@/components/shared/WhatsAppComposeModal";
 import { EmailComposeModal } from "@/components/shared/EmailComposeModal";
+import type { EmailComposeSubmitPayload } from "@/components/shared/EmailComposeModal";
+import { Button } from "@/components/ui/button";
 import { whatsAppHref } from "@/components/employee/leads/employeeLeadConfig";
 import type { TaskLinkedLead } from "@/lib/taskLeadOutreach";
 import {
@@ -11,6 +13,7 @@ import {
   logTaskLeadPhoneCall,
   logTaskLeadWhatsApp,
 } from "@/lib/taskLeadOutreach";
+import { formatEmailActivityNotes, MAX_EMAIL_MESSAGE_LENGTH } from "@/lib/whatsappOutreach";
 import type { createClient } from "@/lib/supabase/client";
 
 type TaskLeadOutreachBlockProps = {
@@ -41,6 +44,8 @@ export function TaskLeadOutreachBlock({
   const [localLeads, setLocalLeads] = useState(leads);
   const [waLead, setWaLead] = useState<TaskLinkedLead | null>(null);
   const [emailLead, setEmailLead] = useState<TaskLinkedLead | null>(null);
+  const [emailComposeProvider, setEmailComposeProvider] = useState<"zoho" | "gmail">("zoho");
+  const [emailProviderPickerLead, setEmailProviderPickerLead] = useState<TaskLinkedLead | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -97,38 +102,69 @@ export function TaskLeadOutreachBlock({
     }
   };
 
-  const handleEmailSend = async (message: string) => {
+  const openEmailCompose = (lead: TaskLinkedLead, provider: "zoho" | "gmail") => {
+    if (!lead.email?.trim()) {
+      onError?.("No email on this lead.");
+      return;
+    }
+    setEmailProviderPickerLead(null);
+    setEmailComposeProvider(provider);
+    setEmailLead(lead);
+  };
+
+  const handleEmailSend = async (payload: EmailComposeSubmitPayload) => {
     if (!emailLead || !userId) return;
-    const email = emailLead.email?.trim();
+    const email = (payload.to || emailLead.email || "").trim();
     if (!email) {
       onError?.("No email on this lead.");
       return;
     }
-    const trimmed = message.trim();
+    const trimmed = payload.message.trim();
     if (!trimmed) {
       onError?.("Enter a message.");
       return;
     }
+    if (trimmed.length > MAX_EMAIL_MESSAGE_LENGTH) {
+      onError?.(`Message is too long (max ${MAX_EMAIL_MESSAGE_LENGTH} characters).`);
+      return;
+    }
     setSubmitting(true);
     try {
-      const subject = `AJ Academy follow-up for ${emailLead.name}`;
+      const subject = payload.subject.trim() || `AJ Academy follow-up for ${emailLead.name}`;
       const res = await fetch("/api/outreach/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: email, subject, body: trimmed }),
+        body: JSON.stringify({
+          provider: payload.provider,
+          to: email,
+          cc: payload.cc,
+          subject,
+          body: trimmed,
+          attachments: payload.attachments,
+        }),
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as { error?: string; from?: string };
       if (!res.ok) throw new Error(json.error ?? "Email failed.");
 
+      const notes = formatEmailActivityNotes(trimmed, {
+        provider: payload.provider,
+        from: json.from,
+        to: email,
+        cc: payload.cc,
+        subject,
+      });
       await logTaskLeadEmail(supabase, {
         taskId,
         lead: emailLead,
         userId,
         subject,
+        notes,
       });
       patchLead(emailLead.id, { email_sent: true });
       setEmailLead(null);
-      onSuccess?.("Email sent and logged on lead and task activity.");
+      onSuccess?.(
+        `Email sent via ${payload.provider === "zoho" ? "Zoho" : "Gmail"} and logged on lead & task activity.`,
+      );
       onUpdated?.();
     } catch (e) {
       onError?.(e instanceof Error ? e.message : "Could not send email.");
@@ -171,7 +207,7 @@ export function TaskLeadOutreachBlock({
                   mode="email"
                   email={lead.email}
                   emailSent={lead.email_sent}
-                  onEmailClick={() => setEmailLead(lead)}
+                  onEmailClick={() => setEmailProviderPickerLead(lead)}
                 />
               ) : null}
               {compact ? (
@@ -179,21 +215,15 @@ export function TaskLeadOutreachBlock({
                   mode="both"
                   phone={lead.phone}
                   whatsapp={lead.whatsapp}
+                  email={lead.email}
                   phoneCalled={lead.phone_called}
                   whatsappSent={lead.whatsapp_sent}
+                  emailSent={lead.email_sent}
                   onPhoneClick={() => void handlePhone(lead)}
                   onWhatsAppClick={() => setWaLead(lead)}
+                  onEmailClick={() => setEmailProviderPickerLead(lead)}
                 />
               ) : null}
-              {compact ? (
-                <StudentOutreachButtons
-                  mode="email"
-                  email={lead.email}
-                  emailSent={lead.email_sent}
-                  onEmailClick={() => setEmailLead(lead)}
-                />
-              ) : null}
-              {compact ? <span className="max-w-[100px] truncate text-xs text-[#64748b]" title={lead.name}>{lead.name}</span> : null}
             </div>
           </div>
         ))}
@@ -209,15 +239,69 @@ export function TaskLeadOutreachBlock({
         onSend={(message) => void handleWhatsAppSend(message)}
       />
 
-      <EmailComposeModal
-        open={!!emailLead}
-        leadName={emailLead?.name ?? ""}
-        email={emailLead?.email ?? ""}
-        templates={emailTemplates}
-        submitting={submitting}
-        onClose={() => !submitting && setEmailLead(null)}
-        onSend={(message) => void handleEmailSend(message)}
-      />
+      {emailLead ? (
+        <EmailComposeModal
+          open={Boolean(emailLead)}
+          leadName={emailLead.name}
+          email={emailLead.email ?? ""}
+          templates={emailTemplates}
+          advanced
+          providerOptions={["zoho", "gmail"]}
+          defaultProvider={emailComposeProvider}
+          defaultSubject={`AJ Academy follow-up for ${emailLead.name}`}
+          submitting={submitting}
+          onClose={() => {
+            if (!submitting) {
+              setEmailLead(null);
+              setEmailComposeProvider("zoho");
+            }
+          }}
+          onSend={() => undefined}
+          onSendDetailed={(payload) => void handleEmailSend(payload)}
+        />
+      ) : null}
+
+      {emailProviderPickerLead ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close"
+            className="fixed inset-0 z-[60] bg-slate-900/40"
+            onClick={() => setEmailProviderPickerLead(null)}
+          />
+          <div className="fixed left-1/2 top-1/2 z-[70] w-[min(100vw-2rem,24rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[#e8dcc8] bg-white p-4 shadow-xl">
+            <h3 className="text-base font-semibold text-[#3d3428]">Choose mail provider</h3>
+            <p className="mt-1 text-xs text-[#6b5d4d]">
+              {emailProviderPickerLead.name} · select how you want to send this email.
+            </p>
+            <div className="mt-4 grid gap-2">
+              <Button
+                type="button"
+                className="h-10 rounded-xl bg-[#0ea5e9] text-white hover:bg-[#0284c7]"
+                onClick={() => openEmailCompose(emailProviderPickerLead, "zoho")}
+              >
+                Zoho Mail
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 rounded-xl border-[#e8dcc8]"
+                onClick={() => openEmailCompose(emailProviderPickerLead, "gmail")}
+              >
+                Gmail
+              </Button>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 w-full rounded-xl border-[#e8dcc8]"
+              onClick={() => setEmailProviderPickerLead(null)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </>
+      ) : null}
     </>
   );
 }

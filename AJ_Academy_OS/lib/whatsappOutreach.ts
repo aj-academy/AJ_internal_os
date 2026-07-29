@@ -33,8 +33,29 @@ export function applyEmailTemplate(template: string, leadName: string) {
   return template.replace(/\{name\}/gi, name);
 }
 
-export function formatEmailActivityNotes(message: string) {
-  return `Email sent from ajacademy.co.in@gmail.com:\n${message.trim()}`;
+export const EMAIL_ACTIVITY_FROM_GMAIL = "ajacademy.co.in@gmail.com";
+export const EMAIL_ACTIVITY_FROM_ZOHO = "support@ajacademy.co.in";
+
+export function formatEmailActivityNotes(
+  message: string,
+  opts?: {
+    provider?: "gmail" | "zoho" | string;
+    from?: string;
+    to?: string;
+    cc?: string;
+    subject?: string;
+  },
+) {
+  const providerKey = String(opts?.provider ?? "gmail").toLowerCase();
+  const providerLabel = providerKey === "zoho" ? "Zoho" : providerKey === "gmail" ? "Gmail" : providerKey;
+  const from =
+    opts?.from?.trim() ||
+    (providerKey === "zoho" ? EMAIL_ACTIVITY_FROM_ZOHO : EMAIL_ACTIVITY_FROM_GMAIL);
+  const header = [`Email sent via ${providerLabel} from ${from}`];
+  if (opts?.to?.trim()) header.push(`To: ${opts.to.trim()}`);
+  if (opts?.cc?.trim()) header.push(`CC: ${opts.cc.trim()}`);
+  if (opts?.subject?.trim()) header.push(`Subject: ${opts.subject.trim()}`);
+  return `${header.join("\n")}\n\n${message.trim()}`;
 }
 
 export function parseWhatsAppTemplatesFromCrm(value: unknown): string[] {
