@@ -14,6 +14,7 @@ import {
   YAxis,
 } from "recharts";
 import { Button } from "@/components/ui/button";
+import { TablePagination } from "@/components/ui/TablePagination";
 import { AnalyticsFiltersBar } from "@/components/analytics/AnalyticsFiltersBar";
 import {
   ANALYTICS_SECTION_LABELS,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/analytics/types";
 import { resolveDateRange } from "@/lib/analytics/dateRanges";
 import { formatInr } from "@/components/reports/reportsHelpers";
+import { usePagination } from "@/lib/usePagination";
 import {
   exportMultiSheetExcel,
   exportRowsAsCsv,
@@ -82,11 +84,24 @@ function EmptyState({ text }: { text: string }) {
 function DataTable({
   columns,
   rows,
+  initialPageSize = 25,
 }: {
   columns: { key: string; label: string }[];
   rows: Record<string, unknown>[];
+  initialPageSize?: number;
 }) {
+  const {
+    paginatedItems,
+    page,
+    setPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    setPageSize,
+  } = usePagination(rows, initialPageSize);
+
   if (!rows.length) return <EmptyState text="No rows for the selected filters." />;
+
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
       <div className="overflow-x-auto">
@@ -104,8 +119,8 @@ function DataTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-[#e8edf5]">
-            {rows.map((row, idx) => (
-              <tr key={idx} className="hover:bg-[#fafcff]">
+            {paginatedItems.map((row, idx) => (
+              <tr key={`${page}-${idx}`} className="hover:bg-[#fafcff]">
                 {columns.map((c) => (
                   <td key={c.key} className="whitespace-nowrap px-3 py-2 text-[#334155]">
                     {row[c.key] == null || row[c.key] === "" ? "-" : String(row[c.key])}
@@ -116,6 +131,16 @@ function DataTable({
           </tbody>
         </table>
       </div>
+      <TablePagination
+        page={page}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+        pageSizeOptions={[10, 25, 50, 100]}
+        alwaysShow
+      />
     </div>
   );
 }
@@ -506,9 +531,12 @@ export function AnalyticsWorkbench({
       {section === "calls" ? (
         <div className="space-y-3">
           <p className="text-xs text-[#64748b]">
-            Includes Student Lead call sessions and College Visits dialer Phone Call logs.
+            Includes Student Lead call sessions and College Visits dialer Phone Call logs. Use date range
+            (This week / This month / Custom) for older activity, then page through the table below.
           </p>
           <DataTable
+            key={`calls-${filters.from}-${filters.to}-${filters.employeeId}-${filters.search}`}
+            initialPageSize={25}
             columns={[
               { key: "employee", label: "Employee" },
               { key: "source", label: "Source" },

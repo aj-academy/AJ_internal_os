@@ -575,7 +575,7 @@ async function buildCalls(
       .lte("started_at", toTs)
       .in("employee_id", emptyScope)
       .order("started_at", { ascending: false })
-      .limit(2000),
+      .limit(5000),
     // College Visits dialer logs Phone Call into college_visit_activities (not lead_call_sessions).
     supabase
       .from("college_visit_activities")
@@ -585,7 +585,7 @@ async function buildCalls(
       .lte("created_at", toTs)
       .in("created_by", emptyScope)
       .order("created_at", { ascending: false })
-      .limit(2000),
+      .limit(5000),
   ]);
 
   const data = sessionsRes.data ?? [];
