@@ -1065,14 +1065,26 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json = (await res.json()) as { error?: string; ok?: boolean };
+      const json = (await res.json()) as {
+        error?: string;
+        ok?: boolean;
+        alreadyCompleted?: boolean;
+        warning?: string;
+        message?: string;
+      };
       if (!res.ok || !json.ok) {
         const msg = json.error || "Could not save call outcome.";
         setError(msg);
         return { ok: false, error: msg };
       }
       setCallOutcomeSession(null);
-      setSuccess("Call outcome saved.");
+      setSuccess(
+        json.warning
+          ? json.warning
+          : json.alreadyCompleted
+            ? json.message || "This call outcome was already saved."
+            : "Call outcome saved.",
+      );
       await Promise.all([silentRefreshCrm(), refreshCallWorkflow()]);
       return { ok: true };
     } catch (e) {
@@ -2645,6 +2657,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       />
 
       <CallOutcomeModal
+        key={callOutcomeSession?.id || "call-outcome"}
         open={Boolean(callOutcomeSession)}
         session={callOutcomeSession}
         leadName={

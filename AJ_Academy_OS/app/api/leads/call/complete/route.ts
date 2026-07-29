@@ -130,8 +130,37 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "You can only complete your own call sessions." }, { status: 403 });
   }
 
+  // Idempotent: if outcome was already saved (e.g. first save worked but follow-up/activity
+  // failed, or double-tap Save), treat as success so the employee is not stuck.
+  if (String(session.session_status) === "completed") {
+    return NextResponse.json({
+      ok: true,
+      alreadyCompleted: true,
+      sessionId,
+      leadId: session.lead_id,
+      callOutcome: session.call_outcome,
+      message: "This call outcome was already saved. You can close this screen.",
+    });
+  }
+
+  if (String(session.session_status) === "cancelled") {
+    return NextResponse.json(
+      {
+        error:
+          "This call session was cancelled. Close this screen, tap Call again to start a new session, then save the outcome.",
+      },
+      { status: 400 },
+    );
+  }
+
   if (!["initiated", "outcome_pending", "stale"].includes(String(session.session_status))) {
-    return NextResponse.json({ error: "This call session is already closed." }, { status: 400 });
+    return NextResponse.json(
+      {
+        error:
+          "This call session is already closed. Close this screen, tap Call again for a new attempt, then save.",
+      },
+      { status: 400 },
+    );
   }
 
   const { data: lead, error: leadError } = await supabase
@@ -164,27 +193,84 @@ export async function POST(request: Request) {
   const priority =
     (typeof body.priority === "string" && body.priority.trim()) || rules.suggestedPriority || lead.priority;
 
-  const { error: sessionUpdateError } = await supabase
-    .from("lead_call_sessions")
-    .update({
-      session_status: "completed",
-      call_outcome: outcome,
-      notes: notes || null,
-      next_action: nextAction || null,
-      ended_at: endedAt,
-      approximate_duration_seconds: duration,
-      lead_stage_after: leadStage || null,
-    })
-    .eq("id", sessionId);
-
-  if (sessionUpdateError) {
-    return NextResponse.json({ error: sessionUpdateError.message }, { status: 400 });
-  }
-
   const followUpAssigned =
     typeof body.followUpAssignedEmployeeId === "string" && isValidUuid(body.followUpAssignedEmployeeId)
       ? body.followUpAssignedEmployeeId
       : lead.assigned_to || user.id;
+
+  const primaryObjectionEarly =
+    typeof body.primaryObjection === "string" ? body.primaryObjection.trim() : "";
+
+  const outcomeSnapshot = {
+    callOutcome: outcome,
+    notes: notes || null,
+    nextAction: nextAction || null,
+    lostReason: lostReason || null,
+    leadStatus: leadStatus || null,
+    leadStage: leadStage || null,
+    priority: priority || null,
+    primaryObjection: primaryObjectionEarly || null,
+    scheduleFollowUp,
+    followUpDate: scheduleFollowUp ? followUpDate || null : null,
+    followUpTime: scheduleFollowUp ? followUpTime : null,
+    followUpType:
+      scheduleFollowUp
+        ? (typeof body.followUpType === "string" && body.followUpType.trim()) || "Phone Call"
+        : null,
+    followUpReason:
+      scheduleFollowUp && typeof body.followUpReason === "string"
+        ? body.followUpReason.trim() || null
+        : null,
+    followUpPriority:
+      scheduleFollowUp && typeof body.followUpPriority === "string"
+        ? body.followUpPriority.trim() || null
+        : null,
+    followUpAssignedEmployeeId: scheduleFollowUp ? followUpAssigned : null,
+    followUpNotes:
+      scheduleFollowUp && typeof body.followUpNotes === "string"
+        ? body.followUpNotes.trim() || null
+        : null,
+    brochureShared: Boolean(body.brochureShared) || Boolean(rules.markBrochureAction),
+    paymentDetailsShared: Boolean(body.paymentDetailsShared) || Boolean(rules.markPaymentAction),
+    duplicateOfLeadId:
+      outcome === "Duplicate Lead" &&
+      typeof body.duplicateOfLeadId === "string" &&
+      isValidUuid(body.duplicateOfLeadId)
+        ? body.duplicateOfLeadId
+        : null,
+    approximateDurationSeconds: duration,
+    endedAt,
+  };
+
+  const sessionPatch: Record<string, unknown> = {
+    session_status: "completed",
+    call_outcome: outcome,
+    notes: notes || null,
+    next_action: nextAction || null,
+    ended_at: endedAt,
+    approximate_duration_seconds: duration,
+    lead_stage_after: leadStage || null,
+    outcome_snapshot: outcomeSnapshot,
+  };
+
+  let { error: sessionUpdateError } = await supabase
+    .from("lead_call_sessions")
+    .update(sessionPatch)
+    .eq("id", sessionId);
+
+  // Older DBs may not have outcome_snapshot yet — save core fields anyway.
+  if (sessionUpdateError && /outcome_snapshot/i.test(sessionUpdateError.message)) {
+    const { outcome_snapshot: _, ...withoutSnapshot } = sessionPatch;
+    void _;
+    ({ error: sessionUpdateError } = await supabase
+      .from("lead_call_sessions")
+      .update(withoutSnapshot)
+      .eq("id", sessionId));
+  }
+
+  if (sessionUpdateError) {
+    return NextResponse.json({ error: sessionUpdateError.message }, { status: 400 });
+  }
 
   const clientPatch: Record<string, unknown> = {
     current_call_employee_id: null,
@@ -199,8 +285,7 @@ export async function POST(request: Request) {
   };
   if (priority) clientPatch.priority = priority;
   if (lostReason) clientPatch.lost_reason = lostReason;
-  const primaryObjection =
-    typeof body.primaryObjection === "string" ? body.primaryObjection.trim() : "";
+  const primaryObjection = primaryObjectionEarly;
   if (primaryObjection) clientPatch.primary_objection = primaryObjection;
   if (outcome === "Connected – Admission Confirmed") {
     clientPatch.admission_status = "Admitted";
@@ -217,6 +302,16 @@ export async function POST(request: Request) {
 
   const { error: clientUpdateError } = await supabase.from("clients").update(clientPatch).eq("id", lead.id);
   if (clientUpdateError) {
+    // Roll session back so the employee can retry instead of hitting "already closed".
+    await supabase
+      .from("lead_call_sessions")
+      .update({
+        session_status: "outcome_pending",
+        call_outcome: null,
+        ended_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", sessionId);
     return NextResponse.json({ error: clientUpdateError.message }, { status: 400 });
   }
 
@@ -269,10 +364,17 @@ export async function POST(request: Request) {
         .select("id")
         .maybeSingle();
       if (fu2Error) {
-        return NextResponse.json(
-          { error: `Call saved, but follow-up failed: ${fu2Error.message}` },
-          { status: 400 },
-        );
+        // Call outcome is already persisted — do not fail the whole save (retry would say "already closed").
+        return NextResponse.json({
+          ok: true,
+          sessionId,
+          followUpId: null,
+          leadId: lead.id,
+          callOutcome: outcome,
+          status: leadStatus,
+          leadStage,
+          warning: `Call outcome saved, but follow-up failed: ${fu2Error.message}. Add the follow-up manually if needed.`,
+        });
       }
       followUpId = fu2?.id ?? null;
     } else {
@@ -413,10 +515,16 @@ export async function POST(request: Request) {
     }));
     const { error: act2 } = await supabase.from("lead_activities").insert(minimal);
     if (act2) {
-      return NextResponse.json(
-        { error: `Call saved, but activity log failed: ${act2.message}` },
-        { status: 400 },
-      );
+      return NextResponse.json({
+        ok: true,
+        sessionId,
+        followUpId,
+        leadId: lead.id,
+        callOutcome: outcome,
+        status: leadStatus,
+        leadStage,
+        warning: `Call outcome saved, but activity log failed: ${act2.message}.`,
+      });
     }
   }
 

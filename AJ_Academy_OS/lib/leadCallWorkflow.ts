@@ -260,10 +260,48 @@ export type LeadCallSessionRow = {
   lead_stage_at_start: string | null;
   lead_stage_after: string | null;
   source_page: string | null;
+  outcome_snapshot?: CallOutcomeSnapshot | null;
   created_at?: string;
   updated_at?: string;
   /** Joined for UI */
   lead_name?: string | null;
+};
+
+export type CallOutcomeSnapshot = {
+  callOutcome?: string | null;
+  notes?: string | null;
+  nextAction?: string | null;
+  lostReason?: string | null;
+  leadStatus?: string | null;
+  leadStage?: string | null;
+  priority?: string | null;
+  primaryObjection?: string | null;
+  scheduleFollowUp?: boolean;
+  followUpDate?: string | null;
+  followUpTime?: string | null;
+  followUpType?: string | null;
+  followUpReason?: string | null;
+  followUpPriority?: string | null;
+  followUpAssignedEmployeeId?: string | null;
+  followUpNotes?: string | null;
+  brochureShared?: boolean;
+  paymentDetailsShared?: boolean;
+  duplicateOfLeadId?: string | null;
+  approximateDurationSeconds?: number | null;
+  endedAt?: string | null;
+};
+
+export type LeadCallHistoryItem = LeadCallSessionRow & {
+  follow_up?: {
+    follow_up_date: string | null;
+    follow_up_time: string | null;
+    follow_up_type: string | null;
+    status: string | null;
+    notes: string | null;
+    reason: string | null;
+    priority: string | null;
+    assigned_employee_id: string | null;
+  } | null;
 };
 
 export function isCallOutcome(value: string): value is CallOutcome {

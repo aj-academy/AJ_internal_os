@@ -7,6 +7,7 @@ import {
   CALL_OUTCOME_RULES,
   CALL_OUTCOMES,
   type CallOutcome,
+  type LeadCallHistoryItem,
   type LeadCallSessionRow,
 } from "@/lib/leadCallWorkflow";
 import { CRM_LEAD_STATUSES, CRM_PRIORITIES, LEAD_STAGES, PRIMARY_OBJECTIONS } from "@/components/student-lead-master/studentMasterConfig";
@@ -31,6 +32,134 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function formatIstDateTime(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function HistoryField({ label, value }: { label: string; value: unknown }) {
+  const text =
+    value == null || value === ""
+      ? "—"
+      : typeof value === "boolean"
+        ? value
+          ? "Yes"
+          : "No"
+        : String(value);
+  return (
+    <div className="grid grid-cols-[7.5rem_1fr] gap-2 text-xs">
+      <span className="font-semibold text-[#8a7a65]">{label}</span>
+      <span className="whitespace-pre-wrap text-[#3d3428]">{text}</span>
+    </div>
+  );
+}
+
+function CallOutcomeHistoryPanel({
+  history,
+  loading,
+  employeeNameMap,
+}: {
+  history: LeadCallHistoryItem[];
+  loading: boolean;
+  employeeNameMap: Record<string, string>;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  if (loading) {
+    return <p className="text-xs text-[#8a7a65]">Loading previous call outcomes…</p>;
+  }
+  if (!history.length) {
+    return <p className="text-xs text-[#8a7a65]">No previous call outcomes for this lead yet.</p>;
+  }
+
+  return (
+    <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+      {history.map((item) => {
+        const snap = item.outcome_snapshot || {};
+        const openItem = expandedId === item.id;
+        const when = formatIstDateTime(item.ended_at || item.started_at);
+        const title = item.call_outcome || snap.callOutcome || "Call logged";
+        return (
+          <div key={item.id} className="rounded-xl border border-[#e8dcc8] bg-white">
+            <button
+              type="button"
+              className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left"
+              onClick={() => setExpandedId(openItem ? null : item.id)}
+            >
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a68b2e]">{when} IST</p>
+                <p className="text-sm font-semibold text-[#3d3428]">{title}</p>
+                <p className="text-[11px] text-[#8a7a65]">
+                  {item.employee_name || "Staff"}
+                  {item.session_status !== "completed" ? ` · ${item.session_status}` : ""}
+                </p>
+              </div>
+              <span className="text-[11px] font-semibold text-[#c9a227]">{openItem ? "Hide" : "View"}</span>
+            </button>
+            {openItem ? (
+              <div className="space-y-1.5 border-t border-[#e8dcc8] px-3 py-2.5">
+                <HistoryField label="Outcome" value={snap.callOutcome || item.call_outcome} />
+                <HistoryField label="Notes" value={snap.notes || item.notes} />
+                <HistoryField label="Next action" value={snap.nextAction || item.next_action} />
+                <HistoryField label="Lost reason" value={snap.lostReason} />
+                <HistoryField label="Lead status" value={snap.leadStatus} />
+                <HistoryField
+                  label="Lead stage"
+                  value={snap.leadStage || item.lead_stage_after || item.lead_stage_at_start}
+                />
+                <HistoryField label="Priority" value={snap.priority} />
+                <HistoryField label="Primary objection" value={snap.primaryObjection} />
+                <HistoryField
+                  label="Duration"
+                  value={
+                    snap.approximateDurationSeconds != null || item.approximate_duration_seconds != null
+                      ? `${Math.round(
+                          Number(snap.approximateDurationSeconds ?? item.approximate_duration_seconds) / 60,
+                        )} min`
+                      : null
+                  }
+                />
+                <HistoryField label="Brochure shared" value={snap.brochureShared} />
+                <HistoryField label="Payment details" value={snap.paymentDetailsShared} />
+                <HistoryField label="Duplicate of" value={snap.duplicateOfLeadId} />
+                <HistoryField label="Follow-up?" value={snap.scheduleFollowUp} />
+                <HistoryField label="Follow-up date" value={snap.followUpDate || item.follow_up?.follow_up_date} />
+                <HistoryField label="Follow-up time" value={snap.followUpTime || item.follow_up?.follow_up_time} />
+                <HistoryField label="Follow-up type" value={snap.followUpType || item.follow_up?.follow_up_type} />
+                <HistoryField label="Follow-up reason" value={snap.followUpReason || item.follow_up?.reason} />
+                <HistoryField label="Follow-up priority" value={snap.followUpPriority || item.follow_up?.priority} />
+                <HistoryField label="Follow-up notes" value={snap.followUpNotes || item.follow_up?.notes} />
+                <HistoryField
+                  label="Follow-up assignee"
+                  value={
+                    snap.followUpAssignedEmployeeId
+                      ? employeeNameMap[snap.followUpAssignedEmployeeId] || snap.followUpAssignedEmployeeId
+                      : item.follow_up?.assigned_employee_id
+                        ? employeeNameMap[item.follow_up.assigned_employee_id] || item.follow_up.assigned_employee_id
+                        : null
+                  }
+                />
+                <HistoryField label="Started" value={formatIstDateTime(item.started_at)} />
+                <HistoryField label="Ended" value={formatIstDateTime(item.ended_at || snap.endedAt)} />
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CallOutcomeModal({
   open,
   session,
@@ -48,64 +177,68 @@ export function CallOutcomeModal({
   const [notes, setNotes] = useState("");
   const [nextAction, setNextAction] = useState("");
   const [lostReason, setLostReason] = useState("");
-  const [leadStatus, setLeadStatus] = useState("");
-  const [leadStage, setLeadStage] = useState("");
-  const [priority, setPriority] = useState("");
+  const [leadStatus, setLeadStatus] = useState(currentStatus || "");
+  const [leadStage, setLeadStage] = useState(currentStage || "");
+  const [priority, setPriority] = useState(currentPriority || "");
   const [primaryObjection, setPrimaryObjection] = useState("");
   const [scheduleFollowUp, setScheduleFollowUp] = useState(false);
   const [followUpDate, setFollowUpDate] = useState(todayISO());
   const [followUpTime, setFollowUpTime] = useState("10:00");
   const [followUpType, setFollowUpType] = useState("Phone Call");
   const [followUpReason, setFollowUpReason] = useState("");
-  const [followUpPriority, setFollowUpPriority] = useState("Warm");
-  const [followUpAssigned, setFollowUpAssigned] = useState("");
+  const [followUpPriority, setFollowUpPriority] = useState(currentPriority || "Warm");
+  const [followUpAssigned, setFollowUpAssigned] = useState(assignedEmployeeId || "");
   const [followUpNotes, setFollowUpNotes] = useState("");
   const [brochureShared, setBrochureShared] = useState(false);
   const [paymentDetailsShared, setPaymentDetailsShared] = useState(false);
   const [duplicateOfLeadId, setDuplicateOfLeadId] = useState("");
   const [durationMinutes, setDurationMinutes] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
+  const [history, setHistory] = useState<LeadCallHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const rules = outcome ? CALL_OUTCOME_RULES[outcome] : null;
+  const employeeNameMap = useMemo(
+    () => Object.fromEntries(employeeOptions.map((e) => [e.id, e.label])),
+    [employeeOptions],
+  );
 
   useEffect(() => {
-    if (!open || !session) return;
-    setOutcome("");
-    setNotes("");
-    setNextAction("");
-    setLostReason("");
-    setLeadStatus(currentStatus || "");
-    setLeadStage(currentStage || "");
-    setPriority(currentPriority || "");
-    setPrimaryObjection("");
-    setScheduleFollowUp(false);
-    setFollowUpDate(todayISO());
-    setFollowUpTime("10:00");
-    setFollowUpType("Phone Call");
-    setFollowUpReason("");
-    setFollowUpPriority(currentPriority || "Warm");
-    setFollowUpAssigned(assignedEmployeeId || "");
-    setFollowUpNotes("");
-    setBrochureShared(false);
-    setPaymentDetailsShared(false);
-    setDuplicateOfLeadId("");
-    setDurationMinutes("");
-    setLocalError(null);
-  }, [open, session?.id, currentStatus, currentStage, currentPriority, assignedEmployeeId]);
+    if (!open || !session?.lead_id) return;
+    let cancelled = false;
+    void (async () => {
+      setHistoryLoading(true);
+      try {
+        const res = await fetch(`/api/leads/call/history?leadId=${encodeURIComponent(session.lead_id)}`);
+        const json = (await res.json()) as { history?: LeadCallHistoryItem[] };
+        if (cancelled) return;
+        setHistory((json.history || []).filter((h) => h.id !== session.id));
+      } catch {
+        if (!cancelled) setHistory([]);
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, session?.id, session?.lead_id]);
 
-  useEffect(() => {
-    if (!outcome || !rules) return;
-    if (rules.suggestedStatus) setLeadStatus(rules.suggestedStatus);
-    if (rules.suggestedStage) setLeadStage(rules.suggestedStage);
-    if (rules.suggestedPriority) setPriority(rules.suggestedPriority);
-    if (rules.requireFollowUp) setScheduleFollowUp(true);
-    else if (!rules.askFollowUp) setScheduleFollowUp(false);
-    if (rules.markBrochureAction) setBrochureShared(true);
-    if (rules.markPaymentAction) {
+  const applyOutcomeDefaults = (next: CallOutcome | "") => {
+    setOutcome(next);
+    if (!next) return;
+    const nextRules = CALL_OUTCOME_RULES[next];
+    if (nextRules.suggestedStatus) setLeadStatus(nextRules.suggestedStatus);
+    if (nextRules.suggestedStage) setLeadStage(nextRules.suggestedStage);
+    if (nextRules.suggestedPriority) setPriority(nextRules.suggestedPriority);
+    if (nextRules.requireFollowUp) setScheduleFollowUp(true);
+    else if (!nextRules.askFollowUp) setScheduleFollowUp(false);
+    if (nextRules.markBrochureAction) setBrochureShared(true);
+    if (nextRules.markPaymentAction) {
       setPaymentDetailsShared(true);
       setFollowUpType("Payment Follow-up");
     }
-  }, [outcome, rules]);
+  };
 
   const statusOptions = useMemo(() => {
     const set = new Set<string>([...CRM_LEAD_STATUSES, leadStatus].filter(Boolean));
@@ -209,13 +342,24 @@ export function CallOutcomeModal({
           </p>
         </div>
 
+        <div className="mb-4 rounded-2xl border border-[#e8dcc8] bg-[#fffdf8] p-3">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#a68b2e]">
+            Previous call outcomes
+          </p>
+          <CallOutcomeHistoryPanel
+            history={history}
+            loading={historyLoading}
+            employeeNameMap={employeeNameMap}
+          />
+        </div>
+
         <div className="space-y-3">
           <label className="block space-y-1">
             <span className="text-xs font-semibold text-[#334155]">Call outcome *</span>
             <select
               className="w-full rounded-lg border border-[#e2e8f0] px-3 py-2 text-sm"
               value={outcome}
-              onChange={(e) => setOutcome(e.target.value as CallOutcome | "")}
+              onChange={(e) => applyOutcomeDefaults(e.target.value as CallOutcome | "")}
             >
               <option value="">Select outcome...</option>
               {CALL_OUTCOMES.map((o) => (

@@ -177,7 +177,9 @@ Run **`lead_call_workflow_schema.sql`** after `employee_student_master_rls.sql` 
 - Extra columns on **`lead_followups`** / **`lead_activities`** (assigned employee, parent follow-up, call_session_id links)
 - RPC **`start_lead_call_session`** (assignment check, concurrent-call lock, admin override) and **`mark_stale_lead_call_sessions`** (30-minute stale unlock)
 
-App APIs (staff session): `POST /api/leads/call/start`, `POST /api/leads/call/complete`, `GET /api/leads/call/pending`, `GET /api/leads/call/live`. Student Master mobile cards show Call / WhatsApp / Follow-up as primary actions; after dialer return, employees must confirm call outcome (web apps cannot detect whether a normal phone call was answered).
+Then run **`lead_call_outcome_snapshot_patch.sql`** (safe to re-run) so each completed call stores a full form snapshot (`outcome_snapshot` JSON) for previous-call history in the outcome modal.
+
+App APIs (staff session): `POST /api/leads/call/start`, `POST /api/leads/call/complete`, `GET /api/leads/call/pending`, `GET /api/leads/call/live`, `GET /api/leads/call/history?leadId=`. Student Master mobile cards show Call / WhatsApp / Follow-up as primary actions; after dialer return, employees must confirm call outcome (web apps cannot detect whether a normal phone call was answered). Calling again always opens a fresh outcome form and shows previous outcomes with date/time and saved fields.
 
 ### Reports & Analytics
 
