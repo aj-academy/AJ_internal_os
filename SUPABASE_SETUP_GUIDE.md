@@ -170,6 +170,8 @@ If an employee sees **Forbidden** when saving a student, run (in order):
 
 Then hard-refresh the app and try **Add Student** again.
 
+If **Follow-up** save fails with database permissions (common for Admin after only running employee RLS), run **`lead_followups_rls_fix.sql`** (restores admin + employee policies on `lead_followups` / `lead_activities`). Safe to re-run.
+
 ### Student Lead calling & follow-up workflow
 
 Run **`lead_call_workflow_schema.sql`** after `employee_student_master_rls.sql` + `crm_owner_isolation.sql` (safe to re-run). Adds:

@@ -232,7 +232,7 @@ export function friendlyError(raw: unknown) {
     msg.toLowerCase().includes("row-level security") ||
     msg.toLowerCase().includes("permission denied")
   ) {
-    return "Save blocked by database permissions. In Supabase SQL Editor, run `employee_student_master_rls.sql` from AJ_Academy_SB (see DATABASE_SETUP_ORDER.txt step 10j), then refresh and try again.";
+    return "Save blocked by database permissions. In Supabase SQL Editor run (in order): `lead_followups_rls_fix.sql`, then if admin still cannot save also run `security_rls_access_fix.sql` + `crm_owner_isolation.sql`. Employees also need `employee_student_master_rls.sql`. Then refresh and try again.";
   }
   return msg;
 }
