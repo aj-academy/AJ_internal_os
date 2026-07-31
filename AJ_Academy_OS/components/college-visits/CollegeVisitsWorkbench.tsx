@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { useRouter, useSearchParams } from "next/navigation";
 import { Download, FileText, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 import { formatDisplayDate } from "@/lib/datetime";
 import { saveTaskCollegeSelection } from "@/lib/taskLeadPickStorage";
 import { resolveTaskAssignment } from "@/lib/taskAssignmentDedupe";
@@ -152,10 +153,15 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [visits, setVisits] = useState<CollegeVisitRow[]>([]);
   const [activities, setActivities] = useState<CollegeVisitActivityRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cvRefreshing, setCvRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [schemaMissing, setSchemaMissing] = useState(false);
+  const cvRefreshSeqRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
 
   const [searchText, setSearchText] = useState("");
   const [fltVisitStatus, setFltVisitStatus] = useState("");
@@ -274,7 +280,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       const msg = json.error ?? "Could not load college visits.";
       if (isMissingCollegeVisitsTable(msg)) {
         setSchemaMissing(true);
-        setVisits([]);
+        // Do not clear existing visits on schema/transient errors during refresh.
+        if (!hasLoadedOnceRef.current) setVisits([]);
         return;
       }
       throw new Error(msg);
@@ -309,18 +316,60 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const reload = useCallback(async () => {
     if (!currentUserId) return;
-    setLoading(true);
+    const isInitial = !hasLoadedOnceRef.current;
     setError(null);
+    setRefreshError(null);
+    if (isInitial) setLoading(true);
+    else setCvRefreshing(true);
     try {
       const lists = await fetchCollegeVisitSettingsLists(supabase);
       setCvLists(lists);
       await loadVisits();
+      hasLoadedOnceRef.current = true;
+      setHasLoadedOnce(true);
     } catch (e) {
-      setError(friendlyCollegeVisitError(e));
+      if (isInitial) setError(friendlyCollegeVisitError(e));
+      else setRefreshError("Unable to refresh. Showing the latest available data.");
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
+      else setCvRefreshing(false);
     }
   }, [currentUserId, loadVisits, supabase]);
+
+  /** Background refetch — keep current visits visible until a valid response arrives. */
+  const silentRefreshVisits = useCallback(async () => {
+    if (!currentUserId) return;
+    const seq = ++cvRefreshSeqRef.current;
+    setCvRefreshing(true);
+    setRefreshError(null);
+    try {
+      const res = await fetch("/api/college-visits");
+      const json = (await res.json()) as { visits?: CollegeVisitRow[]; error?: string };
+      if (seq !== cvRefreshSeqRef.current) return;
+      if (!res.ok) {
+        const msg = json.error ?? "Could not load college visits.";
+        if (isMissingCollegeVisitsTable(msg)) {
+          setSchemaMissing(true);
+          return;
+        }
+        throw new Error(msg);
+      }
+      setSchemaMissing(false);
+      setVisits(json.visits ?? []);
+      hasLoadedOnceRef.current = true;
+      setHasLoadedOnce(true);
+    } catch (e) {
+      if (seq !== cvRefreshSeqRef.current) return;
+      setRefreshError("Unable to refresh. Showing the latest available data.");
+      console.error("[CollegeVisits] silentRefreshVisits", e);
+    } finally {
+      if (seq === cvRefreshSeqRef.current) setCvRefreshing(false);
+    }
+  }, [currentUserId]);
+
+  const scheduleSilentRefreshVisits = useDebouncedCallback(() => {
+    void silentRefreshVisits();
+  }, 400);
 
   useEffect(() => {
     async function bootstrap() {
@@ -458,7 +507,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         setPendingCollegeCall(null);
         setCollegeCallOutcomeOpen(false);
         setSuccess(`Call outcome saved — ${payload.callOutcome}`);
-        await reload();
+        await silentRefreshVisits();
         return { ok: true };
       } catch (e) {
         const msg = friendlyCollegeVisitError(e);
@@ -468,7 +517,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         setCollegeCallOutcomeSubmitting(false);
       }
     },
-    [currentUserId, visits, pendingCollegeCall, isDbAdmin, logCollegeActivity, reload],
+    [currentUserId, visits, pendingCollegeCall, isDbAdmin, logCollegeActivity, silentRefreshVisits],
   );
 
   const requestCollegePhone = useCallback(
@@ -692,6 +741,20 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   }, [currentUserId, reload]);
 
   useEffect(() => {
+    if (!currentUserId) return;
+    const ch = supabase
+      .channel("college-visits-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "college_visits" }, () => scheduleSilentRefreshVisits())
+      .on("postgres_changes", { event: "*", schema: "public", table: "college_visit_activities" }, () =>
+        scheduleSilentRefreshVisits(),
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(ch);
+    };
+  }, [currentUserId, scheduleSilentRefreshVisits, supabase]);
+
+  useEffect(() => {
     if (pickForTask) setActiveTab("all-colleges");
   }, [pickForTask]);
 
@@ -861,7 +924,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? "Could not update visit status.");
       setSuccess(`Visit status -> ${visit_status}`);
-      await reload();
+      await silentRefreshVisits();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
     } finally {
@@ -995,7 +1058,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       }
       setSuccess(filesToUpload.length ? `Proposal updated and ${filesToUpload.length} file(s) uploaded.` : "Proposal updated.");
       setProposalRow(null);
-      await reload();
+      await silentRefreshVisits();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
     } finally {
@@ -1062,7 +1125,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       setPanelOpen(false);
       setEditId(null);
       setPendingProposalFiles([]);
-      await reload();
+      await silentRefreshVisits();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
     } finally {
@@ -1080,7 +1143,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     }
     setSuccess("Deleted.");
     setViewVisit(null);
-    await reload();
+    await silentRefreshVisits();
   };
 
   const handleBulkAssign = async () => {
@@ -1109,7 +1172,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         visitBulk.clearSelection();
         setBulkAssignTo("");
         setSuccess(`${label} already has these college(s) on an active task.`);
-        await reload();
+        await silentRefreshVisits();
         return;
       }
 
@@ -1173,7 +1236,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
             }`
           : `${resolved.collegeVisitIds.length} college(s) sent to ${label} as My Tasks -> College Visit.`,
       );
-      await reload();
+      await silentRefreshVisits();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
     } finally {
@@ -1204,7 +1267,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
           ? `${deleted} college visit(s) deleted.`
           : `${deleted} of ${ids.length} deleted (others were not yours).`,
       );
-      await reload();
+      await silentRefreshVisits();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
     } finally {
@@ -1277,7 +1340,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         }
       }
 
-      await reload();
+      await silentRefreshVisits();
       setSuccess(
         `Import complete: ${ok} added, ${fail} failed.${rowErrors.length ? ` ${rowErrors.slice(0, 3).join(" ")}` : ""}`,
       );
@@ -1302,9 +1365,19 @@ return (
               ? "Track every employee's college outreach. Filter by Owner to review one person. Employees only see their own rows."
               : "Your college outreach only - Overview, All Colleges, Follow-ups, Pipeline, Proposal Tracker, and more."}
           </p>
+          {cvRefreshing ? (
+            <p className="mt-1 text-xs font-medium text-[#64748b]" aria-live="polite">
+              Updating…
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" className="h-9 rounded-full border-[#e8dcc8]" disabled={loading} onClick={() => void reload()}>
+          <Button
+            variant="outline"
+            className="h-9 rounded-full border-[#e8dcc8]"
+            disabled={loading || cvRefreshing}
+            onClick={() => void (hasLoadedOnce ? silentRefreshVisits() : reload())}
+          >
             Refresh
           </Button>
           {isAdmin && !pickForTask ? (
@@ -1322,6 +1395,27 @@ return (
       ) : null}
 
       {error ? <CrmFlash tone="error" message={error} onDismiss={() => setError(null)} /> : null}
+      {refreshError ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <span>{refreshError}</span>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-full border-amber-300 px-3 text-xs"
+              onClick={() => {
+                setRefreshError(null);
+                void silentRefreshVisits();
+              }}
+            >
+              Retry
+            </Button>
+            <Button type="button" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setRefreshError(null)}>
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {success ? <CrmFlash tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
 
       {!collegeCallOutcomeOpen ? (

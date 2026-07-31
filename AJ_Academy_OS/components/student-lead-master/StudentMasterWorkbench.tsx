@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Download, FileText, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 import { Button } from "@/components/ui/button";
 import { CrmFlash } from "@/components/ui/CrmFlash";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
@@ -383,9 +384,16 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([]);
 
   const [loading, setLoading] = useState(true);
+  const [crmRefreshing, setCrmRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const crmRefreshSeqRef = useRef(0);
+  const followFetchSeqRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
+  const crmRefreshingRef = useRef(false);
 
   const [searchText, setSearchText] = useState("");
   const [fltStatus, setFltStatus] = useState("");
@@ -554,8 +562,14 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
 
   const reload = useCallback(async () => {
     if (!currentUserId) return;
+    const isInitial = !hasLoadedOnceRef.current;
     setError(null);
-    setLoading(true);
+    setRefreshError(null);
+    if (isInitial) setLoading(true);
+    else {
+      crmRefreshingRef.current = true;
+      setCrmRefreshing(true);
+    }
     try {
       const lists = await fetchCrmSettingsLists(supabase);
       setCrmLists(lists);
@@ -565,39 +579,54 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       const emailTpls = await fetchEmailTemplates(supabase);
       setEmailTemplates(emailTpls);
       await Promise.all([loadClientsDataset()]);
+      hasLoadedOnceRef.current = true;
+      setHasLoadedOnce(true);
     } catch (e) {
       setError(friendlyError(e));
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
+      else {
+        crmRefreshingRef.current = false;
+        setCrmRefreshing(false);
+      }
     }
   }, [currentUserId, loadClientsDataset, supabase]);
 
-  /** Refresh clients + follow-ups + activities + overview without full-page loading spinner. */
+  /** Refresh clients without clearing UI; follow-ups/activities refetch via the clients effect. */
   const silentRefreshCrm = useCallback(async () => {
     if (!currentUserId) return;
+    const seq = ++crmRefreshSeqRef.current;
+    crmRefreshingRef.current = true;
+    setCrmRefreshing(true);
+    setRefreshError(null);
     try {
       let { data, error: loadError } = await buildClientsBaseQuery();
       if (loadError && isMissingStudentProposalFileColumn(loadError.message)) {
         ({ data, error: loadError } = await buildClientsBaseQuery(STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES));
       }
       if (loadError) throw new Error(loadError.message);
+      if (seq !== crmRefreshSeqRef.current) return;
       const { merged: next, pinIds } = await mergePinnedLeads(data ?? []);
+      if (seq !== crmRefreshSeqRef.current) return;
       setCrmPinIds(pinIds);
       setClients(next);
-      const ids = next.map((c) => c.id);
-      if (!ids.length) {
-        setFollowRows([]);
-        setActivityRows([]);
-      } else {
-        const { follows, activities } = await fetchFollowupsAndActivitiesForIds(supabase, ids);
-        setFollowRows(follows);
-        setActivityRows(activities);
-      }
+      hasLoadedOnceRef.current = true;
+      setHasLoadedOnce(true);
     } catch (e) {
-      setError(friendlyError(e));
+      if (seq !== crmRefreshSeqRef.current) return;
+      setRefreshError("Unable to refresh. Showing the latest available data.");
       logDevSupabase("silentRefreshCrm", e);
+    } finally {
+      if (seq === crmRefreshSeqRef.current) {
+        crmRefreshingRef.current = false;
+        setCrmRefreshing(false);
+      }
     }
   }, [buildClientsBaseQuery, currentUserId, mergePinnedLeads, supabase]);
+
+  const scheduleSilentRefreshCrm = useDebouncedCallback(() => {
+    void silentRefreshCrm();
+  }, 400);
 
   useEffect(() => {
     void loadEmployees();
@@ -632,18 +661,25 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
 
   useEffect(() => {
     const ids = clients.map((clientRow) => clientRow.id);
+    const seq = ++followFetchSeqRef.current;
     if (!ids.length) {
-      setFollowRows([]);
-      setActivityRows([]);
+      // Only clear when the loaded dataset is confirmed empty — never wipe during a background refresh race.
+      if (!crmRefreshingRef.current) {
+        setFollowRows([]);
+        setActivityRows([]);
+      }
       return;
     }
     void (async () => {
       try {
         const { follows, activities } = await fetchFollowupsAndActivitiesForIds(supabase, ids);
+        if (seq !== followFetchSeqRef.current) return;
         setFollowRows(follows);
         setActivityRows(activities);
       } catch (e) {
-        setError(friendlyError(e));
+        if (seq !== followFetchSeqRef.current) return;
+        if (!hasLoadedOnceRef.current) setError(friendlyError(e));
+        else setRefreshError("Unable to refresh. Showing the latest available data.");
         logDevSupabase("fetchFollowupsAndActivitiesForIds", e);
       }
     })();
@@ -653,14 +689,14 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     if (!currentUserId) return;
     const ch = supabase
       .channel("crm-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "clients" }, () => void reload())
-      .on("postgres_changes", { event: "*", schema: "public", table: "lead_followups" }, () => void reload())
-      .on("postgres_changes", { event: "*", schema: "public", table: "lead_activities" }, () => void reload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "clients" }, () => scheduleSilentRefreshCrm())
+      .on("postgres_changes", { event: "*", schema: "public", table: "lead_followups" }, () => scheduleSilentRefreshCrm())
+      .on("postgres_changes", { event: "*", schema: "public", table: "lead_activities" }, () => scheduleSilentRefreshCrm())
       .subscribe();
     return () => {
       void supabase.removeChannel(ch);
     };
-  }, [currentUserId, reload, supabase]);
+  }, [currentUserId, scheduleSilentRefreshCrm, supabase]);
 
   const filteredClients = useMemo(() => {
     let list = [...clients];
@@ -2204,12 +2240,17 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
               ? "Track every employee's student leads. Use the Owner / Assignee filter to review one person. Employees only see their own leads."
               : "Your assigned student leads only - counselling follow-ups, fees and admissions."}
           </p>
+          {crmRefreshing ? (
+            <p className="mt-1 text-xs font-medium text-[#64748b]" aria-live="polite">
+              Updating…
+            </p>
+          ) : null}
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
           <Button
             variant="outline"
-            disabled={loading}
-            onClick={() => void reload()}
+            disabled={loading || crmRefreshing}
+            onClick={() => void (hasLoadedOnce ? silentRefreshCrm() : reload())}
             className="h-10 rounded-full border-[#e8dcc8] bg-[#f8fbff] sm:h-9"
           >
             Refresh
@@ -2223,6 +2264,27 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       </header>
 
       {error ? <Banner tone="error" message={error} onDismiss={() => setError(null)} /> : null}
+      {refreshError ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <span>{refreshError}</span>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-full border-amber-300 px-3 text-xs"
+              onClick={() => {
+                setRefreshError(null);
+                void silentRefreshCrm();
+              }}
+            >
+              Retry
+            </Button>
+            <Button type="button" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setRefreshError(null)}>
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {success ? <Banner tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
 
       <LeadCallLiveDashboard stats={callLiveStats} live={callLiveRows} isAdmin={isAdmin} />

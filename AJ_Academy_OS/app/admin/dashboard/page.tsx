@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -132,9 +132,15 @@ export default function AdminDashboardPage() {
   const [search, setSearch] = useState("");
   const [attWindow, setAttWindow] = useState<"week" | "month">("week");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshWarning, setRefreshWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attendanceSchemaWarning, setAttendanceSchemaWarning] = useState<string | null>(null);
   const [skipAttendanceOpsFetch, setSkipAttendanceOpsFetch] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
+  const loadSeqRef = useRef(0);
+  const clientsSeqRef = useRef(0);
 
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
@@ -148,8 +154,12 @@ export default function AdminDashboardPage() {
   const [wfh, setWfh] = useState<Wfh[]>([]);
 
   const load = useCallback(async (options?: { silent?: boolean }) => {
-    if (!options?.silent) setLoading(true);
-    setError(null);
+    const silent = Boolean(options?.silent);
+    const seq = ++loadSeqRef.current;
+    if (!silent) setLoading(true);
+    else setRefreshing(true);
+    if (!silent) setError(null);
+    setRefreshWarning(null);
     try {
       const queryErrors: SupabaseQueryError[] = [];
 
@@ -209,6 +219,14 @@ export default function AdminDashboardPage() {
         ),
       ]);
 
+      if (seq !== loadSeqRef.current) return;
+
+      const failed = new Set(queryErrors.map((e) => e.table));
+      const apply = <T,>(table: string, next: T, setter: (v: T) => void) => {
+        if (silent && failed.has(table)) return;
+        setter(next);
+      };
+
       const w = typeof window !== "undefined";
       const skipP = w && sessionStorage.getItem(SKIP_PERM_SESSION_KEY) === "1";
       const skipW = w && sessionStorage.getItem(SKIP_WFH_SESSION_KEY) === "1";
@@ -221,6 +239,8 @@ export default function AdminDashboardPage() {
           ? Promise.resolve({ data: [] as Wfh[] | null, error: null })
           : supabase.from("work_from_home_requests").select("status").limit(5000).returns<Wfh[]>(),
       ]);
+
+      if (seq !== loadSeqRef.current) return;
 
       if (w) {
         if (!pmR.error) sessionStorage.removeItem(SKIP_PERM_SESSION_KEY);
@@ -243,29 +263,71 @@ export default function AdminDashboardPage() {
           : null,
       );
 
-      setProfiles(pr);
-      setAttendance(at);
-      setClients(cl);
-      setProjects(pj);
-      setTasks(tk);
-      setTransactions(tx);
-      setTeamMembers(tm);
-      setClaims(ec);
-      setPermissions(pm);
-      setWfh(wf);
+      apply("profiles", pr, setProfiles);
+      apply("attendance_records", at, setAttendance);
+      apply("clients", cl, setClients);
+      apply("projects", pj, setProjects);
+      apply("tasks", tk, setTasks);
+      apply("finance_transactions", tx, setTransactions);
+      apply("project_team_members", tm, setTeamMembers);
+      apply("expense_claims", ec, setClaims);
+      if (!silent || !pmR.error) setPermissions(pm);
+      if (!silent || !wfR.error) setWfh(wf);
 
       const accessWarning = formatBatchAccessWarning(queryErrors);
-      if (accessWarning) setError(accessWarning);
+      if (accessWarning) {
+        if (silent && hasLoadedOnceRef.current) setRefreshWarning("Unable to refresh. Showing the latest available data.");
+        else setError(accessWarning);
+      }
+      hasLoadedOnceRef.current = true;
+      setHasLoadedOnce(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load dashboard data.");
+      if (seq !== loadSeqRef.current) return;
+      if (silent && hasLoadedOnceRef.current) {
+        setRefreshWarning("Unable to refresh. Showing the latest available data.");
+      } else {
+        setError(e instanceof Error ? e.message : "Failed to load dashboard data.");
+      }
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  }, [supabase]);
+
+  /** Student-lead KPI refresh only — avoid refetching attendance/finance/tasks on CRM edits. */
+  const refreshClientsSilent = useCallback(async () => {
+    const seq = ++clientsSeqRef.current;
+    setRefreshing(true);
+    setRefreshWarning(null);
+    try {
+      const { data, error: clientsError } = await supabase
+        .from("clients")
+        .select("id,name,company_name,status,follow_up_date,created_at,updated_at")
+        .limit(10000)
+        .returns<Client[]>();
+      if (seq !== clientsSeqRef.current) return;
+      if (clientsError) {
+        setRefreshWarning("Unable to refresh. Showing the latest available data.");
+        return;
+      }
+      setClients(data ?? []);
+    } catch {
+      if (seq !== clientsSeqRef.current) return;
+      setRefreshWarning("Unable to refresh. Showing the latest available data.");
+    } finally {
+      if (seq === clientsSeqRef.current) setRefreshing(false);
     }
   }, [supabase]);
 
   const scheduleLoad = useDebouncedCallback(() => {
     void load({ silent: true });
   }, 3000);
+
+  const scheduleClientsRefresh = useDebouncedCallback(() => {
+    void refreshClientsSilent();
+  }, 400);
 
   useEffect(() => {
     void load();
@@ -276,7 +338,7 @@ export default function AdminDashboardPage() {
       .channel("admin-dashboard-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleLoad)
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records" }, scheduleLoad)
-      .on("postgres_changes", { event: "*", schema: "public", table: "clients" }, scheduleLoad)
+      .on("postgres_changes", { event: "*", schema: "public", table: "clients" }, scheduleClientsRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, scheduleLoad)
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, scheduleLoad)
       .on("postgres_changes", { event: "*", schema: "public", table: "finance_transactions" }, scheduleLoad)
@@ -290,7 +352,7 @@ export default function AdminDashboardPage() {
     return () => {
       void supabase.removeChannel(ch);
     };
-  }, [scheduleLoad, supabase, skipAttendanceOpsFetch]);
+  }, [scheduleLoad, scheduleClientsRefresh, supabase, skipAttendanceOpsFetch]);
 
   const nameMap = useMemo(() => {
     const m: Record<string, string> = {};
@@ -475,6 +537,11 @@ export default function AdminDashboardPage() {
           <p className="aj-page-subtitle">
             {new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </p>
+          {refreshing ? (
+            <p className="mt-1 text-xs font-medium text-[#64748b]" aria-live="polite">
+              Updating…
+            </p>
+          ) : null}
         </div>
         <div className="aj-page-actions">
           <Link href="/admin/reports" className="w-full sm:w-auto">
@@ -498,6 +565,22 @@ export default function AdminDashboardPage() {
       </header>
 
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</div> : null}
+      {refreshWarning ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <span>{refreshWarning}</span>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 rounded-full border-amber-300 px-3 text-xs"
+            onClick={() => {
+              setRefreshWarning(null);
+              void refreshClientsSilent();
+            }}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
 
       {attendanceSchemaWarning ? (
         <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
@@ -527,7 +610,7 @@ export default function AdminDashboardPage() {
 
       <div className="stat-cards-grid">
         {kpiCards.map((item) => (
-          <StatCard key={item.title} title={item.title} value={loading ? "…" : item.value} trend={item.trendVal} description={item.description} icon={item.icon} />
+          <StatCard key={item.title} title={item.title} value={loading && !hasLoadedOnce ? "…" : item.value} trend={item.trendVal} description={item.description} icon={item.icon} />
         ))}
       </div>
 
