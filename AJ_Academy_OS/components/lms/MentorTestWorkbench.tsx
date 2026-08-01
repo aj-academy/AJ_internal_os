@@ -35,6 +35,7 @@ export function MentorTestWorkbench() {
     batch_id: "",
     duration_minutes: "30",
     tab_switch_policy: "warn",
+    camera_required: false,
     publish: true,
   });
 
@@ -123,6 +124,7 @@ export function MentorTestWorkbench() {
           batch_id: form.batch_id || null,
           duration_minutes: Number(form.duration_minutes) || 30,
           tab_switch_policy: form.tab_switch_policy,
+          camera_required: form.camera_required,
           questions: payloadQuestions,
           student_ids: studentIds,
           publish: form.publish,
@@ -188,6 +190,10 @@ export function MentorTestWorkbench() {
               <option value="auto_submit_after_count">Auto-submit after limit</option>
               <option value="immediate_auto_submit">Immediate auto-submit</option>
             </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm sm:mt-7">
+            <input type="checkbox" checked={form.camera_required} onChange={(e) => setForm((f) => ({ ...f, camera_required: e.target.checked }))} />
+            Require camera
           </label>
           <label className="flex items-center gap-2 text-sm sm:mt-7">
             <input type="checkbox" checked={form.publish} onChange={(e) => setForm((f) => ({ ...f, publish: e.target.checked }))} />

@@ -13,6 +13,7 @@ type ListItem = {
     duration_minutes: number;
     tab_switch_policy: string;
     status: string;
+    camera_required?: boolean;
   } | null;
 };
 
@@ -38,6 +39,32 @@ export default function StudentTestsPage() {
   const [remainingSec, setRemainingSec] = useState<number | null>(null);
   const [tabPolicy, setTabPolicy] = useState("warn");
   const [violations, setViolations] = useState(0);
+  const [policy, setPolicy] = useState<{ version: string; title: string; body: string } | null>(null);
+  const [consentPending, setConsentPending] = useState<{ testId: string; policy: string; camera?: boolean } | null>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+
+  const logEvent = async (attempt: string, event_type: string, severity = "warn") => {
+    try {
+      await fetch("/api/lms/proctoring", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "event",
+          attempt_id: attempt,
+          event_type,
+          severity,
+          browser_state: {
+            visibility: document.visibilityState,
+            userAgent: navigator.userAgent,
+            online: navigator.onLine,
+          },
+        }),
+      });
+    } catch {
+      /* best-effort */
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -119,6 +146,8 @@ export default function StudentTestsPage() {
     setSuccess(
       `Test submitted${json.result?.score != null ? ` · Score ${json.result.score}/${json.result.max_score}` : ""}.`,
     );
+    cameraStream?.getTracks().forEach((t) => t.stop());
+    setCameraStream(null);
     setActiveTestId(null);
     setAttemptId(null);
     setQuestions([]);
@@ -130,6 +159,7 @@ export default function StudentTestsPage() {
     if (!attemptId) return;
     const onVis = () => {
       if (document.visibilityState === "hidden") {
+        void logEvent(attemptId, "visibility_hidden", "critical");
         setViolations((v) => {
           const next = v + 1;
           if (tabPolicy === "immediate_auto_submit") {
@@ -143,20 +173,40 @@ export default function StudentTestsPage() {
         });
       }
     };
+    const onBlur = () => {
+      void logEvent(attemptId, "window_blur", "warn");
+    };
+    const onOffline = () => {
+      void logEvent(attemptId, "network_offline", "critical");
+      setError("Network disconnected. Your attempt is still timed on the server.");
+    };
     document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("blur", onVis);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("offline", onOffline);
     return () => {
       document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("blur", onVis);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("offline", onOffline);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attemptId, tabPolicy]);
 
-  const start = async (testId: string, policy: string) => {
+  const beginAttempt = async (testId: string, policyName: string, cameraRequired?: boolean) => {
     setError(null);
     setSuccess(null);
-    setTabPolicy(policy || "warn");
+    setTabPolicy(policyName || "warn");
     setViolations(0);
+
+    if (cameraRequired) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        setCameraStream(stream);
+      } catch {
+        setError("Camera permission is required for this test. Enable camera and try again.");
+        return;
+      }
+    }
+
     const res = await fetch(`/api/lms/tests/${testId}/start`, { method: "POST", credentials: "include" });
     const json = (await res.json()) as {
       error?: string;
@@ -166,6 +216,8 @@ export default function StudentTestsPage() {
     };
     if (!res.ok) {
       setError(json.error || "Could not start test.");
+      cameraStream?.getTracks().forEach((t) => t.stop());
+      setCameraStream(null);
       return;
     }
     const id = json.attempt?.id || json.result?.attempt_id;
@@ -178,6 +230,47 @@ export default function StudentTestsPage() {
     setAttemptId(id);
     setDeadline(dl || null);
     setQuestions(json.questions ?? []);
+    if (cameraRequired) void logEvent(id, "identity_snapshot", "info");
+  };
+
+  const start = async (testId: string, policyName: string, cameraRequired?: boolean) => {
+    const polRes = await fetch("/api/lms/proctoring", { credentials: "include" });
+    const polJson = (await polRes.json()) as {
+      policy?: { version: string; title: string; body: string };
+      error?: string;
+      hint?: string;
+    };
+    if (!polRes.ok || !polJson.policy) {
+      // If proctoring SQL not applied, still allow normal start
+      if (polJson.hint) setHint(polJson.hint);
+      await beginAttempt(testId, policyName, cameraRequired);
+      return;
+    }
+    setPolicy(polJson.policy);
+    setConsentPending({ testId, policy: policyName, camera: cameraRequired });
+  };
+
+  const acceptConsentAndStart = async () => {
+    if (!consentPending || !policy) return;
+    const res = await fetch("/api/lms/proctoring", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "consent",
+        test_id: consentPending.testId,
+        policy_version: policy.version,
+        browser_state: { userAgent: navigator.userAgent },
+      }),
+    });
+    if (!res.ok) {
+      const json = (await res.json()) as { error?: string };
+      setError(json.error || "Could not record consent.");
+      return;
+    }
+    const pending = consentPending;
+    setConsentPending(null);
+    await beginAttempt(pending.testId, pending.policy, pending.camera);
   };
 
   const mmss = (sec: number | null) => {
@@ -199,6 +292,22 @@ export default function StudentTestsPage() {
       {hint ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{hint}</div> : null}
       {success ? <CrmFlash tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
 
+      {consentPending && policy ? (
+        <div className="rounded-[24px] border border-[#e8dcc8] bg-white p-4 shadow-sm sm:p-6">
+          <h2 className="text-lg font-semibold text-[#0f172a]">{policy.title}</h2>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-[#334155]">{policy.body}</p>
+          <p className="mt-2 text-xs text-[#64748b]">Policy version: {policy.version}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]" onClick={() => void acceptConsentAndStart()}>
+              I understand and consent — continue
+            </Button>
+            <Button variant="outline" className="rounded-full" onClick={() => setConsentPending(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       {attemptId ? (
         <div className="rounded-[24px] border border-[#e8dcc8] bg-white p-4 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -208,6 +317,17 @@ export default function StudentTestsPage() {
               {violations ? ` · Violations: ${violations}` : ""}
             </div>
           </div>
+          {cameraStream ? (
+            <video
+              className="mt-3 h-28 w-40 rounded-lg border border-[#e8dcc8] object-cover"
+              autoPlay
+              muted
+              playsInline
+              ref={(el) => {
+                if (el && el.srcObject !== cameraStream) el.srcObject = cameraStream;
+              }}
+            />
+          ) : null}
           <ul className="mt-4 space-y-4">
             {questions.map((q, idx) => (
               <li key={q.test_question_id} className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] p-4">
@@ -253,7 +373,7 @@ export default function StudentTestsPage() {
                     </p>
                   </div>
                   {item.test && item.recipient.status !== "submitted" ? (
-                    <Button className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]" onClick={() => void start(item.test!.id, item.test!.tab_switch_policy)}>
+                    <Button className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]" onClick={() => void start(item.test!.id, item.test!.tab_switch_policy, item.test!.camera_required)}>
                       {activeTestId === item.test.id ? "Resume" : "Start"}
                     </Button>
                   ) : null}

@@ -59,6 +59,7 @@ export async function POST(request: Request) {
     max_attempts?: number;
     passing_marks?: number;
     tab_switch_policy?: string;
+    camera_required?: boolean;
     questions?: {
       question: string;
       question_type?: string;
@@ -107,6 +108,7 @@ export async function POST(request: Request) {
       max_attempts: body.max_attempts ?? 1,
       passing_marks: body.passing_marks ?? 40,
       tab_switch_policy: body.tab_switch_policy || "warn",
+      camera_required: Boolean(body.camera_required),
       status: "draft",
       audience_type: body.student_ids?.length ? "selected_students" : "department",
       assigned_by: gate.user.id,
