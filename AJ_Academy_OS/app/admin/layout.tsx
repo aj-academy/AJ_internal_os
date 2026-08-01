@@ -34,6 +34,13 @@ const adminSidebarItems = [
       { label: "Student Query Monitoring", href: "/admin/academic/queries" },
     ],
   },
+  {
+    label: "Student Management",
+    href: "/admin/students/bulk-import",
+    children: [
+      { label: "Bulk Import Students", href: "/admin/students/bulk-import" },
+    ],
+  },
   { label: "Reminders & Calendar", href: "/admin/reminders" },
   { label: "User Master", href: "/admin/employee-master" },
   { label: "Student Master", href: "/admin/student-master" },

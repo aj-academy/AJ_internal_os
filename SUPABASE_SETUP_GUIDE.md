@@ -376,6 +376,16 @@ Proctoring purge (admin): `POST /api/lms/proctoring/purge`.
 
 Do **not** confuse CRM `clients` (Student Master leads) with portal student enrolments. Ops `tasks` / `projects` remain separate from LMS coursework.
 
+### Portal student import (Phase 1 — template)
+
+Audit: **`STUDENT_IMPORT_AND_MENTOR_ALLOCATION_AUDIT.md`**.
+
+1. Run **`student_portal_profile_fields.sql`** after core `profiles` / platform expansion (and ideally after LMS academic foundation so catalog names exist).
+2. Ensure Academic Catalog has departments, courses, and batches (Admin → Academic Management → LMS Catalog, or Departments & Courses + Sync).
+3. Admin → **Student Management → Bulk Import Students** → download Excel (Students + Instructions + Valid Values) or CSV.
+4. Template is generated from live `academic_*` tables via `GET /api/admin/students/import/template?format=xlsx|csv`.
+5. Upload / dry-run / Auth import are later phases — do not treat CRM Student Master import as portal provisioning.
+
 ### Student My Tasks
 
 Students see `/student/my-tasks` and dashboard task preview **without** employee CRM columns (Linked To, Lead Contact, lead/college/project tabs). Columns focus on title, assigner, priority, status, dates, and progress.

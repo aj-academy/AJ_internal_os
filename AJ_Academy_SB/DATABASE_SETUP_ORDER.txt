@@ -159,6 +159,13 @@ Optional check anytime: lms_verify.sql
   lms_calendar_reports.sql — academic calendar events + lms_report_summary()
   lms_proctoring_media.sql — register snapshots, retention expiry, purge helpers
   lms_verify.sql — optional status check (OK / MISSING)
+
+STUDENT IMPORT (portal profiles — not CRM Student Master)
+  student_portal_profile_fields.sql — registration_number, phone, academic metadata on profiles
+  App: Admin → Student Management → Bulk Import Students (template download Phase 1)
+  API: GET /api/admin/students/import/template?format=xlsx|csv
+  Audit: STUDENT_IMPORT_AND_MENTOR_ALLOCATION_AUDIT.md
+
   App: Admin → Academic Management → Mentor Allocation (seed from Settings, create/revoke allocations); Calendar & Reports.
   Mentor → Learning Management → Overview / Assignments / Submissions (assignments+projects) / Projects / Tests (proctoring review) / Materials / Queries.
   Student → Learning & Assessments → Overview / Assignments / Projects (milestones) / Tests (camera snapshots + SEB soft check) / Materials / Queries.
