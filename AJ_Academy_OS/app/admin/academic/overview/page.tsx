@@ -130,10 +130,16 @@ export default function AcademicOverviewPage() {
         <p className="font-semibold text-[#0f172a]">Next steps</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5">
           <li>
-            Open <a className="underline" href="/admin/academic/catalog">Academic Catalog</a> and add courses, batches,
-            and subjects under each department (dropdowns read from here).
+            Open{" "}
+            <a className="underline" href="/admin/academic/departments-courses">
+              Departments &amp; Courses
+            </a>{" "}
+            (moved from Settings), then Sync to LMS catalog.
           </li>
-          <li>Open Mentor Allocation → Seed from Settings (imports department/course names from Settings).</li>
+          <li>
+            Open <a className="underline" href="/admin/academic/catalog">LMS Catalog</a> and add batches/subjects under
+            each department.
+          </li>
           <li>Create effective-dated mentor allocations for each department/course/batch.</li>
           <li>Use Calendar & Reports for LMS activity summary and academic events.</li>
         </ol>

@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { HrOrgSettingsPanel } from "@/components/settings/HrOrgSettingsPanel";
 import { AdminPushDevicesPanel } from "@/components/push/AdminPushDevicesPanel";
 import {
   mergeSettings,
@@ -24,7 +23,6 @@ import Link from "next/link";
 export type SettingsTabId =
   | "company"
   | "users"
-  | "hr_org"
   | "attendance"
   | "crm"
   | "college_visits"
@@ -37,7 +35,6 @@ export type SettingsTabId =
 const SETTINGS_TAB_ORDER: SettingsTabId[] = [
   "company",
   "users",
-  "hr_org",
   "attendance",
   "crm",
   "college_visits",
@@ -51,7 +48,6 @@ const SETTINGS_TAB_ORDER: SettingsTabId[] = [
 const SETTINGS_TAB_LABELS: Record<SettingsTabId, string> = {
   company: "Company Settings",
   users: "User & Role Settings",
-  hr_org: "Departments & courses",
   attendance: "Attendance Settings",
   crm: "CRM Settings",
   college_visits: "College Visits",
@@ -233,6 +229,16 @@ export function SettingsWorkbench() {
       </div>
 
       {activeTab === "company" ? (
+        <div className="mb-4 rounded-[20px] border border-[#e8dcc8] bg-[#fffaf0] px-4 py-3 text-sm text-[#334155]">
+          Departments &amp; courses moved to{" "}
+          <Link href="/admin/academic/departments-courses" className="font-semibold text-[#a68b2e] underline">
+            Academic Management → Departments &amp; Courses
+          </Link>
+          .
+        </div>
+      ) : null}
+
+      {activeTab === "company" ? (
         <SettingsPanel title="Company" onSave={() => void saveKey("company")} saving={saving} disabled={schemaMissing}>
           <p className="rounded-xl border border-[#e8dcc8] bg-[#fffdf8] px-3 py-2 text-xs text-[#64748b]">
             Optional company profile for AJ Academy (name, GST, address, logo). The app already works with defaults
@@ -252,10 +258,6 @@ export function SettingsWorkbench() {
             </div>
           </div>
         </SettingsPanel>
-      ) : null}
-
-      {activeTab === "hr_org" ? (
-        <HrOrgSettingsPanel schemaMissing={schemaMissing} onToast={showToast} />
       ) : null}
 
       {activeTab === "users" ? (

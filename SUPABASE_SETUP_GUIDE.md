@@ -367,7 +367,7 @@ Optional: **`lms_verify.sql`** — lists OK / MISSING LMS objects.
 
 Then in the app:
 
-- **Admin → Academic Management** — Overview, Academic Catalog (courses/batches/subjects), Mentor Allocation, Calendar & Reports, Student Query Monitoring  
+- **Admin → Academic Management** — Overview, Departments & Courses (lists for User Master + sync), LMS Catalog (batches/subjects), Mentor Allocation, Calendar & Reports, Student Query Monitoring  
 - **Mentor → Learning Management** — Overview, Assignments, Submissions & Evaluation (assignments + projects), Projects, Tests (proctoring review), Study Materials, Student Queries  
 - **Student → Learning & Assessments** — Overview, Assignments (submit), Projects (milestones), Tests (consent + timer + optional camera snapshots; SEB soft UA check), Materials, Queries & Complaints  
 

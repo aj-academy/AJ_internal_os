@@ -115,8 +115,8 @@ export function AcademicCatalogWorkbench() {
     <section className="space-y-5">
       <PageHeader
         kicker="Academic management"
-        title="Academic Catalog"
-        description="Enter departments, courses, batches, and subjects here. Dropdowns in Mentor Allocation and Learning Management read from this catalog."
+        title="LMS Catalog"
+        description="Link courses, batches, and subjects under a department for LMS dropdowns (assignments, mentor allocation, tests)."
         actions={
           <Button variant="outline" className="rounded-xl border-[#e8dcc8]" onClick={() => void load()}>
             Refresh
@@ -170,7 +170,15 @@ export function AcademicCatalogWorkbench() {
           </div>
 
           <div className="rounded-[24px] border border-[#e8dcc8] bg-white p-4 shadow-sm sm:p-6">
-            <h2 className="text-lg font-semibold text-[#0f172a]">Working department</h2>
+            <h2 className="text-lg font-semibold text-[#0f172a]">Department you&apos;re editing</h2>
+            <p className="mt-1 text-xs text-[#64748b]">
+              Not a new department type — pick which department to add courses/batches/subjects under. For User Master
+              department/course lists, use{" "}
+              <a className="text-[#a68b2e] underline" href="/admin/academic/departments-courses">
+                Departments &amp; Courses
+              </a>
+              .
+            </p>
             <label className="mt-3 block text-sm">
               Select department
               <select
