@@ -116,9 +116,29 @@ export default function AcademicReportsPage() {
         title="Calendar & Reports"
         description="LMS activity summary and academic calendar events (live Supabase data)."
         actions={
-          <Button variant="outline" className="rounded-xl border-[#e8dcc8]" onClick={() => void load()}>
-            Refresh
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" className="rounded-xl border-[#e8dcc8]" onClick={() => void load()}>
+              Refresh
+            </Button>
+            <Button
+              variant="outline"
+              className="rounded-xl border-[#e8dcc8]"
+              onClick={() => {
+                void (async () => {
+                  const res = await fetch("/api/lms/proctoring/purge", { method: "POST", credentials: "include" });
+                  const json = (await res.json()) as { deleted?: number; storageRemoved?: number; error?: string; hint?: string };
+                  if (!res.ok) {
+                    setError(json.error || "Purge failed.");
+                    if (json.hint) setHint(json.hint);
+                    return;
+                  }
+                  setSuccess(`Purged ${json.deleted ?? 0} expired snapshot(s); removed ${json.storageRemoved ?? 0} storage object(s).`);
+                })();
+              }}
+            >
+              Purge expired snapshots
+            </Button>
+          </div>
         }
       />
       {error ? <CrmFlash tone="error" message={error} onDismiss={() => setError(null)} /> : null}

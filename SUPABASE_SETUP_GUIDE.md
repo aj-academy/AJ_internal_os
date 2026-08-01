@@ -361,14 +361,16 @@ Run in Supabase SQL Editor (after platform expansion + system settings):
 8. **`lms_08_submissions_proctoring.sql`** — assignment submit/evaluate RPCs, private buckets (`assignment-submissions`, `test-proctoring`, …), proctoring policy/consent/events  
 9. **`lms_09_project_milestones.sql`** — project milestone submit + mentor evaluate RPCs  
 10. **`lms_10_calendar_reports.sql`** — `lms_academic_events` + `lms_report_summary()`  
+11. **`lms_11_proctoring_media.sql`** — snapshot register RPC, `expires_at`, admin purge helpers  
 
 Then in the app:
 
 - **Admin → Academic Management** — Overview, Mentor Allocation, Calendar & Reports, Student Query Monitoring  
-- **Mentor → Learning Management** — Overview, Assignments, Submissions & Evaluation (assignments + projects), Projects, Tests, Study Materials, Student Queries  
-- **Student → Learning & Assessments** — Overview, Assignments (submit), Projects (milestones), Tests (consent + timer), Materials, Queries & Complaints  
+- **Mentor → Learning Management** — Overview, Assignments, Submissions & Evaluation (assignments + projects), Projects, Tests (proctoring review), Study Materials, Student Queries  
+- **Student → Learning & Assessments** — Overview, Assignments (submit), Projects (milestones), Tests (consent + timer + optional camera snapshots; SEB soft UA check), Materials, Queries & Complaints  
 
-Signed downloads for private LMS files: `POST /api/lms/storage/signed-url` (authz-checked).
+Signed downloads for private LMS files: `POST /api/lms/storage/signed-url` (authz-checked).  
+Proctoring purge (admin): `POST /api/lms/proctoring/purge`.
 
 Do **not** confuse CRM `clients` (Student Master leads) with portal student enrolments. Ops `tasks` / `projects` remain separate from LMS coursework.
 

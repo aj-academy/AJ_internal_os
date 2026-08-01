@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/button";
 import { CrmFlash } from "@/components/ui/CrmFlash";
@@ -14,6 +14,7 @@ type ListItem = {
     tab_switch_policy: string;
     status: string;
     camera_required?: boolean;
+    security_mode?: string;
   } | null;
 };
 
@@ -23,6 +24,29 @@ type Question = {
   options?: { id: string; label: string }[];
   marks?: number;
 };
+
+function detectSafeExamBrowser() {
+  if (typeof window === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  const w = window as Window & { SafeExamBrowser?: unknown };
+  return /SEB/i.test(ua) || Boolean(w.SafeExamBrowser);
+}
+
+async function blobFromVideo(video: HTMLVideoElement): Promise<Blob | null> {
+  try {
+    const canvas = document.createElement("canvas");
+    const w = video.videoWidth || 320;
+    const h = video.videoHeight || 240;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(video, 0, 0, w, h);
+    return await new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/jpeg", 0.72));
+  } catch {
+    return null;
+  }
+}
 
 export default function StudentTestsPage() {
   const [loading, setLoading] = useState(true);
@@ -40,12 +64,28 @@ export default function StudentTestsPage() {
   const [tabPolicy, setTabPolicy] = useState("warn");
   const [violations, setViolations] = useState(0);
   const [policy, setPolicy] = useState<{ version: string; title: string; body: string } | null>(null);
-  const [consentPending, setConsentPending] = useState<{ testId: string; policy: string; camera?: boolean } | null>(null);
+  const [consentPending, setConsentPending] = useState<{
+    testId: string;
+    policy: string;
+    camera?: boolean;
+    securityMode?: string;
+  } | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const attemptRef = useRef<string | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    attemptRef.current = attemptId;
+  }, [attemptId]);
+
+  useEffect(() => {
+    streamRef.current = cameraStream;
+  }, [cameraStream]);
 
   const logEvent = async (attempt: string, event_type: string, severity = "warn") => {
     try {
-      await fetch("/api/lms/proctoring", {
+      const res = await fetch("/api/lms/proctoring", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -58,8 +98,32 @@ export default function StudentTestsPage() {
             visibility: document.visibilityState,
             userAgent: navigator.userAgent,
             online: navigator.onLine,
+            seb: detectSafeExamBrowser(),
           },
         }),
+      });
+      const json = (await res.json()) as { eventId?: string };
+      return json.eventId || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const uploadSnapshot = async (attempt: string, reason: string, eventId?: string | null) => {
+    const video = videoRef.current;
+    if (!video || !streamRef.current) return;
+    const blob = await blobFromVideo(video);
+    if (!blob) return;
+    const fd = new FormData();
+    fd.set("file", blob, `${reason}.jpg`);
+    fd.set("attempt_id", attempt);
+    fd.set("capture_reason", reason);
+    if (eventId) fd.set("event_id", eventId);
+    try {
+      await fetch("/api/lms/uploads/proctoring-snapshot", {
+        method: "POST",
+        credentials: "include",
+        body: fd,
       });
     } catch {
       /* best-effort */
@@ -110,6 +174,17 @@ export default function StudentTestsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remainingSec, attemptId]);
 
+  // Periodic snapshots while camera is on
+  useEffect(() => {
+    if (!attemptId || !cameraStream) return;
+    const id = setInterval(() => {
+      const aid = attemptRef.current;
+      if (aid) void uploadSnapshot(aid, "periodic_snapshot");
+    }, 60_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attemptId, cameraStream]);
+
   const saveAnswer = async (questionId: string, selected: string) => {
     if (!attemptId) return;
     setAnswers((a) => ({ ...a, [questionId]: selected }));
@@ -146,7 +221,7 @@ export default function StudentTestsPage() {
     setSuccess(
       `Test submitted${json.result?.score != null ? ` · Score ${json.result.score}/${json.result.max_score}` : ""}.`,
     );
-    cameraStream?.getTracks().forEach((t) => t.stop());
+    streamRef.current?.getTracks().forEach((t) => t.stop());
     setCameraStream(null);
     setActiveTestId(null);
     setAttemptId(null);
@@ -159,7 +234,10 @@ export default function StudentTestsPage() {
     if (!attemptId) return;
     const onVis = () => {
       if (document.visibilityState === "hidden") {
-        void logEvent(attemptId, "visibility_hidden", "critical");
+        void (async () => {
+          const eventId = await logEvent(attemptId, "visibility_hidden", "critical");
+          await uploadSnapshot(attemptId, "violation_snapshot", eventId);
+        })();
         setViolations((v) => {
           const next = v + 1;
           if (tabPolicy === "immediate_auto_submit") {
@@ -191,11 +269,23 @@ export default function StudentTestsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attemptId, tabPolicy]);
 
-  const beginAttempt = async (testId: string, policyName: string, cameraRequired?: boolean) => {
+  const beginAttempt = async (
+    testId: string,
+    policyName: string,
+    cameraRequired?: boolean,
+    securityMode?: string,
+  ) => {
     setError(null);
     setSuccess(null);
     setTabPolicy(policyName || "warn");
     setViolations(0);
+
+    if (securityMode === "safe_exam_browser" && !detectSafeExamBrowser()) {
+      setError(
+        "This test requires Safe Exam Browser (SEB). Open the exam inside SEB, then try again. Full SEB config/quit-password is managed outside AJ OS.",
+      );
+      return;
+    }
 
     if (cameraRequired) {
       try {
@@ -216,7 +306,7 @@ export default function StudentTestsPage() {
     };
     if (!res.ok) {
       setError(json.error || "Could not start test.");
-      cameraStream?.getTracks().forEach((t) => t.stop());
+      streamRef.current?.getTracks().forEach((t) => t.stop());
       setCameraStream(null);
       return;
     }
@@ -230,10 +320,23 @@ export default function StudentTestsPage() {
     setAttemptId(id);
     setDeadline(dl || null);
     setQuestions(json.questions ?? []);
-    if (cameraRequired) void logEvent(id, "identity_snapshot", "info");
+    if (cameraRequired) {
+      // wait a tick for video element to attach
+      setTimeout(() => {
+        void (async () => {
+          const eventId = await logEvent(id, "identity_snapshot", "info");
+          await uploadSnapshot(id, "identity_snapshot", eventId);
+        })();
+      }, 800);
+    }
   };
 
-  const start = async (testId: string, policyName: string, cameraRequired?: boolean) => {
+  const start = async (
+    testId: string,
+    policyName: string,
+    cameraRequired?: boolean,
+    securityMode?: string,
+  ) => {
     const polRes = await fetch("/api/lms/proctoring", { credentials: "include" });
     const polJson = (await polRes.json()) as {
       policy?: { version: string; title: string; body: string };
@@ -241,13 +344,12 @@ export default function StudentTestsPage() {
       hint?: string;
     };
     if (!polRes.ok || !polJson.policy) {
-      // If proctoring SQL not applied, still allow normal start
       if (polJson.hint) setHint(polJson.hint);
-      await beginAttempt(testId, policyName, cameraRequired);
+      await beginAttempt(testId, policyName, cameraRequired, securityMode);
       return;
     }
     setPolicy(polJson.policy);
-    setConsentPending({ testId, policy: policyName, camera: cameraRequired });
+    setConsentPending({ testId, policy: policyName, camera: cameraRequired, securityMode });
   };
 
   const acceptConsentAndStart = async () => {
@@ -260,7 +362,7 @@ export default function StudentTestsPage() {
         action: "consent",
         test_id: consentPending.testId,
         policy_version: policy.version,
-        browser_state: { userAgent: navigator.userAgent },
+        browser_state: { userAgent: navigator.userAgent, seb: detectSafeExamBrowser() },
       }),
     });
     if (!res.ok) {
@@ -270,7 +372,7 @@ export default function StudentTestsPage() {
     }
     const pending = consentPending;
     setConsentPending(null);
-    await beginAttempt(pending.testId, pending.policy, pending.camera);
+    await beginAttempt(pending.testId, pending.policy, pending.camera, pending.securityMode);
   };
 
   const mmss = (sec: number | null) => {
@@ -285,8 +387,12 @@ export default function StudentTestsPage() {
       <PageHeader
         kicker="Learning & assessments"
         title="Tests"
-        description="Assigned tests with server-side countdown and autosave. Do not switch tabs if your test uses a strict policy."
-        actions={<Button variant="outline" className="rounded-xl border-[#e8dcc8]" onClick={() => void load()}>Refresh</Button>}
+        description="Assigned tests with server-side countdown, autosave, and optional camera snapshots. Do not switch tabs if your test uses a strict policy."
+        actions={
+          <Button variant="outline" className="rounded-xl border-[#e8dcc8]" onClick={() => void load()}>
+            Refresh
+          </Button>
+        }
       />
       {error ? <CrmFlash tone="error" message={error} onDismiss={() => setError(null)} /> : null}
       {hint ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{hint}</div> : null}
@@ -297,6 +403,11 @@ export default function StudentTestsPage() {
           <h2 className="text-lg font-semibold text-[#0f172a]">{policy.title}</h2>
           <p className="mt-2 whitespace-pre-wrap text-sm text-[#334155]">{policy.body}</p>
           <p className="mt-2 text-xs text-[#64748b]">Policy version: {policy.version}</p>
+          {consentPending.securityMode === "safe_exam_browser" ? (
+            <p className="mt-2 text-sm text-amber-900">
+              SEB mode is enabled. {detectSafeExamBrowser() ? "SEB detected." : "SEB not detected in this browser."}
+            </p>
+          ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <Button className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]" onClick={() => void acceptConsentAndStart()}>
               I understand and consent — continue
@@ -324,6 +435,7 @@ export default function StudentTestsPage() {
               muted
               playsInline
               ref={(el) => {
+                videoRef.current = el;
                 if (el && el.srcObject !== cameraStream) el.srcObject = cameraStream;
               }}
             />
@@ -361,19 +473,37 @@ export default function StudentTestsPage() {
           {loading ? (
             <p className="text-sm text-[#64748b]">Loading…</p>
           ) : !items.length ? (
-            <p className="rounded-xl border border-dashed border-[#e8dcc8] px-4 py-10 text-center text-sm text-[#64748b]">No tests assigned.</p>
+            <p className="rounded-xl border border-dashed border-[#e8dcc8] px-4 py-10 text-center text-sm text-[#64748b]">
+              No tests assigned.
+            </p>
           ) : (
             <ul className="space-y-3">
               {items.map((item) => (
-                <li key={item.recipient.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-4 py-3">
+                <li
+                  key={item.recipient.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-4 py-3"
+                >
                   <div>
                     <p className="font-semibold text-[#0f172a]">{item.test?.title || "Test"}</p>
                     <p className="text-xs text-[#64748b]">
-                      {item.recipient.status} · {item.test?.duration_minutes} min · attempts used {item.recipient.attempts_used}
+                      {item.recipient.status} · {item.test?.duration_minutes} min · attempts used{" "}
+                      {item.recipient.attempts_used}
+                      {item.test?.camera_required ? " · camera" : ""}
+                      {item.test?.security_mode === "safe_exam_browser" ? " · SEB" : ""}
                     </p>
                   </div>
                   {item.test && item.recipient.status !== "submitted" ? (
-                    <Button className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]" onClick={() => void start(item.test!.id, item.test!.tab_switch_policy, item.test!.camera_required)}>
+                    <Button
+                      className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]"
+                      onClick={() =>
+                        void start(
+                          item.test!.id,
+                          item.test!.tab_switch_policy,
+                          item.test!.camera_required,
+                          item.test!.security_mode,
+                        )
+                      }
+                    >
                       {activeTestId === item.test.id ? "Resume" : "Start"}
                     </Button>
                   ) : null}

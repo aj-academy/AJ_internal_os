@@ -15,7 +15,7 @@ const ALLOWED_BUCKETS = new Set([
   "test-proctoring",
 ]);
 
-type Kind = "assignment_submission" | "project_submission" | "study_material";
+type Kind = "assignment_submission" | "project_submission" | "study_material" | "proctoring_media";
 
 function filesContainPath(files: unknown, path: string): boolean {
   if (!Array.isArray(files)) return false;
@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     fileName?: string;
     submission_id?: string;
     material_id?: string;
+    media_id?: string;
     download?: boolean;
   };
 
@@ -162,6 +163,30 @@ export async function POST(request: Request) {
       }
     }
     if (bucket !== "study-materials") {
+      return NextResponse.json({ error: "Bucket mismatch." }, { status: 400 });
+    }
+  } else if (kind === "proctoring_media") {
+    if (!body.media_id) {
+      return NextResponse.json({ error: "media_id is required." }, { status: 400 });
+    }
+    if (role === "student") {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+    const { data: media } = await supabase
+      .from("lms_test_proctoring_media")
+      .select("id, storage_path, test_id")
+      .eq("id", body.media_id)
+      .maybeSingle();
+    if (!media || media.storage_path !== path) {
+      return NextResponse.json({ error: "Media not found." }, { status: 404 });
+    }
+    if (role === "mentor") {
+      const { data: t } = await supabase.from("lms_tests").select("assigned_by").eq("id", media.test_id).maybeSingle();
+      if (!t || t.assigned_by !== gate.user.id) {
+        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      }
+    }
+    if (bucket !== "test-proctoring") {
       return NextResponse.json({ error: "Bucket mismatch." }, { status: 400 });
     }
   } else {

@@ -399,11 +399,11 @@ erDiagram
 | Phase 4 academic projects | **Done** (`lms_04` + UI) |
 | Phase 14 study materials | **Done** (`lms_05` + UI; link-first, private bucket ready) |
 | Phase 16 queries & complaints | **Done** (`lms_06` + UI; sensitive admin-only) |
-| Phase 5+ secure tests | **Core done** (`lms_07` + UI). Proctoring consent/events (`lms_08`) done; snapshot media upload still thin |
+| Phase 5+ secure tests | **Done** (`lms_07`–`lms_08` + `lms_11`): consent, events, camera snapshots, retention purge, SEB soft check |
 | Assignment submit/evaluate | **Done** (`lms_08` RPCs + student submit + mentor evaluation UI) |
 | Project milestones submit/evaluate | **Done** (`lms_09` + student/mentor UI) |
 | Signed LMS downloads | **Done** (`/api/lms/storage/signed-url`) |
 | Calendar + LMS reports | **Foundation done** (`lms_10` + Admin Calendar & Reports) |
-| Ready for assignments UI / publish flow | After running L1–L10 SQL in Supabase |
+| Ready for production LMS core | After running **L1–L11** SQL in Supabase |
 
 **Do not** implement secure tests or camera until Phases 1–4 + materials/tickets foundations are stable and RLS-tested.

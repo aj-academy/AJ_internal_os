@@ -7,9 +7,23 @@ import { Button } from "@/components/ui/button";
 import { CrmFlash } from "@/components/ui/CrmFlash";
 import type { AcademicBatch, AcademicCourse, AcademicDepartment } from "@/types/lms";
 
-type TestRow = { id: string; title: string; status: string; duration_minutes: number; tab_switch_policy: string };
+type TestRow = {
+  id: string;
+  title: string;
+  status: string;
+  duration_minutes: number;
+  tab_switch_policy: string;
+  camera_required?: boolean;
+  security_mode?: string;
+};
 type EligibleStudent = { student_id: string; full_name: string | null; email: string | null };
 type QDraft = { question: string; options: string; correct_index: string; marks: string };
+
+type ProctoringReview = {
+  attempts: { id: string; student_id: string; student_name?: string; status: string; score: number | null; started_at?: string; server_started_at?: string }[];
+  events: { id: string; attempt_id: string; event_type: string; severity: string; created_at: string }[];
+  media: { id: string; attempt_id: string; storage_path: string; capture_reason: string; review_status: string; captured_at: string }[];
+};
 
 export function MentorTestWorkbench() {
   const [loading, setLoading] = useState(true);
@@ -36,8 +50,12 @@ export function MentorTestWorkbench() {
     duration_minutes: "30",
     tab_switch_policy: "warn",
     camera_required: false,
+    security_mode: "normal",
     publish: true,
   });
+  const [reviewTestId, setReviewTestId] = useState<string | null>(null);
+  const [review, setReview] = useState<ProctoringReview | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
 
   const coursesForDept = useMemo(
     () => courses.filter((c) => c.department_id === form.department_id),
@@ -125,6 +143,7 @@ export function MentorTestWorkbench() {
           duration_minutes: Number(form.duration_minutes) || 30,
           tab_switch_policy: form.tab_switch_policy,
           camera_required: form.camera_required,
+          security_mode: form.security_mode,
           questions: payloadQuestions,
           student_ids: studentIds,
           publish: form.publish,
@@ -144,6 +163,43 @@ export function MentorTestWorkbench() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const openReview = async (testId: string) => {
+    setReviewTestId(testId);
+    setReviewLoading(true);
+    setReview(null);
+    setError(null);
+    const res = await fetch(`/api/lms/tests/${testId}/proctoring`, { credentials: "include" });
+    const json = (await res.json()) as ProctoringReview & { error?: string; hint?: string };
+    setReviewLoading(false);
+    if (!res.ok) {
+      setError(json.error || "Could not load proctoring review.");
+      if (json.hint) setHint(json.hint);
+      return;
+    }
+    setReview(json);
+  };
+
+  const openMedia = async (media: ProctoringReview["media"][number]) => {
+    const res = await fetch("/api/lms/storage/signed-url", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "proctoring_media",
+        bucket: "test-proctoring",
+        path: media.storage_path,
+        media_id: media.id,
+        fileName: `${media.capture_reason}.jpg`,
+      }),
+    });
+    const json = (await res.json()) as { url?: string; error?: string };
+    if (!res.ok || !json.url) {
+      setError(json.error || "Could not open snapshot.");
+      return;
+    }
+    window.open(json.url, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -189,6 +245,13 @@ export function MentorTestWorkbench() {
               <option value="warn">Warn</option>
               <option value="auto_submit_after_count">Auto-submit after limit</option>
               <option value="immediate_auto_submit">Immediate auto-submit</option>
+            </select>
+          </label>
+          <label className="text-sm">Security mode
+            <select className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3" value={form.security_mode} onChange={(e) => setForm((f) => ({ ...f, security_mode: e.target.value }))}>
+              <option value="normal">Normal browser</option>
+              <option value="strict_browser">Strict browser</option>
+              <option value="safe_exam_browser">Safe Exam Browser (soft check)</option>
             </select>
           </label>
           <label className="flex items-center gap-2 text-sm sm:mt-7">
@@ -260,14 +323,83 @@ export function MentorTestWorkbench() {
         ) : (
           <ul className="mt-4 space-y-3">
             {tests.map((t) => (
-              <li key={t.id} className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-4 py-3 text-sm">
-                <p className="font-semibold text-[#0f172a]">{t.title}</p>
-                <p className="text-xs text-[#64748b]">{t.status} · {t.duration_minutes} min · tab policy: {t.tab_switch_policy}</p>
+              <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-4 py-3 text-sm">
+                <div>
+                  <p className="font-semibold text-[#0f172a]">{t.title}</p>
+                  <p className="text-xs text-[#64748b]">
+                    {t.status} · {t.duration_minutes} min · tab: {t.tab_switch_policy}
+                    {t.camera_required ? " · camera" : ""}
+                    {t.security_mode ? ` · ${t.security_mode}` : ""}
+                  </p>
+                </div>
+                <Button variant="outline" className="rounded-full border-[#e8dcc8] text-xs" onClick={() => void openReview(t.id)}>
+                  Proctoring review
+                </Button>
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      {reviewTestId ? (
+        <div className="rounded-[24px] border border-[#e8dcc8] bg-white p-4 shadow-sm sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold text-[#0f172a]">Proctoring review</h2>
+            <Button variant="outline" className="rounded-full text-xs" onClick={() => { setReviewTestId(null); setReview(null); }}>
+              Close
+            </Button>
+          </div>
+          {reviewLoading ? (
+            <p className="mt-4 text-sm text-[#64748b]">Loading…</p>
+          ) : !review ? (
+            <p className="mt-4 text-sm text-[#64748b]">No data.</p>
+          ) : (
+            <div className="mt-4 grid gap-4 lg:grid-cols-3 text-sm">
+              <div>
+                <h3 className="font-semibold">Attempts ({review.attempts.length})</h3>
+                <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto">
+                  {review.attempts.map((a) => (
+                    <li key={a.id} className="rounded-lg border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
+                      <p className="font-medium">{a.student_name || a.student_id.slice(0, 8)}</p>
+                      <p className="text-xs text-[#64748b]">
+                        {a.status}
+                        {a.score != null ? ` · score ${a.score}` : ""}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h3 className="font-semibold">Events ({review.events.length})</h3>
+                <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto">
+                  {review.events.slice(0, 80).map((e) => (
+                    <li key={e.id} className="rounded-lg border border-[#eef2f7] px-3 py-2 text-xs">
+                      <p className="font-medium capitalize text-[#0f172a]">{e.event_type.replaceAll("_", " ")}</p>
+                      <p className="text-[#64748b]">
+                        {e.severity} · {new Date(e.created_at).toLocaleString()}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h3 className="font-semibold">Snapshots ({review.media.length})</h3>
+                <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto">
+                  {review.media.map((m) => (
+                    <li key={m.id} className="rounded-lg border border-[#eef2f7] px-3 py-2">
+                      <p className="text-xs capitalize">{m.capture_reason.replaceAll("_", " ")}</p>
+                      <p className="text-xs text-[#64748b]">{new Date(m.captured_at).toLocaleString()}</p>
+                      <button type="button" className="mt-1 text-xs text-[#c9a227] underline" onClick={() => void openMedia(m)}>
+                        Open snapshot
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }

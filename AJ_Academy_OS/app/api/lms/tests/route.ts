@@ -60,6 +60,7 @@ export async function POST(request: Request) {
     passing_marks?: number;
     tab_switch_policy?: string;
     camera_required?: boolean;
+    security_mode?: string;
     questions?: {
       question: string;
       question_type?: string;
@@ -109,6 +110,7 @@ export async function POST(request: Request) {
       passing_marks: body.passing_marks ?? 40,
       tab_switch_policy: body.tab_switch_policy || "warn",
       camera_required: Boolean(body.camera_required),
+      security_mode: body.security_mode || "normal",
       status: "draft",
       audience_type: body.student_ids?.length ? "selected_students" : "department",
       assigned_by: gate.user.id,
