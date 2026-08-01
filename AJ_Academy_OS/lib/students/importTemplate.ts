@@ -9,8 +9,11 @@ import { buildCsv } from "@/lib/csv";
 
 export const STUDENT_IMPORT_TEMPLATE_VERSION = "1.0.0";
 
-/** Max data rows recommended per upload (excluding header). */
+/** Max data rows recommended / hard limit per upload (excluding header). */
 export const STUDENT_IMPORT_MAX_ROWS_RECOMMENDED = 500;
+
+/** Hard upload size limit (5 MiB). */
+export const STUDENT_IMPORT_MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 export const STUDENT_IMPORT_REQUIRED_COLUMNS = [
   "Registration Number",

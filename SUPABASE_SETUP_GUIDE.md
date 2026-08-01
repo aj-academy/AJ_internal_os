@@ -376,15 +376,18 @@ Proctoring purge (admin): `POST /api/lms/proctoring/purge`.
 
 Do **not** confuse CRM `clients` (Student Master leads) with portal student enrolments. Ops `tasks` / `projects` remain separate from LMS coursework.
 
-### Portal student import (Phase 1 — template)
+### Portal student import (Phases 1–2 — template + upload)
 
 Audit: **`STUDENT_IMPORT_AND_MENTOR_ALLOCATION_AUDIT.md`**.
 
 1. Run **`student_portal_profile_fields.sql`** after core `profiles` / platform expansion (and ideally after LMS academic foundation so catalog names exist).
-2. Ensure Academic Catalog has departments, courses, and batches (Admin → Academic Management → LMS Catalog, or Departments & Courses + Sync).
-3. Admin → **Student Management → Bulk Import Students** → download Excel (Students + Instructions + Valid Values) or CSV.
-4. Template is generated from live `academic_*` tables via `GET /api/admin/students/import/template?format=xlsx|csv`.
-5. Upload / dry-run / Auth import are later phases — do not treat CRM Student Master import as portal provisioning.
+2. Run **`student_import_batches.sql`** — `student_import_batches` table + private **`student-imports`** storage bucket (admin select; uploads via service-role API only).
+3. Ensure Academic Catalog has departments, courses, and batches (Admin → Academic Management → LMS Catalog, or Departments & Courses + Sync).
+4. Admin → **Student Management → Bulk Import Students** → download Excel (Students + Instructions + Valid Values) or CSV.
+5. Fill the template, then drag/drop or browse to upload. Server validates extension, MIME, size (5 MB), max data rows (500), and template version; stores the file and creates a batch (`status=uploaded`).
+6. APIs: `GET /api/admin/students/import/template?format=xlsx|csv`, `POST|GET /api/admin/students/import/upload`.
+7. Column mapping / dry-run / Auth import are later phases — do not treat CRM Student Master import as portal provisioning.
+8. Legacy `.xls` is rejected; use `.xlsx` or `.csv`.
 
 ### Student My Tasks
 
