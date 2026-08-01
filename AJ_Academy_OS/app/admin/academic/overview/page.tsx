@@ -130,10 +130,10 @@ export default function AcademicOverviewPage() {
         <p className="font-semibold text-[#0f172a]">Next steps</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5">
           <li>
-            Run LMS SQL files in Supabase (see DATABASE_SETUP_ORDER.txt), starting with{" "}
-            <code className="text-xs">lms_academic_foundation.sql</code>.
+            Open <a className="underline" href="/admin/academic/catalog">Academic Catalog</a> and add courses, batches,
+            and subjects under each department (dropdowns read from here).
           </li>
-          <li>Open Mentor Allocation → Seed from Settings.</li>
+          <li>Open Mentor Allocation → Seed from Settings (imports department/course names from Settings).</li>
           <li>Create effective-dated mentor allocations for each department/course/batch.</li>
           <li>Use Calendar & Reports for LMS activity summary and academic events.</li>
         </ol>
