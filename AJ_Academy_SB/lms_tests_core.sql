@@ -1,6 +1,6 @@
 -- =============================================================================
 -- LMS Phase 5–6 — Test management core (no full proctoring yet)
--- Run after: lms_02_mentor_allocations.sql (and ideally lms_03+)
+-- Run after: lms_mentor_allocations.sql (and ideally lms_assignments.sql+)
 -- Safe to re-run.
 -- =============================================================================
 

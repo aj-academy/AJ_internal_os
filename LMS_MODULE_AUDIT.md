@@ -329,16 +329,17 @@ learning_item 1—* learning_item_recipients *—1 student
 
 | # | Script (proposed) | Purpose |
 |---|-------------------|---------|
-| 1 | `lms_01_academic_foundation.sql` | Departments, courses, batches, modules, enrolments, seed helpers |
-| 2 | `lms_02_mentor_allocations.sql` | Allocations + RLS + audit hooks |
-| 3 | `lms_03_audience_engine.sql` | Shared recipient types / helpers |
-| 4 | `lms_04_assignments.sql` | Assignments + submissions + evaluations |
-| 5 | `lms_05_projects.sql` | Academic projects + milestones |
-| 6 | `lms_06_study_materials.sql` | Materials + activity |
-| 7 | `lms_07_tickets.sql` | Queries & complaints |
-| 8 | `lms_08_tests_core.sql` | Tests, questions, attempts, answers |
-| 9 | `lms_09_tests_proctoring.sql` | Violations, media, consent |
-| 10 | `lms_10_storage_buckets.sql` | Private buckets + policies |
+| 1 | `lms_academic_foundation.sql` | Departments, courses, batches, modules, enrolments, seed helpers |
+| 2 | `lms_mentor_allocations.sql` | Allocations + RLS + audit hooks |
+| 3 | `lms_assignments.sql` | Assignments + submissions + evaluations |
+| 4 | `lms_projects.sql` | Academic projects + milestones |
+| 5 | `lms_study_materials.sql` | Materials + activity |
+| 6 | `lms_tickets.sql` | Queries & complaints |
+| 7 | `lms_tests_core.sql` | Tests, questions, attempts, answers |
+| 8 | `lms_submissions_proctoring.sql` | Submit/evaluate RPCs, buckets, consent/events |
+| 9 | `lms_project_milestones.sql` | Project milestone submit/evaluate |
+| 10 | `lms_calendar_reports.sql` | Academic calendar + report summary |
+| 11 | `lms_proctoring_media.sql` | Snapshot register + retention purge |
 
 ## 9. Technical risks
 
@@ -395,15 +396,15 @@ erDiagram
 | Reuse vs rebuild decisions recorded | Done |
 | Migrations proposed | Done |
 | Phase 1 mentor allocation implemented | **Done** (SQL + Admin/Mentor/Student UI) |
-| Phase 2–3 audience + assignments | **Done** (`lms_03` + mentor/student assignment UI) |
-| Phase 4 academic projects | **Done** (`lms_04` + UI) |
-| Phase 14 study materials | **Done** (`lms_05` + UI; link-first, private bucket ready) |
-| Phase 16 queries & complaints | **Done** (`lms_06` + UI; sensitive admin-only) |
-| Phase 5+ secure tests | **Done** (`lms_07`–`lms_08` + `lms_11`): consent, events, camera snapshots, retention purge, SEB soft check |
-| Assignment submit/evaluate | **Done** (`lms_08` RPCs + student submit + mentor evaluation UI) |
-| Project milestones submit/evaluate | **Done** (`lms_09` + student/mentor UI) |
+| Phase 2–3 audience + assignments | **Done** (`lms_assignments.sql` + mentor/student UI) |
+| Phase 4 academic projects | **Done** (`lms_projects.sql` + UI) |
+| Phase 14 study materials | **Done** (`lms_study_materials.sql` + UI; link-first, private bucket ready) |
+| Phase 16 queries & complaints | **Done** (`lms_tickets.sql` + UI; sensitive admin-only) |
+| Phase 5+ secure tests | **Done** (`lms_tests_core` / `lms_submissions_proctoring` / `lms_proctoring_media`) |
+| Assignment submit/evaluate | **Done** (`lms_submissions_proctoring.sql` + student/mentor UI) |
+| Project milestones submit/evaluate | **Done** (`lms_project_milestones.sql` + UI) |
 | Signed LMS downloads | **Done** (`/api/lms/storage/signed-url`) |
-| Calendar + LMS reports | **Foundation done** (`lms_10` + Admin Calendar & Reports) |
-| Ready for production LMS core | After running **L1–L11** SQL in Supabase |
+| Calendar + LMS reports | **Foundation done** (`lms_calendar_reports.sql` + Admin Calendar & Reports) |
+| Ready for production LMS core | After running all `lms_*.sql` files in Supabase (see DATABASE_SETUP_ORDER.txt) |
 
 **Do not** implement secure tests or camera until Phases 1–4 + materials/tickets foundations are stable and RLS-tested.

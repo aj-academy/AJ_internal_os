@@ -1,6 +1,6 @@
 -- =============================================================================
 -- LMS Phase 16 — Student queries & complaints
--- Run after: lms_02_mentor_allocations.sql
+-- Run after: lms_mentor_allocations.sql
 -- Safe to re-run.
 -- =============================================================================
 

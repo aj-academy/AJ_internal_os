@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: error.message,
-        hint: "Run lms_08_submissions_proctoring.sql to create assignment-submissions bucket.",
+        hint: "Run lms_submissions_proctoring.sql to create assignment-submissions bucket.",
       },
       { status: 500 },
     );

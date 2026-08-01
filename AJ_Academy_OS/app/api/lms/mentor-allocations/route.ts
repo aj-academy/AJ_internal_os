@@ -27,7 +27,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error: error.message,
-        hint: "Run AJ_Academy_SB/lms_01_academic_foundation.sql then lms_02_mentor_allocations.sql in Supabase.",
+        hint: "Run AJ_Academy_SB/lms_academic_foundation.sql then lms_mentor_allocations.sql in Supabase.",
       },
       { status: 500 },
     );

@@ -1,6 +1,6 @@
 -- =============================================================================
 -- LMS Phase 2–3 — Audience engine + Assignments (core)
--- Run after: lms_02_mentor_allocations.sql
+-- Run after: lms_mentor_allocations.sql
 -- Safe to re-run.
 -- =============================================================================
 

@@ -20,7 +20,7 @@ export async function GET() {
 
   if (error) {
     return NextResponse.json(
-      { error: error.message, hint: "Run AJ_Academy_SB/lms_08_submissions_proctoring.sql." },
+      { error: error.message, hint: "Run AJ_Academy_SB/lms_submissions_proctoring.sql." },
       { status: 500 },
     );
   }

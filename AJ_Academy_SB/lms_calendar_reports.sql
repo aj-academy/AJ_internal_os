@@ -1,6 +1,6 @@
 -- =============================================================================
 -- LMS Phase 10 — Academic calendar + lightweight report helpers
--- Run after: lms_09_project_milestones.sql
+-- Run after: lms_project_milestones.sql
 -- Safe to re-run.
 -- =============================================================================
 

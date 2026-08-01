@@ -1,6 +1,6 @@
 -- =============================================================================
 -- LMS Phase 8 — Storage buckets + assignment submit RPC + proctoring events
--- Run after: lms_07_tests_core.sql
+-- Run after: lms_tests_core.sql
 -- Safe to re-run.
 -- =============================================================================
 

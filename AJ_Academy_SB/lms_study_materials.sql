@@ -1,6 +1,6 @@
 -- =============================================================================
 -- LMS Phase 14 — Study materials
--- Run after: lms_02_mentor_allocations.sql (and ideally lms_03)
+-- Run after: lms_mentor_allocations.sql (and ideally lms_assignments.sql)
 -- Safe to re-run.
 -- =============================================================================
 

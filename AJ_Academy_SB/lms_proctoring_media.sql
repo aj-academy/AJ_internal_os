@@ -1,6 +1,6 @@
 -- =============================================================================
 -- LMS Phase 11 — Proctoring media register + retention purge + SEB notes
--- Run after: lms_10_calendar_reports.sql (or at least lms_08)
+-- Run after: lms_calendar_reports.sql (or at least lms_submissions_proctoring.sql)
 -- Safe to re-run.
 -- =============================================================================
 
@@ -189,5 +189,5 @@ comment on function public.lms_register_proctoring_media is
 comment on function public.lms_list_expired_proctoring_media is
   'Admin lists expired proctoring media for storage purge job.';
 
--- SEB: security_mode already supports safe_exam_browser on lms_tests (lms_07).
+-- SEB: security_mode already supports safe_exam_browser on lms_tests (lms_tests_core.sql).
 -- Full SEB config/quit-password integration is out of band; app enforces soft UA/check only.

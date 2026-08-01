@@ -112,7 +112,7 @@ export function MentorAssignmentWorkbench() {
 
       if (deptRes.error || courseRes.error || batchRes.error) {
         setError(deptRes.error?.message || courseRes.error?.message || batchRes.error?.message || "Academic load failed.");
-        setHint("Run lms_01_academic_foundation.sql and seed from Admin → Mentor Allocation.");
+        setHint("Run lms_academic_foundation.sql and seed from Admin → Mentor Allocation.");
         return;
       }
 

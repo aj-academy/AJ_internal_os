@@ -23,7 +23,7 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           error: seedError.message,
-          hint: "Run AJ_Academy_SB/lms_01_academic_foundation.sql in Supabase.",
+          hint: "Run AJ_Academy_SB/lms_academic_foundation.sql in Supabase.",
         },
         { status: 500 },
       );
@@ -85,7 +85,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         error: msg,
-        hint: "Run AJ_Academy_SB/lms_01_academic_foundation.sql then lms_02_mentor_allocations.sql.",
+        hint: "Run AJ_Academy_SB/lms_academic_foundation.sql then lms_mentor_allocations.sql.",
       },
       { status: 500 },
     );

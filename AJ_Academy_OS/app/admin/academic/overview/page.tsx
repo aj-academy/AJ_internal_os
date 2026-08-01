@@ -130,7 +130,8 @@ export default function AcademicOverviewPage() {
         <p className="font-semibold text-[#0f172a]">Next steps</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5">
           <li>
-            Run <code className="text-xs">lms_01</code>…<code className="text-xs">lms_10</code> SQL in Supabase (see DATABASE_SETUP_ORDER.txt).
+            Run LMS SQL files in Supabase (see DATABASE_SETUP_ORDER.txt), starting with{" "}
+            <code className="text-xs">lms_academic_foundation.sql</code>.
           </li>
           <li>Open Mentor Allocation → Seed from Settings.</li>
           <li>Create effective-dated mentor allocations for each department/course/batch.</li>

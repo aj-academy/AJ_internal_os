@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: uploadError.message,
-        hint: "Run lms_08_submissions_proctoring.sql for test-proctoring bucket.",
+        hint: "Run lms_submissions_proctoring.sql for test-proctoring bucket.",
       },
       { status: 500 },
     );
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       {
         error: regError.message,
         path,
-        hint: "Run AJ_Academy_SB/lms_11_proctoring_media.sql.",
+        hint: "Run AJ_Academy_SB/lms_proctoring_media.sql.",
       },
       { status: 500 },
     );

@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         error: error.message,
-        hint: "Run lms_01 + lms_02 SQL and ensure students have enrolments (Seed from Settings).",
+        hint: "Run lms_academic_foundation.sql + lms_mentor_allocations.sql and ensure students have enrolments (Seed from Settings).",
       },
       { status: 500 },
     );

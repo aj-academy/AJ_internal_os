@@ -1,6 +1,6 @@
 -- =============================================================================
 -- LMS Phase 4 — Academic projects (milestones + teams)
--- Run after: lms_03_assignments.sql
+-- Run after: lms_assignments.sql
 -- Safe to re-run. Separate from ops Project Master (`projects`).
 -- =============================================================================
 

@@ -1,6 +1,6 @@
 -- =============================================================================
 -- LMS Phase 9 — Project milestone submit + mentor evaluate
--- Run after: lms_08_submissions_proctoring.sql
+-- Run after: lms_submissions_proctoring.sql
 -- Safe to re-run.
 -- =============================================================================
 

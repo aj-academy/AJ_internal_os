@@ -351,17 +351,17 @@ Audit first: **`LMS_MODULE_AUDIT.md`** (repo root).
 
 Run in Supabase SQL Editor (after platform expansion + system settings):
 
-1. **`lms_01_academic_foundation.sql`** — `academic_departments`, `academic_courses`, `academic_batches`, `academic_modules`, `student_enrolments`, seed/backfill RPCs  
-2. **`lms_02_mentor_allocations.sql`** — effective-dated `mentor_allocations` + mentor scope helpers + RLS  
-3. **`lms_03_assignments.sql`** — `lms_assignments`, recipients, submissions, evaluations, `lms_publish_assignment` RPC  
-4. **`lms_04_projects.sql`** — academic projects, milestones, recipients  
-5. **`lms_05_study_materials.sql`** — materials, recipients, activity, private `study-materials` bucket  
-6. **`lms_06_tickets.sql`** — queries & complaints (sensitive → admin only), `query-attachments` bucket  
-7. **`lms_07_tests_core.sql`** — tests, MCQ questions, recipients, server-side attempts/timer, autosave, objective grading  
-8. **`lms_08_submissions_proctoring.sql`** — assignment submit/evaluate RPCs, private buckets (`assignment-submissions`, `test-proctoring`, …), proctoring policy/consent/events  
-9. **`lms_09_project_milestones.sql`** — project milestone submit + mentor evaluate RPCs  
-10. **`lms_10_calendar_reports.sql`** — `lms_academic_events` + `lms_report_summary()`  
-11. **`lms_11_proctoring_media.sql`** — snapshot register RPC, `expires_at`, admin purge helpers  
+1. **`lms_academic_foundation.sql`** — `academic_departments`, `academic_courses`, `academic_batches`, `academic_modules`, `student_enrolments`, seed/backfill RPCs  
+2. **`lms_mentor_allocations.sql`** — effective-dated `mentor_allocations` + mentor scope helpers + RLS  
+3. **`lms_assignments.sql`** — `lms_assignments`, recipients, submissions, evaluations, `lms_publish_assignment` RPC  
+4. **`lms_projects.sql`** — academic projects, milestones, recipients  
+5. **`lms_study_materials.sql`** — materials, recipients, activity, private `study-materials` bucket  
+6. **`lms_tickets.sql`** — queries & complaints (sensitive → admin only), `query-attachments` bucket  
+7. **`lms_tests_core.sql`** — tests, MCQ questions, recipients, server-side attempts/timer, autosave, objective grading  
+8. **`lms_submissions_proctoring.sql`** — assignment submit/evaluate RPCs, private buckets (`assignment-submissions`, `test-proctoring`, …), proctoring policy/consent/events  
+9. **`lms_project_milestones.sql`** — project milestone submit + mentor evaluate RPCs  
+10. **`lms_calendar_reports.sql`** — `lms_academic_events` + `lms_report_summary()`  
+11. **`lms_proctoring_media.sql`** — snapshot register RPC, `expires_at`, admin purge helpers  
 
 Then in the app:
 

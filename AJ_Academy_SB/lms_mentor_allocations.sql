@@ -1,6 +1,6 @@
 -- =============================================================================
 -- LMS Phase 1b — Mentor allocations (effective-dated)
--- Run after: lms_01_academic_foundation.sql, aj_academy_platform_expansion.sql
+-- Run after: lms_academic_foundation.sql, aj_academy_platform_expansion.sql
 -- Safe to re-run.
 -- =============================================================================
 

@@ -22,7 +22,7 @@ export async function GET() {
       .limit(200);
     if (error) {
       return NextResponse.json(
-        { error: error.message, hint: "Run AJ_Academy_SB/lms_05_study_materials.sql." },
+        { error: error.message, hint: "Run AJ_Academy_SB/lms_study_materials.sql." },
         { status: 500 },
       );
     }
@@ -46,7 +46,7 @@ export async function GET() {
     .limit(500);
   if (error) {
     return NextResponse.json(
-      { error: error.message, hint: "Run AJ_Academy_SB/lms_05_study_materials.sql." },
+      { error: error.message, hint: "Run AJ_Academy_SB/lms_study_materials.sql." },
       { status: 500 },
     );
   }

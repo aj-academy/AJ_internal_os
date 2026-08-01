@@ -22,7 +22,7 @@ export async function GET() {
       .limit(200);
     if (error) {
       return NextResponse.json(
-        { error: error.message, hint: "Run AJ_Academy_SB/lms_07_tests_core.sql." },
+        { error: error.message, hint: "Run AJ_Academy_SB/lms_tests_core.sql." },
         { status: 500 },
       );
     }
@@ -37,7 +37,7 @@ export async function GET() {
   const { data, error } = await supabase.from("lms_tests").select("*").order("updated_at", { ascending: false }).limit(500);
   if (error) {
     return NextResponse.json(
-      { error: error.message, hint: "Run AJ_Academy_SB/lms_07_tests_core.sql." },
+      { error: error.message, hint: "Run AJ_Academy_SB/lms_tests_core.sql." },
       { status: 500 },
     );
   }

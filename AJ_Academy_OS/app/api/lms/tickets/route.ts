@@ -25,7 +25,7 @@ export async function GET() {
   const { data, error } = await query;
   if (error) {
     return NextResponse.json(
-      { error: error.message, hint: "Run AJ_Academy_SB/lms_06_tickets.sql after lms_04 and lms_05." },
+      { error: error.message, hint: "Run AJ_Academy_SB/lms_tickets.sql after lms_projects.sql and lms_study_materials.sql." },
       { status: 500 },
     );
   }

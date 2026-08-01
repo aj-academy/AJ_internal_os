@@ -25,7 +25,7 @@ export async function GET() {
       return NextResponse.json(
         {
           error: error.message,
-          hint: "Run AJ_Academy_SB/lms_03_assignments.sql after lms_01 and lms_02.",
+          hint: "Run AJ_Academy_SB/lms_assignments.sql after lms_academic_foundation.sql and lms_mentor_allocations.sql.",
         },
         { status: 500 },
       );
@@ -53,7 +53,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error: error.message,
-        hint: "Run AJ_Academy_SB/lms_03_assignments.sql after lms_01 and lms_02.",
+        hint: "Run AJ_Academy_SB/lms_assignments.sql after lms_academic_foundation.sql and lms_mentor_allocations.sql.",
       },
       { status: 500 },
     );

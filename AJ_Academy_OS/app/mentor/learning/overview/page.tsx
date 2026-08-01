@@ -59,7 +59,7 @@ export default function MentorLearningOverviewPage() {
 
       if (allocError) {
         setError(allocError.message);
-        setHint("Ask admin to run lms_01_academic_foundation.sql and lms_02_mentor_allocations.sql.");
+        setHint("Ask admin to run lms_academic_foundation.sql and lms_mentor_allocations.sql.");
         return;
       }
 

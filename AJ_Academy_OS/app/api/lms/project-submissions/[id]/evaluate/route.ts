@@ -32,7 +32,7 @@ export async function POST(request: Request, ctx: Ctx) {
 
   if (error) {
     return NextResponse.json(
-      { error: error.message, hint: "Run AJ_Academy_SB/lms_09_project_milestones.sql." },
+      { error: error.message, hint: "Run AJ_Academy_SB/lms_project_milestones.sql." },
       { status: 500 },
     );
   }

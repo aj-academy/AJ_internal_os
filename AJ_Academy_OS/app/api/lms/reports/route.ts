@@ -29,7 +29,7 @@ export async function GET(request: Request) {
   const { data: events, error } = await query;
   if (error) {
     return NextResponse.json(
-      { error: error.message, hint: "Run AJ_Academy_SB/lms_10_calendar_reports.sql." },
+      { error: error.message, hint: "Run AJ_Academy_SB/lms_calendar_reports.sql." },
       { status: 500 },
     );
   }
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
           events: events ?? [],
           summary: null,
           warning: summaryError.message,
-          hint: "Run AJ_Academy_SB/lms_10_calendar_reports.sql.",
+          hint: "Run AJ_Academy_SB/lms_calendar_reports.sql.",
         },
         { status: 200 },
       );
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
 
   if (error) {
     return NextResponse.json(
-      { error: error.message, hint: "Run AJ_Academy_SB/lms_10_calendar_reports.sql." },
+      { error: error.message, hint: "Run AJ_Academy_SB/lms_calendar_reports.sql." },
       { status: 500 },
     );
   }

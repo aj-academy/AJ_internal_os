@@ -430,4 +430,4 @@ create policy student_enrolments_self_select on public.student_enrolments
   for select to authenticated
   using (student_id = auth.uid() or public.is_admin());
 
--- Mentors: enrolment select scoped in lms_02 (after allocations exist)
+-- Mentors: enrolment select scoped in lms_mentor_allocations.sql (after allocations exist)

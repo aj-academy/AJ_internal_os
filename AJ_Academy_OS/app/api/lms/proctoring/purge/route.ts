@@ -19,7 +19,7 @@ export async function POST() {
   });
   if (error) {
     return NextResponse.json(
-      { error: error.message, hint: "Run AJ_Academy_SB/lms_11_proctoring_media.sql." },
+      { error: error.message, hint: "Run AJ_Academy_SB/lms_proctoring_media.sql." },
       { status: 500 },
     );
   }

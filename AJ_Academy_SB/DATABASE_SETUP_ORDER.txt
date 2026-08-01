@@ -143,18 +143,18 @@ Mentor portal (/mentor/*):
   My Tasks (assignee) + Assign Tasks (assigner) + student roster on dashboard.
   Mood popup optional via employee_daily_mood_schema.sql.
 
-LMS Academic foundation (after aj_academy_platform_expansion.sql + system_settings):
-  L1) lms_01_academic_foundation.sql — academic_departments/courses/batches/modules + student_enrolments + seed/backfill RPCs
-  L2) lms_02_mentor_allocations.sql — effective-dated mentor_allocations + scope helpers + RLS
-  L3) lms_03_assignments.sql — lms_assignments + recipients + submissions + evaluations + publish RPC
-  L4) lms_04_projects.sql — academic lms_projects + milestones + recipients + publish RPC
-  L5) lms_05_study_materials.sql — study materials + recipients + activity tracking + study-materials bucket
-  L6) lms_06_tickets.sql — queries & complaints + sensitive routing + query-attachments bucket
-  L7) lms_07_tests_core.sql — tests, questions, attempts, server timer, autosave, objective grading, tab-switch policies
-  L8) lms_08_submissions_proctoring.sql — assignment submit/evaluate RPCs, private submission buckets, proctoring consent/events/media
-  L9) lms_09_project_milestones.sql — project milestone submit + mentor evaluate RPCs
-  L10) lms_10_calendar_reports.sql — academic calendar events + lms_report_summary()
-  L11) lms_11_proctoring_media.sql — register snapshots, retention expiry, purge helpers
+LMS Academic foundation (after aj_academy_platform_expansion.sql + system_settings) — run in order:
+  lms_academic_foundation.sql — academic_departments/courses/batches/modules + student_enrolments + seed/backfill RPCs
+  lms_mentor_allocations.sql — effective-dated mentor_allocations + scope helpers + RLS
+  lms_assignments.sql — lms_assignments + recipients + submissions + evaluations + publish RPC
+  lms_projects.sql — academic lms_projects + milestones + recipients + publish RPC
+  lms_study_materials.sql — study materials + recipients + activity tracking + study-materials bucket
+  lms_tickets.sql — queries & complaints + sensitive routing + query-attachments bucket
+  lms_tests_core.sql — tests, questions, attempts, server timer, autosave, objective grading, tab-switch policies
+  lms_submissions_proctoring.sql — assignment submit/evaluate RPCs, private submission buckets, proctoring consent/events/media
+  lms_project_milestones.sql — project milestone submit + mentor evaluate RPCs
+  lms_calendar_reports.sql — academic calendar events + lms_report_summary()
+  lms_proctoring_media.sql — register snapshots, retention expiry, purge helpers
   App: Admin → Academic Management → Mentor Allocation (seed from Settings, create/revoke allocations); Calendar & Reports.
   Mentor → Learning Management → Overview / Assignments / Submissions (assignments+projects) / Projects / Tests (proctoring review) / Materials / Queries.
   Student → Learning & Assessments → Overview / Assignments / Projects (milestones) / Tests (camera snapshots + SEB soft check) / Materials / Queries.

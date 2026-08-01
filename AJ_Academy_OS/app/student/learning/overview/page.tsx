@@ -46,7 +46,7 @@ export default function StudentLearningOverviewPage() {
 
       if (enrolError) {
         setError(enrolError.message);
-        setHint("Ask admin to run lms_01_academic_foundation.sql and seed enrolments.");
+        setHint("Ask admin to run lms_academic_foundation.sql and seed enrolments.");
         return;
       }
 
