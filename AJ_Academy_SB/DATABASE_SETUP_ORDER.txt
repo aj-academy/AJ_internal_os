@@ -176,7 +176,11 @@ STUDENT IMPORT (portal profiles — not CRM Student Master)
        POST /api/admin/students/import/[id]/cancel
        GET/POST /api/admin/students/mentor-assignments
        GET/PUT /api/admin/students/mentor-capacity
+       GET /api/admin/students/mentor-allocations/template
+       POST /api/admin/students/mentor-allocations/import
+       GET /api/admin/students/reports?kind=&format=json|csv|xlsx|pdf
        GET /api/mentor/my-students
+  App also: Mentor Capacity, Import & Allocation Reports
   Audit: STUDENT_IMPORT_AND_MENTOR_ALLOCATION_AUDIT.md
   API notes: STUDENT_IMPORT_AND_MENTOR_ALLOCATION_API.md
 

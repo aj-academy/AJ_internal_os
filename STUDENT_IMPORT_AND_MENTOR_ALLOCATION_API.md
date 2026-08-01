@@ -30,6 +30,21 @@ Updates require `confirmUpdateExisting: true`. Passwords / auth IDs / mentor his
 
 File SHA-256 + import mode: completed fingerprint blocks re-execute (HTTP 409). Row `idempotency_key` = org|registration|academic_year.
 
+## Mentor allocation spreadsheet import
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/admin/students/mentor-allocations/template?format=xlsx\|csv` | Allocation template |
+| POST | `/api/admin/students/mentor-allocations/import` | multipart `file` + `dry_run` + optional capacity override |
+
+## Reports
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/admin/students/reports?kind=…&format=json\|csv\|xlsx\|pdf` | Import & allocation reports |
+
+Kinds: `import_summary`, `students_without_mentor`, `students_with_multiple_mentors`, `mentor_workload`, `expiring_allocations`, `temporary_allocations`, `allocation_history`.
+
 ## Mentor–student assignments
 
 | Method | Path | Purpose |

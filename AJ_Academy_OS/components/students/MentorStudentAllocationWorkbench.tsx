@@ -49,6 +49,8 @@ export function MentorStudentAllocationWorkbench() {
   const [transferTo, setTransferTo] = useState("");
   const [transferStudent, setTransferStudent] = useState("");
   const [busy, setBusy] = useState(false);
+  const [allocImportPreview, setAllocImportPreview] = useState<unknown>(null);
+  const [allocFile, setAllocFile] = useState<File | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -165,6 +167,53 @@ export function MentorStudentAllocationWorkbench() {
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Transfer failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const downloadAllocTemplate = async (format: "xlsx" | "csv") => {
+    const res = await fetch(`/api/admin/students/mentor-allocations/template?format=${format}`, {
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setError(j.error || "Template download failed");
+      return;
+    }
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `mentor_allocation_template.${format}`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const runAllocImport = async (dryRun: boolean) => {
+    if (!allocFile) {
+      setError("Choose an allocation spreadsheet first.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.append("file", allocFile);
+      body.append("dry_run", dryRun ? "1" : "0");
+      body.append("capacity_override", capacityOverride ? "1" : "0");
+      if (overrideReason) body.append("capacity_override_reason", overrideReason);
+      const res = await fetch("/api/admin/students/mentor-allocations/import", {
+        method: "POST",
+        credentials: "include",
+        body,
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Import failed");
+      setAllocImportPreview(json);
+      setSuccess(dryRun ? "Allocation dry run complete." : `Imported ${json.summary?.created ?? 0} allocations.`);
+      if (!dryRun) await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Import failed");
     } finally {
       setBusy(false);
     }
@@ -318,6 +367,36 @@ export function MentorStudentAllocationWorkbench() {
         </div>
         {preview ? (
           <pre className="max-h-48 overflow-auto rounded bg-muted/40 p-3 text-xs">{JSON.stringify(preview, null, 2)}</pre>
+        ) : null}
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <h2 className="text-sm font-semibold">Excel / CSV allocation import</h2>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={() => void downloadAllocTemplate("xlsx")}>
+            Download Excel template
+          </Button>
+          <Button type="button" variant="outline" onClick={() => void downloadAllocTemplate("csv")}>
+            Download CSV template
+          </Button>
+        </div>
+        <input
+          type="file"
+          accept=".xlsx,.csv"
+          onChange={(e) => setAllocFile(e.target.files?.[0] ?? null)}
+        />
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" disabled={busy || !allocFile} onClick={() => void runAllocImport(true)}>
+            Dry run
+          </Button>
+          <Button type="button" disabled={busy || !allocFile || !allocImportPreview} onClick={() => void runAllocImport(false)}>
+            Confirm import
+          </Button>
+        </div>
+        {allocImportPreview ? (
+          <pre className="max-h-48 overflow-auto rounded bg-muted/40 p-3 text-xs">
+            {JSON.stringify(allocImportPreview, null, 2)}
+          </pre>
         ) : null}
       </section>
 

@@ -390,7 +390,9 @@ Run in order (after LMS academic foundation for catalog FKs):
 App:
 
 - Admin → **Student Management → Bulk Import Students** — template, upload, mapping, dry-run, execute, history, error export
-- Admin → **Student Management → Mentor Allocation** — manual/bulk/transfer + workload (distinct from Academic → Mentor Allocation scope)
+- Admin → **Student Management → Mentor Allocation** — manual/bulk/transfer + Excel allocation import + workload (distinct from Academic → Mentor Allocation scope)
+- Admin → **Student Management → Mentor Capacity** — per-mentor caps / availability
+- Admin → **Student Management → Import & Allocation Reports** — CSV / Excel / PDF / print
 - Mentor → **My Students** — primary/secondary/project filters
 
 Import creates Auth users **server-side** with generated temporary passwords (never in the spreadsheet). Default mode: create + skip duplicates. Updating existing students requires explicit confirmation and does not overwrite passwords, auth IDs, mentor history, or grades.
