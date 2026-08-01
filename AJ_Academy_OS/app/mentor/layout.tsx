@@ -12,6 +12,7 @@ const mentorSidebarItems = [
       { label: "Mentor Overview", href: "/mentor/learning/overview" },
       { label: "Assignment Management", href: "/mentor/learning/assignments" },
       { label: "Project Management", href: "/mentor/learning/projects" },
+      { label: "Test Management", href: "/mentor/learning/tests" },
       { label: "Study Materials", href: "/mentor/learning/materials" },
       { label: "Student Queries", href: "/mentor/learning/queries" },
     ],

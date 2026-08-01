@@ -399,7 +399,7 @@ erDiagram
 | Phase 4 academic projects | **Done** (`lms_04` + UI) |
 | Phase 14 study materials | **Done** (`lms_05` + UI; link-first, private bucket ready) |
 | Phase 16 queries & complaints | **Done** (`lms_06` + UI; sensitive admin-only) |
-| Phase 5+ secure tests | Pending |
+| Phase 5+ secure tests | **Core done** (`lms_07` + mentor/student UI). Camera/SEB/proctoring media still pending |
 | Ready for assignments UI / publish flow | After running L1–L6 SQL in Supabase |
 
 **Do not** implement secure tests or camera until Phases 1–4 + materials/tickets foundations are stable and RLS-tested.

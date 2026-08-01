@@ -150,7 +150,8 @@ LMS Academic foundation (after aj_academy_platform_expansion.sql + system_settin
   L4) lms_04_projects.sql — academic lms_projects + milestones + recipients + publish RPC
   L5) lms_05_study_materials.sql — study materials + recipients + activity tracking + study-materials bucket
   L6) lms_06_tickets.sql — queries & complaints + sensitive routing + query-attachments bucket
+  L7) lms_07_tests_core.sql — tests, questions, attempts, server timer, autosave, objective grading, tab-switch policies
   App: Admin → Academic Management → Mentor Allocation (seed from Settings, create/revoke allocations).
-  Mentor → Learning Management → Overview / Assignments / Projects / Materials / Queries.
-  Student → Learning & Assessments → Overview / Assignments / Projects / Materials / Queries.
+  Mentor → Learning Management → Overview / Assignments / Projects / Tests / Materials / Queries.
+  Student → Learning & Assessments → Overview / Assignments / Projects / Tests / Materials / Queries.
   Audit: LMS_MODULE_AUDIT.md at repo root.

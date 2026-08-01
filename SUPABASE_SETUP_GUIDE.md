@@ -357,12 +357,13 @@ Run in Supabase SQL Editor (after platform expansion + system settings):
 4. **`lms_04_projects.sql`** — academic projects, milestones, recipients  
 5. **`lms_05_study_materials.sql`** — materials, recipients, activity, private `study-materials` bucket  
 6. **`lms_06_tickets.sql`** — queries & complaints (sensitive → admin only), `query-attachments` bucket  
+7. **`lms_07_tests_core.sql`** — tests, MCQ questions, recipients, server-side attempts/timer, autosave, objective grading  
 
 Then in the app:
 
 - **Admin → Academic Management** — Overview, Mentor Allocation, Student Query Monitoring  
-- **Mentor → Learning Management** — Overview, Assignments, Projects, Study Materials, Student Queries  
-- **Student → Learning & Assessments** — Overview, Assignments, Projects, Materials, Queries & Complaints  
+- **Mentor → Learning Management** — Overview, Assignments, Projects, Tests, Study Materials, Student Queries  
+- **Student → Learning & Assessments** — Overview, Assignments, Projects, Tests, Materials, Queries & Complaints  
 
 Do **not** confuse CRM `clients` (Student Master leads) with portal student enrolments. Ops `tasks` / `projects` remain separate from LMS coursework.
 

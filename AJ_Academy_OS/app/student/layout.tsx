@@ -12,6 +12,7 @@ const studentSidebarItems = [
       { label: "My Overview", href: "/student/learning/overview" },
       { label: "Assignments", href: "/student/learning/assignments" },
       { label: "Projects", href: "/student/learning/projects" },
+      { label: "Tests", href: "/student/learning/tests" },
       { label: "Study Materials", href: "/student/learning/materials" },
       { label: "Queries & Complaints", href: "/student/learning/queries" },
     ],
