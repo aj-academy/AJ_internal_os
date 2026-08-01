@@ -395,7 +395,11 @@ erDiagram
 | Reuse vs rebuild decisions recorded | Done |
 | Migrations proposed | Done |
 | Phase 1 mentor allocation implemented | **Done** (SQL + Admin/Mentor/Student UI) |
-| Phase 2–3 audience + assignments schema | **SQL ready** (`lms_03_assignments.sql`) — UI next |
-| Ready for assignments UI / publish flow | After running L1–L3 SQL in Supabase |
+| Phase 2–3 audience + assignments | **Done** (`lms_03` + mentor/student assignment UI) |
+| Phase 4 academic projects | **Done** (`lms_04` + UI) |
+| Phase 14 study materials | **Done** (`lms_05` + UI; link-first, private bucket ready) |
+| Phase 16 queries & complaints | **Done** (`lms_06` + UI; sensitive admin-only) |
+| Phase 5+ secure tests | Pending |
+| Ready for assignments UI / publish flow | After running L1–L6 SQL in Supabase |
 
 **Do not** implement secure tests or camera until Phases 1–4 + materials/tickets foundations are stable and RLS-tested.

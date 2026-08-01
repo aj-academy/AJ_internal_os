@@ -11,6 +11,9 @@ const mentorSidebarItems = [
     children: [
       { label: "Mentor Overview", href: "/mentor/learning/overview" },
       { label: "Assignment Management", href: "/mentor/learning/assignments" },
+      { label: "Project Management", href: "/mentor/learning/projects" },
+      { label: "Study Materials", href: "/mentor/learning/materials" },
+      { label: "Student Queries", href: "/mentor/learning/queries" },
     ],
   },
   { label: "Assign Tasks", href: "/mentor/assign-tasks" },

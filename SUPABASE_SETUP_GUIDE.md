@@ -354,14 +354,17 @@ Run in Supabase SQL Editor (after platform expansion + system settings):
 1. **`lms_01_academic_foundation.sql`** — `academic_departments`, `academic_courses`, `academic_batches`, `academic_modules`, `student_enrolments`, seed/backfill RPCs  
 2. **`lms_02_mentor_allocations.sql`** — effective-dated `mentor_allocations` + mentor scope helpers + RLS  
 3. **`lms_03_assignments.sql`** — `lms_assignments`, recipients, submissions, evaluations, `lms_publish_assignment` RPC  
+4. **`lms_04_projects.sql`** — academic projects, milestones, recipients  
+5. **`lms_05_study_materials.sql`** — materials, recipients, activity, private `study-materials` bucket  
+6. **`lms_06_tickets.sql`** — queries & complaints (sensitive → admin only), `query-attachments` bucket  
 
 Then in the app:
 
-- **Admin → Academic Management → Mentor Allocation** — Seed from Settings, create/revoke allocations (audited in `audit_logs`)  
-- **Mentor → Learning Management** — Overview + **Assignment Management** (publish to enrolled students)  
-- **Student → Learning & Assessments** — My Overview + **Assignments** (recipient-scoped)  
+- **Admin → Academic Management** — Overview, Mentor Allocation, Student Query Monitoring  
+- **Mentor → Learning Management** — Overview, Assignments, Projects, Study Materials, Student Queries  
+- **Student → Learning & Assessments** — Overview, Assignments, Projects, Materials, Queries & Complaints  
 
-Do **not** confuse CRM `clients` (Student Master leads) with portal student enrolments. Ops `tasks` remain separate from graded LMS assignments.
+Do **not** confuse CRM `clients` (Student Master leads) with portal student enrolments. Ops `tasks` / `projects` remain separate from LMS coursework.
 
 ### Student My Tasks
 
