@@ -39,6 +39,7 @@ const adminSidebarItems = [
     href: "/admin/students/bulk-import",
     children: [
       { label: "Bulk Import Students", href: "/admin/students/bulk-import" },
+      { label: "Mentor Allocation", href: "/admin/students/mentor-allocation" },
     ],
   },
   { label: "Reminders & Calendar", href: "/admin/reminders" },

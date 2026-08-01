@@ -163,10 +163,22 @@ Optional check anytime: lms_verify.sql
 STUDENT IMPORT (portal profiles — not CRM Student Master)
   student_portal_profile_fields.sql — registration_number, phone, academic metadata on profiles
   student_import_batches.sql — import batches + private student-imports storage bucket
-  App: Admin → Student Management → Bulk Import Students (template + upload Phase 1–2)
+  student_import_rows.sql — row-level mapping/validation/results (Phases 3–10)
+  student_mentor_assignments.sql — student↔mentor assignments + capacity + RLS + expiry
+  App: Admin → Student Management → Bulk Import Students / Mentor Allocation
+       Mentor → My Students
   API: GET /api/admin/students/import/template?format=xlsx|csv
        POST/GET /api/admin/students/import/upload
+       GET/PUT /api/admin/students/import/[id]/mapping
+       POST /api/admin/students/import/[id]/dry-run
+       POST /api/admin/students/import/[id]/execute
+       GET /api/admin/students/import/[id]/errors
+       POST /api/admin/students/import/[id]/cancel
+       GET/POST /api/admin/students/mentor-assignments
+       GET/PUT /api/admin/students/mentor-capacity
+       GET /api/mentor/my-students
   Audit: STUDENT_IMPORT_AND_MENTOR_ALLOCATION_AUDIT.md
+  API notes: STUDENT_IMPORT_AND_MENTOR_ALLOCATION_API.md
 
   App: Admin → Academic Management → Mentor Allocation (seed from Settings, create/revoke allocations); Calendar & Reports.
   Mentor → Learning Management → Overview / Assignments / Submissions (assignments+projects) / Projects / Tests (proctoring review) / Materials / Queries.

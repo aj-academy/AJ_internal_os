@@ -1,159 +1,134 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/button";
 import { CrmFlash } from "@/components/ui/CrmFlash";
 import {
+  STUDENT_IMPORT_ALL_COLUMNS,
   STUDENT_IMPORT_MAX_FILE_BYTES,
   STUDENT_IMPORT_MAX_ROWS_RECOMMENDED,
-  STUDENT_IMPORT_OPTIONAL_COLUMNS,
-  STUDENT_IMPORT_REQUIRED_COLUMNS,
   STUDENT_IMPORT_TEMPLATE_VERSION,
+  type StudentImportColumn,
 } from "@/lib/students/importTemplate";
-
-type CatalogSummary = {
-  departmentCount: number;
-  courseCount: number;
-  batchCount: number;
-};
+import type { ColumnMapping } from "@/lib/students/importMapping";
+import type { ImportMode } from "@/lib/students/importValidate";
 
 type ImportBatchRow = {
   id: string;
   batch_number: string;
   file_name: string;
-  file_mime: string | null;
-  file_size_bytes: number | null;
-  template_version: string | null;
-  template_version_ok: boolean;
   data_row_count: number;
   status: string;
   uploaded_at: string;
-  error_message: string | null;
+  template_version: string | null;
+  created_count?: number;
+  updated_count?: number;
+  skipped_count?: number;
+  failed_count?: number;
+  import_mode?: string | null;
 };
 
-type UploadResultBatch = ImportBatchRow & {
-  storage_path?: string | null;
-  detected_headers?: string[];
-  file_hash?: string;
+type MappingResponse = {
+  headers: string[];
+  analysis: {
+    autoMapping: ColumnMapping;
+    ambiguous: { target: StudentImportColumn; candidates: string[] }[];
+    missingRequired: StudentImportColumn[];
+    unknownHeaders: string[];
+  };
+  previewRows: Record<string, string>[];
+  totalRows: number;
+  batch: ImportBatchRow & { column_mapping?: ColumnMapping; mapping_confirmed_at?: string | null };
 };
+
+const MODES: { id: ImportMode; label: string }[] = [
+  { id: "skip_duplicates", label: "Create new + skip duplicates (safest default)" },
+  { id: "create_only", label: "Create new only" },
+  { id: "update_only", label: "Update existing only" },
+  { id: "create_and_update", label: "Create new and update existing" },
+  { id: "import_valid_skip_invalid", label: "Import valid rows; skip invalid" },
+  { id: "stop_on_error", label: "Stop if any error exists" },
+];
 
 export function StudentBulkImportWorkbench() {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [loadingCatalog, setLoadingCatalog] = useState(true);
-  const [loadingBatches, setLoadingBatches] = useState(true);
-  const [downloading, setDownloading] = useState<"xlsx" | "csv" | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [summary, setSummary] = useState<CatalogSummary | null>(null);
+  const [downloading, setDownloading] = useState<"xlsx" | "csv" | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [batches, setBatches] = useState<ImportBatchRow[]>([]);
-  const [lastUpload, setLastUpload] = useState<UploadResultBatch | null>(null);
-  const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
-
-  const loadCatalogSummary = useCallback(async () => {
-    setLoadingCatalog(true);
-    try {
-      const res = await fetch("/api/lms/academic", { credentials: "include" });
-      const json = (await res.json()) as {
-        error?: string;
-        hint?: string;
-        departments?: unknown[];
-        courses?: unknown[];
-        batches?: unknown[];
-      };
-      if (!res.ok) {
-        setError(json.error || "Could not load academic catalog.");
-        setHint(json.hint || null);
-        setSummary(null);
-        return;
-      }
-      setSummary({
-        departmentCount: json.departments?.length ?? 0,
-        courseCount: json.courses?.length ?? 0,
-        batchCount: json.batches?.length ?? 0,
-      });
-    } catch {
-      setError("Network error while loading academic catalog.");
-      setSummary(null);
-    } finally {
-      setLoadingCatalog(false);
-    }
-  }, []);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [mappingInfo, setMappingInfo] = useState<MappingResponse | null>(null);
+  const [mapping, setMapping] = useState<ColumnMapping>({});
+  const [mode, setMode] = useState<ImportMode>("skip_duplicates");
+  const [confirmUpdate, setConfirmUpdate] = useState(false);
+  const [drySummary, setDrySummary] = useState<Record<string, unknown> | null>(null);
+  const [dryRows, setDryRows] = useState<unknown[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [showAllocateHint, setShowAllocateHint] = useState(false);
 
   const loadBatches = useCallback(async () => {
-    setLoadingBatches(true);
-    try {
-      const res = await fetch("/api/admin/students/import/upload", { credentials: "include" });
-      const json = (await res.json()) as {
-        error?: string;
-        hint?: string;
-        batches?: ImportBatchRow[];
-      };
-      if (!res.ok) {
-        setHint(json.hint || json.error || null);
-        setBatches([]);
-        return;
-      }
-      setBatches(json.batches ?? []);
-    } catch {
-      setBatches([]);
-    } finally {
-      setLoadingBatches(false);
-    }
+    const res = await fetch("/api/admin/students/import/upload", { credentials: "include" });
+    const json = await res.json();
+    if (res.ok) setBatches(json.batches ?? []);
   }, []);
 
   useEffect(() => {
-    void loadCatalogSummary();
     void loadBatches();
-  }, [loadCatalogSummary, loadBatches]);
+  }, [loadBatches]);
 
   const downloadTemplate = async (format: "xlsx" | "csv") => {
     setDownloading(format);
     setError(null);
-    setHint(null);
-    setSuccess(null);
     try {
       const res = await fetch(`/api/admin/students/import/template?format=${format}`, {
         credentials: "include",
       });
       if (!res.ok) {
-        const json = (await res.json().catch(() => ({}))) as { error?: string; hint?: string };
-        setError(json.error || "Template download failed.");
-        setHint(json.hint || null);
+        const j = await res.json().catch(() => ({}));
+        setError(j.error || "Download failed");
         return;
       }
       const blob = await res.blob();
-      const disposition = res.headers.get("Content-Disposition") || "";
-      const match = /filename="([^"]+)"/.exec(disposition);
-      const filename =
-        match?.[1] ||
-        (format === "xlsx"
-          ? `AJ_Student_Import_Template_v${STUDENT_IMPORT_TEMPLATE_VERSION}.xlsx`
-          : `AJ_Student_Import_Template_v${STUDENT_IMPORT_TEMPLATE_VERSION}.csv`);
-      const url = URL.createObjectURL(blob);
+      const match = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
       const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
+      a.href = URL.createObjectURL(blob);
+      a.download = match?.[1] || `template.${format}`;
       a.click();
-      URL.revokeObjectURL(url);
-      setSuccess(`${format.toUpperCase()} template downloaded (${filename}).`);
-    } catch {
-      setError("Network error while downloading template.");
+      URL.revokeObjectURL(a.href);
+      setSuccess("Template downloaded.");
     } finally {
       setDownloading(null);
+    }
+  };
+
+  const openMapping = async (id: string) => {
+    setBusy("mapping");
+    setActiveId(id);
+    setDrySummary(null);
+    setShowAllocateHint(false);
+    try {
+      const res = await fetch(`/api/admin/students/import/${id}/mapping`, { credentials: "include" });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error || "Could not load mapping");
+        setHint(json.hint || null);
+        return;
+      }
+      setMappingInfo(json);
+      setMapping(json.batch.column_mapping?.["Registration Number"] ? json.batch.column_mapping : json.analysis.autoMapping);
+    } finally {
+      setBusy(null);
     }
   };
 
   const uploadFile = async (file: File) => {
     setUploading(true);
     setError(null);
-    setHint(null);
     setSuccess(null);
-    setUploadWarnings([]);
-    setLastUpload(null);
     try {
       const body = new FormData();
       body.append("file", file);
@@ -162,250 +137,351 @@ export function StudentBulkImportWorkbench() {
         credentials: "include",
         body,
       });
-      const json = (await res.json()) as {
-        error?: string;
-        hint?: string;
-        errors?: string[];
-        warnings?: string[];
-        batch?: UploadResultBatch;
-        priorSameFile?: { batch_number: string; status: string }[];
-      };
+      const json = await res.json();
       if (!res.ok) {
-        const detail = json.errors?.length ? json.errors.join(" ") : json.error || "Upload failed.";
-        setError(detail);
+        setError((json.errors || [json.error]).filter(Boolean).join(" ") || "Upload failed");
         setHint(json.hint || null);
-        setUploadWarnings(json.warnings ?? []);
         return;
       }
-      if (json.batch) setLastUpload(json.batch);
-      setUploadWarnings(json.warnings ?? []);
-      const prior =
-        json.priorSameFile && json.priorSameFile.length > 0
-          ? ` Same file hash seen before (${json.priorSameFile.map((p) => p.batch_number).join(", ")}).`
-          : "";
-      setSuccess(
-        `Uploaded ${json.batch?.batch_number ?? "batch"} — ${json.batch?.data_row_count ?? 0} data rows stored securely.${prior}`,
-      );
+      setSuccess(`Uploaded ${json.batch.batch_number}`);
       await loadBatches();
-    } catch {
-      setError("Network error while uploading file.");
+      await openMapping(json.batch.id);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  const onPickFiles = (files: FileList | null) => {
-    const file = files?.[0];
-    if (!file) return;
-    void uploadFile(file);
+  const confirmMapping = async () => {
+    if (!activeId) return;
+    setBusy("confirm-map");
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/students/import/${activeId}/mapping`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mapping }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error || "Mapping invalid");
+        return;
+      }
+      setSuccess("Column mapping confirmed.");
+      await loadBatches();
+    } finally {
+      setBusy(null);
+    }
   };
 
-  const emptyCatalog =
-    !loadingCatalog &&
-    summary &&
-    summary.departmentCount === 0 &&
-    summary.courseCount === 0 &&
-    summary.batchCount === 0;
+  const runDryRun = async () => {
+    if (!activeId) return;
+    setBusy("dry-run");
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/students/import/${activeId}/dry-run`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, confirmUpdateExisting: confirmUpdate }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error || "Dry run failed");
+        setHint(json.hint || null);
+        return;
+      }
+      setDrySummary(json.summary);
+      setDryRows(json.rows || []);
+      if (json.priorSameFingerprint?.length) {
+        setHint(
+          `Same file fingerprint was imported before: ${json.priorSameFingerprint.map((p: { batch_number: string }) => p.batch_number).join(", ")}`,
+        );
+      }
+      setSuccess("Dry run complete — no database student writes yet.");
+      await loadBatches();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const executeImport = async () => {
+    if (!activeId) return;
+    if ((mode === "update_only" || mode === "create_and_update") && !confirmUpdate) {
+      setError("Confirm updating existing students before executing.");
+      return;
+    }
+    setBusy("execute");
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/students/import/${activeId}/execute`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, confirmUpdateExisting: confirmUpdate }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error || "Import failed");
+        return;
+      }
+      setSuccess(
+        `Import finished: created ${json.result.created}, updated ${json.result.updated}, skipped ${json.result.skipped}, failed ${json.result.failed}.`,
+      );
+      setShowAllocateHint(!!json.allocateMentorsNext);
+      await loadBatches();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const cancelImport = async () => {
+    if (!activeId) return;
+    setBusy("cancel");
+    try {
+      const res = await fetch(`/api/admin/students/import/${activeId}/cancel`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (!res.ok) setError(json.error || "Cancel failed");
+      else {
+        setSuccess("Import cancelled.");
+        setActiveId(null);
+        setMappingInfo(null);
+        setDrySummary(null);
+      }
+      await loadBatches();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const downloadErrors = (only: string, format: string) => {
+    if (!activeId) return;
+    window.open(`/api/admin/students/import/${activeId}/errors?only=${only}&format=${format}`, "_blank");
+  };
+
+  const headerOptions = useMemo(() => mappingInfo?.headers ?? [], [mappingInfo]);
 
   return (
     <div className="space-y-6">
       <PageHeader
         kicker="Student Management"
         title="Bulk Import Students"
-        description="Download a catalog-backed template, then upload .xlsx or .csv. Mapping and dry-run come next."
+        description="Template → upload → map columns → dry run → confirm import. Portal Auth students only (not CRM leads)."
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={loadingCatalog}
-              onClick={() => void loadCatalogSummary()}
-            >
-              Refresh catalog
+            <Button type="button" disabled={!!downloading} onClick={() => void downloadTemplate("xlsx")}>
+              {downloading === "xlsx" ? "…" : "Excel template"}
             </Button>
-            <Button
-              type="button"
-              disabled={!!downloading || loadingCatalog}
-              onClick={() => void downloadTemplate("xlsx")}
-            >
-              {downloading === "xlsx" ? "Preparing…" : "Download Excel (.xlsx)"}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={!!downloading || loadingCatalog}
-              onClick={() => void downloadTemplate("csv")}
-            >
-              {downloading === "csv" ? "Preparing…" : "Download CSV"}
+            <Button type="button" variant="secondary" disabled={!!downloading} onClick={() => void downloadTemplate("csv")}>
+              CSV template
             </Button>
           </div>
         }
       />
 
       {error ? <CrmFlash tone="error" message={error} onDismiss={() => setError(null)} /> : null}
-      {hint ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{hint}</div>
-      ) : null}
+      {hint ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">{hint}</div> : null}
       {success ? <CrmFlash tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
 
       <section className="rounded-lg border border-border bg-card p-4 space-y-3">
-        <h2 className="text-sm font-semibold tracking-wide text-foreground">1. Template</h2>
-        {loadingCatalog ? (
-          <p className="text-sm text-muted-foreground">Loading academic catalog…</p>
-        ) : emptyCatalog ? (
-          <div className="space-y-2 text-sm text-muted-foreground">
-            <p>No departments, courses, or batches found in the LMS catalog.</p>
-            <p>
-              Add them under Academic Management → LMS Catalog, then refresh. Template Valid Values will be
-              incomplete until then.
-            </p>
-          </div>
-        ) : (
-          <ul className="grid gap-2 text-sm sm:grid-cols-3">
-            <li className="rounded-md bg-muted/40 px-3 py-2">
-              Departments: <strong>{summary?.departmentCount ?? 0}</strong>
-            </li>
-            <li className="rounded-md bg-muted/40 px-3 py-2">
-              Courses: <strong>{summary?.courseCount ?? 0}</strong>
-            </li>
-            <li className="rounded-md bg-muted/40 px-3 py-2">
-              Batches: <strong>{summary?.batchCount ?? 0}</strong>
-            </li>
-          </ul>
-        )}
+        <h2 className="text-sm font-semibold">Upload</h2>
         <p className="text-xs text-muted-foreground">
-          Template version <strong>{STUDENT_IMPORT_TEMPLATE_VERSION}</strong> · Max{" "}
-          {STUDENT_IMPORT_MAX_ROWS_RECOMMENDED} data rows · Max file{" "}
-          {STUDENT_IMPORT_MAX_FILE_BYTES / (1024 * 1024)} MB · .xlsx / .csv only (not .xls)
+          v{STUDENT_IMPORT_TEMPLATE_VERSION} · max {STUDENT_IMPORT_MAX_ROWS_RECOMMENDED} rows ·{" "}
+          {STUDENT_IMPORT_MAX_FILE_BYTES / (1024 * 1024)} MB · .xlsx/.csv
         </p>
-      </section>
-
-      <section className="rounded-lg border border-border bg-card p-4 space-y-3">
-        <h2 className="text-sm font-semibold tracking-wide text-foreground">2. Upload file</h2>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+          accept=".xlsx,.csv"
           className="hidden"
-          onChange={(e) => onPickFiles(e.target.files)}
+          onChange={(e) => e.target.files?.[0] && void uploadFile(e.target.files[0])}
         />
         <div
-          role="button"
-          tabIndex={0}
-          aria-label="Drop student import file here"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              fileInputRef.current?.click();
-            }
-          }}
-          onDragEnter={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
           onDragOver={(e) => {
             e.preventDefault();
             setDragOver(true);
           }}
-          onDragLeave={(e) => {
-            e.preventDefault();
-            setDragOver(false);
-          }}
+          onDragLeave={() => setDragOver(false)}
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            onPickFiles(e.dataTransfer.files);
+            const f = e.dataTransfer.files?.[0];
+            if (f) void uploadFile(f);
           }}
-          className={`flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors ${
-            dragOver ? "border-primary bg-primary/5" : "border-border bg-muted/20"
-          } ${uploading ? "opacity-60 pointer-events-none" : ""}`}
+          className={`flex flex-col items-center gap-3 rounded-xl border-2 border-dashed px-6 py-8 ${
+            dragOver ? "border-primary bg-primary/5" : "border-border"
+          }`}
         >
-          <p className="text-sm text-foreground">
-            {uploading ? "Uploading and validating…" : "Drag and drop your filled template here"}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Server checks file type, MIME, size, row count, and template version before storing.
-          </p>
+          <p className="text-sm">{uploading ? "Uploading…" : "Drag & drop or browse filled template"}</p>
           <Button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
-            {uploading ? "Uploading…" : "Browse file"}
+            Browse
           </Button>
         </div>
-
-        {uploadWarnings.length > 0 ? (
-          <ul className="space-y-1 text-sm text-amber-900">
-            {uploadWarnings.map((w) => (
-              <li key={w} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
-                {w}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
-        {lastUpload ? (
-          <div className="rounded-md border border-border bg-muted/30 p-3 text-sm space-y-1">
-            <p>
-              <strong>{lastUpload.batch_number}</strong> · {lastUpload.file_name} · status{" "}
-              <strong>{lastUpload.status}</strong>
-            </p>
-            <p className="text-muted-foreground">
-              {lastUpload.data_row_count} data rows · template{" "}
-              {lastUpload.template_version ?? "unknown"}
-              {lastUpload.template_version_ok ? " (ok)" : " (not confirmed)"} · uploaded{" "}
-              {new Date(lastUpload.uploaded_at).toLocaleString()}
-            </p>
-            {lastUpload.detected_headers && lastUpload.detected_headers.length > 0 ? (
-              <p className="text-xs text-muted-foreground">
-                Detected headers: {lastUpload.detected_headers.slice(0, 8).join(", ")}
-                {lastUpload.detected_headers.length > 8 ? "…" : ""}
-              </p>
-            ) : null}
-            <p className="text-xs text-muted-foreground">
-              Column mapping starts in Phase 3 — this upload is stored only.
-            </p>
-          </div>
-        ) : null}
       </section>
 
+      {mappingInfo && activeId ? (
+        <section className="rounded-lg border border-border bg-card p-4 space-y-4">
+          <h2 className="text-sm font-semibold">Column mapping · {mappingInfo.totalRows} rows</h2>
+          {mappingInfo.analysis.ambiguous.length > 0 ? (
+            <p className="text-sm text-amber-800">
+              Ambiguous headers need confirmation:{" "}
+              {mappingInfo.analysis.ambiguous.map((a) => a.target).join(", ")}
+            </p>
+          ) : null}
+          {mappingInfo.analysis.unknownHeaders.length > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Unknown columns (ignored): {mappingInfo.analysis.unknownHeaders.join(", ")}
+            </p>
+          ) : null}
+          <div className="grid gap-2 md:grid-cols-2">
+            {STUDENT_IMPORT_ALL_COLUMNS.map((col) => (
+              <label key={col} className="flex flex-col gap-1 text-xs">
+                <span className="font-medium">{col}</span>
+                <select
+                  className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  value={mapping[col] || ""}
+                  onChange={(e) => setMapping((m) => ({ ...m, [col]: e.target.value || null }))}
+                >
+                  <option value="">— not mapped —</option>
+                  {headerOptions.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
+          <div className="overflow-x-auto">
+            <p className="mb-1 text-xs text-muted-foreground">Preview (first 10)</p>
+            <table className="w-full min-w-[600px] text-left text-xs">
+              <thead>
+                <tr className="border-b">
+                  {headerOptions.slice(0, 8).map((h) => (
+                    <th key={h} className="py-1 pr-2">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {mappingInfo.previewRows.map((r, i) => (
+                  <tr key={i} className="border-b border-border/50">
+                    {headerOptions.slice(0, 8).map((h) => (
+                      <td key={h} className="py-1 pr-2">
+                        {r[h]}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Button type="button" disabled={!!busy} onClick={() => void confirmMapping()}>
+            Confirm mapping
+          </Button>
+        </section>
+      ) : null}
+
+      {activeId ? (
+        <section className="rounded-lg border border-border bg-card p-4 space-y-3">
+          <h2 className="text-sm font-semibold">Import mode & dry run</h2>
+          <div className="grid gap-2">
+            {MODES.map((m) => (
+              <label key={m.id} className="flex items-center gap-2 text-sm">
+                <input type="radio" name="mode" checked={mode === m.id} onChange={() => setMode(m.id)} />
+                {m.label}
+              </label>
+            ))}
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={confirmUpdate} onChange={(e) => setConfirmUpdate(e.target.checked)} />
+            I confirm updates to existing students (does not overwrite passwords / auth IDs / mentors / grades)
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" disabled={!!busy} onClick={() => void runDryRun()}>
+              {busy === "dry-run" ? "Validating…" : "Dry run"}
+            </Button>
+            <Button type="button" disabled={!!busy || !drySummary} onClick={() => void executeImport()}>
+              {busy === "execute" ? "Importing…" : "Confirm import"}
+            </Button>
+            <Button type="button" variant="outline" disabled={!!busy} onClick={() => void cancelImport()}>
+              Cancel
+            </Button>
+            <Button type="button" variant="secondary" disabled={!activeId} onClick={() => downloadErrors("errors", "csv")}>
+              Error CSV
+            </Button>
+            <Button type="button" variant="secondary" disabled={!activeId} onClick={() => downloadErrors("failed", "xlsx")}>
+              Failed XLSX
+            </Button>
+          </div>
+          {drySummary ? (
+            <div className="grid gap-2 text-sm sm:grid-cols-4">
+              {["total", "valid", "warning", "error", "create", "update", "skip", "blocked"].map((k) => (
+                <div key={k} className="rounded-md bg-muted/40 px-3 py-2">
+                  {k}: <strong>{String((drySummary as Record<string, number>)[k] ?? 0)}</strong>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {dryRows.length > 0 ? (
+            <p className="text-xs text-muted-foreground">Showing validation sample ({dryRows.length} of dry-run rows).</p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {showAllocateHint ? (
+        <section className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
+          <h2 className="text-sm font-semibold">Next step: Allocate mentors</h2>
+          <p className="text-sm text-muted-foreground">
+            Student import finished. Mentor allocation is a separate auditable action.
+          </p>
+          <a className="text-sm font-medium underline" href="/admin/students/mentor-allocation">
+            Open Mentor Allocation
+          </a>
+        </section>
+      ) : null}
+
       <section className="rounded-lg border border-border bg-card p-4 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold tracking-wide text-foreground">Recent uploads</h2>
-          <Button type="button" variant="outline" size="sm" disabled={loadingBatches} onClick={() => void loadBatches()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Import history</h2>
+          <Button type="button" variant="outline" size="sm" onClick={() => void loadBatches()}>
             Refresh
           </Button>
         </div>
-        {loadingBatches ? (
-          <p className="text-sm text-muted-foreground">Loading import batches…</p>
-        ) : batches.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No uploads yet. Run <code className="text-xs">student_import_batches.sql</code> if the list fails to
-            load, then upload a file.
-          </p>
+        {batches.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No batches yet. Run student_import_batches.sql + student_import_rows.sql.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
+            <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="text-xs text-muted-foreground">
-                <tr className="border-b border-border">
-                  <th className="py-2 pr-3 font-medium">Batch</th>
-                  <th className="py-2 pr-3 font-medium">File</th>
-                  <th className="py-2 pr-3 font-medium">Rows</th>
-                  <th className="py-2 pr-3 font-medium">Version</th>
-                  <th className="py-2 pr-3 font-medium">Status</th>
-                  <th className="py-2 font-medium">Uploaded</th>
+                <tr className="border-b">
+                  <th className="py-2 pr-2">Batch</th>
+                  <th className="py-2 pr-2">File</th>
+                  <th className="py-2 pr-2">Rows</th>
+                  <th className="py-2 pr-2">Status</th>
+                  <th className="py-2 pr-2">C/U/S/F</th>
+                  <th className="py-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {batches.map((b) => (
                   <tr key={b.id} className="border-b border-border/60">
-                    <td className="py-2 pr-3 font-medium">{b.batch_number}</td>
-                    <td className="py-2 pr-3 truncate max-w-[200px]" title={b.file_name}>
-                      {b.file_name}
+                    <td className="py-2 pr-2 font-medium">{b.batch_number}</td>
+                    <td className="py-2 pr-2 truncate max-w-[180px]">{b.file_name}</td>
+                    <td className="py-2 pr-2">{b.data_row_count}</td>
+                    <td className="py-2 pr-2">{b.status}</td>
+                    <td className="py-2 pr-2 text-xs">
+                      {b.created_count ?? 0}/{b.updated_count ?? 0}/{b.skipped_count ?? 0}/{b.failed_count ?? 0}
                     </td>
-                    <td className="py-2 pr-3">{b.data_row_count}</td>
-                    <td className="py-2 pr-3">{b.template_version ?? "—"}</td>
-                    <td className="py-2 pr-3">{b.status}</td>
-                    <td className="py-2 text-muted-foreground">
-                      {new Date(b.uploaded_at).toLocaleString()}
+                    <td className="py-2">
+                      <Button type="button" size="sm" variant="outline" onClick={() => void openMapping(b.id)}>
+                        Open
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -413,37 +489,6 @@ export function StudentBulkImportWorkbench() {
             </table>
           </div>
         )}
-      </section>
-
-      <section className="rounded-lg border border-border bg-card p-4 space-y-3">
-        <h2 className="text-sm font-semibold tracking-wide text-foreground">Required columns</h2>
-        <ul className="flex flex-wrap gap-2 text-xs">
-          {STUDENT_IMPORT_REQUIRED_COLUMNS.map((col) => (
-            <li key={col} className="rounded-md border border-border px-2 py-1">
-              {col}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="rounded-lg border border-border bg-card p-4 space-y-3">
-        <h2 className="text-sm font-semibold tracking-wide text-foreground">Optional columns</h2>
-        <ul className="flex flex-wrap gap-2 text-xs">
-          {STUDENT_IMPORT_OPTIONAL_COLUMNS.map((col) => (
-            <li key={col} className="rounded-md border border-dashed border-border px-2 py-1 text-muted-foreground">
-              {col}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="rounded-lg border border-dashed border-border bg-muted/20 p-4 text-sm text-muted-foreground space-y-1">
-        <p className="font-medium text-foreground">SQL prerequisites</p>
-        <p>
-          <code className="text-xs">student_portal_profile_fields.sql</code> then{" "}
-          <code className="text-xs">student_import_batches.sql</code>
-        </p>
-        <p>Next: Phase 3 column mapping and preview (no database inserts yet).</p>
       </section>
     </div>
   );

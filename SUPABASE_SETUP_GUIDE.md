@@ -376,18 +376,26 @@ Proctoring purge (admin): `POST /api/lms/proctoring/purge`.
 
 Do **not** confuse CRM `clients` (Student Master leads) with portal student enrolments. Ops `tasks` / `projects` remain separate from LMS coursework.
 
-### Portal student import (Phases 1–2 — template + upload)
+### Portal student import + mentor–student allocation (Phases 1–21)
 
-Audit: **`STUDENT_IMPORT_AND_MENTOR_ALLOCATION_AUDIT.md`**.
+Audit: **`STUDENT_IMPORT_AND_MENTOR_ALLOCATION_AUDIT.md`**. API notes: **`STUDENT_IMPORT_AND_MENTOR_ALLOCATION_API.md`**.
 
-1. Run **`student_portal_profile_fields.sql`** after core `profiles` / platform expansion (and ideally after LMS academic foundation so catalog names exist).
-2. Run **`student_import_batches.sql`** — `student_import_batches` table + private **`student-imports`** storage bucket (admin select; uploads via service-role API only).
-3. Ensure Academic Catalog has departments, courses, and batches (Admin → Academic Management → LMS Catalog, or Departments & Courses + Sync).
-4. Admin → **Student Management → Bulk Import Students** → download Excel (Students + Instructions + Valid Values) or CSV.
-5. Fill the template, then drag/drop or browse to upload. Server validates extension, MIME, size (5 MB), max data rows (500), and template version; stores the file and creates a batch (`status=uploaded`).
-6. APIs: `GET /api/admin/students/import/template?format=xlsx|csv`, `POST|GET /api/admin/students/import/upload`.
-7. Column mapping / dry-run / Auth import are later phases — do not treat CRM Student Master import as portal provisioning.
-8. Legacy `.xls` is rejected; use `.xlsx` or `.csv`.
+Run in order (after LMS academic foundation for catalog FKs):
+
+1. **`student_portal_profile_fields.sql`**
+2. **`student_import_batches.sql`** — batches + private **`student-imports`** bucket
+3. **`student_import_rows.sql`** — per-row validation/results
+4. **`student_mentor_assignments.sql`** — mentee assignments, capacity, overrides, RLS, expiry RPC
+
+App:
+
+- Admin → **Student Management → Bulk Import Students** — template, upload, mapping, dry-run, execute, history, error export
+- Admin → **Student Management → Mentor Allocation** — manual/bulk/transfer + workload (distinct from Academic → Mentor Allocation scope)
+- Mentor → **My Students** — primary/secondary/project filters
+
+Import creates Auth users **server-side** with generated temporary passwords (never in the spreadsheet). Default mode: create + skip duplicates. Updating existing students requires explicit confirmation and does not overwrite passwords, auth IDs, mentor history, or grades.
+
+Rollback: stop using the Admin Student Management routes; optionally `drop table student_import_rows, student_import_batches cascade;` and `drop table student_mentor_assignments, mentor_capacity, mentor_capacity_overrides cascade;` (destroys history). Do not drop `profiles`.
 
 ### Student My Tasks
 

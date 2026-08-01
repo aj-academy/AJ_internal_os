@@ -191,7 +191,7 @@ export async function GET() {
   const { data, error } = await admin
     .from("student_import_batches")
     .select(
-      "id,batch_number,file_name,file_mime,file_size_bytes,template_version,template_version_ok,data_row_count,status,uploaded_by,uploaded_at,error_message,created_at",
+      "id,batch_number,file_name,file_mime,file_size_bytes,template_version,template_version_ok,data_row_count,status,uploaded_by,uploaded_at,error_message,created_at,created_count,updated_count,skipped_count,failed_count,import_mode",
     )
     .order("uploaded_at", { ascending: false })
     .limit(25);
