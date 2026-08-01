@@ -1,8 +1,18 @@
 -- =============================================================================
--- LMS Phase 9 — Project milestone submit + mentor evaluate
--- Run after: lms_submissions_proctoring.sql
+-- LMS — Project milestone submit + mentor evaluate
+-- Run after: lms_projects.sql
 -- Safe to re-run.
 -- =============================================================================
+
+do $$
+begin
+  if to_regclass('public.lms_projects') is null then
+    raise exception 'Missing lms_projects — run lms_projects.sql first.';
+  end if;
+  if to_regclass('public.lms_project_milestones') is null then
+    raise exception 'Missing lms_project_milestones — run lms_projects.sql first.';
+  end if;
+end $$;
 
 create or replace function public.lms_submit_project_milestone(
   p_project_id uuid,

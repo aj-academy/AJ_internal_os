@@ -1,8 +1,15 @@
 -- =============================================================================
--- LMS Phase 14 — Study materials
+-- LMS — Study materials
 -- Run after: lms_mentor_allocations.sql (and ideally lms_assignments.sql)
 -- Safe to re-run.
 -- =============================================================================
+
+do $$
+begin
+  if to_regprocedure('public.lms_mentor_has_active_allocation(uuid,uuid,uuid,uuid,uuid)') is null then
+    raise exception 'Missing lms_mentor_has_active_allocation — run lms_mentor_allocations.sql first.';
+  end if;
+end $$;
 
 create table if not exists public.lms_study_materials (
   id uuid primary key default gen_random_uuid(),

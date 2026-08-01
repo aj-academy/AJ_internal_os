@@ -1,8 +1,18 @@
 -- =============================================================================
--- LMS Phase 11 — Proctoring media register + retention purge + SEB notes
--- Run after: lms_calendar_reports.sql (or at least lms_submissions_proctoring.sql)
+-- LMS — Proctoring media register + retention purge + SEB notes
+-- Run after: lms_submissions_proctoring.sql
 -- Safe to re-run.
 -- =============================================================================
+
+do $$
+begin
+  if to_regclass('public.lms_test_proctoring_media') is null then
+    raise exception 'Missing lms_test_proctoring_media — run lms_submissions_proctoring.sql first.';
+  end if;
+  if to_regclass('public.lms_test_attempts') is null then
+    raise exception 'Missing lms_test_attempts — run lms_tests_core.sql first.';
+  end if;
+end $$;
 
 -- Optional expires_at for retention tracking
 alter table public.lms_test_proctoring_media

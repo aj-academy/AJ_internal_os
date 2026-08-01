@@ -1,8 +1,18 @@
 -- =============================================================================
--- LMS Phase 8 — Storage buckets + assignment submit RPC + proctoring events
--- Run after: lms_tests_core.sql
+-- LMS — Storage buckets + assignment submit RPC + proctoring events
+-- Run after: lms_tests_core.sql and lms_assignments.sql
 -- Safe to re-run.
 -- =============================================================================
+
+do $$
+begin
+  if to_regclass('public.lms_assignments') is null then
+    raise exception 'Missing lms_assignments — run lms_assignments.sql first (must succeed fully).';
+  end if;
+  if to_regclass('public.lms_tests') is null then
+    raise exception 'Missing lms_tests — run lms_tests_core.sql first.';
+  end if;
+end $$;
 
 insert into storage.buckets (id, name, public)
 values

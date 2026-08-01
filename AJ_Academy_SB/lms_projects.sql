@@ -1,8 +1,15 @@
 -- =============================================================================
--- LMS Phase 4 — Academic projects (milestones + teams)
--- Run after: lms_assignments.sql
+-- LMS — Academic projects (milestones + teams)
+-- Run after: lms_assignments.sql (or at least lms_mentor_allocations.sql)
 -- Safe to re-run. Separate from ops Project Master (`projects`).
 -- =============================================================================
+
+do $$
+begin
+  if to_regprocedure('public.lms_mentor_has_active_allocation(uuid,uuid,uuid,uuid,uuid)') is null then
+    raise exception 'Missing lms_mentor_has_active_allocation — run lms_mentor_allocations.sql first.';
+  end if;
+end $$;
 
 create table if not exists public.lms_projects (
   id uuid primary key default gen_random_uuid(),

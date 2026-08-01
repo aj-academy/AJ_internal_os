@@ -1,8 +1,24 @@
 -- =============================================================================
--- LMS Phase 10 — Academic calendar + lightweight report helpers
--- Run after: lms_project_milestones.sql
+-- LMS — Academic calendar + lightweight report helpers
+-- Run after: assignments, projects, tests, tickets (all LMS core tables)
 -- Safe to re-run.
 -- =============================================================================
+
+do $$
+begin
+  if to_regclass('public.lms_assignments') is null then
+    raise exception 'Missing public.lms_assignments — run lms_assignments.sql first.';
+  end if;
+  if to_regclass('public.lms_projects') is null then
+    raise exception 'Missing public.lms_projects — run lms_projects.sql first.';
+  end if;
+  if to_regclass('public.lms_tests') is null then
+    raise exception 'Missing public.lms_tests — run lms_tests_core.sql first.';
+  end if;
+  if to_regprocedure('public.lms_mentor_has_active_allocation(uuid,uuid,uuid,uuid,uuid)') is null then
+    raise exception 'Missing lms_mentor_has_active_allocation — run lms_mentor_allocations.sql first.';
+  end if;
+end $$;
 
 create table if not exists public.lms_academic_events (
   id uuid primary key default gen_random_uuid(),
@@ -19,9 +35,9 @@ create table if not exists public.lms_academic_events (
   department_id uuid references public.academic_departments (id) on delete set null,
   course_id uuid references public.academic_courses (id) on delete set null,
   batch_id uuid references public.academic_batches (id) on delete set null,
-  related_assignment_id uuid references public.lms_assignments (id) on delete set null,
-  related_project_id uuid references public.lms_projects (id) on delete set null,
-  related_test_id uuid references public.lms_tests (id) on delete set null,
+  related_assignment_id uuid,
+  related_project_id uuid,
+  related_test_id uuid,
   visibility text not null default 'scoped'
     check (visibility in ('all', 'scoped', 'staff_only')),
   created_by uuid references public.profiles (id) on delete set null,

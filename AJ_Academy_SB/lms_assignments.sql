@@ -1,8 +1,18 @@
 -- =============================================================================
--- LMS Phase 2–3 — Audience engine + Assignments (core)
+-- LMS — Audience engine + Assignments (core)
 -- Run after: lms_mentor_allocations.sql
 -- Safe to re-run.
 -- =============================================================================
+
+do $$
+begin
+  if to_regclass('public.academic_departments') is null then
+    raise exception 'Missing academic_departments — run lms_academic_foundation.sql first.';
+  end if;
+  if to_regprocedure('public.lms_mentor_has_active_allocation(uuid,uuid,uuid,uuid,uuid)') is null then
+    raise exception 'Missing lms_mentor_has_active_allocation — run lms_mentor_allocations.sql first (and confirm it succeeded with no errors).';
+  end if;
+end $$;
 
 -- Canonical learning item kinds sharing the recipient pattern
 create table if not exists public.lms_assignments (

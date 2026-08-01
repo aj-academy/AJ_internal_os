@@ -1,8 +1,24 @@
 -- =============================================================================
--- LMS Phase 1b — Mentor allocations (effective-dated)
+-- LMS — Mentor allocations (effective-dated)
 -- Run after: lms_academic_foundation.sql, aj_academy_platform_expansion.sql
 -- Safe to re-run.
 -- =============================================================================
+
+do $$
+begin
+  if to_regclass('public.academic_departments') is null then
+    raise exception 'Missing academic_departments — run lms_academic_foundation.sql first.';
+  end if;
+  if to_regprocedure('public.lms_touch_updated_at()') is null then
+    raise exception 'Missing lms_touch_updated_at — run lms_academic_foundation.sql first.';
+  end if;
+  if to_regprocedure('public.is_admin()') is null then
+    raise exception 'Missing is_admin() — run schema.sql / platform expansion first.';
+  end if;
+  if to_regprocedure('public.is_mentor_role()') is null then
+    raise exception 'Missing is_mentor_role() — run aj_academy_platform_expansion.sql (or mentor_department_tasks.sql) first.';
+  end if;
+end $$;
 
 create table if not exists public.mentor_allocations (
   id uuid primary key default gen_random_uuid(),

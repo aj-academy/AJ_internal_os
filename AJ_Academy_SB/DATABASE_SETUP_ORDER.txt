@@ -143,9 +143,12 @@ Mentor portal (/mentor/*):
   My Tasks (assignee) + Assign Tasks (assigner) + student roster on dashboard.
   Mood popup optional via employee_daily_mood_schema.sql.
 
-LMS Academic foundation (after aj_academy_platform_expansion.sql + system_settings) — run in order:
+LMS Academic foundation (after aj_academy_platform_expansion.sql + system_settings) — run in order.
+IMPORTANT: If ANY file errors, stop. Fix/re-run that file before the next one (a failed script rolls back its whole transaction).
+Optional check anytime: lms_verify.sql
+
   lms_academic_foundation.sql — academic_departments/courses/batches/modules + student_enrolments + seed/backfill RPCs
-  lms_mentor_allocations.sql — effective-dated mentor_allocations + scope helpers + RLS
+  lms_mentor_allocations.sql — effective-dated mentor_allocations + scope helpers + RLS  (**required before assignments**)
   lms_assignments.sql — lms_assignments + recipients + submissions + evaluations + publish RPC
   lms_projects.sql — academic lms_projects + milestones + recipients + publish RPC
   lms_study_materials.sql — study materials + recipients + activity tracking + study-materials bucket
@@ -155,6 +158,7 @@ LMS Academic foundation (after aj_academy_platform_expansion.sql + system_settin
   lms_project_milestones.sql — project milestone submit + mentor evaluate RPCs
   lms_calendar_reports.sql — academic calendar events + lms_report_summary()
   lms_proctoring_media.sql — register snapshots, retention expiry, purge helpers
+  lms_verify.sql — optional status check (OK / MISSING)
   App: Admin → Academic Management → Mentor Allocation (seed from Settings, create/revoke allocations); Calendar & Reports.
   Mentor → Learning Management → Overview / Assignments / Submissions (assignments+projects) / Projects / Tests (proctoring review) / Materials / Queries.
   Student → Learning & Assessments → Overview / Assignments / Projects (milestones) / Tests (camera snapshots + SEB soft check) / Materials / Queries.

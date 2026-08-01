@@ -1,8 +1,15 @@
 -- =============================================================================
--- LMS Phase 16 — Student queries & complaints
--- Run after: lms_mentor_allocations.sql
+-- LMS — Student queries & complaints
+-- Run after: lms_mentor_allocations.sql (and ideally assignments/projects/materials)
 -- Safe to re-run.
 -- =============================================================================
+
+do $$
+begin
+  if to_regprocedure('public.lms_mentor_has_active_allocation(uuid,uuid,uuid,uuid,uuid)') is null then
+    raise exception 'Missing lms_mentor_has_active_allocation — run lms_mentor_allocations.sql first.';
+  end if;
+end $$;
 
 create table if not exists public.lms_student_tickets (
   id uuid primary key default gen_random_uuid(),
@@ -22,9 +29,10 @@ create table if not exists public.lms_student_tickets (
     check (priority in ('low', 'medium', 'high', 'urgent')),
   department_id uuid references public.academic_departments (id) on delete set null,
   course_id uuid references public.academic_courses (id) on delete set null,
-  related_assignment_id uuid references public.lms_assignments (id) on delete set null,
-  related_project_id uuid references public.lms_projects (id) on delete set null,
-  related_material_id uuid references public.lms_study_materials (id) on delete set null,
+  -- Optional links (no hard FK so this file can run even if other LMS modules are still pending)
+  related_assignment_id uuid,
+  related_project_id uuid,
+  related_material_id uuid,
   assigned_to uuid references public.profiles (id) on delete set null,
   is_confidential boolean not null default false,
   anonymous_to_mentor boolean not null default false,

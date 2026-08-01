@@ -349,10 +349,10 @@ Requires `aj_academy_platform_expansion.sql`, `mentor_department_tasks.sql` (the
 
 Audit first: **`LMS_MODULE_AUDIT.md`** (repo root).
 
-Run in Supabase SQL Editor (after platform expansion + system settings):
+Run in Supabase SQL Editor (after platform expansion + system settings), **one file at a time**. If a file errors, stop and fix before continuing (failed scripts roll back):
 
 1. **`lms_academic_foundation.sql`** — `academic_departments`, `academic_courses`, `academic_batches`, `academic_modules`, `student_enrolments`, seed/backfill RPCs  
-2. **`lms_mentor_allocations.sql`** — effective-dated `mentor_allocations` + mentor scope helpers + RLS  
+2. **`lms_mentor_allocations.sql`** — effective-dated `mentor_allocations` + mentor scope helpers + RLS (**must succeed before #3**)  
 3. **`lms_assignments.sql`** — `lms_assignments`, recipients, submissions, evaluations, `lms_publish_assignment` RPC  
 4. **`lms_projects.sql`** — academic projects, milestones, recipients  
 5. **`lms_study_materials.sql`** — materials, recipients, activity, private `study-materials` bucket  
@@ -362,6 +362,8 @@ Run in Supabase SQL Editor (after platform expansion + system settings):
 9. **`lms_project_milestones.sql`** — project milestone submit + mentor evaluate RPCs  
 10. **`lms_calendar_reports.sql`** — `lms_academic_events` + `lms_report_summary()`  
 11. **`lms_proctoring_media.sql`** — snapshot register RPC, `expires_at`, admin purge helpers  
+
+Optional: **`lms_verify.sql`** — lists OK / MISSING LMS objects.
 
 Then in the app:
 
