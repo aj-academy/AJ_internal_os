@@ -28,6 +28,7 @@ const adminSidebarItems = [
     children: [
       { label: "Academic Overview", href: "/admin/academic/overview" },
       { label: "Mentor Allocation", href: "/admin/academic/mentor-allocation" },
+      { label: "Calendar & Reports", href: "/admin/academic/reports" },
       { label: "Student Query Monitoring", href: "/admin/academic/queries" },
     ],
   },

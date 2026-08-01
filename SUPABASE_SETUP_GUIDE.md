@@ -359,12 +359,16 @@ Run in Supabase SQL Editor (after platform expansion + system settings):
 6. **`lms_06_tickets.sql`** — queries & complaints (sensitive → admin only), `query-attachments` bucket  
 7. **`lms_07_tests_core.sql`** — tests, MCQ questions, recipients, server-side attempts/timer, autosave, objective grading  
 8. **`lms_08_submissions_proctoring.sql`** — assignment submit/evaluate RPCs, private buckets (`assignment-submissions`, `test-proctoring`, …), proctoring policy/consent/events  
+9. **`lms_09_project_milestones.sql`** — project milestone submit + mentor evaluate RPCs  
+10. **`lms_10_calendar_reports.sql`** — `lms_academic_events` + `lms_report_summary()`  
 
 Then in the app:
 
-- **Admin → Academic Management** — Overview, Mentor Allocation, Student Query Monitoring  
-- **Mentor → Learning Management** — Overview, Assignments, Submissions & Evaluation, Projects, Tests, Study Materials, Student Queries  
-- **Student → Learning & Assessments** — Overview, Assignments (submit), Projects, Tests (consent + timer), Materials, Queries & Complaints  
+- **Admin → Academic Management** — Overview, Mentor Allocation, Calendar & Reports, Student Query Monitoring  
+- **Mentor → Learning Management** — Overview, Assignments, Submissions & Evaluation (assignments + projects), Projects, Tests, Study Materials, Student Queries  
+- **Student → Learning & Assessments** — Overview, Assignments (submit), Projects (milestones), Tests (consent + timer), Materials, Queries & Complaints  
+
+Signed downloads for private LMS files: `POST /api/lms/storage/signed-url` (authz-checked).
 
 Do **not** confuse CRM `clients` (Student Master leads) with portal student enrolments. Ops `tasks` / `projects` remain separate from LMS coursework.
 

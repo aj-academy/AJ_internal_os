@@ -28,6 +28,13 @@ export default function MentorLearningOverviewPage() {
   const [hint, setHint] = useState<string | null>(null);
   const [rows, setRows] = useState<AllocationRow[]>([]);
 
+  const [summary, setSummary] = useState<{
+    assignment_submissions_pending?: number;
+    project_submissions_pending?: number;
+    open_tickets?: number;
+    upcoming_events_7d?: number;
+  } | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -62,7 +69,7 @@ export default function MentorLearningOverviewPage() {
       const batchIds = [...new Set(list.map((r) => r.batch_id).filter(Boolean))] as string[];
       const moduleIds = [...new Set(list.map((r) => r.module_id).filter(Boolean))] as string[];
 
-      const [depts, courses, batches, modules] = await Promise.all([
+      const [depts, courses, batches, modules, reportsRes] = await Promise.all([
         deptIds.length
           ? supabase.from("academic_departments").select("id,name").in("id", deptIds)
           : Promise.resolve({ data: [] as { id: string; name: string }[] }),
@@ -75,6 +82,7 @@ export default function MentorLearningOverviewPage() {
         moduleIds.length
           ? supabase.from("academic_modules").select("id,name").in("id", moduleIds)
           : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+        fetch("/api/lms/reports", { credentials: "include" }),
       ]);
 
       const deptMap = new Map((depts.data ?? []).map((d) => [d.id, d.name]));
@@ -91,6 +99,11 @@ export default function MentorLearningOverviewPage() {
           module_name: r.module_id ? moduleMap.get(r.module_id) ?? null : null,
         })),
       );
+
+      if (reportsRes.ok) {
+        const reportsJson = (await reportsRes.json()) as { summary?: typeof summary };
+        setSummary(reportsJson.summary ?? null);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load.");
     } finally {
@@ -109,7 +122,7 @@ export default function MentorLearningOverviewPage() {
       <PageHeader
         kicker="Learning management"
         title="Mentor Overview"
-        description="Your active academic allocations from Supabase. You may create learning content only within these scopes (assignments and tests land in later phases)."
+        description="Your active academic allocations and LMS workload from Supabase."
         actions={
           <Button variant="outline" className="rounded-xl border-[#e8dcc8]" onClick={() => void load()}>
             Refresh
@@ -122,14 +135,26 @@ export default function MentorLearningOverviewPage() {
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{hint}</div>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-[#64748b]">Active allocations</p>
           <p className="mt-2 text-2xl font-semibold text-[#0f172a]">{loading ? "…" : active.length}</p>
         </article>
         <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-[#64748b]">Total allocation records</p>
-          <p className="mt-2 text-2xl font-semibold text-[#0f172a]">{loading ? "…" : rows.length}</p>
+          <p className="text-xs uppercase tracking-wide text-[#64748b]">Pending assignment evals</p>
+          <p className="mt-2 text-2xl font-semibold text-[#0f172a]">
+            {loading ? "…" : (summary?.assignment_submissions_pending ?? "—")}
+          </p>
+        </article>
+        <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-[#64748b]">Pending project reviews</p>
+          <p className="mt-2 text-2xl font-semibold text-[#0f172a]">
+            {loading ? "…" : (summary?.project_submissions_pending ?? "—")}
+          </p>
+        </article>
+        <article className="rounded-[20px] border border-[#dbe6f3] bg-white p-4 shadow-sm">
+          <p className="text-xs uppercase tracking-wide text-[#64748b]">Open tickets</p>
+          <p className="mt-2 text-2xl font-semibold text-[#0f172a]">{loading ? "…" : (summary?.open_tickets ?? "—")}</p>
         </article>
       </div>
 
