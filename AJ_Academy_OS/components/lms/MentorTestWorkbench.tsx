@@ -228,15 +228,49 @@ export function MentorTestWorkbench() {
             <input className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3" value={form.duration_minutes} onChange={(e) => setForm((f) => ({ ...f, duration_minutes: e.target.value }))} />
           </label>
           <label className="text-sm">Course
-            <select className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3" value={form.course_id} disabled={!form.department_id} onChange={(e) => setForm((f) => ({ ...f, course_id: e.target.value, batch_id: "" }))}>
-              <option value="">Optional</option>
-              {coursesForDept.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <select
+              className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3"
+              value={form.course_id}
+              onChange={(e) => {
+                if (!form.department_id) return;
+                setForm((f) => ({ ...f, course_id: e.target.value, batch_id: "" }));
+              }}
+            >
+              {!form.department_id ? (
+                <option value="">Select a department first</option>
+              ) : (
+                <>
+                  <option value="">{coursesForDept.length ? "Optional" : "No courses for this department"}</option>
+                  {coursesForDept.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </label>
           <label className="text-sm">Batch
-            <select className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3" value={form.batch_id} disabled={!form.course_id} onChange={(e) => setForm((f) => ({ ...f, batch_id: e.target.value }))}>
-              <option value="">Optional</option>
-              {batchesForCourse.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            <select
+              className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3"
+              value={form.batch_id}
+              onChange={(e) => {
+                if (!form.course_id) return;
+                setForm((f) => ({ ...f, batch_id: e.target.value }));
+              }}
+            >
+              {!form.course_id ? (
+                <option value="">Select a course first</option>
+              ) : (
+                <>
+                  <option value="">{batchesForCourse.length ? "Optional" : "No batches for this course"}</option>
+                  {batchesForCourse.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </label>
           <label className="text-sm">Tab-switch policy

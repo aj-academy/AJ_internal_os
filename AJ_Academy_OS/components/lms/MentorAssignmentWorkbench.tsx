@@ -295,15 +295,25 @@ export function MentorAssignmentWorkbench() {
             <select
               className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3"
               value={form.course_id}
-              disabled={!form.department_id}
-              onChange={(e) => setForm((f) => ({ ...f, course_id: e.target.value, batch_id: "" }))}
+              onChange={(e) => {
+                if (!form.department_id) return;
+                setForm((f) => ({ ...f, course_id: e.target.value, batch_id: "" }));
+              }}
             >
-              <option value="">All courses in scope</option>
-              {coursesForDept.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+              {!form.department_id ? (
+                <option value="">Select a department first</option>
+              ) : (
+                <>
+                  <option value="">
+                    {coursesForDept.length ? "All courses in scope" : "No courses — ask admin (Academic Catalog)"}
+                  </option>
+                  {coursesForDept.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </label>
           <label className="text-sm text-[#334155]">
@@ -311,15 +321,25 @@ export function MentorAssignmentWorkbench() {
             <select
               className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3"
               value={form.batch_id}
-              disabled={!form.course_id}
-              onChange={(e) => setForm((f) => ({ ...f, batch_id: e.target.value }))}
+              onChange={(e) => {
+                if (!form.course_id) return;
+                setForm((f) => ({ ...f, batch_id: e.target.value }));
+              }}
             >
-              <option value="">All batches</option>
-              {batchesForCourse.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
+              {!form.course_id ? (
+                <option value="">Select a course first</option>
+              ) : (
+                <>
+                  <option value="">
+                    {batchesForCourse.length ? "All batches" : "No batches — ask admin (Academic Catalog)"}
+                  </option>
+                  {batchesForCourse.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </label>
           <label className="text-sm text-[#334155]">

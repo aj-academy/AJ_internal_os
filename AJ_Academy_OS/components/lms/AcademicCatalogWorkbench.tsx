@@ -238,15 +238,23 @@ export function AcademicCatalogWorkbench() {
               <select
                 className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3"
                 value={courseId}
-                disabled={!departmentId}
-                onChange={(e) => setCourseId(e.target.value)}
+                onChange={(e) => {
+                  if (!departmentId) return;
+                  setCourseId(e.target.value);
+                }}
               >
-                <option value="">Select course</option>
-                {coursesForDept.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+                {!departmentId ? (
+                  <option value="">Select a department first</option>
+                ) : (
+                  <>
+                    <option value="">{coursesForDept.length ? "Select course" : "No courses — add one above"}</option>
+                    {coursesForDept.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </>
+                )}
               </select>
             </label>
 

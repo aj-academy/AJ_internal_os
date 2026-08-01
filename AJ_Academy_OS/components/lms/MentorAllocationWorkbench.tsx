@@ -233,7 +233,15 @@ export function MentorAllocationWorkbench() {
         <h2 className="text-lg font-semibold text-[#0f172a]">New allocation</h2>
         <p className="mt-1 text-sm text-[#64748b]">
           Leave course/batch/module empty to grant department-wide scope. Changing allocation never deletes history —
-          revoke instead.
+          revoke instead. Add missing courses/batches/subjects under{" "}
+          <a className="font-medium text-[#a68b2e] underline" href="/admin/academic/catalog">
+            Academic Catalog
+          </a>
+          .
+        </p>
+        <p className="mt-2 text-xs text-[#64748b]">
+          Tip: pick <strong>Department</strong> first, then Course, then Batch/Subject. Those fields stay clickable and
+          will tell you what to select next.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <label className="text-sm text-[#334155]">
@@ -266,7 +274,9 @@ export function MentorAllocationWorkbench() {
                 }))
               }
             >
-              <option value="">Select department</option>
+              <option value="">
+                {departments.length ? "Select department" : "No departments — add in Academic Catalog"}
+              </option>
               {departments.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
@@ -279,17 +289,30 @@ export function MentorAllocationWorkbench() {
             <select
               className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] bg-white px-3"
               value={form.course_id}
-              disabled={!form.department_id}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, course_id: e.target.value, batch_id: "", module_id: "" }))
-              }
+              onChange={(e) => {
+                if (!form.department_id) {
+                  setError("Select a department first, then choose a course.");
+                  return;
+                }
+                setForm((f) => ({ ...f, course_id: e.target.value, batch_id: "", module_id: "" }));
+              }}
             >
-              <option value="">All courses in department</option>
-              {coursesForDept.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+              {!form.department_id ? (
+                <option value="">Select a department first</option>
+              ) : (
+                <>
+                  <option value="">
+                    {coursesForDept.length
+                      ? "All courses in department"
+                      : "No courses for this department — add in Academic Catalog"}
+                  </option>
+                  {coursesForDept.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </label>
           <label className="text-sm text-[#334155]">
@@ -297,15 +320,30 @@ export function MentorAllocationWorkbench() {
             <select
               className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] bg-white px-3"
               value={form.batch_id}
-              disabled={!form.course_id}
-              onChange={(e) => setForm((f) => ({ ...f, batch_id: e.target.value }))}
+              onChange={(e) => {
+                if (!form.course_id) {
+                  setError("Select a course first, then choose a batch.");
+                  return;
+                }
+                setForm((f) => ({ ...f, batch_id: e.target.value }));
+              }}
             >
-              <option value="">All batches in course</option>
-              {batchesForCourse.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
+              {!form.course_id ? (
+                <option value="">Select a course first</option>
+              ) : (
+                <>
+                  <option value="">
+                    {batchesForCourse.length
+                      ? "All batches in course"
+                      : "No batches for this course — add in Academic Catalog"}
+                  </option>
+                  {batchesForCourse.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </label>
           <label className="text-sm text-[#334155]">
@@ -313,15 +351,30 @@ export function MentorAllocationWorkbench() {
             <select
               className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] bg-white px-3"
               value={form.module_id}
-              disabled={!form.course_id}
-              onChange={(e) => setForm((f) => ({ ...f, module_id: e.target.value }))}
+              onChange={(e) => {
+                if (!form.course_id) {
+                  setError("Select a course first, then choose a subject.");
+                  return;
+                }
+                setForm((f) => ({ ...f, module_id: e.target.value }));
+              }}
             >
-              <option value="">All modules</option>
-              {modulesForCourse.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
+              {!form.course_id ? (
+                <option value="">Select a course first</option>
+              ) : (
+                <>
+                  <option value="">
+                    {modulesForCourse.length
+                      ? "All modules"
+                      : "No subjects for this course — add in Academic Catalog"}
+                  </option>
+                  {modulesForCourse.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </label>
           <label className="text-sm text-[#334155]">
