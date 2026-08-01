@@ -1,5 +1,6 @@
 -- =============================================================================
 -- LMS verify — check what is installed (run anytime in Supabase SQL Editor)
+-- MISSING rows appear first.
 -- =============================================================================
 
 select
@@ -21,7 +22,8 @@ from (
     ('lms_academic_events', 'table', to_regclass('public.lms_academic_events') is not null),
     ('lms_submit_assignment()', 'function', to_regprocedure('public.lms_submit_assignment(uuid,text,text,jsonb,boolean)') is not null),
     ('lms_submit_project_milestone()', 'function', to_regprocedure('public.lms_submit_project_milestone(uuid,uuid,text,text,text,jsonb)') is not null),
+    ('lms_evaluate_project_submission()', 'function', to_regprocedure('public.lms_evaluate_project_submission(uuid,numeric,text,text)') is not null),
     ('lms_register_proctoring_media()', 'function', to_regprocedure('public.lms_register_proctoring_media(uuid,text,text,uuid,text,bigint)') is not null),
     ('lms_report_summary()', 'function', to_regprocedure('public.lms_report_summary()') is not null)
 ) as x(object_name, kind, ok)
-order by status desc, object_name;
+order by case when x.ok then 1 else 0 end, x.object_name;
