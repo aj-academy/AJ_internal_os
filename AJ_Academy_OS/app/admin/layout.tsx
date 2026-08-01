@@ -22,6 +22,14 @@ const adminSidebarItems = [
     ],
   },
   { label: "Counselling", href: "/admin/counselling" },
+  {
+    label: "Academic Management",
+    href: "/admin/academic/overview",
+    children: [
+      { label: "Academic Overview", href: "/admin/academic/overview" },
+      { label: "Mentor Allocation", href: "/admin/academic/mentor-allocation" },
+    ],
+  },
   { label: "Reminders & Calendar", href: "/admin/reminders" },
   { label: "User Master", href: "/admin/employee-master" },
   { label: "Student Master", href: "/admin/student-master" },

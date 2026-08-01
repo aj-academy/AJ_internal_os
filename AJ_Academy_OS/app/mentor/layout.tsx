@@ -5,6 +5,14 @@ import { requireRole } from "@/lib/auth/requireRole";
 const mentorSidebarItems = [
   { label: "Dashboard", href: "/mentor/dashboard" },
   { label: "My Attendance", href: "/mentor/attendance" },
+  {
+    label: "Learning Management",
+    href: "/mentor/learning/overview",
+    children: [
+      { label: "Mentor Overview", href: "/mentor/learning/overview" },
+      { label: "Assignment Management", href: "/mentor/learning/assignments" },
+    ],
+  },
   { label: "Assign Tasks", href: "/mentor/assign-tasks" },
   { label: "My Tasks", href: "/mentor/my-tasks" },
   { label: "Counselling", href: "/mentor/counselling" },

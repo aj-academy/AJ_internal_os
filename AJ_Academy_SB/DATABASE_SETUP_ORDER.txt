@@ -142,3 +142,12 @@ Mentor portal (/mentor/*):
   attendance_module.sql + mentor_department_tasks.sql + aj_academy_platform_expansion.sql.
   My Tasks (assignee) + Assign Tasks (assigner) + student roster on dashboard.
   Mood popup optional via employee_daily_mood_schema.sql.
+
+LMS Academic foundation (after aj_academy_platform_expansion.sql + system_settings):
+  L1) lms_01_academic_foundation.sql — academic_departments/courses/batches/modules + student_enrolments + seed/backfill RPCs
+  L2) lms_02_mentor_allocations.sql — effective-dated mentor_allocations + scope helpers + RLS
+  L3) lms_03_assignments.sql — lms_assignments + recipients + submissions + evaluations + publish RPC
+  App: Admin → Academic Management → Mentor Allocation (seed from Settings, create/revoke allocations).
+  Mentor → Learning Management → Mentor Overview (own allocations).
+  Student → Learning & Assessments → My Overview (own enrolments).
+  Audit: LMS_MODULE_AUDIT.md at repo root.

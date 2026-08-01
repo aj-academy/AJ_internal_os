@@ -345,6 +345,24 @@ Requires `aj_academy_platform_expansion.sql`, `mentor_department_tasks.sql` (the
 
 **Department scoping:** Roster and Assign Tasks both use `get_department_task_assignees()` — only **active students** whose `profiles.department` matches the mentor/freelancer department (case/whitespace-insensitive). Mentors assign simple department tasks (no CRM lead/college/project link required).
 
+### LMS Academic Management (Phase 1)
+
+Audit first: **`LMS_MODULE_AUDIT.md`** (repo root).
+
+Run in Supabase SQL Editor (after platform expansion + system settings):
+
+1. **`lms_01_academic_foundation.sql`** — `academic_departments`, `academic_courses`, `academic_batches`, `academic_modules`, `student_enrolments`, seed/backfill RPCs  
+2. **`lms_02_mentor_allocations.sql`** — effective-dated `mentor_allocations` + mentor scope helpers + RLS  
+3. **`lms_03_assignments.sql`** — `lms_assignments`, recipients, submissions, evaluations, `lms_publish_assignment` RPC  
+
+Then in the app:
+
+- **Admin → Academic Management → Mentor Allocation** — Seed from Settings, create/revoke allocations (audited in `audit_logs`)  
+- **Mentor → Learning Management** — Overview + **Assignment Management** (publish to enrolled students)  
+- **Student → Learning & Assessments** — My Overview + **Assignments** (recipient-scoped)  
+
+Do **not** confuse CRM `clients` (Student Master leads) with portal student enrolments. Ops `tasks` remain separate from graded LMS assignments.
+
 ### Student My Tasks
 
 Students see `/student/my-tasks` and dashboard task preview **without** employee CRM columns (Linked To, Lead Contact, lead/college/project tabs). Columns focus on title, assigner, priority, status, dates, and progress.

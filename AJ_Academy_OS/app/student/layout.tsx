@@ -5,6 +5,14 @@ import { requireRole } from "@/lib/auth/requireRole";
 
 const studentSidebarItems = [
   { label: "Dashboard", href: "/student/dashboard" },
+  {
+    label: "Learning & Assessments",
+    href: "/student/learning/overview",
+    children: [
+      { label: "My Overview", href: "/student/learning/overview" },
+      { label: "Assignments", href: "/student/learning/assignments" },
+    ],
+  },
   { label: "My Attendance", href: "/student/attendance" },
   { label: "My Tasks", href: "/student/my-tasks" },
   { label: "My Portfolio", href: "/student/portfolio" },
