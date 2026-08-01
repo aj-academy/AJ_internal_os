@@ -190,7 +190,10 @@ Import + capacity override + transfer must be **admin/super_admin** APIs with `r
 - Auth user creation is already server-side — **reuse that pattern**, never from the browser.
 - Bulk create needs rate limits / batching (Supabase Auth quotas).
 - Email confirm currently forced `true` on User Master create — decide invite vs auto-confirm for import.
+- **No** `inviteUserByEmail` / magic-link invite path exists today (password required on User Master).
+- **No** unique constraint on `profiles.email` — Auth email uniqueness is the only hard gate; import must preflight Auth + profiles.
 - Idempotency: same registration/email must not create a second Auth user.
+- CRM Student Master **Admit** does not create Auth/profile/enrolment — admit ≠ portal provision.
 
 ---
 
@@ -201,12 +204,15 @@ Import + capacity override + transfer must be **admin/super_admin** APIs with `r
 | Effective dates | Done on **scope** table |
 | History (no delete) | Done for scope |
 | Primary flag | Exists on scope (mentor’s primary dept), **not** “primary mentor of student” |
+| Soft sync to `assigned_mentor_id` | `lms_sync_primary_assigned_mentor` sets profile mentor only when null for in-scope students; does not clear on revoke |
+| Mentor student roster UI | Still driven by legacy `assigned_mentor_id` (`MentorStudentRoster`) |
 | Bulk assign mentees | Missing |
 | Multiple mentors per student | Missing |
 | Roles (project/placement/…) | Missing |
 | Capacity | Missing |
 | Transfer / temporary | Missing |
 | Student sees mentors | Partial via `assigned_mentor_id` only |
+| Allocation notifications | Missing (audit log exists for scope create/update) |
 
 ---
 
