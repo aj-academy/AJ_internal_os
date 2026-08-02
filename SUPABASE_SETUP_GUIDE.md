@@ -205,6 +205,8 @@ Also run **`reports_analytics_schema.sql`** after `lead_call_workflow_schema.sql
 
 **Attendance camera / location:** Employee layout shows a one-time popup asking for camera + location (saved in browser localStorage per user). `Permissions-Policy` must allow `camera=(self)` and `geolocation=(self)` (see `lib/security/headers.ts`). Restart the Next server after header changes.
 
+**Late check-in email:** After a successful punch-in, `POST /api/notifications/attendance-late` evaluates office start + grace from `attendance_policies`. If late, it emails the member (Resend: `RESEND_API_KEY` + `TASK_EMAIL_FROM`) and creates an in-app/push notification (`hr_attendance_late`) once per person per day.
+
 ### HR, Attendance & Payroll (module in progress — phased build)
 
 A full audit precedes implementation: see **`PAYROLL_MODULE_AUDIT.md`** (repo root) for the feature inventory, database mapping, and phased plan. The module **reuses** existing `attendance_records`, `profiles` / `employee_details` / `employee_profile_details` (bank/PAN), `permission_requests`, `in_app_notifications` + FCM, and the private storage + signed-URL pattern. It does **not** create a second attendance system and does **not** modify the check-in/check-out flow.

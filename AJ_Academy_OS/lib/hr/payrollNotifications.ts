@@ -156,3 +156,25 @@ export async function notifyAdminsPendingReview(args: {
     /* ignore */
   }
 }
+
+export async function notifyLateCheckIn(args: {
+  employeeId: string;
+  attendanceDate: string;
+  checkInTimeLabel: string;
+  portalAttendanceHref: string;
+}) {
+  try {
+    await sendPushNotification({
+      userId: args.employeeId,
+      title: "Late check-in recorded",
+      message: `You checked in late on ${args.attendanceDate} at ${args.checkInTimeLabel}. Please review your attendance.`,
+      type: "hr_attendance_late",
+      targetUrl: args.portalAttendanceHref,
+      entityType: "attendance_late",
+      entityId: `${args.employeeId}_${args.attendanceDate}`,
+      priority: "high",
+    });
+  } catch {
+    /* ignore */
+  }
+}
