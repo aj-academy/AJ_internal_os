@@ -330,6 +330,7 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
                   <Field label="Work phone" value={display(employeeDetails?.phone)} />
                   <Field label="Role" value={display(profile?.role?.replace("_", " "))} />
                   <Field label="Department" value={display(profile?.department)} />
+                  <Field label="Designation" value={display(profile?.designation)} />
                   <Field label="Reporting manager" value={display(managerName)} />
                   <Field
                     label="Joining date"
@@ -524,6 +525,8 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
                     </div>
                   </div>
                   <Field label="Passport" value={display(details.passport_number)} />
+                  <Field label="UAN" value={display(details.uan_number)} />
+                  <Field label="ESI number" value={display(details.esi_number)} />
                 </div>
               </div>
 

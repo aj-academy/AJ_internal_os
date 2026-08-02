@@ -17,6 +17,7 @@ export {
   verifySessionRole,
   requireAdminApiSession,
   requireStaffApiSession,
+  requireHrSelfServiceApiSession,
 } from "@/lib/security/auth";
 
 export { safeRelativePath } from "@/lib/security/safeRedirect";
