@@ -36,8 +36,9 @@ const adminSidebarItems = [
   },
   {
     label: "Student Management",
-    href: "/admin/students/bulk-import",
+    href: "/admin/students/directory",
     children: [
+      { label: "Student Directory", href: "/admin/students/directory" },
       { label: "Bulk Import Students", href: "/admin/students/bulk-import" },
       { label: "Mentor Allocation", href: "/admin/students/mentor-allocation" },
       { label: "Mentor Capacity", href: "/admin/students/mentor-capacity" },
