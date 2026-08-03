@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Briefcase,
   CheckCircle2,
+  Eye,
   FileText,
   Loader2,
   Shield,
@@ -21,6 +22,7 @@ import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
 import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { createClient } from "@/lib/supabase/client";
+import { AdminEmployeeProfileView } from "@/components/admin/AdminEmployeeProfileView";
 
 interface FreelancerRow {
   id: string;
@@ -55,6 +57,7 @@ export default function AdminFreelancersPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [offboardingId, setOffboardingId] = useState<string | null>(null);
+  const [viewProfileId, setViewProfileId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -312,6 +315,15 @@ export default function AdminFreelancersPage() {
                       <td className="px-4 py-3 capitalize">{row.status ?? "active"}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 rounded-lg border-[#e8dcc8]"
+                            onClick={() => setViewProfileId(row.id)}
+                          >
+                            <Eye className="mr-1 h-3.5 w-3.5" />
+                            View
+                          </Button>
                           <Link
                             href={`/admin/task-assignment?assignee=${row.id}`}
                             className="inline-flex h-8 items-center rounded-lg border border-[#e8dcc8] bg-white px-3 text-xs font-medium text-[#475569] hover:bg-[#faf8f3]"
@@ -365,6 +377,10 @@ export default function AdminFreelancersPage() {
           </ul>
         </CardContent>
       </Card>
+
+      {viewProfileId ? (
+        <AdminEmployeeProfileView profileId={viewProfileId} onClose={() => setViewProfileId(null)} />
+      ) : null}
     </section>
   );
 }

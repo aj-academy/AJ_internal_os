@@ -40,8 +40,8 @@ export async function GET(request: Request) {
     query,
     admin
       .from("profiles")
-      .select("id, full_name, email")
-      .eq("role", "employee")
+      .select("id, full_name, email, role")
+      .in("role", ["employee", "freelancer"])
       .eq("status", "active")
       .order("full_name"),
   ]);

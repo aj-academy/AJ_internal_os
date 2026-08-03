@@ -55,6 +55,8 @@ export type EmployeeProfileDetails = {
   pan_number: string | null;
   aadhaar_number: string | null;
   passport_number: string | null;
+  uan_number: string | null;
+  esi_number: string | null;
   preferred_work_mode: string | null;
   preferred_communication_channel: string | null;
   notification_preferences: Record<string, boolean>;
@@ -183,6 +185,8 @@ export function emptyProfileDetails(profileId: string): EmployeeProfileDetails {
     pan_number: null,
     aadhaar_number: null,
     passport_number: null,
+    uan_number: null,
+    esi_number: null,
     preferred_work_mode: null,
     preferred_communication_channel: null,
     notification_preferences: {},
@@ -268,6 +272,31 @@ export function maskPan(value: string | null | undefined) {
 
 export function tagsToPayload(tags: string[]) {
   return tags.map((t) => t.trim()).filter(Boolean);
+}
+
+/** Bank / statutory fields needed before payroll payout. */
+export function bankKycReadiness(d: Pick<
+  EmployeeProfileDetails,
+  "bank_name" | "account_holder_name" | "account_number" | "ifsc_code" | "pan_number" | "uan_number" | "esi_number"
+>) {
+  const bankReady = Boolean(
+    filled(d.bank_name) && filled(d.account_holder_name) && filled(d.account_number) && filled(d.ifsc_code),
+  );
+  const panReady = filled(d.pan_number);
+  return {
+    bankReady,
+    panReady,
+    uanReady: filled(d.uan_number),
+    esiReady: filled(d.esi_number),
+    readyForPayout: bankReady && panReady,
+    missing: [
+      !filled(d.bank_name) ? "Bank name" : null,
+      !filled(d.account_holder_name) ? "Account holder" : null,
+      !filled(d.account_number) ? "Account number" : null,
+      !filled(d.ifsc_code) ? "IFSC" : null,
+      !filled(d.pan_number) ? "PAN" : null,
+    ].filter(Boolean) as string[],
+  };
 }
 
 export function profileDetailsToDbPayload(d: EmployeeProfileDetails, userId: string) {

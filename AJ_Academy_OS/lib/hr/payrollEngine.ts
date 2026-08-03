@@ -642,8 +642,8 @@ export async function runPayrollCalculation(
 
   const { data: employees, error: empErr } = await admin
     .from("profiles")
-    .select("id, full_name")
-    .eq("role", "employee")
+    .select("id, full_name, role")
+    .in("role", ["employee", "freelancer"])
     .eq("status", "active");
   if (empErr) throw new Error(empErr.message);
 
@@ -651,6 +651,10 @@ export async function runPayrollCalculation(
 
   for (const emp of employees ?? []) {
     const structure = await resolveSalaryStructureForDate(admin, emp.id, bounds.periodEnd);
+    // Freelancers only enter payroll when they have an active salary structure.
+    if ((emp as { role?: string }).role === "freelancer" && !structure) {
+      continue;
+    }
     const { totals, dayDetails } = await buildAttendanceTotalsForEmployee(
       admin,
       emp.id,

@@ -126,6 +126,15 @@ function minutesOfDay(iso: string | null): number | null {
   return d.getHours() * 60 + d.getMinutes();
 }
 
+/** True when check-in is after office start + grace (respects lateArrivalRule=ignore). Safe to call at punch-in before checkout. */
+export function isLateArrival(checkInIso: string | null | undefined, policy: AttendancePolicy): boolean {
+  if (!checkInIso) return false;
+  if (policy.lateArrivalRule === "ignore") return false;
+  const lateAfter = policy.lateAfterTime || computeLateAfterTime(policy.standardCheckInTime, policy.graceMinutes);
+  const inMin = minutesOfDay(checkInIso);
+  return inMin != null && inMin > hhmmToMinutes(lateAfter);
+}
+
 export function hhmmToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(":").map((n) => Number.parseInt(n, 10));
   return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);

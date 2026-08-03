@@ -205,9 +205,13 @@ Also run **`reports_analytics_schema.sql`** after `lead_call_workflow_schema.sql
 
 **Attendance camera / location:** Employee layout shows a one-time popup asking for camera + location (saved in browser localStorage per user). `Permissions-Policy` must allow `camera=(self)` and `geolocation=(self)` (see `lib/security/headers.ts`). Restart the Next server after header changes.
 
+**Late check-in email:** After a successful punch-in, `POST /api/notifications/attendance-late` evaluates office start + grace from `attendance_policies`. If late, it emails the member (Resend: `RESEND_API_KEY` + `TASK_EMAIL_FROM`) and creates an in-app/push notification (`hr_attendance_late`) once per person per day.
+
 ### HR, Attendance & Payroll (module in progress — phased build)
 
 A full audit precedes implementation: see **`PAYROLL_MODULE_AUDIT.md`** (repo root) for the feature inventory, database mapping, and phased plan. The module **reuses** existing `attendance_records`, `profiles` / `employee_details` / `employee_profile_details` (bank/PAN), `permission_requests`, `in_app_notifications` + FCM, and the private storage + signed-URL pattern. It does **not** create a second attendance system and does **not** modify the check-in/check-out flow.
+
+**Prerequisite — employee/freelancer My Profile.** Run **`employee_profile_self_service_schema.sql`** (see `DATABASE_SETUP_ORDER.txt` step 10g2) so `employee_profile_details` / `employee_documents` exist. Admin views filled profiles via **User Master → View** and **Freelance management → View**. Salary Structures and Monthly Payroll show bank/KYC readiness from those tables. Freelancers with an active salary structure are included in payroll calculation and can open **Payroll** (payslips / salary / queries) in the freelancer panel.
 
 **Phase 1 — Attendance integrity & review.** Run **`hr_payroll_01_attendance_integrity.sql`** after `schema.sql` + `attendance_module.sql` (safe to re-run):
 
@@ -335,7 +339,7 @@ Set `course` / `department` / `assigned_mentor_id` on the student’s `profiles`
 
 ### Freelancer portal
 
-Freelancers now use `/freelancer/*` routes for attendance (selfie check-in), **Assign Tasks**, **Reimbursement**, and **My Profile**.  
+Freelancers now use `/freelancer/*` routes for attendance (selfie check-in), **Assign Tasks**, **Reimbursement**, **My Profile**, and **Payroll** (payslips / salary structure / salary queries when an admin has published a salary structure for them).  
 Task popups use `in_app_notifications` (fallback `/freelancer/my-tasks`).
 
 ### Mentor portal

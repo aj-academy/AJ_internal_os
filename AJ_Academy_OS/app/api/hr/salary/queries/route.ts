@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdminApiSession, requireStaffApiSession } from "@/lib/security";
+import { requireAdminApiSession, requireHrSelfServiceApiSession } from "@/lib/security";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { writeAuditLog } from "@/lib/hr/auditLog";
 
@@ -11,7 +11,7 @@ function isAdminRole(role: string | null | undefined) {
 
 // GET /api/hr/salary/queries?status=
 export async function GET(request: Request) {
-  const { response, profile } = await requireStaffApiSession();
+  const { response, profile } = await requireHrSelfServiceApiSession();
   if (response || !profile) return response!;
 
   const url = new URL(request.url);
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
 
 // POST — employee raises query (or admin on behalf)
 export async function POST(request: Request) {
-  const { response, profile } = await requireStaffApiSession();
+  const { response, profile } = await requireHrSelfServiceApiSession();
   if (response || !profile) return response!;
 
   let body: {

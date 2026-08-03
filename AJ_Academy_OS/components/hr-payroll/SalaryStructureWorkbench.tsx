@@ -1,11 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AdminEmployeeProfileView } from "@/components/admin/AdminEmployeeProfileView";
 
-type Emp = { id: string; full_name: string | null; email: string | null; department: string | null };
+type Emp = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  department: string | null;
+  role?: string | null;
+};
 type Structure = {
   id: string;
   employee_id: string;
@@ -23,6 +30,16 @@ type Structure = {
   other_allowances: number;
   fixed_deductions: number;
   change_reason: string | null;
+};
+type ProfileBank = {
+  profile_id: string;
+  bank_ready: boolean;
+  pan_ready: boolean;
+  ready_for_payout: boolean;
+  has_uan: boolean;
+  has_esi: boolean;
+  profile_completion: number;
+  missing: string[];
 };
 
 const inputClass = "h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm text-[#3d3428]";
@@ -50,6 +67,7 @@ const emptyForm = {
 export function SalaryStructureWorkbench() {
   const [employees, setEmployees] = useState<Emp[]>([]);
   const [openStructures, setOpenStructures] = useState<Structure[]>([]);
+  const [profileBank, setProfileBank] = useState<ProfileBank[]>([]);
   const [employeeId, setEmployeeId] = useState("");
   const [history, setHistory] = useState<Structure[]>([]);
   const [form, setForm] = useState(emptyForm);
@@ -58,6 +76,10 @@ export function SalaryStructureWorkbench() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [viewProfileId, setViewProfileId] = useState<string | null>(null);
+
+  const bankMap = useMemo(() => new Map(profileBank.map((b) => [b.profile_id, b])), [profileBank]);
+  const selectedBank = employeeId ? bankMap.get(employeeId) : undefined;
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -68,6 +90,7 @@ export function SalaryStructureWorkbench() {
       if (!res.ok) throw new Error(json.error || "Failed to load");
       setEmployees(json.employees ?? []);
       setOpenStructures(json.openStructures ?? []);
+      setProfileBank(json.profileBank ?? []);
       if (json.migrationRequired) setMigrationRequired(json.migrationRequired);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -160,7 +183,7 @@ export function SalaryStructureWorkbench() {
       <PageHeader
         kicker="HR, Attendance & Payroll"
         title="Employee Salary Structure"
-        description="Effective-dated salary structures. Publishing a revision closes the previous version — historical payroll stays reproducible. Change reason is mandatory."
+        description="Effective-dated salary structures for employees and freelancers. Publishing a revision closes the previous version — historical payroll stays reproducible. Change reason is mandatory."
       />
 
       {migrationRequired ? (
@@ -182,29 +205,59 @@ export function SalaryStructureWorkbench() {
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3 pt-4">
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-            Employee
+            Employee / Freelancer
             <select
               className={`${inputClass} min-w-64`}
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}
             >
-              <option value="">Select employee…</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.full_name ?? e.email}
-                  {openMap.has(e.id) ? "" : " · no structure"}
-                </option>
-              ))}
+              <option value="">Select person…</option>
+              {employees.map((e) => {
+                const bank = bankMap.get(e.id);
+                const roleTag = e.role === "freelancer" ? " · freelancer" : "";
+                const bankTag = bank?.ready_for_payout ? "" : " · bank incomplete";
+                return (
+                  <option key={e.id} value={e.id}>
+                    {e.full_name ?? e.email}
+                    {roleTag}
+                    {openMap.has(e.id) ? "" : " · no structure"}
+                    {bankTag}
+                  </option>
+                );
+              })}
             </select>
           </label>
           <Button size="sm" variant="outline" onClick={() => void loadList()} disabled={loading}>
             Refresh list
           </Button>
+          {employeeId ? (
+            <Button size="sm" variant="outline" onClick={() => setViewProfileId(employeeId)}>
+              View profile
+            </Button>
+          ) : null}
           <p className="text-xs text-muted-foreground">
-            {employees.length} employees · {openStructures.length} with active structure
+            {employees.length} people · {openStructures.length} with active structure
           </p>
         </CardContent>
       </Card>
+
+      {employeeId && selectedBank ? (
+        <div
+          className={[
+            "rounded-lg border px-3 py-2 text-sm",
+            selectedBank.ready_for_payout
+              ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+              : "border-amber-300 bg-amber-50 text-amber-900",
+          ].join(" ")}
+        >
+          {selectedBank.ready_for_payout
+            ? "Bank & PAN ready for payout."
+            : `Bank/KYC incomplete for payroll payout: ${selectedBank.missing.join(", ") || "missing fields"}. Ask the person to complete My Profile → Bank & Compliance.`}
+          {selectedBank.has_uan ? " · UAN on file" : " · UAN missing"}
+          {selectedBank.has_esi ? " · ESI on file" : " · ESI missing"}
+          {` · profile ${selectedBank.profile_completion}%`}
+        </div>
+      ) : null}
 
       {employeeId ? (
         <Card>
@@ -337,6 +390,10 @@ export function SalaryStructureWorkbench() {
             </table>
           </CardContent>
         </Card>
+      ) : null}
+
+      {viewProfileId ? (
+        <AdminEmployeeProfileView profileId={viewProfileId} onClose={() => setViewProfileId(null)} />
       ) : null}
     </div>
   );

@@ -31,6 +31,7 @@ import {
   type EmployeeProfileDetails,
   type ProfileTabId,
 } from "@/lib/employeeProfile";
+import { fetchEmployeeDetailsForProfile } from "@/lib/employeeDetails";
 import { TagInput } from "./TagInput";
 import { PushDeviceSettings } from "@/components/push/PushDeviceSettings";
 
@@ -231,17 +232,13 @@ export function EmployeeProfileWorkbench() {
         return;
       }
 
-      const [profRes, edRes, epdRes, docsRes] = await Promise.all([
+      const [profRes, edLookup, epdRes, docsRes] = await Promise.all([
         supabase
           .from("profiles")
           .select("id,full_name,email,role,department,designation,status,created_at")
           .eq("id", uid)
           .maybeSingle(),
-        supabase
-          .from("employee_details")
-          .select("employee_code,phone,joined_at,manager_id,employment_type")
-          .eq("employee_id", uid)
-          .maybeSingle(),
+        fetchEmployeeDetailsForProfile(supabase, uid),
         supabase.from("employee_profile_details").select(PROFILE_DETAIL_SELECT).eq("profile_id", uid).maybeSingle(),
         supabase
           .from("employee_documents")
@@ -253,7 +250,16 @@ export function EmployeeProfileWorkbench() {
       if (profRes.error) throw new Error(profRes.error.message);
       setProfile((profRes.data as ProfileRow | null) ?? null);
 
-      const ed = (edRes.data as EmployeeDetailsRow | null) ?? null;
+      const edRaw = edLookup.data;
+      const ed: EmployeeDetailsRow | null = edRaw
+        ? {
+            employee_code: (edRaw as { employee_code?: string | null }).employee_code ?? null,
+            phone: edRaw.phone ?? null,
+            joined_at: edRaw.joined_at ?? null,
+            manager_id: edRaw.manager_id ?? null,
+            employment_type: edRaw.employment_type ?? null,
+          }
+        : null;
       setEmployeeDetails(ed);
       if (ed?.manager_id) {
         const { data: mgr } = await supabase.from("profiles").select("full_name,email").eq("id", ed.manager_id).maybeSingle();
@@ -1066,6 +1072,12 @@ export function EmployeeProfileWorkbench() {
             </LabeledField>
             <LabeledField label="Passport number">
               <Input value={details.passport_number ?? ""} onChange={(e) => patch({ passport_number: e.target.value || null })} className={fieldClass} disabled={schemaMissing} />
+            </LabeledField>
+            <LabeledField label="UAN">
+              <Input value={details.uan_number ?? ""} onChange={(e) => patch({ uan_number: e.target.value || null })} className={fieldClass} disabled={schemaMissing} />
+            </LabeledField>
+            <LabeledField label="ESI number">
+              <Input value={details.esi_number ?? ""} onChange={(e) => patch({ esi_number: e.target.value || null })} className={fieldClass} disabled={schemaMissing} />
             </LabeledField>
           </div>
           <SaveBar saving={saving} disabled={schemaMissing} onSave={() => void saveProfile()} />

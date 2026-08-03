@@ -49,17 +49,33 @@ export async function GET(request: Request) {
       .order("employee_id");
     items = itemRows ?? [];
 
-    // Attach employee names
+    // Attach employee names + bank/KYC readiness
     const ids = [...new Set(items.map((i) => (i as { employee_id: string }).employee_id))];
     if (ids.length) {
-      const { data: profiles } = await admin
-        .from("profiles")
-        .select("id, full_name, department")
-        .in("id", ids);
+      const [{ data: profiles }, { data: bankRows }] = await Promise.all([
+        admin.from("profiles").select("id, full_name, department, role").in("id", ids),
+        admin
+          .from("employee_profile_details")
+          .select("profile_id, bank_name, account_holder_name, account_number, ifsc_code, pan_number")
+          .in("profile_id", ids),
+      ]);
       const map = new Map((profiles ?? []).map((p) => [p.id, p]));
+      const bankMap = new Map(
+        (bankRows ?? []).map((b) => [String((b as { profile_id: string }).profile_id), b as Record<string, unknown>]),
+      );
       items = items.map((i) => {
         const row = i as { employee_id: string };
-        return { ...row, employee: map.get(row.employee_id) ?? null };
+        const bank = bankMap.get(row.employee_id);
+        const bankReady = Boolean(
+          bank?.bank_name && bank?.account_holder_name && bank?.account_number && bank?.ifsc_code,
+        );
+        const panReady = Boolean(bank?.pan_number);
+        return {
+          ...row,
+          employee: map.get(row.employee_id) ?? null,
+          bank_ready: bankReady,
+          ready_for_payout: bankReady && panReady,
+        };
       });
     }
   }

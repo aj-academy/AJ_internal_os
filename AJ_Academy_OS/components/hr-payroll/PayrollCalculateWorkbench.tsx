@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { WorkflowAction } from "@/lib/hr/payrollWorkflow";
+import { AdminEmployeeProfileView } from "@/components/admin/AdminEmployeeProfileView";
 
 type Item = {
   id: string;
@@ -19,7 +20,9 @@ type Item = {
   total_deductions: number;
   net_salary: number;
   error_message: string | null;
-  employee: { full_name: string | null; department: string | null } | null;
+  bank_ready?: boolean;
+  ready_for_payout?: boolean;
+  employee: { full_name: string | null; department: string | null; role?: string | null } | null;
 };
 
 type Period = {
@@ -58,6 +61,7 @@ export function PayrollCalculateWorkbench() {
   const [workflowBusy, setWorkflowBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [viewProfileId, setViewProfileId] = useState<string | null>(null);
   const [summary, setSummary] = useState<{
     employees: number;
     calculated: number;
@@ -342,10 +346,17 @@ export function PayrollCalculateWorkbench() {
           <CardTitle>Payroll items ({items.length})</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <table className="w-full min-w-[960px] text-sm">
+          {items.some((i) => i.ready_for_payout === false) ? (
+            <p className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              Some people are missing bank/PAN details. Complete My Profile → Bank &amp; Compliance before marking paid /
+              bank transfer. Incomplete rows are highlighted.
+            </p>
+          ) : null}
+          <table className="w-full min-w-[1080px] text-sm">
             <thead>
               <tr className="border-b border-[#e8dcc8] text-left text-xs uppercase text-muted-foreground">
                 <th className="py-2 pr-3">Employee</th>
+                <th className="py-2 pr-3">Bank</th>
                 <th className="py-2 pr-3">Status</th>
                 <th className="py-2 pr-3">Present</th>
                 <th className="py-2 pr-3">Paid leave</th>
@@ -355,12 +366,35 @@ export function PayrollCalculateWorkbench() {
                 <th className="py-2 pr-3">Deductions</th>
                 <th className="py-2 pr-3">Net</th>
                 <th className="py-2 pr-3">Error</th>
+                <th className="py-2 pr-3">Profile</th>
               </tr>
             </thead>
             <tbody>
               {items.map((i) => (
-                <tr key={i.id} className="border-b border-[#f0e9db]">
-                  <td className="py-2 pr-3">{i.employee?.full_name ?? i.employee_id.slice(0, 8)}</td>
+                <tr
+                  key={i.id}
+                  className={[
+                    "border-b border-[#f0e9db]",
+                    i.ready_for_payout === false ? "bg-amber-50/60" : "",
+                  ].join(" ")}
+                >
+                  <td className="py-2 pr-3">
+                    {i.employee?.full_name ?? i.employee_id.slice(0, 8)}
+                    {i.employee?.role === "freelancer" ? (
+                      <span className="ml-1 text-[10px] uppercase text-[#64748b]">freelancer</span>
+                    ) : null}
+                  </td>
+                  <td className="py-2 pr-3">
+                    {i.ready_for_payout ? (
+                      <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
+                        Ready
+                      </span>
+                    ) : (
+                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                        Incomplete
+                      </span>
+                    )}
+                  </td>
                   <td className="py-2 pr-3 capitalize">{i.status}</td>
                   <td className="py-2 pr-3">{i.present_days}</td>
                   <td className="py-2 pr-3">{i.paid_leave_days}</td>
@@ -374,11 +408,16 @@ export function PayrollCalculateWorkbench() {
                   <td className="max-w-48 truncate py-2 pr-3 text-xs text-destructive" title={i.error_message ?? ""}>
                     {i.error_message ?? "—"}
                   </td>
+                  <td className="py-2 pr-3">
+                    <Button size="xs" variant="outline" onClick={() => setViewProfileId(i.employee_id)}>
+                      View
+                    </Button>
+                  </td>
                 </tr>
               ))}
               {!loading && items.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-6 text-center text-sm text-muted-foreground">
+                  <td colSpan={12} className="py-6 text-center text-sm text-muted-foreground">
                     No payroll items yet. Run Calculate for this month.
                   </td>
                 </tr>
@@ -387,6 +426,10 @@ export function PayrollCalculateWorkbench() {
           </table>
         </CardContent>
       </Card>
+
+      {viewProfileId ? (
+        <AdminEmployeeProfileView profileId={viewProfileId} onClose={() => setViewProfileId(null)} />
+      ) : null}
     </div>
   );
 }

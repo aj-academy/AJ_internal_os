@@ -483,6 +483,13 @@ export function MemberAttendancePage({
         type: "success",
         text: requireSelfie ? "Check-in recorded with selfie and location." : "Check in successful.",
       });
+
+      // Fire-and-forget: if punch is late, email + notify the member once for today.
+      void fetch("/api/notifications/attendance-late", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attendanceDate: today, checkInTime: nowIso }),
+      }).catch(() => undefined);
     } catch (error) {
       const text = toReadableAttendanceError(error);
       setMessage({ type: "error", text });

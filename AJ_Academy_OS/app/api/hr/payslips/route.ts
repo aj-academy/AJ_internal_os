@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdminApiSession, requireStaffApiSession } from "@/lib/security";
+import { requireAdminApiSession, requireHrSelfServiceApiSession } from "@/lib/security";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { writeAuditLog } from "@/lib/hr/auditLog";
 import { createPayslipSignedUrl, generatePayslipsForPeriod } from "@/lib/hr/payslipService";
@@ -12,7 +12,7 @@ function isAdminRole(role: string | null | undefined) {
 
 // GET /api/hr/payslips?year=&month=&employeeId=
 export async function GET(request: Request) {
-  const { response, profile } = await requireStaffApiSession();
+  const { response, profile } = await requireHrSelfServiceApiSession();
   if (response || !profile) return response!;
 
   const url = new URL(request.url);
