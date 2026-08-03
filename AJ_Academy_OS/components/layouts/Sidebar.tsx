@@ -69,11 +69,53 @@ function routePathOnly(href: string) {
   }
 }
 
+/** True when current location matches this nav link (path + optional ?tab=). */
+function isNavLinkActive(
+  href: string,
+  pathNorm: string,
+  activeTab: string | null,
+): boolean {
+  try {
+    const url = new URL(href, "https://example.com");
+    const linkPath = normalizeRoutePath(url.pathname);
+    const pathMatches = pathNorm === linkPath || pathNorm.startsWith(`${linkPath}/`);
+    if (!pathMatches) return false;
+
+    // Only enforce tab when the link itself specifies ?tab=
+    const linkTab = url.searchParams.get("tab");
+    if (linkTab != null) {
+      return (activeTab ?? "overview") === linkTab;
+    }
+    return true;
+  } catch {
+    return pathNorm === routePathOnly(href);
+  }
+}
+
+/**
+ * Keep parent accordion open for any sibling under the same section folder
+ * e.g. /admin/students/directory and /admin/students/bulk-import.
+ */
+function isUnderNavSection(item: SidebarItem, pathNorm: string, activeTab: string | null): boolean {
+  if (!item.children?.length) return false;
+  if (item.children.some((child) => isNavLinkActive(child.href, pathNorm, activeTab))) {
+    return true;
+  }
+  // Sibling pages sharing the same first two path segments as any child
+  return item.children.some((child) => {
+    const childPath = routePathOnly(child.href);
+    const childParts = childPath.split("/").filter(Boolean);
+    const pathParts = pathNorm.split("/").filter(Boolean);
+    if (childParts.length < 2 || pathParts.length < 2) return false;
+    return childParts[0] === pathParts[0] && childParts[1] === pathParts[1];
+  });
+}
+
 export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggleCollapse, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const pathNorm = normalizeRoutePath(pathname);
   const searchParams = useSearchParams();
-  const activeTab = searchParams.get("tab") ?? "overview";
+  const activeTab = searchParams.get("tab");
   const getIcon = (label: string) => {
     const l = label.toLowerCase();
     if (l.includes("attendance")) return UserCheck;
@@ -153,27 +195,23 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
 
       <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-2.5 pb-4 sm:px-3">
         {uniqueItems.map((item) => {
-          const isActive = pathNorm === routePathOnly(item.href);
           const hasChildren = Boolean(item.children?.length);
-          const hasActiveChild =
-            hasChildren &&
-            item.children!.some((child) => {
-              const url = new URL(child.href, "http://localhost");
-              return pathNorm === normalizeRoutePath(url.pathname) && activeTab === (url.searchParams.get("tab") ?? "overview");
-            });
-          const isExpanded = !collapsed && hasChildren && (isActive || hasActiveChild);
+          const hasActiveChild = hasChildren && isUnderNavSection(item, pathNorm, activeTab);
+          const isExactParent = pathNorm === routePathOnly(item.href);
+          const isActive = hasChildren ? hasActiveChild || isExactParent : isExactParent;
+          const isExpanded = !collapsed && hasChildren && (hasActiveChild || isExactParent);
           const Icon = getIcon(item.label);
 
           return (
-            <div key={item.href} className="space-y-1">
+            <div key={`${item.label}::${item.href}`} className="space-y-1">
               <Link
                 href={toLinkHref(item.href)}
                 onClick={() => onNavigate?.()}
                 className={cn(
                   "group flex min-h-11 items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-out sm:min-h-10",
-                  isActive
+                  isActive && !hasChildren
                     ? "bg-[#fffdf8] text-[#3d3428] shadow-[0_4px_14px_rgba(61,52,40,0.12)]"
-                    : hasActiveChild
+                    : hasActiveChild || (hasChildren && isExactParent)
                       ? "bg-white/15 text-white"
                       : "text-white/92 hover:bg-white/15 hover:text-white",
                 )}
@@ -182,7 +220,7 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
                   <Icon
                     className={cn(
                       "h-4 w-4 shrink-0 transition-colors duration-200",
-                      isActive ? "text-[#c9a227]" : "text-white/95 group-hover:text-white",
+                      isActive && !hasChildren ? "text-[#c9a227]" : "text-white/95 group-hover:text-white",
                     )}
                   />
                   <span
@@ -206,13 +244,10 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
               {isExpanded && hasChildren ? (
                 <div className="ml-4 space-y-0.5 border-l border-white/25 pl-3 sm:ml-5">
                   {item.children!.map((child) => {
-                    const childUrl = new URL(child.href, "http://localhost");
-                    const childIsActive =
-                      pathNorm === normalizeRoutePath(childUrl.pathname) &&
-                      activeTab === (childUrl.searchParams.get("tab") ?? "overview");
+                    const childIsActive = isNavLinkActive(child.href, pathNorm, activeTab);
                     return (
                       <Link
-                        key={child.href}
+                        key={`${child.label}::${child.href}`}
                         href={toLinkHref(child.href)}
                         onClick={onNavigate}
                         className={cn(
