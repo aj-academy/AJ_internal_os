@@ -1,9 +1,8 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useMemo } from "react";
 import {
   BarChart3,
   BriefcaseBusiness,
@@ -11,7 +10,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
   FileText,
   FolderKanban,
   FolderOpen,
@@ -69,19 +67,17 @@ function routePathOnly(href: string) {
   }
 }
 
+function sectionKey(item: SidebarItem) {
+  return `${item.label}::${item.href}`;
+}
+
 /** True when current location matches this nav link (path + optional ?tab=). */
-function isNavLinkActive(
-  href: string,
-  pathNorm: string,
-  activeTab: string | null,
-): boolean {
+function isNavLinkActive(href: string, pathNorm: string, activeTab: string | null): boolean {
   try {
     const url = new URL(href, "https://example.com");
     const linkPath = normalizeRoutePath(url.pathname);
     const pathMatches = pathNorm === linkPath || pathNorm.startsWith(`${linkPath}/`);
     if (!pathMatches) return false;
-
-    // Only enforce tab when the link itself specifies ?tab=
     const linkTab = url.searchParams.get("tab");
     if (linkTab != null) {
       return (activeTab ?? "overview") === linkTab;
@@ -92,16 +88,11 @@ function isNavLinkActive(
   }
 }
 
-/**
- * Keep parent accordion open for any sibling under the same section folder
- * e.g. /admin/students/directory and /admin/students/bulk-import.
- */
 function isUnderNavSection(item: SidebarItem, pathNorm: string, activeTab: string | null): boolean {
   if (!item.children?.length) return false;
   if (item.children.some((child) => isNavLinkActive(child.href, pathNorm, activeTab))) {
     return true;
   }
-  // Sibling pages sharing the same first two path segments as any child
   return item.children.some((child) => {
     const childPath = routePathOnly(child.href);
     const childParts = childPath.split("/").filter(Boolean);
@@ -116,6 +107,9 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
   const pathNorm = normalizeRoutePath(pathname);
   const searchParams = useSearchParams();
   const activeTab = searchParams.get("tab");
+  /** Manual open/close for sections with children. true = open, false = closed. */
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+
   const getIcon = (label: string) => {
     const l = label.toLowerCase();
     if (l.includes("attendance")) return UserCheck;
@@ -161,6 +155,30 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
       });
   }, [items]);
 
+  // When you navigate into a section, open that section so the active child is visible.
+  // Does not force-reopen if the user already closed it on the same path (only on path change).
+  useEffect(() => {
+    setOpenSections((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const item of uniqueItems) {
+        if (!item.children?.length) continue;
+        const key = sectionKey(item);
+        if (isUnderNavSection(item, pathNorm, activeTab) && next[key] !== true) {
+          // Only auto-open when entering the section; leave explicit false alone only if...
+          // Actually: on path change into section, always open so user sees where they are.
+          next[key] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [pathNorm, activeTab, uniqueItems]);
+
+  const toggleSection = (key: string, currentlyOpen: boolean) => {
+    setOpenSections((prev) => ({ ...prev, [key]: !currentlyOpen }));
+  };
+
   return (
     <aside className="flex h-full w-full flex-col overflow-hidden rounded-[1.25rem] border border-[#d4b84a]/70 bg-gradient-to-b from-[#d4b84a] via-[#c9a227] to-[#a68b2e] shadow-[0_12px_36px_rgba(166,139,46,0.22)] transition-all duration-200 ease-out">
       <div className="flex items-center justify-between gap-2 px-3.5 py-4 sm:px-4">
@@ -196,51 +214,84 @@ export const Sidebar = memo(function Sidebar({ items, collapsed = false, onToggl
       <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-2.5 pb-4 sm:px-3">
         {uniqueItems.map((item) => {
           const hasChildren = Boolean(item.children?.length);
+          const key = sectionKey(item);
           const hasActiveChild = hasChildren && isUnderNavSection(item, pathNorm, activeTab);
           const isExactParent = pathNorm === routePathOnly(item.href);
-          const isActive = hasChildren ? hasActiveChild || isExactParent : isExactParent;
-          const isExpanded = !collapsed && hasChildren && (hasActiveChild || isExactParent);
+          const isLeafActive = !hasChildren && isExactParent;
+
+          // Manual toggle wins; default closed unless currently in that section (handled by effect / initial)
+          const isExpanded =
+            !collapsed &&
+            hasChildren &&
+            (openSections[key] ?? false);
+
           const Icon = getIcon(item.label);
+          const parentHighlight = hasActiveChild || (hasChildren && isExactParent && isExpanded);
 
           return (
-            <div key={`${item.label}::${item.href}`} className="space-y-1">
-              <Link
-                href={toLinkHref(item.href)}
-                onClick={() => onNavigate?.()}
-                className={cn(
-                  "group flex min-h-11 items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-out sm:min-h-10",
-                  isActive && !hasChildren
-                    ? "bg-[#fffdf8] text-[#3d3428] shadow-[0_4px_14px_rgba(61,52,40,0.12)]"
-                    : hasActiveChild || (hasChildren && isExactParent)
+            <div key={key} className="space-y-1">
+              {hasChildren ? (
+                <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  onClick={() => toggleSection(key, isExpanded)}
+                  className={cn(
+                    "group flex min-h-11 w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all duration-200 ease-out sm:min-h-10",
+                    parentHighlight
                       ? "bg-white/15 text-white"
                       : "text-white/92 hover:bg-white/15 hover:text-white",
-                )}
-              >
-                <span className="flex min-w-0 items-center gap-3">
-                  <Icon
-                    className={cn(
-                      "h-4 w-4 shrink-0 transition-colors duration-200",
-                      isActive && !hasChildren ? "text-[#c9a227]" : "text-white/95 group-hover:text-white",
-                    )}
-                  />
-                  <span
-                    className={cn(
-                      "origin-left truncate whitespace-nowrap transition-all duration-300 ease-in-out",
-                      collapsed ? "w-0 scale-95 opacity-0" : "w-auto scale-100 opacity-100",
-                    )}
-                  >
-                    {item.label}
+                  )}
+                >
+                  <span className="flex min-w-0 items-center gap-3">
+                    <Icon className="h-4 w-4 shrink-0 text-white/95 group-hover:text-white" />
+                    <span
+                      className={cn(
+                        "origin-left truncate whitespace-nowrap transition-all duration-300 ease-in-out",
+                        collapsed ? "w-0 scale-95 opacity-0" : "w-auto scale-100 opacity-100",
+                      )}
+                    >
+                      {item.label}
+                    </span>
                   </span>
-                </span>
-                {!collapsed && hasChildren ? (
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 shrink-0 text-white/70 transition-transform",
-                      isExpanded ? "rotate-180" : "rotate-0",
-                    )}
-                  />
-                ) : null}
-              </Link>
+                  {!collapsed ? (
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 shrink-0 text-white/70 transition-transform",
+                        isExpanded ? "rotate-180" : "rotate-0",
+                      )}
+                    />
+                  ) : null}
+                </button>
+              ) : (
+                <Link
+                  href={toLinkHref(item.href)}
+                  onClick={() => onNavigate?.()}
+                  className={cn(
+                    "group flex min-h-11 items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-out sm:min-h-10",
+                    isLeafActive
+                      ? "bg-[#fffdf8] text-[#3d3428] shadow-[0_4px_14px_rgba(61,52,40,0.12)]"
+                      : "text-white/92 hover:bg-white/15 hover:text-white",
+                  )}
+                >
+                  <span className="flex min-w-0 items-center gap-3">
+                    <Icon
+                      className={cn(
+                        "h-4 w-4 shrink-0 transition-colors duration-200",
+                        isLeafActive ? "text-[#c9a227]" : "text-white/95 group-hover:text-white",
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "origin-left truncate whitespace-nowrap transition-all duration-300 ease-in-out",
+                        collapsed ? "w-0 scale-95 opacity-0" : "w-auto scale-100 opacity-100",
+                      )}
+                    >
+                      {item.label}
+                    </span>
+                  </span>
+                </Link>
+              )}
+
               {isExpanded && hasChildren ? (
                 <div className="ml-4 space-y-0.5 border-l border-white/25 pl-3 sm:ml-5">
                   {item.children!.map((child) => {
