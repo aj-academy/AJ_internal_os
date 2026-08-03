@@ -235,6 +235,47 @@ $$;
 
 grant execute on function public.lms_track_material_activity(uuid, text) to authenticated;
 
+-- Helpers so RLS policies do not recurse across materials ↔ recipients
+create or replace function public.lms_material_student_is_recipient(p_material_id uuid, p_student uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.lms_study_material_recipients r
+    where r.material_id = p_material_id
+      and r.student_id = p_student
+  );
+$$;
+
+create or replace function public.lms_material_mentor_can_access(p_material_id uuid, p_user uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.lms_study_materials m
+    where m.id = p_material_id
+      and (
+        m.assigned_by = p_user
+        or public.lms_mentor_has_active_allocation(
+          p_user, m.department_id, m.course_id, m.batch_id, m.module_id
+        )
+      )
+  );
+$$;
+
+grant execute on function public.lms_material_student_is_recipient(uuid, uuid) to authenticated;
+grant execute on function public.lms_material_mentor_can_access(uuid, uuid) to authenticated;
+
 -- Private study-materials bucket (signed URLs via app later)
 insert into storage.buckets (id, name, public)
 values ('study-materials', 'study-materials', false)
@@ -272,10 +313,7 @@ create policy lms_study_materials_student_select on public.lms_study_materials
   for select to authenticated
   using (
     status in ('published', 'scheduled')
-    and exists (
-      select 1 from public.lms_study_material_recipients r
-      where r.material_id = lms_study_materials.id and r.student_id = auth.uid()
-    )
+    and public.lms_material_student_is_recipient(id, auth.uid())
   );
 
 drop policy if exists lms_study_material_recipients_admin_all on public.lms_study_material_recipients;
@@ -291,10 +329,7 @@ create policy lms_study_material_recipients_mentor on public.lms_study_material_
   for select to authenticated
   using (
     public.is_mentor_role()
-    and exists (
-      select 1 from public.lms_study_materials m
-      where m.id = material_id and m.assigned_by = auth.uid()
-    )
+    and public.lms_material_mentor_can_access(material_id, auth.uid())
   );
 
 drop policy if exists lms_material_activity_admin_all on public.lms_material_activity;

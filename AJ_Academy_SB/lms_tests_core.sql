@@ -506,6 +506,42 @@ $$;
 
 grant execute on function public.lms_submit_test_attempt(uuid, text) to authenticated;
 
+-- Helpers so RLS policies do not recurse across lms_tests ↔ recipients
+create or replace function public.lms_test_assigned_by(p_test_id uuid, p_user uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.lms_tests t
+    where t.id = p_test_id
+      and t.assigned_by = p_user
+  );
+$$;
+
+create or replace function public.lms_test_student_is_recipient(p_test_id uuid, p_student uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.lms_test_recipients r
+    where r.test_id = p_test_id
+      and r.student_id = p_student
+  );
+$$;
+
+grant execute on function public.lms_test_assigned_by(uuid, uuid) to authenticated;
+grant execute on function public.lms_test_student_is_recipient(uuid, uuid) to authenticated;
+
 -- RLS
 alter table public.lms_question_bank enable row level security;
 alter table public.lms_tests enable row level security;
@@ -538,14 +574,14 @@ create policy lms_tests_mentor on public.lms_tests for all to authenticated
   with check (public.is_mentor_role() and public.lms_mentor_has_active_allocation(auth.uid(), department_id, course_id, batch_id, module_id));
 drop policy if exists lms_tests_student_select on public.lms_tests;
 create policy lms_tests_student_select on public.lms_tests for select to authenticated
-  using (exists (select 1 from public.lms_test_recipients r where r.test_id = lms_tests.id and r.student_id = auth.uid()));
+  using (public.lms_test_student_is_recipient(id, auth.uid()));
 
 drop policy if exists lms_test_questions_admin_all on public.lms_test_questions;
 create policy lms_test_questions_admin_all on public.lms_test_questions for all to authenticated using (public.is_admin()) with check (public.is_admin());
 drop policy if exists lms_test_questions_mentor on public.lms_test_questions;
 create policy lms_test_questions_mentor on public.lms_test_questions for all to authenticated
-  using (exists (select 1 from public.lms_tests t where t.id = test_id and t.assigned_by = auth.uid()))
-  with check (exists (select 1 from public.lms_tests t where t.id = test_id and t.assigned_by = auth.uid()));
+  using (public.is_mentor_role() and public.lms_test_assigned_by(test_id, auth.uid()))
+  with check (public.is_mentor_role() and public.lms_test_assigned_by(test_id, auth.uid()));
 -- Students see questions only via attempt snapshots (answers/attempt_questions), not bank correct answers on test_questions directly during attempt through
 -- Allow select of question text for assigned tests without correct_answer leakage in app layer.
 drop policy if exists lms_test_questions_student_select on public.lms_test_questions;
@@ -561,8 +597,9 @@ create policy lms_test_recipients_admin_all on public.lms_test_recipients for al
 drop policy if exists lms_test_recipients_student on public.lms_test_recipients;
 create policy lms_test_recipients_student on public.lms_test_recipients for select to authenticated using (student_id = auth.uid());
 drop policy if exists lms_test_recipients_mentor on public.lms_test_recipients;
-create policy lms_test_recipients_mentor on public.lms_test_recipients for select to authenticated
-  using (exists (select 1 from public.lms_tests t where t.id = test_id and t.assigned_by = auth.uid()));
+create policy lms_test_recipients_mentor on public.lms_test_recipients for all to authenticated
+  using (public.is_mentor_role() and public.lms_test_assigned_by(test_id, auth.uid()))
+  with check (public.is_mentor_role() and public.lms_test_assigned_by(test_id, auth.uid()));
 
 drop policy if exists lms_test_attempts_admin_all on public.lms_test_attempts;
 create policy lms_test_attempts_admin_all on public.lms_test_attempts for all to authenticated using (public.is_admin()) with check (public.is_admin());
@@ -574,7 +611,7 @@ create policy lms_test_attempts_student_update on public.lms_test_attempts for u
   with check (student_id = auth.uid());
 drop policy if exists lms_test_attempts_mentor on public.lms_test_attempts;
 create policy lms_test_attempts_mentor on public.lms_test_attempts for select to authenticated
-  using (exists (select 1 from public.lms_tests t where t.id = test_id and t.assigned_by = auth.uid()));
+  using (public.is_mentor_role() and public.lms_test_assigned_by(test_id, auth.uid()));
 
 drop policy if exists lms_test_attempt_questions_admin on public.lms_test_attempt_questions;
 create policy lms_test_attempt_questions_admin on public.lms_test_attempt_questions for all to authenticated using (public.is_admin()) with check (public.is_admin());
@@ -590,10 +627,13 @@ create policy lms_test_answers_student on public.lms_test_answers for all to aut
   with check (exists (select 1 from public.lms_test_attempts a where a.id = attempt_id and a.student_id = auth.uid() and a.locked = false));
 drop policy if exists lms_test_answers_mentor on public.lms_test_answers;
 create policy lms_test_answers_mentor on public.lms_test_answers for select to authenticated
-  using (exists (
-    select 1 from public.lms_test_attempts a
-    join public.lms_tests t on t.id = a.test_id
-    where a.id = attempt_id and t.assigned_by = auth.uid()
-  ));
+  using (
+    public.is_mentor_role()
+    and exists (
+      select 1 from public.lms_test_attempts a
+      where a.id = attempt_id
+        and public.lms_test_assigned_by(a.test_id, auth.uid())
+    )
+  );
 
 comment on table public.lms_tests is 'LMS tests with server-side attempt timer and publish-time recipients.';

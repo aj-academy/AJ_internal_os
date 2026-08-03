@@ -155,6 +155,8 @@ Optional check anytime: lms_verify.sql
   lms_study_materials.sql — study materials + recipients + activity tracking + study-materials bucket
   lms_tickets.sql — queries & complaints + sensitive routing + query-attachments bucket
   lms_tests_core.sql — tests, questions, attempts, server timer, autosave, objective grading, tab-switch policies
+  lms_mentor_rls_recursion_fix.sql — ONLY if mentor LMS pages already show "infinite recursion detected in policy" (assignments/projects/materials/tests). Safe to re-run.
+  lms_tests_rls_fix.sql — older tests-only patch; prefer lms_mentor_rls_recursion_fix.sql instead
   lms_submissions_proctoring.sql — assignment submit/evaluate RPCs, private submission buckets, proctoring consent/events/media
   lms_project_milestones.sql — project milestone submit + mentor evaluate RPCs
   lms_calendar_reports.sql — academic calendar events + lms_report_summary()

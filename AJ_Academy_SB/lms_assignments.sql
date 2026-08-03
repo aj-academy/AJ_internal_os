@@ -254,6 +254,47 @@ $$;
 
 grant execute on function public.lms_publish_assignment(uuid, uuid[], text) to authenticated;
 
+-- Helpers so RLS policies do not recurse across assignments ↔ recipients
+create or replace function public.lms_assignment_student_is_recipient(p_assignment_id uuid, p_student uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.lms_assignment_recipients r
+    where r.assignment_id = p_assignment_id
+      and r.student_id = p_student
+  );
+$$;
+
+create or replace function public.lms_assignment_mentor_can_access(p_assignment_id uuid, p_user uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.lms_assignments a
+    where a.id = p_assignment_id
+      and (
+        a.assigned_by = p_user
+        or public.lms_mentor_has_active_allocation(
+          p_user, a.department_id, a.course_id, a.batch_id, a.module_id
+        )
+      )
+  );
+$$;
+
+grant execute on function public.lms_assignment_student_is_recipient(uuid, uuid) to authenticated;
+grant execute on function public.lms_assignment_mentor_can_access(uuid, uuid) to authenticated;
+
 -- ---------------------------------------------------------------------------
 -- RLS
 -- ---------------------------------------------------------------------------
@@ -292,11 +333,7 @@ create policy lms_assignments_student_select on public.lms_assignments
   for select to authenticated
   using (
     status in ('published', 'in_progress', 'due', 'closed', 'scheduled')
-    and exists (
-      select 1 from public.lms_assignment_recipients r
-      where r.assignment_id = lms_assignments.id
-        and r.student_id = auth.uid()
-    )
+    and public.lms_assignment_student_is_recipient(id, auth.uid())
   );
 
 drop policy if exists lms_assignment_recipients_admin_all on public.lms_assignment_recipients;
@@ -319,14 +356,7 @@ create policy lms_assignment_recipients_mentor_select on public.lms_assignment_r
   for select to authenticated
   using (
     public.is_mentor_role()
-    and exists (
-      select 1 from public.lms_assignments a
-      where a.id = assignment_id
-        and (
-          a.assigned_by = auth.uid()
-          or public.lms_mentor_has_active_allocation(auth.uid(), a.department_id, a.course_id, a.batch_id, a.module_id)
-        )
-    )
+    and public.lms_assignment_mentor_can_access(assignment_id, auth.uid())
   );
 
 drop policy if exists lms_assignment_submissions_admin_all on public.lms_assignment_submissions;
@@ -344,14 +374,7 @@ create policy lms_assignment_submissions_mentor_select on public.lms_assignment_
   for select to authenticated
   using (
     public.is_mentor_role()
-    and exists (
-      select 1 from public.lms_assignments a
-      where a.id = assignment_id
-        and (
-          a.assigned_by = auth.uid()
-          or public.lms_mentor_has_active_allocation(auth.uid(), a.department_id, a.course_id, a.batch_id, a.module_id)
-        )
-    )
+    and public.lms_assignment_mentor_can_access(assignment_id, auth.uid())
   );
 
 drop policy if exists lms_assignment_evaluations_admin_all on public.lms_assignment_evaluations;
@@ -365,10 +388,7 @@ create policy lms_assignment_evaluations_mentor_rw on public.lms_assignment_eval
     public.is_mentor_role()
     and (
       evaluator_id = auth.uid()
-      or exists (
-        select 1 from public.lms_assignments a
-        where a.id = assignment_id and a.assigned_by = auth.uid()
-      )
+      or public.lms_assignment_mentor_can_access(assignment_id, auth.uid())
     )
   )
   with check (public.is_mentor_role());

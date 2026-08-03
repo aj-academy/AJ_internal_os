@@ -365,7 +365,7 @@ create policy lms_proctoring_events_mentor on public.lms_test_proctoring_events
   for select to authenticated
   using (
     public.is_mentor_role()
-    and exists (select 1 from public.lms_tests t where t.id = test_id and t.assigned_by = auth.uid())
+    and public.lms_test_assigned_by(test_id, auth.uid())
   );
 
 drop policy if exists lms_proctoring_media_admin on public.lms_test_proctoring_media;
@@ -377,7 +377,7 @@ create policy lms_proctoring_media_mentor on public.lms_test_proctoring_media
   for select to authenticated
   using (
     public.is_mentor_role()
-    and exists (select 1 from public.lms_tests t where t.id = test_id and t.assigned_by = auth.uid())
+    and public.lms_test_assigned_by(test_id, auth.uid())
   );
 
 comment on table public.lms_test_proctoring_events is 'Strict-mode proctoring events; server remains source of truth.';

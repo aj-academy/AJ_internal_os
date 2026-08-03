@@ -271,6 +271,47 @@ $$;
 
 grant execute on function public.lms_seed_default_project_milestones(uuid) to authenticated;
 
+-- Helpers so RLS policies do not recurse across projects ↔ recipients
+create or replace function public.lms_project_student_is_recipient(p_project_id uuid, p_student uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.lms_project_recipients r
+    where r.project_id = p_project_id
+      and r.student_id = p_student
+  );
+$$;
+
+create or replace function public.lms_project_mentor_can_access(p_project_id uuid, p_user uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select exists (
+    select 1
+    from public.lms_projects p
+    where p.id = p_project_id
+      and (
+        p.assigned_by = p_user
+        or public.lms_mentor_has_active_allocation(
+          p_user, p.department_id, p.course_id, p.batch_id, p.module_id
+        )
+      )
+  );
+$$;
+
+grant execute on function public.lms_project_student_is_recipient(uuid, uuid) to authenticated;
+grant execute on function public.lms_project_mentor_can_access(uuid, uuid) to authenticated;
+
 -- RLS
 alter table public.lms_projects enable row level security;
 alter table public.lms_project_recipients enable row level security;
@@ -306,12 +347,7 @@ create policy lms_projects_mentor_rw on public.lms_projects
 drop policy if exists lms_projects_student_select on public.lms_projects;
 create policy lms_projects_student_select on public.lms_projects
   for select to authenticated
-  using (
-    exists (
-      select 1 from public.lms_project_recipients r
-      where r.project_id = lms_projects.id and r.student_id = auth.uid()
-    )
-  );
+  using (public.lms_project_student_is_recipient(id, auth.uid()));
 
 drop policy if exists lms_project_recipients_admin_all on public.lms_project_recipients;
 create policy lms_project_recipients_admin_all on public.lms_project_recipients
@@ -326,12 +362,7 @@ create policy lms_project_recipients_mentor_select on public.lms_project_recipie
   for select to authenticated
   using (
     public.is_mentor_role()
-    and exists (
-      select 1 from public.lms_projects p
-      where p.id = project_id
-        and (p.assigned_by = auth.uid()
-          or public.lms_mentor_has_active_allocation(auth.uid(), p.department_id, p.course_id, p.batch_id, p.module_id))
-    )
+    and public.lms_project_mentor_can_access(project_id, auth.uid())
   );
 
 drop policy if exists lms_project_members_admin_all on public.lms_project_members;
@@ -346,10 +377,7 @@ create policy lms_project_members_participant on public.lms_project_members
     or public.is_admin()
     or (
       public.is_mentor_role()
-      and exists (
-        select 1 from public.lms_projects p
-        where p.id = project_id and p.assigned_by = auth.uid()
-      )
+      and public.lms_project_mentor_can_access(project_id, auth.uid())
     )
   );
 
@@ -362,27 +390,17 @@ create policy lms_project_milestones_rw on public.lms_project_milestones
   for all to authenticated
   using (
     public.is_admin()
-    or exists (
-      select 1 from public.lms_projects p
-      where p.id = project_id
-        and (
-          (public.is_mentor_role() and (p.assigned_by = auth.uid()
-            or public.lms_mentor_has_active_allocation(auth.uid(), p.department_id, p.course_id, p.batch_id, p.module_id)))
-          or exists (
-            select 1 from public.lms_project_recipients r
-            where r.project_id = p.id and r.student_id = auth.uid()
-          )
-        )
+    or (
+      public.is_mentor_role()
+      and public.lms_project_mentor_can_access(project_id, auth.uid())
     )
+    or public.lms_project_student_is_recipient(project_id, auth.uid())
   )
   with check (
     public.is_admin()
     or (
       public.is_mentor_role()
-      and exists (
-        select 1 from public.lms_projects p
-        where p.id = project_id and p.assigned_by = auth.uid()
-      )
+      and public.lms_project_mentor_can_access(project_id, auth.uid())
     )
   );
 
@@ -401,10 +419,7 @@ create policy lms_project_submissions_mentor_select on public.lms_project_submis
   for select to authenticated
   using (
     public.is_mentor_role()
-    and exists (
-      select 1 from public.lms_projects p
-      where p.id = project_id and p.assigned_by = auth.uid()
-    )
+    and public.lms_project_mentor_can_access(project_id, auth.uid())
   );
 
 comment on table public.lms_projects is 'Academic LMS projects (not ops Project Master).';
