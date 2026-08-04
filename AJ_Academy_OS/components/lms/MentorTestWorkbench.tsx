@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/button";
 import { CrmFlash } from "@/components/ui/CrmFlash";
 import type { AcademicBatch, AcademicCourse, AcademicDepartment } from "@/types/lms";
+import type { TestQuestionDraft, TestQuestionImportIssue } from "@/lib/lms/testQuestionImport";
 
 type TestRow = {
   id: string;
@@ -15,9 +16,15 @@ type TestRow = {
   tab_switch_policy: string;
   camera_required?: boolean;
   security_mode?: string;
+  assigned_by?: string;
+  assigned_by_name?: string | null;
+  assigned_by_email?: string | null;
+  department_id?: string;
+  created_at?: string;
+  updated_at?: string;
 };
 type EligibleStudent = { student_id: string; full_name: string | null; email: string | null };
-type QDraft = { question: string; options: string; correct_index: string; marks: string };
+type QDraft = TestQuestionDraft;
 
 type ProctoringReview = {
   attempts: { id: string; student_id: string; student_name?: string; status: string; score: number | null; started_at?: string; server_started_at?: string }[];
@@ -25,7 +32,17 @@ type ProctoringReview = {
   media: { id: string; attempt_id: string; storage_path: string; capture_reason: string; review_status: string; captured_at: string }[];
 };
 
-export function MentorTestWorkbench() {
+const emptyQuestion = (): QDraft => ({
+  question: "",
+  options: "Option A\nOption B\nOption C\nOption D",
+  correct_index: "0",
+  marks: "1",
+});
+
+type Props = { mode?: "mentor" | "admin" };
+
+export function MentorTestWorkbench({ mode = "mentor" }: Props) {
+  const isAdmin = mode === "admin";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
@@ -38,9 +55,7 @@ export function MentorTestWorkbench() {
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [audienceMode, setAudienceMode] = useState<"all" | "selected">("all");
   const [submitting, setSubmitting] = useState(false);
-  const [questions, setQuestions] = useState<QDraft[]>([
-    { question: "", options: "Option A\nOption B\nOption C\nOption D", correct_index: "0", marks: "1" },
-  ]);
+  const [questions, setQuestions] = useState<QDraft[]>([emptyQuestion()]);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -57,6 +72,12 @@ export function MentorTestWorkbench() {
   const [review, setReview] = useState<ProctoringReview | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
 
+  const [importing, setImporting] = useState(false);
+  const [importIssues, setImportIssues] = useState<TestQuestionImportIssue[]>([]);
+  const [gformsUrl, setGformsUrl] = useState("");
+  const [importMode, setImportMode] = useState<"replace" | "append">("replace");
+  const fileRef = useRef<HTMLInputElement>(null);
+
   const coursesForDept = useMemo(
     () => courses.filter((c) => c.department_id === form.department_id),
     [courses, form.department_id],
@@ -64,6 +85,10 @@ export function MentorTestWorkbench() {
   const batchesForCourse = useMemo(
     () => batches.filter((b) => b.course_id === form.course_id),
     [batches, form.course_id],
+  );
+  const deptName = useCallback(
+    (id?: string) => departments.find((d) => d.id === id)?.name || "—",
+    [departments],
   );
 
   const load = useCallback(async () => {
@@ -112,6 +137,86 @@ export function MentorTestWorkbench() {
       .then((j: { students?: EligibleStudent[] }) => setEligible(j.students ?? []));
   }, [form.department_id, form.course_id, form.batch_id]);
 
+  const applyImported = (incoming: QDraft[], issues: TestQuestionImportIssue[], needsReview: boolean) => {
+    setImportIssues(issues);
+    if (!incoming.length) {
+      setError(issues.find((i) => i.severity === "error")?.message || "No questions detected.");
+      return;
+    }
+    setQuestions((prev) => {
+      if (importMode === "append") {
+        const base = prev.filter((q) => q.question.trim());
+        return [...base, ...incoming];
+      }
+      return incoming;
+    });
+    setSuccess(
+      `Imported ${incoming.length} question(s)${needsReview ? " — review Correct answers before publish" : ""}.`,
+    );
+  };
+
+  const runImportFile = async (file: File) => {
+    setImporting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/lms/tests/import-parse", {
+        method: "POST",
+        credentials: "include",
+        body: fd,
+      });
+      const json = (await res.json()) as {
+        questions?: QDraft[];
+        issues?: TestQuestionImportIssue[];
+        needsCorrectReview?: boolean;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(json.error || "Import failed.");
+      applyImported(json.questions ?? [], json.issues ?? [], Boolean(json.needsCorrectReview));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Import failed.");
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const runImportGforms = async () => {
+    if (!gformsUrl.trim()) {
+      setError("Paste a Google Forms public link (…/viewform).");
+      return;
+    }
+    setImporting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch("/api/lms/tests/import-parse", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gforms_url: gformsUrl.trim() }),
+      });
+      const json = (await res.json()) as {
+        questions?: QDraft[];
+        issues?: TestQuestionImportIssue[];
+        needsCorrectReview?: boolean;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(json.error || "Google Forms import failed.");
+      applyImported(json.questions ?? [], json.issues ?? [], Boolean(json.needsCorrectReview));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Google Forms import failed.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const downloadTemplate = (format: "xlsx" | "csv") => {
+    window.open(`/api/lms/tests/question-template?format=${format}`, "_blank", "noopener,noreferrer");
+  };
+
   const submit = async () => {
     setSubmitting(true);
     setError(null);
@@ -157,6 +262,8 @@ export function MentorTestWorkbench() {
           : "Draft test saved.",
       );
       setForm((f) => ({ ...f, title: "", description: "" }));
+      setQuestions([emptyQuestion()]);
+      setImportIssues([]);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
@@ -205,9 +312,13 @@ export function MentorTestWorkbench() {
   return (
     <section className="space-y-5">
       <PageHeader
-        kicker="Learning management"
-        title="Test Management"
-        description="Create MCQ tests with server-side timers. Tab-switch policy is configurable (log/warn/auto-submit)."
+        kicker={isAdmin ? "Academic management" : "Learning management"}
+        title={isAdmin ? "Test Monitoring" : "Test Management"}
+        description={
+          isAdmin
+            ? "Create tests and monitor every mentor-published test, audience, and proctoring activity."
+            : "Create MCQ tests with server-side timers. Bulk-upload questions from Excel, CSV, PDF, or Google Forms."
+        }
         actions={<Button variant="outline" className="rounded-xl border-[#e8dcc8]" onClick={() => void load()}>Refresh</Button>}
       />
       {error ? <CrmFlash tone="error" message={error} onDismiss={() => setError(null)} /> : null}
@@ -299,15 +410,108 @@ export function MentorTestWorkbench() {
         </div>
 
         <div className="mt-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-[#0f172a]">Questions</h3>
-            <Button type="button" variant="outline" className="h-8 rounded-full text-xs" onClick={() => setQuestions((q) => [...q, { question: "", options: "Option A\nOption B\nOption C\nOption D", correct_index: "0", marks: "1" }])}>+ Question</Button>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold text-[#0f172a]">Questions ({questions.filter((q) => q.question.trim()).length})</h3>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-full text-xs"
+              onClick={() => setQuestions((q) => [...q, emptyQuestion()])}
+            >
+              + Question
+            </Button>
           </div>
+
+          <div className="rounded-xl border border-[#e8dcc8] bg-[#fffdf7] p-4 text-sm">
+            <p className="font-semibold text-[#0f172a]">Bulk upload</p>
+            <p className="mt-1 text-xs text-[#64748b]">
+              Import questions and answers only from Excel, CSV, PDF, or a public Google Forms link. Download the template first for best results.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button type="button" variant="outline" className="h-8 rounded-full border-[#e8dcc8] text-xs" onClick={() => downloadTemplate("xlsx")}>
+                Download XL template
+              </Button>
+              <Button type="button" variant="outline" className="h-8 rounded-full border-[#e8dcc8] text-xs" onClick={() => downloadTemplate("csv")}>
+                Download CSV template
+              </Button>
+              <Button
+                type="button"
+                className="h-8 rounded-full bg-[#c9a227] text-xs text-white hover:bg-[#b8921f]"
+                disabled={importing}
+                onClick={() => fileRef.current?.click()}
+              >
+                {importing ? "Importing…" : "Upload XL / CSV / PDF"}
+              </Button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".xlsx,.xls,.csv,.pdf,.txt,application/pdf,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void runImportFile(f);
+                }}
+              />
+            </div>
+            <div className="mt-3 flex flex-wrap items-end gap-2">
+              <label className="min-w-[220px] flex-1 text-xs">
+                Google Forms public link
+                <input
+                  className="mt-1 h-9 w-full rounded-lg border border-[#dbe6f3] px-3 text-sm"
+                  placeholder="https://docs.google.com/forms/d/e/…/viewform"
+                  value={gformsUrl}
+                  onChange={(e) => setGformsUrl(e.target.value)}
+                />
+              </label>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-full border-[#e8dcc8] text-xs"
+                disabled={importing}
+                onClick={() => void runImportGforms()}
+              >
+                Import from GForms
+              </Button>
+              <label className="flex items-center gap-2 text-xs sm:mb-2">
+                <select
+                  className="h-9 rounded-lg border border-[#dbe6f3] px-2"
+                  value={importMode}
+                  onChange={(e) => setImportMode(e.target.value as "replace" | "append")}
+                >
+                  <option value="replace">Replace questions</option>
+                  <option value="append">Append questions</option>
+                </select>
+              </label>
+            </div>
+            {importIssues.length ? (
+              <ul className="mt-3 max-h-28 space-y-1 overflow-y-auto text-xs text-[#92400e]">
+                {importIssues.slice(0, 12).map((iss, i) => (
+                  <li key={`${iss.rowNumber}-${i}`}>
+                    {iss.severity === "error" ? "Error" : "Warning"}
+                    {iss.rowNumber ? ` (row ${iss.rowNumber})` : ""}: {iss.message}
+                  </li>
+                ))}
+                {importIssues.length > 12 ? <li>…and {importIssues.length - 12} more</li> : null}
+              </ul>
+            ) : null}
+          </div>
+
           {questions.map((q, idx) => (
             <div key={idx} className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] p-3 text-sm">
-              <label className="block">Question {idx + 1}
-                <input className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3" value={q.question} onChange={(e) => setQuestions((all) => all.map((x, i) => (i === idx ? { ...x, question: e.target.value } : x)))} />
-              </label>
+              <div className="flex items-start justify-between gap-2">
+                <label className="block flex-1">Question {idx + 1}
+                  <input className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3" value={q.question} onChange={(e) => setQuestions((all) => all.map((x, i) => (i === idx ? { ...x, question: e.target.value } : x)))} />
+                </label>
+                {questions.length > 1 ? (
+                  <button
+                    type="button"
+                    className="mt-6 text-xs text-red-600 underline"
+                    onClick={() => setQuestions((all) => all.filter((_, i) => i !== idx))}
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </div>
               <label className="mt-2 block">Options (one per line)
                 <textarea className="mt-1 min-h-[88px] w-full rounded-lg border border-[#dbe6f3] px-3 py-2" value={q.options} onChange={(e) => setQuestions((all) => all.map((x, i) => (i === idx ? { ...x, options: e.target.value } : x)))} />
               </label>
@@ -351,7 +555,7 @@ export function MentorTestWorkbench() {
       </div>
 
       <div className="rounded-[24px] border border-[#e8dcc8] bg-white p-4 shadow-sm sm:p-6">
-        <h2 className="text-lg font-semibold text-[#0f172a]">Tests</h2>
+        <h2 className="text-lg font-semibold text-[#0f172a]">{isAdmin ? "All tests (mentors + admins)" : "Your tests"}</h2>
         {loading ? <p className="mt-4 text-sm text-[#64748b]">Loading…</p> : !tests.length ? (
           <p className="mt-4 rounded-xl border border-dashed border-[#e8dcc8] px-4 py-8 text-center text-sm text-[#64748b]">No tests yet.</p>
         ) : (
@@ -364,7 +568,14 @@ export function MentorTestWorkbench() {
                     {t.status} · {t.duration_minutes} min · tab: {t.tab_switch_policy}
                     {t.camera_required ? " · camera" : ""}
                     {t.security_mode ? ` · ${t.security_mode}` : ""}
+                    {isAdmin ? ` · ${deptName(t.department_id)}` : ""}
                   </p>
+                  {isAdmin ? (
+                    <p className="mt-0.5 text-xs text-[#475569]">
+                      By {t.assigned_by_name || t.assigned_by_email || "unknown mentor"}
+                      {t.updated_at ? ` · updated ${new Date(t.updated_at).toLocaleString()}` : ""}
+                    </p>
+                  ) : null}
                 </div>
                 <Button variant="outline" className="rounded-full border-[#e8dcc8] text-xs" onClick={() => void openReview(t.id)}>
                   Proctoring review

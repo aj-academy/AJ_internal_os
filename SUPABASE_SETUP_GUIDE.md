@@ -373,10 +373,12 @@ Optional: **`lms_verify.sql`** — lists OK / MISSING LMS objects.
 
 Then in the app:
 
-- **Admin → Academic Management** — Overview, Departments & Courses (lists for User Master + sync), LMS Catalog (batches/subjects), Mentor Allocation, Calendar & Reports, Student Query Monitoring  
-- **Mentor → Learning Management** — Overview, Assignments, Submissions & Evaluation (assignments + projects), Projects, Tests (proctoring review), Study Materials, Student Queries  
+- **Admin → Academic Management** — Overview, Departments & Courses (lists for User Master + sync), LMS Catalog (batches/subjects), Mentor Allocation, **Test Monitoring** (all mentor/admin tests + proctoring; bulk question import), Calendar & Reports, Student Query Monitoring  
+- **Mentor → Learning Management** — Overview, Assignments, Submissions & Evaluation (assignments + projects), Projects, Tests (bulk XL/CSV/PDF/GForms question import + proctoring review), Study Materials, Student Queries  
 - **Student → Learning & Assessments** — Overview, Assignments (submit), Projects (milestones), Tests (consent + timer + optional camera snapshots; SEB soft UA check), Materials, Queries & Complaints  
 
+Test question template: `GET /api/lms/tests/question-template?format=xlsx|csv`.  
+Bulk parse: `POST /api/lms/tests/import-parse` (file or `{ gforms_url }`).  
 Signed downloads for private LMS files: `POST /api/lms/storage/signed-url` (authz-checked).  
 Proctoring purge (admin): `POST /api/lms/proctoring/purge`.
 

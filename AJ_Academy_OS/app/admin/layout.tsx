@@ -30,6 +30,7 @@ const adminSidebarItems = [
       { label: "Departments & Courses", href: "/admin/academic/departments-courses" },
       { label: "LMS Catalog", href: "/admin/academic/catalog" },
       { label: "Mentor Allocation", href: "/admin/academic/mentor-allocation" },
+      { label: "Test Monitoring", href: "/admin/academic/tests" },
       { label: "Calendar & Reports", href: "/admin/academic/reports" },
       { label: "Student Query Monitoring", href: "/admin/academic/queries" },
     ],

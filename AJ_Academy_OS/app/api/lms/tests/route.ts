@@ -34,14 +34,38 @@ export async function GET() {
     });
   }
 
-  const { data, error } = await supabase.from("lms_tests").select("*").order("updated_at", { ascending: false }).limit(500);
+  const { data, error } = await supabase
+    .from("lms_tests")
+    .select("*")
+    .order("updated_at", { ascending: false })
+    .limit(500);
   if (error) {
     return NextResponse.json(
       { error: error.message, hint: "Run AJ_Academy_SB/lms_tests_core.sql." },
       { status: 500 },
     );
   }
-  return NextResponse.json({ tests: data ?? [] });
+
+  const tests = data ?? [];
+  const assignerIds = [...new Set(tests.map((t) => t.assigned_by).filter(Boolean))] as string[];
+  let assigners: Record<string, { full_name: string | null; email: string | null }> = {};
+  if (assignerIds.length) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", assignerIds);
+    for (const p of profiles ?? []) {
+      assigners[p.id] = { full_name: p.full_name ?? null, email: p.email ?? null };
+    }
+  }
+
+  return NextResponse.json({
+    tests: tests.map((t) => ({
+      ...t,
+      assigned_by_name: assigners[t.assigned_by]?.full_name || assigners[t.assigned_by]?.email || null,
+      assigned_by_email: assigners[t.assigned_by]?.email || null,
+    })),
+  });
 }
 
 export async function POST(request: Request) {
