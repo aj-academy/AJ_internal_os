@@ -60,9 +60,26 @@ For College Visits Email compose (provider switch), Gmail and Zoho can both be c
 
 ---
 
-## Step 3 — Auth URLs
+## Step 3 — Auth URLs + password recovery
 
-**Authentication** → **URL configuration** → add `http://localhost:3000/auth/callback` and `/reset-password`.
+**Authentication** → **URL configuration** — allow-list:
+
+- `http://localhost:3000/auth/callback`
+- `http://localhost:3000/auth/reset-password`
+- `http://localhost:3000/reset-password` (legacy redirect)
+- Production equivalents under your AJ OS domain
+
+Set `NEXT_PUBLIC_SITE_URL` to the production origin so recovery emails use the correct host.
+
+**Forgot / reset password (app):**
+
+- `/forgot-password` → `POST /api/auth/forgot-password` (neutral response + rate limits)
+- Email link → `/auth/callback?next=/auth/reset-password` → `/auth/reset-password`
+- Setup notes + Zoho SMTP checklist: `AJ_Academy_OS/docs/FORGOT_PASSWORD_SETUP.md`
+- Recovery HTML template: `AJ_Academy_OS/docs/SUPABASE_RECOVERY_EMAIL_TEMPLATE.html`  
+  Paste into Supabase → Authentication → Email Templates → Reset Password (uses `{{ .ConfirmationURL }}` only).
+
+**Custom SMTP (Zoho):** Supabase → Authentication → SMTP — `smtp.zoho.in:465` + Zoho App Password. Auth recovery mail is **not** sent via `/api/outreach/send-email`.
 
 ---
 

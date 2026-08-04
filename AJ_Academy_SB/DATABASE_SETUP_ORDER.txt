@@ -187,6 +187,9 @@ STUDENT IMPORT (portal profiles — not CRM Student Master)
   Audit: STUDENT_IMPORT_AND_MENTOR_ALLOCATION_AUDIT.md
   API notes: STUDENT_IMPORT_AND_MENTOR_ALLOCATION_API.md
 
+  Auth recovery (no SQL): /forgot-password → POST /api/auth/forgot-password → Supabase recovery email (Zoho SMTP) → /auth/callback → /auth/reset-password
+  Docs: FORGOT_PASSWORD_AUDIT.md (repo root), AJ_Academy_OS/docs/FORGOT_PASSWORD_SETUP.md, SUPABASE_RECOVERY_EMAIL_TEMPLATE.html
+
   App: Admin → Academic Management → Mentor Allocation (seed from Settings, create/revoke allocations); Test Monitoring (all mentor tests + bulk question import); Calendar & Reports.
   Mentor → Learning Management → Overview / Assignments / Submissions (assignments+projects) / Projects / Tests (XL/CSV/PDF/GForms bulk questions + proctoring) / Materials / Queries.
   Student → Learning & Assessments → Overview / Assignments / Projects (milestones) / Tests (camera snapshots + SEB soft check) / Materials / Queries.
