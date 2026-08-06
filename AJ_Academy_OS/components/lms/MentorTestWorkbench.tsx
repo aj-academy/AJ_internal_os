@@ -89,7 +89,7 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
   const [reviewTestId, setReviewTestId] = useState<string | null>(null);
   const [review, setReview] = useState<ProctoringReview | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
-  const [testSection, setTestSection] = useState<"tests" | "insights">("tests");
+  const [testSection, setTestSection] = useState<"create" | "insights">("create");
 
   const [importing, setImporting] = useState(false);
   const [importIssues, setImportIssues] = useState<TestQuestionImportIssue[]>([]);
@@ -308,7 +308,6 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
   };
 
   const openReview = async (testId: string) => {
-    setTestSection("insights");
     setReviewTestId(testId);
     setReviewLoading(true);
     setReview(null);
@@ -420,6 +419,30 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
       {hint ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{hint}</div> : null}
       {success ? <CrmFlash tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
 
+      <div className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-1">
+        <div className="flex flex-wrap gap-1">
+          <button
+            type="button"
+            className={`rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap ${
+              testSection === "create" ? "bg-[#2563eb] text-white" : "text-[#334155] hover:bg-white"
+            }`}
+            onClick={() => setTestSection("create")}
+          >
+            Create test
+          </button>
+          <button
+            type="button"
+            className={`rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap ${
+              testSection === "insights" ? "bg-[#2563eb] text-white" : "text-[#334155] hover:bg-white"
+            }`}
+            onClick={() => setTestSection("insights")}
+          >
+            Test insights
+          </button>
+        </div>
+      </div>
+
+      {testSection === "create" ? (
       <div className="rounded-[24px] border border-[#e8dcc8] bg-white p-4 shadow-sm sm:p-6">
         <h2 className="text-lg font-semibold text-[#0f172a]">Create test</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -684,202 +707,177 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
           </Button>
         </div>
       </div>
-
+      ) : (
       <div className="rounded-[24px] border border-[#e8dcc8] bg-white p-4 shadow-sm sm:p-6">
-        <h2 className="text-lg font-semibold text-[#0f172a]">Test Management sections</h2>
-        <div className="mt-4 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-1">
-          <div className="flex flex-wrap gap-1">
-            <button
-              type="button"
-              className={`rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap ${
-                testSection === "tests"
-                  ? "bg-[#2563eb] text-white"
-                  : "text-[#334155] hover:bg-white"
-              }`}
-              onClick={() => setTestSection("tests")}
-            >
-              {isAdmin ? "All tests" : "Your tests"}
-            </button>
-            <button
-              type="button"
-              className={`rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap ${
-                testSection === "insights"
-                  ? "bg-[#2563eb] text-white"
-                  : "text-[#334155] hover:bg-white"
-              }`}
-              onClick={() => setTestSection("insights")}
-            >
-              Test insights
-            </button>
-          </div>
-        </div>
+        <h2 className="text-lg font-semibold text-[#0f172a]">Test insights</h2>
+        <p className="mt-1 text-sm text-[#64748b]">
+          Your published and draft tests are listed below. Open any row to view student scores and submission status.
+        </p>
 
-        {testSection === "tests" ? (
-          <div className="mt-4">
-            {loading ? <p className="mt-3 text-sm text-[#64748b]">Loading…</p> : !tests.length ? (
-              <p className="mt-3 rounded-xl border border-dashed border-[#e8dcc8] px-4 py-8 text-center text-sm text-[#64748b]">No tests yet.</p>
-            ) : (
-              <ul className="mt-3 space-y-3">
-                {tests.map((t) => (
-                  <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#e2e8f0] bg-white px-3 py-3 text-sm">
+        {loading ? (
+          <p className="mt-4 text-sm text-[#64748b]">Loading…</p>
+        ) : !tests.length ? (
+          <p className="mt-4 rounded-xl border border-dashed border-[#e8dcc8] px-4 py-8 text-center text-sm text-[#64748b]">
+            No tests yet. Create a test in the Create test section first.
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-3">
+            {tests.map((t) => {
+              const isOpen = reviewTestId === t.id;
+              return (
+                <li key={t.id} className="rounded-xl border border-[#e2e8f0] bg-[#f8fbff] overflow-hidden">
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
                     <div>
                       <p className="font-semibold text-[#0f172a]">{t.title}</p>
                       <p className="text-xs text-[#64748b]">
-                        {t.status} · {t.duration_minutes} min · tab: {t.tab_switch_policy}
-                        {t.camera_required ? " · camera" : ""}
-                        {t.security_mode ? ` · ${t.security_mode}` : ""}
+                        {t.status}
+                        {t.created_at ? ` · ${new Date(t.created_at).toLocaleString()}` : ""}
+                        {t.duration_minutes ? ` · ${t.duration_minutes} min` : ""}
                         {isAdmin ? ` · ${deptName(t.department_id)}` : ""}
                       </p>
                       {isAdmin ? (
                         <p className="mt-0.5 text-xs text-[#475569]">
                           By {t.assigned_by_name || t.assigned_by_email || "unknown mentor"}
-                          {t.updated_at ? ` · updated ${new Date(t.updated_at).toLocaleString()}` : ""}
                         </p>
                       ) : null}
                     </div>
-                    <Button variant="outline" className="rounded-full border-[#e8dcc8] text-xs" onClick={() => void openReview(t.id)}>
-                      View scores
+                    <Button
+                      variant="outline"
+                      className="rounded-full border-[#e8dcc8] text-xs"
+                      onClick={() => {
+                        if (isOpen) {
+                          setReviewTestId(null);
+                          setReview(null);
+                          return;
+                        }
+                        void openReview(t.id);
+                      }}
+                    >
+                      {isOpen ? "Hide scores" : "View scores"}
                     </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ) : (
-          <div className="mt-4">
-            {!reviewTestId ? (
-              <p className="text-sm text-[#64748b]">
-                Select any test in <strong>{isAdmin ? "All tests" : "Your tests"}</strong> and click{" "}
-                <strong>View scores</strong>.
-              </p>
-            ) : reviewLoading ? (
-              <p className="text-sm text-[#64748b]">Loading…</p>
-            ) : !review ? (
-              <p className="text-sm text-[#64748b]">No data.</p>
-            ) : (
-              <div className="space-y-4 text-sm">
-                <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    className="rounded-full text-xs"
-                    onClick={() => {
-                      setReviewTestId(null);
-                      setReview(null);
-                    }}
-                  >
-                    Clear
-                  </Button>
-                </div>
-                <div className="rounded-xl border border-[#e2e8f0] bg-white p-3">
-                  <p className="mb-2 text-sm font-semibold text-[#0f172a]">Score section</p>
-                  <p className="font-semibold text-[#0f172a]">{review.test?.title || "Test"}</p>
-                  <p className="mt-1 text-xs text-[#64748b]">
-                    {review.test?.status || "—"} · {review.test?.duration_minutes ?? "—"} min
-                    {review.test?.passing_marks != null ? ` · pass ${review.test.passing_marks}` : ""}
-                    {review.test?.max_attempts != null ? ` · max attempts ${review.test.max_attempts}` : ""}
-                    {isAdmin ? ` · ${deptName(review.test?.department_id || undefined)}` : ""}
-                  </p>
-                  <p className="mt-1 text-xs text-[#64748b]">
-                    Students assigned: {recipientSummary.total} · Submitted: {recipientSummary.submitted} ·
-                    Started: {recipientSummary.started} · Not started: {recipientSummary.assigned}
-                  </p>
-                  <p className="mt-1 text-xs text-[#64748b]">
-                    Students attempted: {scoreRows.length} · Attempts logged: {review.attempts.length}
-                    {avgScore != null ? ` · Avg best score ${avgScore}` : ""}
-                  </p>
-                  <p className="mt-1 text-[11px] text-[#64748b]">Test ID: {review.test?.id || "—"}</p>
-                </div>
-
-                <div>
-                  <h4 className="font-semibold">Student scores ({scoreRows.length})</h4>
-                  {!scoreRows.length ? (
-                    <p className="mt-2 text-xs text-[#64748b]">No attempt scores yet for this test.</p>
-                  ) : (
-                    <ul className="mt-2 max-h-56 space-y-2 overflow-y-auto">
-                      {scoreRows.map((row) => (
-                        <li key={row.studentId} className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2">
-                          <p className="font-medium">{row.studentName}</p>
-                          <p className="text-xs text-[#64748b]">
-                            Best: {row.bestScore != null ? row.bestScore : "—"} · Latest:{" "}
-                            {row.latestScore != null ? row.latestScore : "—"} · Submitted attempts:{" "}
-                            {row.submittedAttempts}/{row.attempts}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <div>
-                  <h4 className="font-semibold">Submission status ({review.recipients?.length ?? 0})</h4>
-                  {!review.recipients?.length ? (
-                    <p className="mt-2 text-xs text-[#64748b]">No recipients found for this test.</p>
-                  ) : (
-                    <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto">
-                      {review.recipients.map((r) => (
-                        <li key={r.id} className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2">
-                          <p className="font-medium">{r.student_name || r.student_id.slice(0, 8)}</p>
-                          <p className="text-xs text-[#64748b]">
-                            {r.status} · attempts used {r.attempts_used ?? 0}
-                            {r.updated_at ? ` · ${new Date(r.updated_at).toLocaleString()}` : ""}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <div>
-                  <p className="mb-2 text-sm font-semibold text-[#0f172a]">Proctoring section</p>
-                  <div className="grid gap-4 lg:grid-cols-3">
-                    <div>
-                      <h4 className="font-semibold">Attempts ({review.attempts.length})</h4>
-                      <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto">
-                        {review.attempts.map((a) => (
-                          <li key={a.id} className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2">
-                            <p className="font-medium">{a.student_name || a.student_id.slice(0, 8)}</p>
-                            <p className="text-xs text-[#64748b]">
-                              {a.status}
-                              {a.score != null ? ` · score ${a.score}` : ""}
-                            </p>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold">Events ({review.events.length})</h4>
-                      <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto">
-                        {review.events.slice(0, 80).map((e) => (
-                          <li key={e.id} className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2 text-xs">
-                            <p className="font-medium capitalize text-[#0f172a]">{e.event_type.replaceAll("_", " ")}</p>
-                            <p className="text-[#64748b]">
-                              {e.severity} · {new Date(e.created_at).toLocaleString()}
-                            </p>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold">Snapshots ({review.media.length})</h4>
-                      <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto">
-                        {review.media.map((m) => (
-                          <li key={m.id} className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2">
-                            <p className="text-xs capitalize">{m.capture_reason.replaceAll("_", " ")}</p>
-                            <p className="text-xs text-[#64748b]">{new Date(m.captured_at).toLocaleString()}</p>
-                            <button type="button" className="mt-1 text-xs text-[#c9a227] underline" onClick={() => void openMedia(m)}>
-                              Open snapshot
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
                   </div>
-                </div>
-              </div>
-            )}
-          </div>
+
+                  {isOpen ? (
+                    <div className="border-t border-[#e2e8f0] bg-white px-4 py-4 text-sm">
+                      {reviewLoading ? (
+                        <p className="text-[#64748b]">Loading scores…</p>
+                      ) : !review ? (
+                        <p className="text-[#64748b]">No data.</p>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] p-3">
+                            <p className="mb-1 text-sm font-semibold text-[#0f172a]">Score summary</p>
+                            <p className="text-xs text-[#64748b]">
+                              {review.test?.status || "—"} · {review.test?.duration_minutes ?? "—"} min
+                              {review.test?.passing_marks != null ? ` · pass ${review.test.passing_marks}` : ""}
+                              {review.test?.max_attempts != null ? ` · max attempts ${review.test.max_attempts}` : ""}
+                            </p>
+                            <p className="mt-1 text-xs text-[#64748b]">
+                              Students assigned: {recipientSummary.total} · Submitted: {recipientSummary.submitted} ·
+                              Started: {recipientSummary.started} · Not started: {recipientSummary.assigned}
+                            </p>
+                            <p className="mt-1 text-xs text-[#64748b]">
+                              Students attempted: {scoreRows.length} · Attempts logged: {review.attempts.length}
+                              {avgScore != null ? ` · Avg best score ${avgScore}` : ""}
+                            </p>
+                          </div>
+
+                          <div>
+                            <h4 className="font-semibold">Student scores ({scoreRows.length})</h4>
+                            {!scoreRows.length ? (
+                              <p className="mt-2 text-xs text-[#64748b]">No attempt scores yet for this test.</p>
+                            ) : (
+                              <ul className="mt-2 max-h-56 space-y-2 overflow-y-auto">
+                                {scoreRows.map((row) => (
+                                  <li key={row.studentId} className="rounded-lg border border-[#e2e8f0] bg-[#f8fbff] px-3 py-2">
+                                    <p className="font-medium">{row.studentName}</p>
+                                    <p className="text-xs text-[#64748b]">
+                                      Best: {row.bestScore != null ? row.bestScore : "—"} · Latest:{" "}
+                                      {row.latestScore != null ? row.latestScore : "—"} · Submitted attempts:{" "}
+                                      {row.submittedAttempts}/{row.attempts}
+                                    </p>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+
+                          <div>
+                            <h4 className="font-semibold">Submission status ({review.recipients?.length ?? 0})</h4>
+                            {!review.recipients?.length ? (
+                              <p className="mt-2 text-xs text-[#64748b]">No recipients found for this test.</p>
+                            ) : (
+                              <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto">
+                                {review.recipients.map((r) => (
+                                  <li key={r.id} className="rounded-lg border border-[#e2e8f0] bg-[#f8fbff] px-3 py-2">
+                                    <p className="font-medium">{r.student_name || r.student_id.slice(0, 8)}</p>
+                                    <p className="text-xs text-[#64748b]">
+                                      {r.status} · attempts used {r.attempts_used ?? 0}
+                                      {r.updated_at ? ` · ${new Date(r.updated_at).toLocaleString()}` : ""}
+                                    </p>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+
+                          <div>
+                            <p className="mb-2 text-sm font-semibold text-[#0f172a]">Proctoring</p>
+                            <div className="grid gap-4 lg:grid-cols-3">
+                              <div>
+                                <h4 className="font-semibold">Attempts ({review.attempts.length})</h4>
+                                <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
+                                  {review.attempts.map((a) => (
+                                    <li key={a.id} className="rounded-lg border border-[#e2e8f0] bg-[#f8fbff] px-3 py-2">
+                                      <p className="font-medium">{a.student_name || a.student_id.slice(0, 8)}</p>
+                                      <p className="text-xs text-[#64748b]">
+                                        {a.status}
+                                        {a.score != null ? ` · score ${a.score}` : ""}
+                                      </p>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div>
+                                <h4 className="font-semibold">Events ({review.events.length})</h4>
+                                <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
+                                  {review.events.slice(0, 80).map((e) => (
+                                    <li key={e.id} className="rounded-lg border border-[#e2e8f0] bg-[#f8fbff] px-3 py-2 text-xs">
+                                      <p className="font-medium capitalize text-[#0f172a]">{e.event_type.replaceAll("_", " ")}</p>
+                                      <p className="text-[#64748b]">
+                                        {e.severity} · {new Date(e.created_at).toLocaleString()}
+                                      </p>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div>
+                                <h4 className="font-semibold">Snapshots ({review.media.length})</h4>
+                                <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
+                                  {review.media.map((m) => (
+                                    <li key={m.id} className="rounded-lg border border-[#e2e8f0] bg-[#f8fbff] px-3 py-2">
+                                      <p className="text-xs capitalize">{m.capture_reason.replaceAll("_", " ")}</p>
+                                      <p className="text-xs text-[#64748b]">{new Date(m.captured_at).toLocaleString()}</p>
+                                      <button type="button" className="mt-1 text-xs text-[#c9a227] underline" onClick={() => void openMedia(m)}>
+                                        Open snapshot
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
+      )}
     </section>
   );
 }
