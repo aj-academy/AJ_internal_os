@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { downloadUrlInSameWindow } from "@/lib/browser/sameWindowDownload";
 
 type Payslip = {
   id: string;
@@ -118,7 +119,9 @@ export function PayslipsWorkbench() {
       const res = await fetch(`/api/hr/payslips?downloadId=${id}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Download failed");
-      if (json.signedUrl) window.open(json.signedUrl, "_blank", "noopener,noreferrer");
+      if (json.signedUrl) {
+        await downloadUrlInSameWindow(json.signedUrl, `${json.payslipNumber || id}.pdf`);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Download failed");
     }

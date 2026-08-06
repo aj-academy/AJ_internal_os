@@ -14,6 +14,7 @@ import {
   maskPan,
   emptyProfileDetails,
 } from "@/lib/employeeProfile";
+import { downloadUrlInSameWindow } from "@/lib/browser/sameWindowDownload";
 
 type ProfileRow = {
   id: string;
@@ -180,7 +181,11 @@ export function AdminEmployeeProfileView({ profileId, onClose }: { profileId: st
       setActionError(urlError?.message ?? "Could not open document.");
       return;
     }
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    try {
+      await downloadUrlInSameWindow(data.signedUrl, doc.document_name || "document");
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Could not open document.");
+    }
   };
 
   const verifyDocument = async (docId: string) => {

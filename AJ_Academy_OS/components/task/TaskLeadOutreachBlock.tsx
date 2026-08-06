@@ -13,6 +13,7 @@ import {
   logTaskLeadPhoneCall,
   logTaskLeadWhatsApp,
 } from "@/lib/taskLeadOutreach";
+import { navigateWithoutAppPopup } from "@/lib/browser/sameWindowDownload";
 import { formatEmailActivityNotes, MAX_EMAIL_MESSAGE_LENGTH } from "@/lib/whatsappOutreach";
 import type { createClient } from "@/lib/supabase/client";
 
@@ -84,7 +85,7 @@ export function TaskLeadOutreachBlock({
     }
     setSubmitting(true);
     try {
-      window.open(wa, "_blank", "noopener,noreferrer");
+      navigateWithoutAppPopup(wa);
       await logTaskLeadWhatsApp(supabase, {
         taskId,
         lead: waLead,

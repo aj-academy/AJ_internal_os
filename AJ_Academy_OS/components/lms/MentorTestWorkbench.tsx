@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CrmFlash } from "@/components/ui/CrmFlash";
 import type { AcademicBatch, AcademicCourse, AcademicDepartment } from "@/types/lms";
 import type { TestQuestionDraft, TestQuestionImportIssue } from "@/lib/lms/testQuestionImport";
+import { downloadUrlInSameWindow } from "@/lib/browser/sameWindowDownload";
 
 type TestRow = {
   id: string;
@@ -214,7 +215,10 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
   };
 
   const downloadTemplate = (format: "xlsx" | "csv") => {
-    window.open(`/api/lms/tests/question-template?format=${format}`, "_blank", "noopener,noreferrer");
+    void downloadUrlInSameWindow(
+      `/api/lms/tests/question-template?format=${format}`,
+      `question-template.${format}`,
+    ).catch((e) => setError(e instanceof Error ? e.message : "Download failed."));
   };
 
   const submit = async () => {
@@ -306,7 +310,11 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
       setError(json.error || "Could not open snapshot.");
       return;
     }
-    window.open(json.url, "_blank", "noopener,noreferrer");
+    try {
+      await downloadUrlInSameWindow(json.url, `${media.capture_reason}.jpg`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not open snapshot.");
+    }
   };
 
   return (

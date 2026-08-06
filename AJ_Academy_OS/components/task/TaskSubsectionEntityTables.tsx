@@ -30,6 +30,7 @@ import {
   TABLE_SNO_TH,
 } from "@/components/ui/ResponsiveDataView";
 import { whatsAppHref } from "@/components/employee/leads/employeeLeadConfig";
+import { navigateWithoutAppPopup } from "@/lib/browser/sameWindowDownload";
 import {
   logTaskLeadEmail,
   logTaskLeadPhoneCall,
@@ -510,7 +511,7 @@ export function TaskSubsectionLeadsTable({
             }
             setOutreachBusy(true);
             try {
-              window.open(wa, "_blank", "noopener,noreferrer");
+              navigateWithoutAppPopup(wa);
               await logTaskLeadWhatsApp(supabase, {
                 taskId: waTarget.taskId,
                 lead: waTarget.lead,
@@ -848,7 +849,7 @@ export function TaskSubsectionCollegesTable({
                         whatsappSent={false}
                         onWhatsAppClick={() => {
                           const wa = whatsAppHref(phone, "");
-                          if (wa) window.open(wa, "_blank", "noopener,noreferrer");
+                          if (wa) navigateWithoutAppPopup(wa);
                         }}
                       />
                     </td>

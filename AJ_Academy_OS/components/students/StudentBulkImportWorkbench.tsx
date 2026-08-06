@@ -13,6 +13,7 @@ import {
 } from "@/lib/students/importTemplate";
 import type { ColumnMapping } from "@/lib/students/importMapping";
 import type { ImportMode } from "@/lib/students/importValidate";
+import { downloadUrlInSameWindow } from "@/lib/browser/sameWindowDownload";
 
 type ImportBatchRow = {
   id: string;
@@ -260,7 +261,10 @@ export function StudentBulkImportWorkbench() {
 
   const downloadErrors = (only: string, format: string) => {
     if (!activeId) return;
-    window.open(`/api/admin/students/import/${activeId}/errors?only=${only}&format=${format}`, "_blank");
+    void downloadUrlInSameWindow(
+      `/api/admin/students/import/${activeId}/errors?only=${only}&format=${format}`,
+      `import-errors.${format}`,
+    ).catch((e) => setError(e instanceof Error ? e.message : "Download failed"));
   };
 
   const headerOptions = useMemo(() => mappingInfo?.headers ?? [], [mappingInfo]);

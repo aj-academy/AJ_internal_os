@@ -1,4 +1,5 @@
 import type { PortfolioTemplate } from "@/types/portfolio";
+import { printHtmlInSameWindow } from "@/lib/browser/sameWindowDownload";
 
 export const PORTFOLIO_MAX_FILE_BYTES = 5 * 1024 * 1024;
 
@@ -118,15 +119,7 @@ export function downloadHtmlFile(html: string, filename: string) {
 }
 
 export function openPrintDialog(html: string) {
-  const win = window.open("", "_blank", "noopener,noreferrer");
-  if (!win) {
-    throw new Error("Pop-up blocked. Allow pop-ups to save as PDF.");
-  }
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => win.print(), 400);
+  printHtmlInSameWindow(html);
 }
 
 export function isMissingPortfolioTable(message: string) {

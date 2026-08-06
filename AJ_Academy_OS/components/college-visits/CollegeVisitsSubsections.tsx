@@ -28,6 +28,7 @@ import {
 } from "@/lib/collegeVisitSettings";
 import { useSuppressBackdropClose } from "@/lib/useSuppressBackdropClose";
 import { formatActivityValue, resolveActorName } from "@/lib/activityDisplay";
+import { downloadUrlInSameWindow } from "@/lib/browser/sameWindowDownload";
 
 function countBy(rows: CollegeVisitRow[], key: (r: CollegeVisitRow) => string) {
   const m = new Map<string, number>();
@@ -772,7 +773,7 @@ function CollegeProposalFileCell({ row }: { row: CollegeVisitRow }) {
               });
               const json = (await res.json()) as { url?: string; error?: string };
               if (!res.ok || !json.url) throw new Error(json.error || "Could not open file.");
-              window.open(json.url, "_blank", "noopener,noreferrer");
+              await downloadUrlInSameWindow(json.url, row.proposal_file_name || "proposal");
             } catch {
               /* ignore */
             } finally {

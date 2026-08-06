@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/button";
 import { CrmFlash } from "@/components/ui/CrmFlash";
+import { downloadUrlInSameWindow } from "@/lib/browser/sameWindowDownload";
 
 type AssignmentRow = { id: string; title: string; status: string; total_marks: number };
 type ProjectRow = { id: string; title: string; status: string; total_marks: number };
@@ -61,7 +62,7 @@ async function openSignedDownload(args: {
   });
   const json = (await res.json()) as { url?: string; error?: string };
   if (!res.ok || !json.url) throw new Error(json.error || "Could not open file.");
-  window.open(json.url, "_blank", "noopener,noreferrer");
+  await downloadUrlInSameWindow(json.url, args.fileName || "submission");
 }
 
 export default function MentorSubmissionsPage() {

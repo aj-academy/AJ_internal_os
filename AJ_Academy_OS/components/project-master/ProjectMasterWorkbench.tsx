@@ -19,6 +19,7 @@ import { useRowSelection } from "@/lib/useRowSelection";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { CrmFlash } from "@/components/ui/CrmFlash";
+import { navigateWithoutAppPopup } from "@/lib/browser/sameWindowDownload";
 import { PROJECT_PRIORITIES, PROJECT_STATUSES, PROJECT_TAB_IDS, TAB_LABELS } from "@/components/project-master/projectConfig";
 import { ProjectFormPanel, type ProjectFormValue } from "@/components/project-master/ProjectFormPanel";
 import {
@@ -851,7 +852,7 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
           showCreateTaskLink={isAdmin}
           onClose={() => setViewProject(null)}
           onCreateTask={() => {
-            window.open(`/admin/task-assignment?project=${viewProject.id}`, "_blank", "noopener,noreferrer");
+            navigateWithoutAppPopup(`/admin/task-assignment?project=${viewProject.id}`);
           }}
         />
       ) : null}

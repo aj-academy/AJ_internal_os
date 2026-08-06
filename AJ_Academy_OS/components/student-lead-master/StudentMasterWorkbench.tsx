@@ -78,6 +78,10 @@ import { formatActivityValue, resolveActorName } from "@/lib/activityDisplay";
 import { persistInterestedPrograms } from "@/lib/studentPrograms";
 import { useSuppressBackdropClose } from "@/lib/useSuppressBackdropClose";
 import {
+  downloadUrlInSameWindow,
+  navigateWithoutAppPopup,
+} from "@/lib/browser/sameWindowDownload";
+import {
   defaultCrmSettingsLists,
   fetchCrmSettingsLists,
   linesToList,
@@ -1169,7 +1173,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     const activityNotes = formatWhatsAppActivityNotes(trimmed);
 
     patchClientLocal(lead.id, { whatsapp_sent: true, whatsapp_sent_at: now, last_contacted_at: now });
-    window.open(wa, "_blank", "noopener,noreferrer");
+    navigateWithoutAppPopup(wa);
 
     const { error: updateError } = await supabase
       .from("clients")
@@ -4107,7 +4111,7 @@ function ProposalFileOpenCell({
               });
               const json = (await res.json()) as { url?: string; error?: string };
               if (!res.ok || !json.url) throw new Error(json.error || "Could not open file.");
-              window.open(json.url, "_blank", "noopener,noreferrer");
+              await downloadUrlInSameWindow(json.url, "proposal");
             } catch {
               /* parent banners handle save errors; table open fails silently to avoid noisy popups */
             } finally {

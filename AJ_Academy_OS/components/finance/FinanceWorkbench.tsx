@@ -20,6 +20,7 @@ import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { formatDisplayDate } from "@/lib/datetime";
+import { downloadUrlInSameWindow } from "@/lib/browser/sameWindowDownload";
 import {
   FINANCE_TAB_LABELS,
   FINANCE_TAB_ORDER,
@@ -969,9 +970,15 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                             <td className="px-3 py-2">{c.approval_status}</td>
                             <td className="space-x-2 px-3 py-2">
                               {c.receipt_url ? (
-                                <a href={c.receipt_url} target="_blank" rel="noreferrer" className="text-blue-700 text-xs font-semibold">
+                                <button
+                                  type="button"
+                                  className="text-blue-700 text-xs font-semibold"
+                                  onClick={() =>
+                                    void downloadUrlInSameWindow(c.receipt_url!, "receipt").catch(() => undefined)
+                                  }
+                                >
                                   Receipt
-                                </a>
+                                </button>
                               ) : (
                                 <span className="text-xs text-[#94a3b8]">—</span>
                               )}
@@ -1011,7 +1018,8 @@ export function FinanceWorkbench({ variant, title = "Finance & Expense Managemen
                   if (c.receipt_url) {
                     primaryActions.push({
                       label: "Receipt",
-                      onClick: () => window.open(c.receipt_url!, "_blank", "noopener,noreferrer"),
+                      onClick: () =>
+                        void downloadUrlInSameWindow(c.receipt_url!, "receipt").catch(() => undefined),
                     });
                   }
                   if (isPrivileged && c.approval_status === "Pending") {

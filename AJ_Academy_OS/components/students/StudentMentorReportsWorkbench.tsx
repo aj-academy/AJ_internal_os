@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/button";
 import { CrmFlash } from "@/components/ui/CrmFlash";
+import { downloadUrlInSameWindow } from "@/lib/browser/sameWindowDownload";
 
 const REPORTS = [
   { kind: "import_summary", label: "Student import summary" },
@@ -42,7 +43,10 @@ export function StudentMentorReportsWorkbench() {
   };
 
   const download = (format: "csv" | "xlsx" | "pdf") => {
-    window.open(`/api/admin/students/reports?kind=${kind}&format=${format}`, "_blank");
+    void downloadUrlInSameWindow(
+      `/api/admin/students/reports?kind=${kind}&format=${format}`,
+      `report-${kind}.${format}`,
+    ).catch((e) => setError(e instanceof Error ? e.message : "Download failed"));
   };
 
   return (

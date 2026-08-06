@@ -14,6 +14,7 @@ import {
   type ProposalStoredFile,
 } from "@/lib/proposalFiles";
 import { armFilePickerBackdropGuard } from "@/lib/useSuppressBackdropClose";
+import { downloadUrlInSameWindow } from "@/lib/browser/sameWindowDownload";
 
 type ProposalFileUploadProps = {
   entityType: ProposalEntityKind;
@@ -117,7 +118,7 @@ export function ProposalFileUpload({
       });
       const json = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !json.url) throw new Error(json.error || "Could not open file.");
-      window.open(json.url, "_blank", "noopener,noreferrer");
+      await downloadUrlInSameWindow(json.url, meta.proposal_file_name || "proposal");
     } catch (e) {
       onError?.(e instanceof Error ? e.message : "Could not open file.");
     } finally {
@@ -185,7 +186,7 @@ export function ProposalFileUpload({
       });
       const json = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !json.url) throw new Error(json.error || "Could not open file.");
-      window.open(json.url, "_blank", "noopener,noreferrer");
+      await downloadUrlInSameWindow(json.url, file.file_name || "proposal");
     } catch (e) {
       onError?.(e instanceof Error ? e.message : "Could not open file.");
     } finally {

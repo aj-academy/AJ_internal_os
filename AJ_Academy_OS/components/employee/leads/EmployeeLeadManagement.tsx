@@ -16,6 +16,7 @@ import { formatDateTimeIST, todayDateIST } from "@/lib/datetime";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CrmFlash } from "@/components/ui/CrmFlash";
+import { navigateWithoutAppPopup } from "@/lib/browser/sameWindowDownload";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
 import { TablePagination } from "@/components/ui/TablePagination";
@@ -343,7 +344,7 @@ export function EmployeeLeadManagement() {
     const activityNotes = formatWhatsAppActivityNotes(trimmed);
 
     patchLeadLocal(row.id, { whatsapp_sent: true, whatsapp_sent_at: now, last_contacted_at: now });
-    window.open(wa, "_blank", "noopener,noreferrer");
+    navigateWithoutAppPopup(wa);
 
     const { error: updateError } = await supabase
       .from("clients")

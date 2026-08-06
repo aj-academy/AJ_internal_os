@@ -22,6 +22,7 @@ import {
   MAX_EMAIL_MESSAGE_LENGTH,
   MAX_WHATSAPP_MESSAGE_LENGTH,
 } from "@/lib/whatsappOutreach";
+import { navigateWithoutAppPopup } from "@/lib/browser/sameWindowDownload";
 import { Button } from "@/components/ui/button";
 import { CrmFlash } from "@/components/ui/CrmFlash";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
@@ -588,7 +589,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       setWhatsAppSubmitting(true);
       setError(null);
       markOutreach(whatsAppComposeVisit.id, { whatsappSent: true });
-      window.open(wa, "_blank", "noopener,noreferrer");
+      navigateWithoutAppPopup(wa);
 
       try {
         await logCollegeActivity(
