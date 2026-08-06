@@ -44,8 +44,29 @@ type ProctoringReview = {
     batch_id?: string | null;
     updated_at?: string | null;
   };
-  attempts: { id: string; student_id: string; student_name?: string; status: string; score: number | null; started_at?: string; server_started_at?: string }[];
-  recipients?: { id: string; student_id: string; student_name?: string; status: string; attempts_used?: number | null; updated_at?: string }[];
+  attempts: {
+    id: string;
+    student_id: string;
+    student_name?: string;
+    status: string;
+    score: number | null;
+    max_score?: number | null;
+    started_at?: string;
+    submitted_at?: string | null;
+    server_started_at?: string;
+  }[];
+  recipients?: {
+    id: string;
+    student_id: string;
+    student_name?: string;
+    status: string;
+    attempts_used?: number | null;
+    updated_at?: string;
+    latest_score?: number | null;
+    latest_max_score?: number | null;
+    latest_attempt_status?: string | null;
+    latest_submitted_at?: string | null;
+  }[];
   events: { id: string; attempt_id: string; event_type: string; severity: string; created_at: string }[];
   media: { id: string; attempt_id: string; storage_path: string; capture_reason: string; review_status: string; captured_at: string }[];
 };
@@ -349,59 +370,81 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
   };
 
   const scoreRows = useMemo(() => {
-    if (!review?.attempts?.length) return [];
+    if (!review) return [];
+
     const byStudent = new Map<
       string,
       {
         studentId: string;
         studentName: string;
-        attempts: number;
-        submittedAttempts: number;
-        bestScore: number | null;
-        latestScore: number | null;
+        status: string;
+        attemptsUsed: number;
+        score: number | null;
+        maxScore: number | null;
+        submittedAt: string | null;
       }
     >();
-    for (const attempt of review.attempts) {
-      const key = attempt.student_id;
-      const row = byStudent.get(key) ?? {
-        studentId: key,
-        studentName: attempt.student_name || key.slice(0, 8),
-        attempts: 0,
-        submittedAttempts: 0,
-        bestScore: null,
-        latestScore: null,
-      };
-      row.attempts += 1;
-      if (attempt.status !== "in_progress") row.submittedAttempts += 1;
-      if (attempt.score != null) {
-        row.latestScore = row.latestScore == null ? attempt.score : row.latestScore;
-        row.bestScore = row.bestScore == null ? attempt.score : Math.max(row.bestScore, attempt.score);
-      }
-      byStudent.set(key, row);
+
+    for (const r of review.recipients ?? []) {
+      byStudent.set(r.student_id, {
+        studentId: r.student_id,
+        studentName: r.student_name || r.student_id.slice(0, 8),
+        status: r.status,
+        attemptsUsed: r.attempts_used ?? 0,
+        score: r.latest_score ?? null,
+        maxScore: r.latest_max_score ?? null,
+        submittedAt: r.latest_submitted_at ?? r.updated_at ?? null,
+      });
     }
+
+    for (const attempt of review.attempts ?? []) {
+      const existing = byStudent.get(attempt.student_id);
+      const score = attempt.score != null ? Number(attempt.score) : null;
+      const maxScore = attempt.max_score != null ? Number(attempt.max_score) : null;
+      if (!existing) {
+        byStudent.set(attempt.student_id, {
+          studentId: attempt.student_id,
+          studentName: attempt.student_name || attempt.student_id.slice(0, 8),
+          status: attempt.status,
+          attemptsUsed: 1,
+          score,
+          maxScore,
+          submittedAt: attempt.submitted_at ?? null,
+        });
+        continue;
+      }
+      if (existing.score == null && score != null) existing.score = score;
+      if (existing.maxScore == null && maxScore != null) existing.maxScore = maxScore;
+      if (!existing.submittedAt && attempt.submitted_at) existing.submittedAt = attempt.submitted_at;
+      if (existing.attemptsUsed < 1) existing.attemptsUsed = 1;
+    }
+
     return [...byStudent.values()].sort((a, b) => {
-      const aa = a.bestScore ?? -1;
-      const bb = b.bestScore ?? -1;
+      const aa = a.score ?? -1;
+      const bb = b.score ?? -1;
       if (aa !== bb) return bb - aa;
       return a.studentName.localeCompare(b.studentName);
     });
   }, [review]);
 
   const avgScore = useMemo(() => {
-    const scores = scoreRows.map((r) => r.bestScore).filter((s): s is number => s != null);
+    const scores = scoreRows.map((r) => r.score).filter((s): s is number => s != null);
     if (!scores.length) return null;
     return Math.round((scores.reduce((sum, s) => sum + s, 0) / scores.length) * 100) / 100;
   }, [scoreRows]);
 
   const recipientSummary = useMemo(() => {
-    const recipients = review?.recipients ?? [];
+    const rows = scoreRows;
+    const submitted = rows.filter((r) => r.status === "submitted" || r.score != null).length;
+    const started = rows.filter((r) => r.status === "started").length;
+    const notStarted = rows.filter((r) => r.status === "assigned").length;
     return {
-      total: recipients.length,
-      submitted: recipients.filter((r) => r.status === "submitted").length,
-      started: recipients.filter((r) => r.status === "started").length,
-      assigned: recipients.filter((r) => r.status === "assigned").length,
+      total: rows.length,
+      submitted,
+      started,
+      notStarted,
     };
-  }, [review]);
+  }, [scoreRows]);
 
   return (
     <section className="space-y-5">
@@ -765,108 +808,104 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
                         <p className="text-[#64748b]">No data.</p>
                       ) : (
                         <div className="space-y-4">
-                          <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] p-3">
-                            <p className="mb-1 text-sm font-semibold text-[#0f172a]">Score summary</p>
-                            <p className="text-xs text-[#64748b]">
-                              {review.test?.status || "—"} · {review.test?.duration_minutes ?? "—"} min
-                              {review.test?.passing_marks != null ? ` · pass ${review.test.passing_marks}` : ""}
-                              {review.test?.max_attempts != null ? ` · max attempts ${review.test.max_attempts}` : ""}
-                            </p>
-                            <p className="mt-1 text-xs text-[#64748b]">
-                              Students assigned: {recipientSummary.total} · Submitted: {recipientSummary.submitted} ·
-                              Started: {recipientSummary.started} · Not started: {recipientSummary.assigned}
-                            </p>
-                            <p className="mt-1 text-xs text-[#64748b]">
-                              Students attempted: {scoreRows.length} · Attempts logged: {review.attempts.length}
-                              {avgScore != null ? ` · Avg best score ${avgScore}` : ""}
-                            </p>
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                            <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
+                              <p className="text-[11px] uppercase tracking-wide text-[#64748b]">Should attempt</p>
+                              <p className="mt-1 text-lg font-semibold text-[#0f172a]">{recipientSummary.total}</p>
+                            </div>
+                            <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
+                              <p className="text-[11px] uppercase tracking-wide text-[#64748b]">Submitted</p>
+                              <p className="mt-1 text-lg font-semibold text-[#0f172a]">{recipientSummary.submitted}</p>
+                            </div>
+                            <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
+                              <p className="text-[11px] uppercase tracking-wide text-[#64748b]">In progress</p>
+                              <p className="mt-1 text-lg font-semibold text-[#0f172a]">{recipientSummary.started}</p>
+                            </div>
+                            <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
+                              <p className="text-[11px] uppercase tracking-wide text-[#64748b]">Not started</p>
+                              <p className="mt-1 text-lg font-semibold text-[#0f172a]">{recipientSummary.notStarted}</p>
+                            </div>
+                            <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
+                              <p className="text-[11px] uppercase tracking-wide text-[#64748b]">Avg score</p>
+                              <p className="mt-1 text-lg font-semibold text-[#0f172a]">
+                                {avgScore != null ? avgScore : "—"}
+                              </p>
+                            </div>
                           </div>
 
-                          <div>
-                            <h4 className="font-semibold">Student scores ({scoreRows.length})</h4>
-                            {!scoreRows.length ? (
-                              <p className="mt-2 text-xs text-[#64748b]">No attempt scores yet for this test.</p>
-                            ) : (
-                              <ul className="mt-2 max-h-56 space-y-2 overflow-y-auto">
-                                {scoreRows.map((row) => (
-                                  <li key={row.studentId} className="rounded-lg border border-[#e2e8f0] bg-[#f8fbff] px-3 py-2">
-                                    <p className="font-medium">{row.studentName}</p>
-                                    <p className="text-xs text-[#64748b]">
-                                      Best: {row.bestScore != null ? row.bestScore : "—"} · Latest:{" "}
-                                      {row.latestScore != null ? row.latestScore : "—"} · Submitted attempts:{" "}
-                                      {row.submittedAttempts}/{row.attempts}
-                                    </p>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
+                          <div className="overflow-x-auto rounded-xl border border-[#e2e8f0]">
+                            <table className="min-w-full text-left text-sm">
+                              <thead className="bg-[#f8fbff] text-xs uppercase tracking-wide text-[#64748b]">
+                                <tr>
+                                  <th className="px-3 py-2 font-semibold">Student name</th>
+                                  <th className="px-3 py-2 font-semibold">Score</th>
+                                  <th className="px-3 py-2 font-semibold">Status</th>
+                                  <th className="px-3 py-2 font-semibold">Attempts</th>
+                                  <th className="px-3 py-2 font-semibold">Submitted at</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {!scoreRows.length ? (
+                                  <tr>
+                                    <td colSpan={5} className="px-3 py-4 text-center text-[#64748b]">
+                                      No students assigned to this test yet.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  scoreRows.map((row) => (
+                                    <tr key={row.studentId} className="border-t border-[#eef2f7]">
+                                      <td className="px-3 py-2 font-medium text-[#0f172a]">{row.studentName}</td>
+                                      <td className="px-3 py-2 text-[#0f172a]">
+                                        {row.score != null
+                                          ? `${row.score}${row.maxScore != null ? ` / ${row.maxScore}` : ""}`
+                                          : "—"}
+                                      </td>
+                                      <td className="px-3 py-2 capitalize text-[#475569]">{row.status}</td>
+                                      <td className="px-3 py-2 text-[#475569]">{row.attemptsUsed}</td>
+                                      <td className="px-3 py-2 text-[#475569]">
+                                        {row.submittedAt ? new Date(row.submittedAt).toLocaleString() : "—"}
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
                           </div>
 
-                          <div>
-                            <h4 className="font-semibold">Submission status ({review.recipients?.length ?? 0})</h4>
-                            {!review.recipients?.length ? (
-                              <p className="mt-2 text-xs text-[#64748b]">No recipients found for this test.</p>
-                            ) : (
-                              <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto">
-                                {review.recipients.map((r) => (
-                                  <li key={r.id} className="rounded-lg border border-[#e2e8f0] bg-[#f8fbff] px-3 py-2">
-                                    <p className="font-medium">{r.student_name || r.student_id.slice(0, 8)}</p>
-                                    <p className="text-xs text-[#64748b]">
-                                      {r.status} · attempts used {r.attempts_used ?? 0}
-                                      {r.updated_at ? ` · ${new Date(r.updated_at).toLocaleString()}` : ""}
-                                    </p>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-
-                          <div>
-                            <p className="mb-2 text-sm font-semibold text-[#0f172a]">Proctoring</p>
-                            <div className="grid gap-4 lg:grid-cols-3">
-                              <div>
-                                <h4 className="font-semibold">Attempts ({review.attempts.length})</h4>
-                                <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
-                                  {review.attempts.map((a) => (
-                                    <li key={a.id} className="rounded-lg border border-[#e2e8f0] bg-[#f8fbff] px-3 py-2">
-                                      <p className="font-medium">{a.student_name || a.student_id.slice(0, 8)}</p>
-                                      <p className="text-xs text-[#64748b]">
-                                        {a.status}
-                                        {a.score != null ? ` · score ${a.score}` : ""}
-                                      </p>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                              <div>
-                                <h4 className="font-semibold">Events ({review.events.length})</h4>
-                                <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
-                                  {review.events.slice(0, 80).map((e) => (
-                                    <li key={e.id} className="rounded-lg border border-[#e2e8f0] bg-[#f8fbff] px-3 py-2 text-xs">
-                                      <p className="font-medium capitalize text-[#0f172a]">{e.event_type.replaceAll("_", " ")}</p>
+                          {(review.events.length > 0 || review.media.length > 0) && (
+                            <details className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
+                              <summary className="cursor-pointer text-sm font-semibold text-[#0f172a]">
+                                Proctoring details ({review.events.length} events · {review.media.length} snapshots)
+                              </summary>
+                              <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                                <ul className="max-h-40 space-y-2 overflow-y-auto text-xs">
+                                  {review.events.slice(0, 40).map((e) => (
+                                    <li key={e.id} className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2">
+                                      <p className="font-medium capitalize">{e.event_type.replaceAll("_", " ")}</p>
                                       <p className="text-[#64748b]">
                                         {e.severity} · {new Date(e.created_at).toLocaleString()}
                                       </p>
                                     </li>
                                   ))}
                                 </ul>
-                              </div>
-                              <div>
-                                <h4 className="font-semibold">Snapshots ({review.media.length})</h4>
-                                <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
+                                <ul className="max-h-40 space-y-2 overflow-y-auto text-xs">
                                   {review.media.map((m) => (
-                                    <li key={m.id} className="rounded-lg border border-[#e2e8f0] bg-[#f8fbff] px-3 py-2">
-                                      <p className="text-xs capitalize">{m.capture_reason.replaceAll("_", " ")}</p>
-                                      <p className="text-xs text-[#64748b]">{new Date(m.captured_at).toLocaleString()}</p>
-                                      <button type="button" className="mt-1 text-xs text-[#c9a227] underline" onClick={() => void openMedia(m)}>
+                                    <li key={m.id} className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2">
+                                      <p className="capitalize">{m.capture_reason.replaceAll("_", " ")}</p>
+                                      <p className="text-[#64748b]">{new Date(m.captured_at).toLocaleString()}</p>
+                                      <button
+                                        type="button"
+                                        className="mt-1 text-[#c9a227] underline"
+                                        onClick={() => void openMedia(m)}
+                                      >
                                         Open snapshot
                                       </button>
                                     </li>
                                   ))}
                                 </ul>
                               </div>
-                            </div>
-                          </div>
+                            </details>
+                          )}
                         </div>
                       )}
                     </div>
