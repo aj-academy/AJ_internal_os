@@ -10,7 +10,7 @@ type AllocationRow = {
 };
 
 export type MentorDepartmentScope = {
-  /** Departments the mentor may use (from active allocations, else profile name match). */
+  /** Departments the mentor may use (User Master first, then active allocations). */
   departments: AcademicDepartment[];
   /** True when exactly one department is in scope — UI should lock the field. */
   locked: boolean;
@@ -21,9 +21,20 @@ export type MentorDepartmentScope = {
   reload: () => Promise<void>;
 };
 
+function matchDeptByName(
+  catalog: AcademicDepartment[],
+  name: string | null,
+): AcademicDepartment[] {
+  if (!name) return [];
+  const key = name.trim().toLowerCase();
+  if (!key) return [];
+  return catalog.filter((d) => d.name.trim().toLowerCase() === key);
+}
+
 /**
- * Resolves the mentor's fixed academic department(s) from Admin allocations
- * (and profile.department name as fallback). Used to lock LMS create forms.
+ * Resolves the mentor's fixed academic department from User Master
+ * (`profiles.department` set when the mentor was created). Falls back to
+ * active Academic → Mentor Allocation rows only when the profile has no department.
  */
 export function useMentorDepartmentScope(
   enabled: boolean,
@@ -90,28 +101,28 @@ export function useMentorDepartmentScope(
 
   const departments = useMemo(() => {
     if (!enabled) return catalogDepartments;
+
+    // User Master department is the source of truth (set when admin creates the mentor).
+    const fromProfile = matchDeptByName(catalogDepartments, profileDeptName);
+    if (fromProfile.length) return fromProfile;
+
     if (allocDeptIds.length) {
       return catalogDepartments.filter((d) => allocDeptIds.includes(d.id));
     }
-    if (profileDeptName) {
-      const key = profileDeptName.toLowerCase();
-      const matched = catalogDepartments.filter((d) => d.name.trim().toLowerCase() === key);
-      if (matched.length) return matched;
-    }
+
     return [];
   }, [enabled, catalogDepartments, allocDeptIds, profileDeptName]);
 
-  const locked = enabled && departments.length === 1;
-  const lockedDepartmentId = locked ? departments[0].id : "";
-  const lockedDepartmentName = locked
-    ? departments[0].name
-    : profileDeptName && !departments.length
-      ? profileDeptName
-      : "";
+  const locked = enabled && (departments.length === 1 || Boolean(profileDeptName));
+  const lockedDepartmentId = departments.length === 1 ? departments[0].id : "";
+  const lockedDepartmentName =
+    departments.length === 1
+      ? departments[0].name
+      : profileDeptName || "";
 
   return {
     departments,
-    locked,
+    locked: locked && Boolean(lockedDepartmentName || lockedDepartmentId),
     lockedDepartmentId,
     lockedDepartmentName,
     loading,
@@ -120,7 +131,7 @@ export function useMentorDepartmentScope(
   };
 }
 
-/** Read-only department display for mentors with a fixed admin assignment. */
+/** Read-only department display for mentors with a fixed User Master assignment. */
 export function MentorLockedDepartmentField({
   name,
   loading,
@@ -133,13 +144,13 @@ export function MentorLockedDepartmentField({
       Department
       <input
         className="mt-1 h-10 w-full cursor-not-allowed rounded-lg border border-[#dbe6f3] bg-[#f8fafc] px-3 text-[#0f172a]"
-        value={loading ? "Loading…" : name || "Not assigned by admin"}
+        value={loading ? "Loading…" : name || "Not assigned"}
         readOnly
         disabled
-        title="Fixed by admin allocation / User Master department"
+        title="Your department from User Master"
       />
       <span className="mt-1 block text-xs text-[#64748b]">
-        Set by admin — mentors cannot change department.
+        Your assigned department — cannot be changed here.
       </span>
     </label>
   );
