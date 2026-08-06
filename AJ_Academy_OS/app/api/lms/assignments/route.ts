@@ -106,7 +106,10 @@ export async function POST(request: Request) {
     }
     if (!allowed) {
       return NextResponse.json(
-        { error: "No active mentor allocation for this department/course/batch scope." },
+        {
+          error: "No active mentor allocation for this department/course/batch scope.",
+          hint: "Set the mentor's department in User Master to match the LMS department, or add Admin → Academic → Mentor Allocation. Run lms_mentor_scope_user_master_fix.sql if needed.",
+        },
         { status: 403 },
       );
     }

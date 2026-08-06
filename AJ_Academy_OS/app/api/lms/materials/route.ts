@@ -88,7 +88,13 @@ export async function POST(request: Request) {
       p_module_id: null,
     });
     if (!allowed) {
-      return NextResponse.json({ error: "No active mentor allocation for this scope." }, { status: 403 });
+      return NextResponse.json(
+        {
+          error: "No active mentor allocation for this scope.",
+          hint: "Set the mentor's department in User Master to match the LMS department, or add Admin → Academic → Mentor Allocation. Run lms_mentor_scope_user_master_fix.sql if needed.",
+        },
+        { status: 403 },
+      );
     }
   }
 

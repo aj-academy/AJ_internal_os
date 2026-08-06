@@ -584,6 +584,12 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
 
         <div className="mt-4 rounded-xl border border-[#eef2f7] bg-[#f8fbff] p-4 text-sm">
           <p className="font-semibold">Audience ({eligible.length} eligible)</p>
+          {!eligible.length && form.department_id ? (
+            <p className="mt-1 text-xs text-amber-800">
+              No eligible students yet. Assign mentees under Admin → Student Management → Mentor Allocation, and ensure this mentor’s User Master department matches the test department (or add Academic → Mentor Allocation). If the error persists, run{" "}
+              <code className="rounded bg-amber-100 px-1">lms_mentor_scope_user_master_fix.sql</code> in Supabase.
+            </p>
+          ) : null}
           <div className="mt-2 flex gap-4">
             <label className="flex items-center gap-2"><input type="radio" checked={audienceMode === "all"} onChange={() => setAudienceMode("all")} /> All eligible</label>
             <label className="flex items-center gap-2"><input type="radio" checked={audienceMode === "selected"} onChange={() => setAudienceMode("selected")} /> Selected ({selectedStudents.size})</label>

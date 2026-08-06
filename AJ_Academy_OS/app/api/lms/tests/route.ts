@@ -116,7 +116,13 @@ export async function POST(request: Request) {
       p_module_id: null,
     });
     if (!allowed) {
-      return NextResponse.json({ error: "No active mentor allocation for this scope." }, { status: 403 });
+      return NextResponse.json(
+        {
+          error: "No active mentor allocation for this scope.",
+          hint: "Mentors need User Master department matching the test department (or Admin → Academic → Mentor Allocation). Assigning a student under Student Management → Mentor Allocation alone is not enough for scope. Run AJ_Academy_SB/lms_mentor_scope_user_master_fix.sql if this still fails after department is set.",
+        },
+        { status: 403 },
+      );
     }
   }
 

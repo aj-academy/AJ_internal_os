@@ -150,6 +150,7 @@ Optional check anytime: lms_verify.sql
 
   lms_academic_foundation.sql — academic_departments/courses/batches/modules + student_enrolments + seed/backfill RPCs
   lms_mentor_allocations.sql — effective-dated mentor_allocations + scope helpers + RLS  (**required before assignments**)
+  lms_mentor_scope_user_master_fix.sql — ONLY if create/publish says "No active mentor allocation for this scope" / Audience 0 despite Student Management mentee link. Safe to re-run. (User Master department + mentees count for LMS scope; already in current lms_mentor_allocations.sql for fresh installs.)
   lms_assignments.sql — lms_assignments + recipients + submissions + evaluations + publish RPC
   lms_projects.sql — academic lms_projects + milestones + recipients + publish RPC
   lms_study_materials.sql — study materials + recipients + activity tracking + study-materials bucket

@@ -384,7 +384,9 @@ Run in Supabase SQL Editor (after platform expansion + system settings), **one f
 10. **`lms_calendar_reports.sql`** — `lms_academic_events` + `lms_report_summary()`  
 11. **`lms_proctoring_media.sql`** — snapshot register RPC, `expires_at`, admin purge helpers  
 
-**If mentor Learning Management pages error with `infinite recursion detected in policy`:** run **`lms_mentor_rls_recursion_fix.sql`** once (covers assignments, projects, materials, tests). Current core SQL files already embed the same helpers for fresh installs.  
+**If mentor Learning Management pages error with `infinite recursion detected in policy`:** run **`lms_mentor_rls_recursion_fix.sql`** once (covers assignments, projects, materials, tests). Current core SQL files already embed the same helpers for fresh installs.
+
+**If mentor create/publish fails with `No active mentor allocation for this scope` (and Audience is 0) after assigning students under Student Management → Mentor Allocation:** those are two different screens. LMS scope needs the mentor’s **User Master department** to match the academic department (or **Academic → Mentor Allocation**). Run **`lms_mentor_scope_user_master_fix.sql`** once so User Master department + mentee links count for LMS audience.  
 
 Optional: **`lms_verify.sql`** — lists OK / MISSING LMS objects.
 
