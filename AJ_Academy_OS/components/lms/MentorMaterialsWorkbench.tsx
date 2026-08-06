@@ -6,6 +6,10 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/button";
 import { CrmFlash } from "@/components/ui/CrmFlash";
 import type { AcademicBatch, AcademicCourse, AcademicDepartment } from "@/types/lms";
+import {
+  MentorLockedDepartmentField,
+  useMentorDepartmentScope,
+} from "@/components/lms/useMentorDepartmentScope";
 
 type MaterialRow = {
   id: string;
@@ -51,6 +55,17 @@ export function MentorMaterialsWorkbench() {
     () => batches.filter((b) => b.course_id === form.course_id),
     [batches, form.course_id],
   );
+  const mentorScope = useMentorDepartmentScope(true, departments);
+  const selectableDepartments = mentorScope.departments;
+
+  useEffect(() => {
+    if (!mentorScope.locked || !mentorScope.lockedDepartmentId) return;
+    setForm((f) =>
+      f.department_id === mentorScope.lockedDepartmentId
+        ? f
+        : { ...f, department_id: mentorScope.lockedDepartmentId, course_id: "", batch_id: "" },
+    );
+  }, [mentorScope.locked, mentorScope.lockedDepartmentId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -160,15 +175,28 @@ export function MentorMaterialsWorkbench() {
             Description
             <textarea className="mt-1 min-h-[64px] w-full rounded-lg border border-[#dbe6f3] px-3 py-2" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
           </label>
-          <label className="text-sm">
-            Department
-            <select className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3" value={form.department_id} onChange={(e) => setForm((f) => ({ ...f, department_id: e.target.value, course_id: "", batch_id: "" }))}>
-              <option value="">Select</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
-          </label>
+          {mentorScope.locked || selectableDepartments.length <= 1 ? (
+            <MentorLockedDepartmentField
+              name={mentorScope.lockedDepartmentName || selectableDepartments[0]?.name || ""}
+              loading={mentorScope.loading}
+            />
+          ) : (
+            <label className="text-sm">
+              Department
+              <select className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3" value={form.department_id} onChange={(e) => setForm((f) => ({ ...f, department_id: e.target.value, course_id: "", batch_id: "" }))}>
+                <option value="">Select</option>
+                {selectableDepartments.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-[#64748b]">Only departments allocated to you by admin.</span>
+            </label>
+          )}
+          {!mentorScope.loading && !selectableDepartments.length ? (
+            <p className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              No department is assigned for your mentor account. Ask admin to set your department in User Master and/or Academic → Mentor Allocation.
+            </p>
+          ) : null}
           <label className="text-sm">
             Type
             <select className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3" value={form.material_type} onChange={(e) => setForm((f) => ({ ...f, material_type: e.target.value }))}>

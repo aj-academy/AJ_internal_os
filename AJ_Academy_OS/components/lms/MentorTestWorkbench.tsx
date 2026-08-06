@@ -8,6 +8,10 @@ import { CrmFlash } from "@/components/ui/CrmFlash";
 import type { AcademicBatch, AcademicCourse, AcademicDepartment } from "@/types/lms";
 import type { TestQuestionDraft, TestQuestionImportIssue } from "@/lib/lms/testQuestionImport";
 import { downloadUrlInSameWindow } from "@/lib/browser/sameWindowDownload";
+import {
+  MentorLockedDepartmentField,
+  useMentorDepartmentScope,
+} from "@/components/lms/useMentorDepartmentScope";
 
 type TestRow = {
   id: string;
@@ -87,10 +91,23 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
     () => batches.filter((b) => b.course_id === form.course_id),
     [batches, form.course_id],
   );
+  const mentorScope = useMentorDepartmentScope(!isAdmin, departments);
+  const selectableDepartments = isAdmin ? departments : mentorScope.departments;
+
   const deptName = useCallback(
     (id?: string) => departments.find((d) => d.id === id)?.name || "—",
     [departments],
   );
+
+  useEffect(() => {
+    if (isAdmin) return;
+    if (!mentorScope.locked || !mentorScope.lockedDepartmentId) return;
+    setForm((f) =>
+      f.department_id === mentorScope.lockedDepartmentId
+        ? f
+        : { ...f, department_id: mentorScope.lockedDepartmentId, course_id: "", batch_id: "" },
+    );
+  }, [isAdmin, mentorScope.locked, mentorScope.lockedDepartmentId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -337,12 +354,42 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
         <h2 className="text-lg font-semibold text-[#0f172a]">Create test</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="text-sm sm:col-span-2">Title<input className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} /></label>
-          <label className="text-sm">Department
-            <select className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3" value={form.department_id} onChange={(e) => setForm((f) => ({ ...f, department_id: e.target.value, course_id: "", batch_id: "" }))}>
-              <option value="">Select</option>
-              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </label>
+          {isAdmin ? (
+            <label className="text-sm">Department
+              <select className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3" value={form.department_id} onChange={(e) => setForm((f) => ({ ...f, department_id: e.target.value, course_id: "", batch_id: "" }))}>
+                <option value="">Select</option>
+                {selectableDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </label>
+          ) : mentorScope.locked || selectableDepartments.length <= 1 ? (
+            <MentorLockedDepartmentField
+              name={
+                mentorScope.lockedDepartmentName ||
+                selectableDepartments[0]?.name ||
+                mentorScope.lockedDepartmentName
+              }
+              loading={mentorScope.loading}
+            />
+          ) : (
+            <label className="text-sm">Department
+              <select
+                className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3"
+                value={form.department_id}
+                onChange={(e) => setForm((f) => ({ ...f, department_id: e.target.value, course_id: "", batch_id: "" }))}
+              >
+                <option value="">Select</option>
+                {selectableDepartments.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-[#64748b]">Only departments allocated to you by admin.</span>
+            </label>
+          )}
+          {!isAdmin && !mentorScope.loading && !selectableDepartments.length ? (
+            <p className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              No department is assigned for your mentor account. Ask admin to set your department in User Master and/or Academic → Mentor Allocation.
+            </p>
+          ) : null}
           <label className="text-sm">Duration (minutes)
             <input className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3" value={form.duration_minutes} onChange={(e) => setForm((f) => ({ ...f, duration_minutes: e.target.value }))} />
           </label>

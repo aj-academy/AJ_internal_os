@@ -6,6 +6,10 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/button";
 import { CrmFlash } from "@/components/ui/CrmFlash";
 import type { AcademicCourse, AcademicDepartment, AcademicBatch } from "@/types/lms";
+import {
+  MentorLockedDepartmentField,
+  useMentorDepartmentScope,
+} from "@/components/lms/useMentorDepartmentScope";
 
 type AssignmentRow = {
   id: string;
@@ -26,14 +30,6 @@ type EligibleStudent = {
   email: string | null;
 };
 
-type Allocation = {
-  id: string;
-  department_id: string;
-  course_id: string | null;
-  batch_id: string | null;
-  status: string;
-};
-
 export function MentorAssignmentWorkbench() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +39,6 @@ export function MentorAssignmentWorkbench() {
   const [departments, setDepartments] = useState<AcademicDepartment[]>([]);
   const [courses, setCourses] = useState<AcademicCourse[]>([]);
   const [batches, setBatches] = useState<AcademicBatch[]>([]);
-  const [allocations, setAllocations] = useState<Allocation[]>([]);
   const [eligible, setEligible] = useState<EligibleStudent[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [audienceMode, setAudienceMode] = useState<"all" | "selected">("all");
@@ -72,15 +67,17 @@ export function MentorAssignmentWorkbench() {
     [batches, form.course_id],
   );
 
-  const allowedDeptIds = useMemo(() => {
-    const active = allocations.filter((a) => a.status === "active");
-    return new Set(active.map((a) => a.department_id));
-  }, [allocations]);
+  const mentorScope = useMentorDepartmentScope(true, departments);
+  const visibleDepartments = mentorScope.departments;
 
-  const visibleDepartments = useMemo(
-    () => departments.filter((d) => allowedDeptIds.has(d.id) || allowedDeptIds.size === 0),
-    [departments, allowedDeptIds],
-  );
+  useEffect(() => {
+    if (!mentorScope.locked || !mentorScope.lockedDepartmentId) return;
+    setForm((f) =>
+      f.department_id === mentorScope.lockedDepartmentId
+        ? f
+        : { ...f, department_id: mentorScope.lockedDepartmentId, course_id: "", batch_id: "" },
+    );
+  }, [mentorScope.locked, mentorScope.lockedDepartmentId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,9 +85,6 @@ export function MentorAssignmentWorkbench() {
     setHint(null);
     try {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
 
       const [assignRes, deptRes, courseRes, batchRes] = await Promise.all([
         fetch("/api/lms/assignments", { credentials: "include" }),
@@ -120,14 +114,6 @@ export function MentorAssignmentWorkbench() {
       setDepartments((deptRes.data as AcademicDepartment[]) ?? []);
       setCourses((courseRes.data as AcademicCourse[]) ?? []);
       setBatches((batchRes.data as AcademicBatch[]) ?? []);
-
-      if (user?.id) {
-        const { data: allocs } = await supabase
-          .from("mentor_allocations")
-          .select("id,department_id,course_id,batch_id,status")
-          .eq("mentor_id", user.id);
-        setAllocations((allocs as Allocation[]) ?? []);
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load.");
     } finally {
@@ -273,23 +259,36 @@ export function MentorAssignmentWorkbench() {
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
             />
           </label>
-          <label className="text-sm text-[#334155]">
-            Department
-            <select
-              className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3"
-              value={form.department_id}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, department_id: e.target.value, course_id: "", batch_id: "" }))
-              }
-            >
-              <option value="">Select</option>
-              {visibleDepartments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {mentorScope.locked || visibleDepartments.length <= 1 ? (
+            <MentorLockedDepartmentField
+              name={mentorScope.lockedDepartmentName || visibleDepartments[0]?.name || ""}
+              loading={mentorScope.loading}
+            />
+          ) : (
+            <label className="text-sm text-[#334155]">
+              Department
+              <select
+                className="mt-1 h-10 w-full rounded-lg border border-[#dbe6f3] px-3"
+                value={form.department_id}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, department_id: e.target.value, course_id: "", batch_id: "" }))
+                }
+              >
+                <option value="">Select</option>
+                {visibleDepartments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-[#64748b]">Only departments allocated to you by admin.</span>
+            </label>
+          )}
+          {!mentorScope.loading && !visibleDepartments.length ? (
+            <p className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              No department is assigned for your mentor account. Ask admin to set your department in User Master and/or Academic → Mentor Allocation.
+            </p>
+          ) : null}
           <label className="text-sm text-[#334155]">
             Course (optional)
             <select
