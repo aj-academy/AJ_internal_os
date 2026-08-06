@@ -35,11 +35,11 @@ export async function GET() {
     if (testIds.length) {
       const { data: attempts } = await supabase
         .from("lms_test_attempts")
-        .select("test_id,status,score,max_score,submitted_at,started_at")
+        .select("test_id,status,score,max_score,submitted_at,server_started_at")
         .eq("student_id", gate.user!.id)
         .in("test_id", testIds)
         .order("submitted_at", { ascending: false, nullsFirst: false })
-        .order("started_at", { ascending: false, nullsFirst: false })
+        .order("server_started_at", { ascending: false, nullsFirst: false })
         .limit(500);
       for (const a of attempts ?? []) {
         if (!a.test_id || latestAttemptByTest[a.test_id]) continue;

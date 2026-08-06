@@ -51,7 +51,6 @@ type ProctoringReview = {
     status: string;
     score: number | null;
     max_score?: number | null;
-    started_at?: string;
     submitted_at?: string | null;
     server_started_at?: string;
   }[];
@@ -765,158 +764,186 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
           </p>
         ) : (
           <ul className="mt-4 space-y-3">
-            {tests.map((t) => {
-              const isOpen = reviewTestId === t.id;
-              return (
-                <li key={t.id} className="rounded-xl border border-[#e2e8f0] bg-[#f8fbff] overflow-hidden">
-                  <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                    <div>
-                      <p className="font-semibold text-[#0f172a]">{t.title}</p>
-                      <p className="text-xs text-[#64748b]">
-                        {t.status}
-                        {t.created_at ? ` · ${new Date(t.created_at).toLocaleString()}` : ""}
-                        {t.duration_minutes ? ` · ${t.duration_minutes} min` : ""}
-                        {isAdmin ? ` · ${deptName(t.department_id)}` : ""}
+            {tests.map((t) => (
+              <li key={t.id} className="rounded-xl border border-[#e2e8f0] bg-[#f8fbff] overflow-hidden">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                  <div>
+                    <p className="font-semibold text-[#0f172a]">{t.title}</p>
+                    <p className="text-xs text-[#64748b]">
+                      {t.status}
+                      {t.created_at ? ` · ${new Date(t.created_at).toLocaleString()}` : ""}
+                      {t.duration_minutes ? ` · ${t.duration_minutes} min` : ""}
+                      {isAdmin ? ` · ${deptName(t.department_id)}` : ""}
+                    </p>
+                    {isAdmin ? (
+                      <p className="mt-0.5 text-xs text-[#475569]">
+                        By {t.assigned_by_name || t.assigned_by_email || "unknown mentor"}
                       </p>
-                      {isAdmin ? (
-                        <p className="mt-0.5 text-xs text-[#475569]">
-                          By {t.assigned_by_name || t.assigned_by_email || "unknown mentor"}
-                        </p>
-                      ) : null}
-                    </div>
-                    <Button
-                      variant="outline"
-                      className="rounded-full border-[#e8dcc8] text-xs"
-                      onClick={() => {
-                        if (isOpen) {
-                          setReviewTestId(null);
-                          setReview(null);
-                          return;
-                        }
-                        void openReview(t.id);
-                      }}
-                    >
-                      {isOpen ? "Hide scores" : "View scores"}
-                    </Button>
+                    ) : null}
                   </div>
-
-                  {isOpen ? (
-                    <div className="border-t border-[#e2e8f0] bg-white px-4 py-4 text-sm">
-                      {reviewLoading ? (
-                        <p className="text-[#64748b]">Loading scores…</p>
-                      ) : !review ? (
-                        <p className="text-[#64748b]">No data.</p>
-                      ) : (
-                        <div className="space-y-4">
-                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                            <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
-                              <p className="text-[11px] uppercase tracking-wide text-[#64748b]">Should attempt</p>
-                              <p className="mt-1 text-lg font-semibold text-[#0f172a]">{recipientSummary.total}</p>
-                            </div>
-                            <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
-                              <p className="text-[11px] uppercase tracking-wide text-[#64748b]">Submitted</p>
-                              <p className="mt-1 text-lg font-semibold text-[#0f172a]">{recipientSummary.submitted}</p>
-                            </div>
-                            <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
-                              <p className="text-[11px] uppercase tracking-wide text-[#64748b]">In progress</p>
-                              <p className="mt-1 text-lg font-semibold text-[#0f172a]">{recipientSummary.started}</p>
-                            </div>
-                            <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
-                              <p className="text-[11px] uppercase tracking-wide text-[#64748b]">Not started</p>
-                              <p className="mt-1 text-lg font-semibold text-[#0f172a]">{recipientSummary.notStarted}</p>
-                            </div>
-                            <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
-                              <p className="text-[11px] uppercase tracking-wide text-[#64748b]">Avg score</p>
-                              <p className="mt-1 text-lg font-semibold text-[#0f172a]">
-                                {avgScore != null ? avgScore : "—"}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="overflow-x-auto rounded-xl border border-[#e2e8f0]">
-                            <table className="min-w-full text-left text-sm">
-                              <thead className="bg-[#f8fbff] text-xs uppercase tracking-wide text-[#64748b]">
-                                <tr>
-                                  <th className="px-3 py-2 font-semibold">Student name</th>
-                                  <th className="px-3 py-2 font-semibold">Score</th>
-                                  <th className="px-3 py-2 font-semibold">Status</th>
-                                  <th className="px-3 py-2 font-semibold">Attempts</th>
-                                  <th className="px-3 py-2 font-semibold">Submitted at</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {!scoreRows.length ? (
-                                  <tr>
-                                    <td colSpan={5} className="px-3 py-4 text-center text-[#64748b]">
-                                      No students assigned to this test yet.
-                                    </td>
-                                  </tr>
-                                ) : (
-                                  scoreRows.map((row) => (
-                                    <tr key={row.studentId} className="border-t border-[#eef2f7]">
-                                      <td className="px-3 py-2 font-medium text-[#0f172a]">{row.studentName}</td>
-                                      <td className="px-3 py-2 text-[#0f172a]">
-                                        {row.score != null
-                                          ? `${row.score}${row.maxScore != null ? ` / ${row.maxScore}` : ""}`
-                                          : "—"}
-                                      </td>
-                                      <td className="px-3 py-2 capitalize text-[#475569]">{row.status}</td>
-                                      <td className="px-3 py-2 text-[#475569]">{row.attemptsUsed}</td>
-                                      <td className="px-3 py-2 text-[#475569]">
-                                        {row.submittedAt ? new Date(row.submittedAt).toLocaleString() : "—"}
-                                      </td>
-                                    </tr>
-                                  ))
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
-
-                          {(review.events.length > 0 || review.media.length > 0) && (
-                            <details className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
-                              <summary className="cursor-pointer text-sm font-semibold text-[#0f172a]">
-                                Proctoring details ({review.events.length} events · {review.media.length} snapshots)
-                              </summary>
-                              <div className="mt-3 grid gap-4 lg:grid-cols-2">
-                                <ul className="max-h-40 space-y-2 overflow-y-auto text-xs">
-                                  {review.events.slice(0, 40).map((e) => (
-                                    <li key={e.id} className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2">
-                                      <p className="font-medium capitalize">{e.event_type.replaceAll("_", " ")}</p>
-                                      <p className="text-[#64748b]">
-                                        {e.severity} · {new Date(e.created_at).toLocaleString()}
-                                      </p>
-                                    </li>
-                                  ))}
-                                </ul>
-                                <ul className="max-h-40 space-y-2 overflow-y-auto text-xs">
-                                  {review.media.map((m) => (
-                                    <li key={m.id} className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2">
-                                      <p className="capitalize">{m.capture_reason.replaceAll("_", " ")}</p>
-                                      <p className="text-[#64748b]">{new Date(m.captured_at).toLocaleString()}</p>
-                                      <button
-                                        type="button"
-                                        className="mt-1 text-[#c9a227] underline"
-                                        onClick={() => void openMedia(m)}
-                                      >
-                                        Open snapshot
-                                      </button>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            </details>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
+                  <Button
+                    variant="outline"
+                    className="rounded-full border-[#e8dcc8] text-xs"
+                    onClick={() => void openReview(t.id)}
+                  >
+                    View scores
+                  </Button>
+                </div>
+              </li>
+            ))}
           </ul>
         )}
       </div>
       )}
+
+      {reviewTestId ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/45 p-3 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="test-scores-title"
+        >
+          <button
+            type="button"
+            aria-label="Close scores"
+            className="absolute inset-0 cursor-default"
+            onClick={() => {
+              setReviewTestId(null);
+              setReview(null);
+            }}
+          />
+          <div className="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#e8dcc8] bg-white shadow-[0_24px_60px_rgba(61,52,40,0.22)]">
+            <div className="flex items-start justify-between gap-3 border-b border-[#e8dcc8] bg-[#fffdf8] px-5 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#a68b2e]">Test insights</p>
+                <h3 id="test-scores-title" className="text-lg font-semibold text-[#0f172a]">
+                  {tests.find((t) => t.id === reviewTestId)?.title || "Student scores"}
+                </h3>
+                <p className="mt-0.5 text-xs text-[#64748b]">Stats and scores for assigned students</p>
+              </div>
+              <Button
+                variant="outline"
+                className="rounded-full border-[#e8dcc8] text-xs"
+                onClick={() => {
+                  setReviewTestId(null);
+                  setReview(null);
+                }}
+              >
+                Close
+              </Button>
+            </div>
+
+            <div className="overflow-y-auto px-5 py-4 text-sm">
+              {reviewLoading ? (
+                <p className="py-8 text-center text-[#64748b]">Loading scores…</p>
+              ) : !review ? (
+                <p className="py-8 text-center text-[#64748b]">No data.</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                    <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-wide text-[#64748b]">Should attempt</p>
+                      <p className="mt-1 text-lg font-semibold text-[#0f172a]">{recipientSummary.total}</p>
+                    </div>
+                    <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-wide text-[#64748b]">Submitted</p>
+                      <p className="mt-1 text-lg font-semibold text-[#0f172a]">{recipientSummary.submitted}</p>
+                    </div>
+                    <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-wide text-[#64748b]">In progress</p>
+                      <p className="mt-1 text-lg font-semibold text-[#0f172a]">{recipientSummary.started}</p>
+                    </div>
+                    <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-wide text-[#64748b]">Not started</p>
+                      <p className="mt-1 text-lg font-semibold text-[#0f172a]">{recipientSummary.notStarted}</p>
+                    </div>
+                    <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-wide text-[#64748b]">Avg score</p>
+                      <p className="mt-1 text-lg font-semibold text-[#0f172a]">
+                        {avgScore != null ? avgScore : "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-[#e2e8f0]">
+                    <table className="min-w-full text-left text-sm">
+                      <thead className="bg-[#f8fbff] text-xs uppercase tracking-wide text-[#64748b]">
+                        <tr>
+                          <th className="px-3 py-2 font-semibold">Student name</th>
+                          <th className="px-3 py-2 font-semibold">Score</th>
+                          <th className="px-3 py-2 font-semibold">Status</th>
+                          <th className="px-3 py-2 font-semibold">Attempts</th>
+                          <th className="px-3 py-2 font-semibold">Submitted at</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {!scoreRows.length ? (
+                          <tr>
+                            <td colSpan={5} className="px-3 py-4 text-center text-[#64748b]">
+                              No students assigned to this test yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          scoreRows.map((row) => (
+                            <tr key={row.studentId} className="border-t border-[#eef2f7]">
+                              <td className="px-3 py-2 font-medium text-[#0f172a]">{row.studentName}</td>
+                              <td className="px-3 py-2 text-[#0f172a]">
+                                {row.score != null
+                                  ? `${row.score}${row.maxScore != null ? ` / ${row.maxScore}` : ""}`
+                                  : "—"}
+                              </td>
+                              <td className="px-3 py-2 capitalize text-[#475569]">{row.status}</td>
+                              <td className="px-3 py-2 text-[#475569]">{row.attemptsUsed}</td>
+                              <td className="px-3 py-2 text-[#475569]">
+                                {row.submittedAt ? new Date(row.submittedAt).toLocaleString() : "—"}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {(review.events.length > 0 || review.media.length > 0) && (
+                    <details className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
+                      <summary className="cursor-pointer text-sm font-semibold text-[#0f172a]">
+                        Proctoring details ({review.events.length} events · {review.media.length} snapshots)
+                      </summary>
+                      <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                        <ul className="max-h-40 space-y-2 overflow-y-auto text-xs">
+                          {review.events.slice(0, 40).map((e) => (
+                            <li key={e.id} className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2">
+                              <p className="font-medium capitalize">{e.event_type.replaceAll("_", " ")}</p>
+                              <p className="text-[#64748b]">
+                                {e.severity} · {new Date(e.created_at).toLocaleString()}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                        <ul className="max-h-40 space-y-2 overflow-y-auto text-xs">
+                          {review.media.map((m) => (
+                            <li key={m.id} className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2">
+                              <p className="capitalize">{m.capture_reason.replaceAll("_", " ")}</p>
+                              <p className="text-[#64748b]">{new Date(m.captured_at).toLocaleString()}</p>
+                              <button
+                                type="button"
+                                className="mt-1 text-[#c9a227] underline"
+                                onClick={() => void openMedia(m)}
+                              >
+                                Open snapshot
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -40,10 +40,10 @@ export async function GET(_request: Request, ctx: Ctx) {
   // see real attempts/events/media after passing the explicit authz checks above.
   const { data: attempts, error: attemptsError } = await admin
     .from("lms_test_attempts")
-    .select("id,test_id,student_id,status,score,max_score,started_at,submitted_at,server_started_at,attempt_number,result_status")
+    .select("id,test_id,student_id,status,score,max_score,submitted_at,server_started_at,attempt_number,result_status")
     .eq("test_id", id)
     .order("submitted_at", { ascending: false, nullsFirst: false })
-    .order("started_at", { ascending: false, nullsFirst: false })
+    .order("server_started_at", { ascending: false, nullsFirst: false })
     .limit(500);
 
   const { data: recipients, error: recipientsError } = await admin
