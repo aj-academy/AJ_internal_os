@@ -479,17 +479,36 @@ export function MemberAttendancePage({
       if (error) throw error;
 
       await loadAttendanceData(employeeId);
+
+      // Await late-mail so cookies/session are still active; show soft hint when emailed.
+      let lateHint = "";
+      try {
+        const lateRes = await fetch("/api/notifications/attendance-late", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ attendanceDate: today, checkInTime: nowIso }),
+        });
+        const lateJson = (await lateRes.json().catch(() => ({}))) as {
+          late?: boolean;
+          emailed?: boolean;
+          skipped?: boolean;
+          reason?: string;
+        };
+        if (lateJson.late && lateJson.emailed) {
+          lateHint = " Late check-in email sent to your work email.";
+        } else if (lateJson.late && !lateJson.emailed) {
+          lateHint = " Late check-in noted (email could not be sent — ask admin to check mail settings).";
+        }
+      } catch {
+        /* never block check-in on mail */
+      }
+
       setMessage({
         type: "success",
-        text: requireSelfie ? "Check-in recorded with selfie and location." : "Check in successful.",
+        text:
+          (requireSelfie ? "Check-in recorded with selfie and location." : "Check in successful.") + lateHint,
       });
-
-      // Fire-and-forget: if punch is late, email + notify the member once for today.
-      void fetch("/api/notifications/attendance-late", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ attendanceDate: today, checkInTime: nowIso }),
-      }).catch(() => undefined);
     } catch (error) {
       const text = toReadableAttendanceError(error);
       setMessage({ type: "error", text });

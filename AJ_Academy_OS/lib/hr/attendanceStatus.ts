@@ -123,7 +123,18 @@ function minutesOfDay(iso: string | null): number | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  return d.getHours() * 60 + d.getMinutes();
+  // Business hours are IST — never use server local (UTC on Vercel).
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const hourRaw = Number(parts.find((p) => p.type === "hour")?.value);
+  const minute = Number(parts.find((p) => p.type === "minute")?.value);
+  if (!Number.isFinite(hourRaw) || !Number.isFinite(minute)) return null;
+  const hour = hourRaw === 24 ? 0 : hourRaw;
+  return hour * 60 + minute;
 }
 
 /** True when check-in is after office start + grace (respects lateArrivalRule=ignore). Safe to call at punch-in before checkout. */
