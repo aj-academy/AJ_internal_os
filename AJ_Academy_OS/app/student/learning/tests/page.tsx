@@ -6,7 +6,16 @@ import { Button } from "@/components/ui/button";
 import { CrmFlash } from "@/components/ui/CrmFlash";
 
 type ListItem = {
-  recipient: { id: string; status: string; attempts_used: number; test_id: string };
+  recipient: {
+    id: string;
+    status: string;
+    attempts_used: number;
+    test_id: string;
+    latest_attempt_status?: string | null;
+    latest_score?: number | null;
+    latest_max_score?: number | null;
+    latest_submitted_at?: string | null;
+  };
   test: {
     id: string;
     title: string;
@@ -491,6 +500,17 @@ export default function StudentTestsPage() {
                       {item.test?.camera_required ? " · camera" : ""}
                       {item.test?.security_mode === "safe_exam_browser" ? " · SEB" : ""}
                     </p>
+                    {item.recipient.latest_score != null ? (
+                      <p className="mt-0.5 text-xs font-medium text-[#166534]">
+                        Score: {item.recipient.latest_score}
+                        {item.recipient.latest_max_score != null
+                          ? `/${item.recipient.latest_max_score}`
+                          : ""}
+                        {item.recipient.latest_submitted_at
+                          ? ` · submitted ${new Date(item.recipient.latest_submitted_at).toLocaleString()}`
+                          : ""}
+                      </p>
+                    ) : null}
                   </div>
                   {item.test && item.recipient.status !== "submitted" ? (
                     <Button

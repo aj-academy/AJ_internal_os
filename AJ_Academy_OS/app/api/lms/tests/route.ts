@@ -26,9 +26,44 @@ export async function GET() {
         { status: 500 },
       );
     }
+
+    const testIds = [...new Set((data ?? []).map((r) => r.test_id).filter(Boolean))] as string[];
+    let latestAttemptByTest: Record<
+      string,
+      { status: string | null; score: number | null; max_score: number | null; submitted_at: string | null }
+    > = {};
+    if (testIds.length) {
+      const { data: attempts } = await supabase
+        .from("lms_test_attempts")
+        .select("test_id,status,score,max_score,submitted_at,started_at")
+        .eq("student_id", gate.user!.id)
+        .in("test_id", testIds)
+        .order("submitted_at", { ascending: false, nullsFirst: false })
+        .order("started_at", { ascending: false, nullsFirst: false })
+        .limit(500);
+      for (const a of attempts ?? []) {
+        if (!a.test_id || latestAttemptByTest[a.test_id]) continue;
+        latestAttemptByTest[a.test_id] = {
+          status: a.status ?? null,
+          score: a.score != null ? Number(a.score) : null,
+          max_score: a.max_score != null ? Number(a.max_score) : null,
+          submitted_at: a.submitted_at ?? null,
+        };
+      }
+    }
+
     return NextResponse.json({
       items: (data ?? []).map((r) => ({
-        recipient: { id: r.id, status: r.status, attempts_used: r.attempts_used, test_id: r.test_id },
+        recipient: {
+          id: r.id,
+          status: r.status,
+          attempts_used: r.attempts_used,
+          test_id: r.test_id,
+          latest_attempt_status: latestAttemptByTest[r.test_id]?.status ?? null,
+          latest_score: latestAttemptByTest[r.test_id]?.score ?? null,
+          latest_max_score: latestAttemptByTest[r.test_id]?.max_score ?? null,
+          latest_submitted_at: latestAttemptByTest[r.test_id]?.submitted_at ?? null,
+        },
         test: r.lms_tests,
       })),
     });
