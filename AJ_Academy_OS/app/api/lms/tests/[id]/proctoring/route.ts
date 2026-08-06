@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { verifySessionRole } from "@/lib/security/auth/verifySessionRole";
 import type { UserRole } from "@/types/profile";
 
@@ -14,6 +15,7 @@ export async function GET(_request: Request, ctx: Ctx) {
 
   const { id } = await ctx.params;
   const supabase = await createClient();
+  const admin = createAdminClient();
   const role = String(gate.profile?.role || "").toLowerCase();
 
   const { data: test, error: testError } = await supabase.from("lms_tests").select("*").eq("id", id).maybeSingle();
@@ -34,7 +36,9 @@ export async function GET(_request: Request, ctx: Ctx) {
     }
   }
 
-  const { data: attempts } = await supabase
+  // Use service-role reads for review payload so mentors/admins can always
+  // see real attempts/events/media after passing the explicit authz checks above.
+  const { data: attempts } = await admin
     .from("lms_test_attempts")
     .select("*")
     .eq("test_id", id)
@@ -46,7 +50,7 @@ export async function GET(_request: Request, ctx: Ctx) {
 
   const [{ data: events }, { data: media }, { data: profiles }] = await Promise.all([
     attemptIds.length
-      ? supabase
+      ? admin
           .from("lms_test_proctoring_events")
           .select("*")
           .in("attempt_id", attemptIds)
@@ -54,7 +58,7 @@ export async function GET(_request: Request, ctx: Ctx) {
           .limit(1000)
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     attemptIds.length
-      ? supabase
+      ? admin
           .from("lms_test_proctoring_media")
           .select("*")
           .in("attempt_id", attemptIds)
@@ -62,7 +66,7 @@ export async function GET(_request: Request, ctx: Ctx) {
           .limit(500)
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
     studentIds.length
-      ? supabase.from("profiles").select("id,full_name,email").in("id", studentIds)
+      ? admin.from("profiles").select("id,full_name,email").in("id", studentIds)
       : Promise.resolve({ data: [] as { id: string; full_name: string | null; email: string | null }[] }),
   ]);
 

@@ -709,7 +709,7 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
       {reviewTestId ? (
         <div className="rounded-[24px] border border-[#e8dcc8] bg-white p-4 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold text-[#0f172a]">Scores & proctoring review</h2>
+            <h2 className="text-lg font-semibold text-[#0f172a]">Test insights</h2>
             <Button variant="outline" className="rounded-full text-xs" onClick={() => { setReviewTestId(null); setReview(null); }}>
               Close
             </Button>
@@ -721,6 +721,7 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
           ) : (
             <div className="mt-4 space-y-4 text-sm">
               <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] p-3">
+                <p className="mb-2 text-sm font-semibold text-[#0f172a]">Score section</p>
                 <p className="font-semibold text-[#0f172a]">{review.test?.title || "Test"}</p>
                 <p className="mt-1 text-xs text-[#64748b]">
                   {review.test?.status || "—"} · {review.test?.duration_minutes ?? "—"} min
@@ -754,7 +755,9 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
                 )}
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-3">
+              <div>
+                <p className="mb-2 text-sm font-semibold text-[#0f172a]">Proctoring section</p>
+                <div className="grid gap-4 lg:grid-cols-3">
               <div>
                 <h3 className="font-semibold">Attempts ({review.attempts.length})</h3>
                 <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto">
@@ -796,6 +799,7 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
                   ))}
                 </ul>
               </div>
+                </div>
               </div>
             </div>
           )}
