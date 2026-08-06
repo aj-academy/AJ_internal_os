@@ -89,6 +89,7 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
   const [reviewTestId, setReviewTestId] = useState<string | null>(null);
   const [review, setReview] = useState<ProctoringReview | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [testSection, setTestSection] = useState<"tests" | "insights">("tests");
 
   const [importing, setImporting] = useState(false);
   const [importIssues, setImportIssues] = useState<TestQuestionImportIssue[]>([]);
@@ -307,6 +308,7 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
   };
 
   const openReview = async (testId: string) => {
+    setTestSection("insights");
     setReviewTestId(testId);
     setReviewLoading(true);
     setReview(null);
@@ -685,9 +687,35 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
 
       <div className="rounded-[24px] border border-[#e8dcc8] bg-white p-4 shadow-sm sm:p-6">
         <h2 className="text-lg font-semibold text-[#0f172a]">Test Management sections</h2>
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] p-4">
-            <h3 className="text-base font-semibold text-[#0f172a]">{isAdmin ? "All tests (mentors + admins)" : "Your tests"}</h3>
+        <div className="mt-4 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-1">
+          <div className="flex flex-wrap gap-1">
+            <button
+              type="button"
+              className={`rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap ${
+                testSection === "tests"
+                  ? "bg-[#2563eb] text-white"
+                  : "text-[#334155] hover:bg-white"
+              }`}
+              onClick={() => setTestSection("tests")}
+            >
+              {isAdmin ? "All tests" : "Your tests"}
+            </button>
+            <button
+              type="button"
+              className={`rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap ${
+                testSection === "insights"
+                  ? "bg-[#2563eb] text-white"
+                  : "text-[#334155] hover:bg-white"
+              }`}
+              onClick={() => setTestSection("insights")}
+            >
+              Test insights
+            </button>
+          </div>
+        </div>
+
+        {testSection === "tests" ? (
+          <div className="mt-4">
             {loading ? <p className="mt-3 text-sm text-[#64748b]">Loading…</p> : !tests.length ? (
               <p className="mt-3 rounded-xl border border-dashed border-[#e8dcc8] px-4 py-8 text-center text-sm text-[#64748b]">No tests yet.</p>
             ) : (
@@ -717,26 +745,31 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
               </ul>
             )}
           </div>
-
-          <div className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-base font-semibold text-[#0f172a]">Test insights</h3>
-              {reviewTestId ? (
-                <Button variant="outline" className="rounded-full text-xs" onClick={() => { setReviewTestId(null); setReview(null); }}>
-                  Clear
-                </Button>
-              ) : null}
-            </div>
+        ) : (
+          <div className="mt-4">
             {!reviewTestId ? (
-              <p className="mt-3 text-sm text-[#64748b]">
-                Select any test from <strong>Your tests</strong> and click <strong>View scores</strong> to load this subsection.
+              <p className="text-sm text-[#64748b]">
+                Select any test in <strong>{isAdmin ? "All tests" : "Your tests"}</strong> and click{" "}
+                <strong>View scores</strong>.
               </p>
             ) : reviewLoading ? (
-              <p className="mt-3 text-sm text-[#64748b]">Loading…</p>
+              <p className="text-sm text-[#64748b]">Loading…</p>
             ) : !review ? (
-              <p className="mt-3 text-sm text-[#64748b]">No data.</p>
+              <p className="text-sm text-[#64748b]">No data.</p>
             ) : (
-              <div className="mt-3 space-y-4 text-sm">
+              <div className="space-y-4 text-sm">
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    className="rounded-full text-xs"
+                    onClick={() => {
+                      setReviewTestId(null);
+                      setReview(null);
+                    }}
+                  >
+                    Clear
+                  </Button>
+                </div>
                 <div className="rounded-xl border border-[#e2e8f0] bg-white p-3">
                   <p className="mb-2 text-sm font-semibold text-[#0f172a]">Score section</p>
                   <p className="font-semibold text-[#0f172a]">{review.test?.title || "Test"}</p>
@@ -845,7 +878,7 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
               </div>
             )}
           </div>
-        </div>
+        )}
       </div>
     </section>
   );
