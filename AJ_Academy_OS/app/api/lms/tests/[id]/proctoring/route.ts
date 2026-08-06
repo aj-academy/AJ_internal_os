@@ -45,8 +45,17 @@ export async function GET(_request: Request, ctx: Ctx) {
     .order("started_at", { ascending: false })
     .limit(200);
 
+  const { data: recipients } = await admin
+    .from("lms_test_recipients")
+    .select("id,student_id,status,attempts_used,updated_at")
+    .eq("test_id", id)
+    .order("updated_at", { ascending: false })
+    .limit(1000);
+
   const attemptIds = (attempts ?? []).map((a) => a.id);
-  const studentIds = [...new Set((attempts ?? []).map((a) => a.student_id))];
+  const studentIds = [
+    ...new Set([...(attempts ?? []).map((a) => a.student_id), ...(recipients ?? []).map((r) => r.student_id)]),
+  ];
 
   const [{ data: events }, { data: media }, { data: profiles }] = await Promise.all([
     attemptIds.length
@@ -74,6 +83,10 @@ export async function GET(_request: Request, ctx: Ctx) {
 
   return NextResponse.json({
     test,
+    recipients: (recipients ?? []).map((r) => ({
+      ...r,
+      student_name: nameMap.get(r.student_id),
+    })),
     attempts: (attempts ?? []).map((a) => ({ ...a, student_name: nameMap.get(a.student_id) })),
     events: events ?? [],
     media: media ?? [],

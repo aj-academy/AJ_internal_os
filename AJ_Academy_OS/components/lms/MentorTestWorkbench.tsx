@@ -45,6 +45,7 @@ type ProctoringReview = {
     updated_at?: string | null;
   };
   attempts: { id: string; student_id: string; student_name?: string; status: string; score: number | null; started_at?: string; server_started_at?: string }[];
+  recipients?: { id: string; student_id: string; student_name?: string; status: string; attempts_used?: number | null; updated_at?: string }[];
   events: { id: string; attempt_id: string; event_type: string; severity: string; created_at: string }[];
   media: { id: string; attempt_id: string; storage_path: string; capture_reason: string; review_status: string; captured_at: string }[];
 };
@@ -391,6 +392,16 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
     return Math.round((scores.reduce((sum, s) => sum + s, 0) / scores.length) * 100) / 100;
   }, [scoreRows]);
 
+  const recipientSummary = useMemo(() => {
+    const recipients = review?.recipients ?? [];
+    return {
+      total: recipients.length,
+      submitted: recipients.filter((r) => r.status === "submitted").length,
+      started: recipients.filter((r) => r.status === "started").length,
+      assigned: recipients.filter((r) => r.status === "assigned").length,
+    };
+  }, [review]);
+
   return (
     <section className="space-y-5">
       <PageHeader
@@ -730,9 +741,14 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
                   {isAdmin ? ` · ${deptName(review.test?.department_id || undefined)}` : ""}
                 </p>
                 <p className="mt-1 text-xs text-[#64748b]">
-                  Students attempted: {scoreRows.length} · Attempts: {review.attempts.length}
+                  Students assigned: {recipientSummary.total} · Submitted: {recipientSummary.submitted} ·
+                  Started: {recipientSummary.started} · Not started: {recipientSummary.assigned}
+                </p>
+                <p className="mt-1 text-xs text-[#64748b]">
+                  Students attempted: {scoreRows.length} · Attempts logged: {review.attempts.length}
                   {avgScore != null ? ` · Avg best score ${avgScore}` : ""}
                 </p>
+                <p className="mt-1 text-[11px] text-[#64748b]">Test ID: {review.test?.id || "—"}</p>
               </div>
 
               <div>
@@ -748,6 +764,25 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
                           Best: {row.bestScore != null ? row.bestScore : "—"} · Latest:{" "}
                           {row.latestScore != null ? row.latestScore : "—"} · Submitted attempts:{" "}
                           {row.submittedAttempts}/{row.attempts}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div>
+                <h3 className="font-semibold">Submission status ({review.recipients?.length ?? 0})</h3>
+                {!review.recipients?.length ? (
+                  <p className="mt-2 text-xs text-[#64748b]">No recipients found for this test.</p>
+                ) : (
+                  <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto">
+                    {review.recipients.map((r) => (
+                      <li key={r.id} className="rounded-lg border border-[#eef2f7] bg-white px-3 py-2">
+                        <p className="font-medium">{r.student_name || r.student_id.slice(0, 8)}</p>
+                        <p className="text-xs text-[#64748b]">
+                          {r.status} · attempts used {r.attempts_used ?? 0}
+                          {r.updated_at ? ` · ${new Date(r.updated_at).toLocaleString()}` : ""}
                         </p>
                       </li>
                     ))}
