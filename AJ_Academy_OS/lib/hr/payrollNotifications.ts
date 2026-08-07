@@ -162,12 +162,16 @@ export async function notifyLateCheckIn(args: {
   attendanceDate: string;
   checkInTimeLabel: string;
   portalAttendanceHref: string;
+  pushTitle?: string;
+  pushMessage?: string;
 }) {
   try {
     await sendPushNotification({
       userId: args.employeeId,
-      title: "Late check-in recorded",
-      message: `You checked in late on ${args.attendanceDate} at ${args.checkInTimeLabel}. Please review your attendance.`,
+      title: args.pushTitle || "Attendance notice — delayed arrival",
+      message:
+        args.pushMessage ||
+        `Your check-in on ${args.attendanceDate} at ${args.checkInTimeLabel} was after the allowed reporting time. Please review your attendance in AJ OS.`,
       type: "hr_attendance_late",
       targetUrl: args.portalAttendanceHref,
       entityType: "attendance_late",

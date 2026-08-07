@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveAttendancePolicyForDate } from "@/lib/hr/attendancePolicy";
 import { isLateArrival } from "@/lib/hr/attendanceStatus";
 import { notifyLateCheckIn } from "@/lib/hr/payrollNotifications";
+import { buildLateAttendanceNotice } from "@/lib/hr/lateAttendanceEmail";
 import { sendOutreachEmail } from "@/lib/email/outreachEmail";
 import { todayDateIST } from "@/lib/datetime";
 import type { UserRole } from "@/types/profile";
@@ -20,15 +21,6 @@ const ATTENDANCE_ROLES = new Set<UserRole>([
   "admin",
   "super_admin",
 ]);
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
 
 function formatCheckInIst(iso: string) {
   const d = new Date(iso);
@@ -57,6 +49,13 @@ function portalAttendanceHref(role: string | null | undefined) {
   }
 }
 
+function resendFromAddress() {
+  const from = process.env.TASK_EMAIL_FROM?.trim() || "";
+  // Shared Resend sandbox From addresses are heavily spam-foldered — skip Resend unless a real domain is set.
+  if (!from || /onboarding@resend\.dev/i.test(from)) return null;
+  return from;
+}
+
 async function sendLateEmail(args: {
   to: string;
   name: string;
@@ -66,67 +65,45 @@ async function sendLateEmail(args: {
   lateAfter: string;
   graceMinutes: number;
 }): Promise<{ emailed: boolean; via?: string; error?: string; reason?: string }> {
-  const subject = `Late check-in on ${args.today}`;
-  const text = [
-    `Hi ${args.name},`,
-    "",
-    "Your attendance check-in was recorded as late in AJ Academy OS.",
-    `Date: ${args.today}`,
-    `Check-in time: ${args.checkInLabel}`,
-    `Office start: ${args.officeStart}`,
-    `Late after (incl. grace): ${args.lateAfter}`,
-    `Grace minutes: ${args.graceMinutes}`,
-    "",
-    "Please open your attendance page in AJ OS if you need to raise a correction.",
-  ].join("\n");
+  const notice = buildLateAttendanceNotice({
+    name: args.name,
+    attendanceDate: args.today,
+    checkInLabel: args.checkInLabel,
+    officeStart: args.officeStart,
+    lateAfter: args.lateAfter,
+    graceMinutes: args.graceMinutes,
+  });
 
-  const html = `
-  <html>
-    <body style="font-family:Arial,sans-serif;color:#111827;line-height:1.5;">
-      <h2 style="margin:0 0 12px;">Late check-in recorded</h2>
-      <p>Hi ${escapeHtml(args.name)},</p>
-      <p>Your attendance check-in was recorded as <strong>late</strong> in AJ Academy OS.</p>
-      <ul>
-        <li><strong>Date:</strong> ${escapeHtml(args.today)}</li>
-        <li><strong>Check-in time:</strong> ${escapeHtml(args.checkInLabel)}</li>
-        <li><strong>Office start:</strong> ${escapeHtml(args.officeStart)}</li>
-        <li><strong>Late after (incl. grace):</strong> ${escapeHtml(args.lateAfter)}</li>
-        <li><strong>Grace minutes:</strong> ${args.graceMinutes}</li>
-      </ul>
-      <p>Please open your attendance page in AJ OS if you need to raise a correction.</p>
-    </body>
-  </html>
-  `.trim();
-
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  if (apiKey) {
-    const resend = new Resend(apiKey);
-    const from = process.env.TASK_EMAIL_FROM?.trim() || "AJ Academy <onboarding@resend.dev>";
-    const { error } = await resend.emails.send({
-      from,
-      to: [args.to],
-      subject,
-      html,
-    });
-    if (!error) return { emailed: true, via: "resend" };
-    // Fall through to SMTP outreach if Resend fails.
-  }
-
-  for (const provider of ["gmail", "zoho"] as const) {
+  // Prefer company SMTP (Zoho / Gmail) for deliverability — real ajacademy.co.in From.
+  for (const provider of ["zoho", "gmail"] as const) {
     const result = await sendOutreachEmail({
       provider,
       to: args.to,
-      subject,
-      text,
+      subject: notice.subject,
+      text: notice.text,
     });
     if (result.ok) return { emailed: true, via: provider };
   }
 
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = resendFromAddress();
+  if (apiKey && from) {
+    const resend = new Resend(apiKey);
+    const { error } = await resend.emails.send({
+      from,
+      to: [args.to],
+      subject: notice.subject,
+      html: notice.html,
+      text: notice.text,
+    });
+    if (!error) return { emailed: true, via: "resend" };
+    return { emailed: false, error: error.message || "Resend send failed" };
+  }
+
   return {
     emailed: false,
-    reason: apiKey
-      ? "Resend and outreach SMTP both failed"
-      : "RESEND_API_KEY not set and outreach SMTP not configured",
+    reason:
+      "Company mail (Zoho/Gmail) not configured. Set ZOHO_SMTP_PASSWORD or GMAIL_OUTREACH_APP_PASSWORD. Avoid Resend onboarding@resend.dev — it lands in spam.",
   };
 }
 
@@ -198,7 +175,6 @@ export async function POST(request: Request) {
   }
 
   const entityId = `${userId}_${today}`;
-  // entity_id lives in meta jsonb (no dedicated column on in_app_notifications).
   const { data: existingRows } = await admin
     .from("in_app_notifications")
     .select("id, meta")
@@ -223,6 +199,14 @@ export async function POST(request: Request) {
   const name = (profile.full_name || "there").trim();
   const to = (profile.email || "").trim().toLowerCase();
   const attendanceHref = portalAttendanceHref(profile.role);
+  const notice = buildLateAttendanceNotice({
+    name,
+    attendanceDate: today,
+    checkInLabel,
+    officeStart: policy.standardCheckInTime,
+    lateAfter,
+    graceMinutes: policy.graceMinutes,
+  });
 
   let emailResult: { emailed: boolean; via?: string; error?: string; reason?: string } = {
     emailed: false,
@@ -246,10 +230,11 @@ export async function POST(request: Request) {
       attendanceDate: today,
       checkInTimeLabel: checkInLabel,
       portalAttendanceHref: attendanceHref,
+      pushTitle: notice.pushTitle,
+      pushMessage: notice.pushMessage,
     });
   }
 
-  // Stamp email success on the notification meta so retries don't spam, but can retry failed sends.
   if (emailResult.emailed) {
     const { data: rows } = await admin
       .from("in_app_notifications")

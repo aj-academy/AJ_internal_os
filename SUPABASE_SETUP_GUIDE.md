@@ -222,7 +222,7 @@ Also run **`reports_analytics_schema.sql`** after `lead_call_workflow_schema.sql
 
 **Attendance camera / location:** Employee layout shows a one-time popup asking for camera + location (saved in browser localStorage per user). `Permissions-Policy` must allow `camera=(self)` and `geolocation=(self)` (see `lib/security/headers.ts`). Restart the Next server after header changes.
 
-**Late check-in email:** After a successful punch-in, `POST /api/notifications/attendance-late` evaluates office start + grace from `attendance_policies` using **IST (`Asia/Kolkata`)**. If late, it emails the member once per day via **Resend** (`RESEND_API_KEY` + `TASK_EMAIL_FROM`) or falls back to **Gmail/Zoho outreach SMTP**, and creates an in-app/push notification (`hr_attendance_late`).
+**Late check-in email:** After a successful punch-in, `POST /api/notifications/attendance-late` evaluates office start + grace from `attendance_policies` using **IST (`Asia/Kolkata`)**. If late, it sends a dedicated HR attendance notice once per day via **Zoho/Gmail company SMTP first** (best inbox delivery), then Resend only if `TASK_EMAIL_FROM` is a real domain (not `onboarding@resend.dev`, which spam-filters). Also creates in-app/push `hr_attendance_late`.
 
 ### HR, Attendance & Payroll (module in progress — phased build)
 
