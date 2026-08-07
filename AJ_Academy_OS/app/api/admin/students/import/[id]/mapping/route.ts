@@ -17,7 +17,7 @@ async function getBatch(admin: ReturnType<typeof createAdminClient>, id: string)
   return data;
 }
 
-/** GET mapping analysis + first 10 preview rows */
+/** GET mapping analysis + all spreadsheet rows for preview pagination */
 export async function GET(_request: Request, ctx: Ctx) {
   const auth = await requireAdminApiSession();
   if (auth.response || !auth.user) return auth.response!;
@@ -45,7 +45,7 @@ export async function GET(_request: Request, ctx: Ctx) {
       headers,
       analysis,
       targets: STUDENT_IMPORT_ALL_COLUMNS,
-      previewRows: rows.slice(0, 10),
+      previewRows: rows,
       totalRows: rows.length,
     });
   } catch (e) {

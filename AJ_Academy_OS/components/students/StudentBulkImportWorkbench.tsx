@@ -151,9 +151,11 @@ export function StudentBulkImportWorkbench() {
   const [dryRows, setDryRows] = useState<unknown[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [showAllocateHint, setShowAllocateHint] = useState(false);
+  const [previewPage, setPreviewPage] = useState(1);
 
   const selectedMode = MODES.find((m) => m.id === mode) ?? MODES[0];
   const needsUpdateConfirm = !!selectedMode.needsUpdateConfirm;
+  const PREVIEW_PAGE_SIZE = 10;
 
   const loadBatches = useCallback(async () => {
     const res = await fetch("/api/admin/students/import/upload", { credentials: "include" });
@@ -197,6 +199,7 @@ export function StudentBulkImportWorkbench() {
     setDryRows([]);
     setShowAllocateHint(false);
     setShowAdvancedMapping(false);
+    setPreviewPage(1);
     try {
       const res = await fetch(`/api/admin/students/import/${id}/mapping`, { credentials: "include" });
       const json = await res.json();
@@ -387,6 +390,16 @@ export function StudentBulkImportWorkbench() {
   };
 
   const headerOptions = useMemo(() => mappingInfo?.headers ?? [], [mappingInfo]);
+  const previewTotal = mappingInfo?.previewRows.length ?? 0;
+  const previewPageCount = Math.max(1, Math.ceil(previewTotal / PREVIEW_PAGE_SIZE));
+  const safePreviewPage = Math.min(previewPage, previewPageCount);
+  const pagedPreviewRows = useMemo(() => {
+    if (!mappingInfo) return [];
+    const start = (safePreviewPage - 1) * PREVIEW_PAGE_SIZE;
+    return mappingInfo.previewRows.slice(start, start + PREVIEW_PAGE_SIZE);
+  }, [mappingInfo, safePreviewPage, PREVIEW_PAGE_SIZE]);
+  const previewFrom = previewTotal === 0 ? 0 : (safePreviewPage - 1) * PREVIEW_PAGE_SIZE + 1;
+  const previewTo = Math.min(safePreviewPage * PREVIEW_PAGE_SIZE, previewTotal);
   const dryDone = Boolean(drySummary);
   const importDisabledReason = !drySummary
     ? "Run “Check my file” first."
@@ -548,7 +561,7 @@ export function StudentBulkImportWorkbench() {
 
               <div className="overflow-x-auto rounded-xl border border-[#e2e8f0]">
                 <p className="border-b border-[#eef2f7] bg-[#f8fbff] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[#64748b]">
-                  Preview · first {mappingInfo.previewRows.length} of {mappingInfo.totalRows} rows
+                  Preview · rows {previewFrom}–{previewTo} of {previewTotal}
                 </p>
                 <table className="w-full min-w-[640px] text-left text-sm">
                   <thead>
@@ -561,8 +574,8 @@ export function StudentBulkImportWorkbench() {
                     </tr>
                   </thead>
                   <tbody>
-                    {mappingInfo.previewRows.map((r, i) => (
-                      <tr key={i} className="border-b border-[#eef2f7]">
+                    {pagedPreviewRows.map((r, i) => (
+                      <tr key={`${safePreviewPage}-${i}`} className="border-b border-[#eef2f7]">
                         {headerOptions.slice(0, 8).map((h) => (
                           <td key={h} className="px-3 py-2 text-[#0f172a]">
                             {r[h]}
@@ -572,6 +585,54 @@ export function StudentBulkImportWorkbench() {
                     ))}
                   </tbody>
                 </table>
+                {previewPageCount > 1 ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#eef2f7] bg-white px-3 py-2">
+                    <p className="text-xs text-[#64748b]">
+                      Page {safePreviewPage} of {previewPageCount}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={safePreviewPage <= 1}
+                        onClick={() => setPreviewPage((p) => Math.max(1, p - 1))}
+                      >
+                        Previous
+                      </Button>
+                      {(previewPageCount <= 7
+                        ? Array.from({ length: previewPageCount }, (_, i) => i + 1)
+                        : [
+                            1,
+                            Math.max(2, safePreviewPage - 1),
+                            safePreviewPage,
+                            Math.min(previewPageCount - 1, safePreviewPage + 1),
+                            previewPageCount,
+                          ].filter((v, i, arr) => arr.indexOf(v) === i)
+                      ).map((page) => (
+                        <Button
+                          key={page}
+                          type="button"
+                          size="sm"
+                          variant={page === safePreviewPage ? "default" : "outline"}
+                          className="min-w-8"
+                          onClick={() => setPreviewPage(page)}
+                        >
+                          {page}
+                        </Button>
+                      ))}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={safePreviewPage >= previewPageCount}
+                        onClick={() => setPreviewPage((p) => Math.min(previewPageCount, p + 1))}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <div className="rounded-xl border border-[#eef2f7] bg-[#fafaf7] px-3 py-3">

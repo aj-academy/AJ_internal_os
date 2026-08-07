@@ -118,6 +118,9 @@ export function MentorStudentAllocationWorkbench() {
   const [allocFile, setAllocFile] = useState<File | null>(null);
   const [studentSearch, setStudentSearch] = useState("");
   const [mentorSearch, setMentorSearch] = useState("");
+  const [studentPage, setStudentPage] = useState(1);
+  const [mentorPage, setMentorPage] = useState(1);
+  const LIST_PAGE_SIZE = 10;
 
   const mentorName = useCallback(
     (id: string) => {
@@ -190,6 +193,38 @@ export function MentorStudentAllocationWorkbench() {
         (m.department || "").toLowerCase().includes(q),
     );
   }, [mentors, mentorSearch]);
+
+  useEffect(() => {
+    setStudentPage(1);
+  }, [studentSearch, withoutMentor]);
+
+  useEffect(() => {
+    setMentorPage(1);
+  }, [mentorSearch, mentors]);
+
+  const studentPageCount = Math.max(1, Math.ceil(filteredStudents.length / LIST_PAGE_SIZE));
+  const safeStudentPage = Math.min(studentPage, studentPageCount);
+  const pagedStudents = useMemo(() => {
+    const start = (safeStudentPage - 1) * LIST_PAGE_SIZE;
+    return filteredStudents.slice(start, start + LIST_PAGE_SIZE);
+  }, [filteredStudents, safeStudentPage, LIST_PAGE_SIZE]);
+
+  const mentorPageCount = Math.max(1, Math.ceil(filteredMentors.length / LIST_PAGE_SIZE));
+  const safeMentorPage = Math.min(mentorPage, mentorPageCount);
+  const pagedMentors = useMemo(() => {
+    const start = (safeMentorPage - 1) * LIST_PAGE_SIZE;
+    return filteredMentors.slice(start, start + LIST_PAGE_SIZE);
+  }, [filteredMentors, safeMentorPage, LIST_PAGE_SIZE]);
+
+  const studentRangeLabel =
+    filteredStudents.length === 0
+      ? "0 students"
+      : `Showing ${(safeStudentPage - 1) * LIST_PAGE_SIZE + 1}–${Math.min(safeStudentPage * LIST_PAGE_SIZE, filteredStudents.length)} of ${filteredStudents.length}`;
+
+  const mentorRangeLabel =
+    filteredMentors.length === 0
+      ? "0 mentors"
+      : `Showing ${(safeMentorPage - 1) * LIST_PAGE_SIZE + 1}–${Math.min(safeMentorPage * LIST_PAGE_SIZE, filteredMentors.length)} of ${filteredMentors.length}`;
 
   const effectiveStudentCount = selectedStudents.length || withoutMentor.length;
   const canPreview = selectedMentors.length > 0 && effectiveStudentCount > 0 && !busy;
@@ -361,8 +396,12 @@ export function MentorStudentAllocationWorkbench() {
   };
 
   const selectAllStudents = () => setSelectedStudents(filteredStudents.map((s) => s.id));
+  const selectPageStudents = () =>
+    setSelectedStudents((prev) => [...new Set([...prev, ...pagedStudents.map((s) => s.id)])]);
   const clearStudents = () => setSelectedStudents([]);
   const selectAllMentors = () => setSelectedMentors(filteredMentors.map((m) => m.id));
+  const selectPageMentors = () =>
+    setSelectedMentors((prev) => [...new Set([...prev, ...pagedMentors.map((m) => m.id)])]);
   const clearMentors = () => setSelectedMentors([]);
 
   const modes: { id: Mode; title: string; blurb: string }[] = [
@@ -563,8 +602,11 @@ export function MentorStudentAllocationWorkbench() {
                 value={studentSearch}
                 onChange={(e) => setStudentSearch(e.target.value)}
               />
+              <Button type="button" size="sm" variant="outline" onClick={selectPageStudents}>
+                Select page
+              </Button>
               <Button type="button" size="sm" variant="outline" onClick={selectAllStudents}>
-                Select all shown
+                Select all
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={clearStudents}>
                 Clear
@@ -573,34 +615,75 @@ export function MentorStudentAllocationWorkbench() {
                 Selected: <strong>{selectedStudents.length || `all ${withoutMentor.length}`}</strong>
               </span>
             </div>
-            <div className="max-h-56 overflow-auto rounded-lg border border-border p-2 space-y-1">
-              {filteredStudents.length === 0 ? (
-                <p className="p-3 text-sm text-muted-foreground">
-                  {withoutMentor.length === 0
-                    ? "Every active student already has a primary mentor — nothing to bulk-assign here."
-                    : "No students match your search."}
-                </p>
-              ) : (
-                filteredStudents.slice(0, 300).map((s) => (
-                  <label
-                    key={s.id}
-                    className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={selectedStudents.includes(s.id)}
-                      onChange={() => toggleStudent(s.id)}
-                    />
-                    <span>
-                      <span className="font-medium">{s.full_name || s.email || "Student"}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {[s.registration_number, s.email, s.department].filter(Boolean).join(" · ")}
+            <div className="rounded-lg border border-border overflow-hidden">
+              <div className="max-h-72 overflow-auto p-2 space-y-1">
+                {filteredStudents.length === 0 ? (
+                  <p className="p-3 text-sm text-muted-foreground">
+                    {withoutMentor.length === 0
+                      ? "Every active student already has a primary mentor — nothing to bulk-assign here."
+                      : "No students match your search."}
+                  </p>
+                ) : (
+                  pagedStudents.map((s) => (
+                    <label
+                      key={s.id}
+                      className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={selectedStudents.includes(s.id)}
+                        onChange={() => toggleStudent(s.id)}
+                      />
+                      <span>
+                        <span className="font-medium">{s.full_name || s.email || "Student"}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {[s.registration_number, s.email, s.department].filter(Boolean).join(" · ")}
+                        </span>
                       </span>
-                    </span>
-                  </label>
-                ))
-              )}
+                    </label>
+                  ))
+                )}
+              </div>
+              {studentPageCount > 1 ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/30 px-3 py-2">
+                  <p className="text-xs text-muted-foreground">{studentRangeLabel}</p>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={safeStudentPage <= 1}
+                      onClick={() => setStudentPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </Button>
+                    {Array.from({ length: studentPageCount }, (_, i) => i + 1).map((page) => (
+                      <Button
+                        key={page}
+                        type="button"
+                        size="sm"
+                        variant={page === safeStudentPage ? "default" : "outline"}
+                        className="min-w-8"
+                        onClick={() => setStudentPage(page)}
+                      >
+                        {page}
+                      </Button>
+                    ))}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={safeStudentPage >= studentPageCount}
+                      onClick={() => setStudentPage((p) => Math.min(studentPageCount, p + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              ) : filteredStudents.length > 0 ? (
+                <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">{studentRangeLabel}</p>
+              ) : null}
             </div>
           </div>
 
@@ -624,8 +707,11 @@ export function MentorStudentAllocationWorkbench() {
                 value={mentorSearch}
                 onChange={(e) => setMentorSearch(e.target.value)}
               />
+              <Button type="button" size="sm" variant="outline" onClick={selectPageMentors}>
+                Select page
+              </Button>
               <Button type="button" size="sm" variant="outline" onClick={selectAllMentors}>
-                Select all shown
+                Select all
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={clearMentors}>
                 Clear
@@ -634,33 +720,74 @@ export function MentorStudentAllocationWorkbench() {
                 Selected: <strong>{selectedMentors.length}</strong>
               </span>
             </div>
-            <div className="max-h-56 overflow-auto rounded-lg border border-border p-2 space-y-1">
-              {filteredMentors.length === 0 ? (
-                <p className="p-3 text-sm text-muted-foreground">No mentors to show.</p>
-              ) : (
-                filteredMentors.map((m) => (
-                  <label
-                    key={m.id}
-                    className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={selectedMentors.includes(m.id)}
-                      onChange={() => toggleMentor(m.id)}
-                    />
-                    <span className="flex-1">
-                      <span className="font-medium">{m.full_name || m.email}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        Load {m.workload?.total ?? 0}/{m.workload?.caps.max_total_students ?? 50}
+            <div className="rounded-lg border border-border overflow-hidden">
+              <div className="max-h-72 overflow-auto p-2 space-y-1">
+                {filteredMentors.length === 0 ? (
+                  <p className="p-3 text-sm text-muted-foreground">No mentors to show.</p>
+                ) : (
+                  pagedMentors.map((m) => (
+                    <label
+                      key={m.id}
+                      className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={selectedMentors.includes(m.id)}
+                        onChange={() => toggleMentor(m.id)}
+                      />
+                      <span className="flex-1">
+                        <span className="font-medium">{m.full_name || m.email}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          Load {m.workload?.total ?? 0}/{m.workload?.caps.max_total_students ?? 50}
+                        </span>
                       </span>
-                    </span>
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] ${statusTone(m.workload?.status)}`}>
-                      {statusLabel(m.workload?.status)}
-                    </span>
-                  </label>
-                ))
-              )}
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] ${statusTone(m.workload?.status)}`}>
+                        {statusLabel(m.workload?.status)}
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+              {mentorPageCount > 1 ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/30 px-3 py-2">
+                  <p className="text-xs text-muted-foreground">{mentorRangeLabel}</p>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={safeMentorPage <= 1}
+                      onClick={() => setMentorPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </Button>
+                    {Array.from({ length: mentorPageCount }, (_, i) => i + 1).map((page) => (
+                      <Button
+                        key={page}
+                        type="button"
+                        size="sm"
+                        variant={page === safeMentorPage ? "default" : "outline"}
+                        className="min-w-8"
+                        onClick={() => setMentorPage(page)}
+                      >
+                        {page}
+                      </Button>
+                    ))}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={safeMentorPage >= mentorPageCount}
+                      onClick={() => setMentorPage((p) => Math.min(mentorPageCount, p + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              ) : filteredMentors.length > 0 ? (
+                <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">{mentorRangeLabel}</p>
+              ) : null}
             </div>
           </div>
 
