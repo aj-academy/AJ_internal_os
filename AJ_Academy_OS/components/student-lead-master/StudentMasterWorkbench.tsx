@@ -69,10 +69,20 @@ import {
 import {
   downloadStudentMasterImportTemplate,
   exportStudentMasterCsv,
+  importPayloadForUpdate,
+  normalizeImportEmail,
+  normalizeImportPhone,
   parseStudentMasterMatrix,
+  partitionImportPayloads,
   studentMasterFileToMatrix,
   STUDENT_MASTER_DATA_COLUMN_COUNT,
+  type ImportConflictAction,
+  type ImportConflictCandidate,
+  type ImportConflictRow,
+  type StudentMasterImportPayload,
 } from "@/components/student-lead-master/studentMasterCsv";
+import { LeadImportConflictModal } from "@/components/student-lead-master/LeadImportConflictModal";
+import { LeadImportCleanupPanel } from "@/components/student-lead-master/LeadImportCleanupPanel";
 import { formatDateTimeIST, formatDisplayDate } from "@/lib/datetime";
 import { formatActivityValue, resolveActorName } from "@/lib/activityDisplay";
 import { persistInterestedPrograms } from "@/lib/studentPrograms";
@@ -497,6 +507,10 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
 
   const importFileRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  const [importConflicts, setImportConflicts] = useState<ImportConflictRow[] | null>(null);
+  const [importFresh, setImportFresh] = useState<StudentMasterImportPayload[]>([]);
+  const [importParseErrors, setImportParseErrors] = useState<string[]>([]);
+  const [importConflictActions, setImportConflictActions] = useState<Record<string, ImportConflictAction>>({});
   /** Leads pinned from My Tasks (employee CRM workspace, not ownership transfer). */
   const [crmPinIds, setCrmPinIds] = useState<Set<string>>(() => new Set());
 
@@ -2184,11 +2198,162 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     );
   };
 
+  const insertImportPayloads = async (payloads: StudentMasterImportPayload[]) => {
+    let ok = 0;
+    let fail = 0;
+    const rowErrors: string[] = [];
+    const chunkSize = 150;
+    for (let i = 0; i < payloads.length; i += chunkSize) {
+      const chunk = payloads.slice(i, i + chunkSize);
+      const { error: chunkError } = await supabase.from("clients").insert(chunk);
+      if (!chunkError) {
+        ok += chunk.length;
+        continue;
+      }
+      for (const payload of chunk) {
+        const { error: insertError } = await supabase.from("clients").insert(payload);
+        if (insertError) {
+          fail += 1;
+          rowErrors.push(insertError.message);
+        } else {
+          ok += 1;
+        }
+      }
+    }
+    return { ok, fail, rowErrors };
+  };
+
+  const loadImportConflictCandidates = async (
+    payloads: StudentMasterImportPayload[],
+  ): Promise<ImportConflictCandidate[]> => {
+    const select = "id,lead_name,name,phone,email,status,lead_stage,priority,assigned_to";
+    const byId = new Map<string, ImportConflictCandidate>();
+
+    const emails = [
+      ...new Set(payloads.map((p) => normalizeImportEmail(p.email)).filter(Boolean)),
+    ];
+    const phones = [...new Set(payloads.map((p) => String(p.phone || "").trim()).filter(Boolean))];
+
+    const merge = (rows: ImportConflictCandidate[] | null | undefined) => {
+      for (const r of rows ?? []) {
+        if (r?.id) byId.set(r.id, r);
+      }
+    };
+
+    for (let i = 0; i < emails.length; i += 100) {
+      const chunk = emails.slice(i, i + 100);
+      let q = supabase.from("clients").select(select).in("email", chunk);
+      if (!isAdmin && currentUserId) q = q.eq("assigned_to", currentUserId);
+      const { data, error } = await q.limit(500);
+      if (error) throw new Error(error.message);
+      merge(data as ImportConflictCandidate[]);
+    }
+
+    for (let i = 0; i < phones.length; i += 100) {
+      const chunk = phones.slice(i, i + 100);
+      let q = supabase.from("clients").select(select).in("phone", chunk);
+      if (!isAdmin && currentUserId) q = q.eq("assigned_to", currentUserId);
+      const { data, error } = await q.limit(500);
+      if (error) throw new Error(error.message);
+      merge(data as ImportConflictCandidate[]);
+    }
+
+    // Digits-normalized phone match against owned portfolio (handles +91 vs local format).
+    if (!isAdmin && currentUserId) {
+      const { data, error } = await supabase
+        .from("clients")
+        .select(select)
+        .eq("assigned_to", currentUserId)
+        .limit(3000);
+      if (error) throw new Error(error.message);
+      merge(data as ImportConflictCandidate[]);
+    } else if (isAdmin) {
+      const wanted = new Set(payloads.map((p) => normalizeImportPhone(p.phone)).filter(Boolean));
+      if (wanted.size) {
+        const { data, error } = await supabase.from("clients").select(select).not("phone", "is", null).limit(5000);
+        if (error) throw new Error(error.message);
+        merge(
+          ((data as ImportConflictCandidate[]) ?? []).filter((c) =>
+            wanted.has(normalizeImportPhone(c.phone)),
+          ),
+        );
+      }
+    }
+
+    return [...byId.values()];
+  };
+
+  const clearImportConflictState = () => {
+    setImportConflicts(null);
+    setImportFresh([]);
+    setImportParseErrors([]);
+    setImportConflictActions({});
+  };
+
+  const applyStudentImport = async (opts: {
+    conflicts: ImportConflictRow[];
+    fresh: StudentMasterImportPayload[];
+    actions: Record<string, ImportConflictAction>;
+    parseErrors: string[];
+  }) => {
+    setImporting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      let created = 0;
+      let updated = 0;
+      let skipped = 0;
+      let fail = opts.parseErrors.length;
+      const rowErrors = [...opts.parseErrors];
+
+      const toInsert: StudentMasterImportPayload[] = [...opts.fresh];
+
+      for (const row of opts.conflicts) {
+        const action = opts.actions[row.key] ?? row.defaultAction;
+        if (action === "skip") {
+          skipped += 1;
+          continue;
+        }
+        if (action === "add_new") {
+          toInsert.push(row.sheet);
+          continue;
+        }
+        const patch = importPayloadForUpdate(row.sheet);
+        const { error: upErr } = await supabase.from("clients").update(patch).eq("id", row.existing.id);
+        if (upErr) {
+          fail += 1;
+          rowErrors.push(upErr.message);
+        } else {
+          updated += 1;
+        }
+      }
+
+      const insertResult = await insertImportPayloads(toInsert);
+      created += insertResult.ok;
+      fail += insertResult.fail;
+      rowErrors.push(...insertResult.rowErrors);
+
+      await reload();
+      clearImportConflictState();
+      setSuccess(
+        `Import complete: ${created} added, ${updated} updated, ${skipped} skipped, ${fail} failed.${
+          rowErrors.length ? ` ${rowErrors.slice(0, 3).join(" ")}` : ""
+        }`,
+      );
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setImporting(false);
+      if (importFileRef.current) importFileRef.current.value = "";
+    }
+  };
+
   const handleImportStudents = async (file: File) => {
     if (!currentUserId || !canWriteOwnLeads) return;
     setImporting(true);
     setError(null);
     setSuccess(null);
+    clearImportConflictState();
     try {
       const matrix = await studentMasterFileToMatrix(file);
       const { payloads, errors } = parseStudentMasterMatrix(matrix, {
@@ -2196,35 +2361,33 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         currentUserId,
         isDbAdmin,
       });
-      let ok = 0;
-      let fail = errors.length;
-      const rowErrors = [...errors];
 
-      // Bulk insert for speed; if a chunk fails, fall back to row-by-row
-      // to keep detailed row-level failure reporting.
-      const chunkSize = 150;
-      for (let i = 0; i < payloads.length; i += chunkSize) {
-        const chunk = payloads.slice(i, i + chunkSize);
-        const { error: chunkError } = await supabase.from("clients").insert(chunk);
-        if (!chunkError) {
-          ok += chunk.length;
-          continue;
-        }
-
-        for (const payload of chunk) {
-          const { error: insertError } = await supabase.from("clients").insert(payload);
-          if (insertError) {
-            fail += 1;
-            rowErrors.push(insertError.message);
-          } else {
-            ok += 1;
-          }
-        }
+      if (!payloads.length) {
+        setError(errors[0] || "No valid rows to import.");
+        return;
       }
 
-      await reload();
+      const candidates = await loadImportConflictCandidates(payloads);
+      const { conflicts, fresh } = partitionImportPayloads(payloads, candidates);
+
+      if (!conflicts.length) {
+        await applyStudentImport({
+          conflicts: [],
+          fresh,
+          actions: {},
+          parseErrors: errors,
+        });
+        return;
+      }
+
+      const defaults: Record<string, ImportConflictAction> = {};
+      for (const c of conflicts) defaults[c.key] = c.defaultAction;
+      setImportConflicts(conflicts);
+      setImportFresh(fresh);
+      setImportParseErrors(errors);
+      setImportConflictActions(defaults);
       setSuccess(
-        `Import complete: ${ok} added, ${fail} failed.${rowErrors.length ? ` ${rowErrors.slice(0, 3).join(" ")}` : ""}`,
+        `Found ${conflicts.length} matching lead(s). Review the popup, then Apply import. ${fresh.length} new row(s) ready.`,
       );
     } catch (e) {
       setError(friendlyError(e));
@@ -2290,6 +2453,35 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         </div>
       ) : null}
       {success ? <Banner tone="success" message={success} onDismiss={() => setSuccess(null)} /> : null}
+
+      {importConflicts?.length ? (
+        <LeadImportConflictModal
+          conflicts={importConflicts}
+          freshCount={importFresh.length}
+          actions={importConflictActions}
+          busy={importing}
+          onChangeAction={(key, action) =>
+            setImportConflictActions((prev) => ({ ...prev, [key]: action }))
+          }
+          onApplyAll={(action) => {
+            const next: Record<string, ImportConflictAction> = {};
+            for (const c of importConflicts) next[c.key] = action;
+            setImportConflictActions(next);
+          }}
+          onCancel={() => {
+            clearImportConflictState();
+            setSuccess("Import cancelled — nothing was written.");
+          }}
+          onConfirm={() =>
+            void applyStudentImport({
+              conflicts: importConflicts,
+              fresh: importFresh,
+              actions: importConflictActions,
+              parseErrors: importParseErrors,
+            })
+          }
+        />
+      ) : null}
 
       <LeadCallLiveDashboard stats={callLiveStats} live={callLiveRows} isAdmin={isAdmin} />
 
@@ -2415,6 +2607,15 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
 
       {activeTab === "all-leads" ? (
         <div className="space-y-3">
+          {isAdmin && currentUserId ? (
+            <LeadImportCleanupPanel
+              supabase={supabase}
+              adminUserId={currentUserId}
+              onDone={() => void reload()}
+              onError={(message) => setError(message)}
+              onSuccess={(message) => setSuccess(message)}
+            />
+          ) : null}
           {!pickForTask ? (
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
               <Button

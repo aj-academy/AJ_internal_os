@@ -441,3 +441,107 @@ export function parseStudentMasterCsvRows(
 ): { payloads: StudentMasterImportPayload[]; errors: string[] } {
   return parseStudentMasterMatrix(parseCsv(text), opts);
 }
+
+/** Digits only; keeps last 10 when longer (common IN mobile with country code). */
+export function normalizeImportPhone(raw: string | null | undefined): string {
+  const digits = String(raw || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length > 10) return digits.slice(-10);
+  return digits;
+}
+
+export function normalizeImportEmail(raw: string | null | undefined): string {
+  return String(raw || "").trim().toLowerCase();
+}
+
+export type ImportConflictCandidate = {
+  id: string;
+  lead_name?: string | null;
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  status?: string | null;
+  lead_stage?: string | null;
+  priority?: string | null;
+};
+
+export type ImportConflictAction = "update" | "add_new" | "skip";
+
+export type ImportConflictRow = {
+  key: string;
+  sheet: StudentMasterImportPayload;
+  existing: ImportConflictCandidate;
+  defaultAction: ImportConflictAction;
+  statusChanged: boolean;
+  stageChanged: boolean;
+  priorityChanged: boolean;
+};
+
+export function importFieldsChanged(
+  sheet: StudentMasterImportPayload,
+  existing: ImportConflictCandidate,
+): { statusChanged: boolean; stageChanged: boolean; priorityChanged: boolean } {
+  const statusChanged =
+    String(sheet.status || "").trim().toLowerCase() !== String(existing.status || "").trim().toLowerCase();
+  const stageChanged =
+    String(sheet.lead_stage || "").trim().toLowerCase() !== String(existing.lead_stage || "").trim().toLowerCase();
+  const priorityChanged =
+    String(sheet.priority || "").trim().toLowerCase() !== String(existing.priority || "").trim().toLowerCase();
+  return { statusChanged, stageChanged, priorityChanged };
+}
+
+export function matchImportCandidate(
+  sheet: StudentMasterImportPayload,
+  candidates: ImportConflictCandidate[],
+): ImportConflictCandidate | null {
+  const phone = normalizeImportPhone(sheet.phone);
+  const email = normalizeImportEmail(sheet.email);
+  if (phone) {
+    const byPhone = candidates.find((c) => normalizeImportPhone(c.phone) === phone);
+    if (byPhone) return byPhone;
+  }
+  if (email) {
+    const byEmail = candidates.find((c) => normalizeImportEmail(c.email) === email);
+    if (byEmail) return byEmail;
+  }
+  return null;
+}
+
+export function partitionImportPayloads(
+  payloads: StudentMasterImportPayload[],
+  candidates: ImportConflictCandidate[],
+): { conflicts: ImportConflictRow[]; fresh: StudentMasterImportPayload[] } {
+  const conflicts: ImportConflictRow[] = [];
+  const fresh: StudentMasterImportPayload[] = [];
+  const usedExisting = new Set<string>();
+
+  payloads.forEach((sheet, index) => {
+    const existing = matchImportCandidate(sheet, candidates);
+    if (!existing) {
+      fresh.push(sheet);
+      return;
+    }
+    if (usedExisting.has(existing.id)) {
+      fresh.push(sheet);
+      return;
+    }
+    usedExisting.add(existing.id);
+    const changed = importFieldsChanged(sheet, existing);
+    const anyChanged = changed.statusChanged || changed.stageChanged || changed.priorityChanged;
+    conflicts.push({
+      key: `${existing.id}:${index}`,
+      sheet,
+      existing,
+      defaultAction: anyChanged ? "update" : "skip",
+      ...changed,
+    });
+  });
+
+  return { conflicts, fresh };
+}
+
+/** Fields safe to write on update — never ownership / auth. */
+export function importPayloadForUpdate(sheet: StudentMasterImportPayload): Record<string, unknown> {
+  const { assigned_to: _a, assigned_by: _b, ...rest } = sheet;
+  return { ...rest };
+}
