@@ -381,16 +381,19 @@ export function parseStudentMasterMatrix(
       continue;
     }
 
-    const phone = cell(cells, idx, "Mobile Number") || null;
+    const phoneRaw = cell(cells, idx, "Mobile Number");
+    const whatsappRaw = cell(cells, idx, "WhatsApp Number");
+    const phoneDigits = normalizeImportPhone(phoneRaw) || null;
+    const whatsappDigits = normalizeImportPhone(whatsappRaw) || phoneDigits;
     const program = cell(cells, idx, "Interested Program") || null;
     const college = cell(cells, idx, "College/Company") || null;
 
     payloads.push({
       lead_name: studentName,
       name: studentName,
-      phone,
-      whatsapp: cell(cells, idx, "WhatsApp Number") || phone,
-      email: email || null,
+      phone: phoneDigits || phoneRaw || null,
+      whatsapp: whatsappDigits || whatsappRaw || phoneDigits || phoneRaw || null,
+      email: email ? normalizeImportEmail(email) : null,
       city: cell(cells, idx, "City") || null,
       current_profile: cell(cells, idx, "Current Profile") || null,
       degree: cell(cells, idx, "Degree") || null,
@@ -459,6 +462,7 @@ export type ImportConflictCandidate = {
   lead_name?: string | null;
   name?: string | null;
   phone?: string | null;
+  whatsapp?: string | null;
   email?: string | null;
   status?: string | null;
   lead_stage?: string | null;
@@ -490,16 +494,23 @@ export function importFieldsChanged(
   return { statusChanged, stageChanged, priorityChanged };
 }
 
+/** Sheet/app phones may live in Mobile and/or WhatsApp — match either side. */
+export function importContactPhones(
+  row: { phone?: string | null; whatsapp?: string | null },
+): string[] {
+  return [...new Set([normalizeImportPhone(row.phone), normalizeImportPhone(row.whatsapp)].filter(Boolean))];
+}
+
 export function matchImportCandidate(
   sheet: StudentMasterImportPayload,
   candidates: ImportConflictCandidate[],
 ): ImportConflictCandidate | null {
-  const phone = normalizeImportPhone(sheet.phone);
-  const email = normalizeImportEmail(sheet.email);
-  if (phone) {
-    const byPhone = candidates.find((c) => normalizeImportPhone(c.phone) === phone);
+  const sheetPhones = new Set(importContactPhones(sheet));
+  if (sheetPhones.size) {
+    const byPhone = candidates.find((c) => importContactPhones(c).some((p) => sheetPhones.has(p)));
     if (byPhone) return byPhone;
   }
+  const email = normalizeImportEmail(sheet.email);
   if (email) {
     const byEmail = candidates.find((c) => normalizeImportEmail(c.email) === email);
     if (byEmail) return byEmail;

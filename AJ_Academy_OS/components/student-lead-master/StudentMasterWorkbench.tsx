@@ -69,6 +69,7 @@ import {
 import {
   downloadStudentMasterImportTemplate,
   exportStudentMasterCsv,
+  importContactPhones,
   importPayloadForUpdate,
   normalizeImportEmail,
   normalizeImportPhone,
@@ -2226,19 +2227,43 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
   const loadImportConflictCandidates = async (
     payloads: StudentMasterImportPayload[],
   ): Promise<ImportConflictCandidate[]> => {
-    const select = "id,lead_name,name,phone,email,status,lead_stage,priority,assigned_to";
+    const select = "id,lead_name,name,phone,whatsapp,email,status,lead_stage,priority,assigned_to";
     const byId = new Map<string, ImportConflictCandidate>();
 
     const emails = [
       ...new Set(payloads.map((p) => normalizeImportEmail(p.email)).filter(Boolean)),
     ];
-    const phones = [...new Set(payloads.map((p) => String(p.phone || "").trim()).filter(Boolean))];
+    // Raw sheet values + normalized digits (exact .in may miss +91 / spacing variants).
+    const phoneQueryValues = [
+      ...new Set(
+        payloads.flatMap((p) =>
+          [String(p.phone || "").trim(), String(p.whatsapp || "").trim(), ...importContactPhones(p)].filter(Boolean),
+        ),
+      ),
+    ];
+    const wantedPhones = new Set(payloads.flatMap((p) => importContactPhones(p)));
 
     const merge = (rows: ImportConflictCandidate[] | null | undefined) => {
       for (const r of rows ?? []) {
         if (r?.id) byId.set(r.id, r);
       }
     };
+
+    // Prefer already-loaded Student Master rows (same visibility as the list).
+    merge(
+      clients.map((c) => ({
+        id: c.id,
+        lead_name: c.lead_name,
+        name: c.name,
+        phone: c.phone,
+        whatsapp: c.whatsapp,
+        email: c.email,
+        status: c.status,
+        lead_stage: c.lead_stage,
+        priority: c.priority,
+        assigned_to: c.assigned_to,
+      })),
+    );
 
     for (let i = 0; i < emails.length; i += 100) {
       const chunk = emails.slice(i, i + 100);
@@ -2249,35 +2274,42 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       merge(data as ImportConflictCandidate[]);
     }
 
-    for (let i = 0; i < phones.length; i += 100) {
-      const chunk = phones.slice(i, i + 100);
-      let q = supabase.from("clients").select(select).in("phone", chunk);
-      if (!isAdmin && currentUserId) q = q.eq("assigned_to", currentUserId);
-      const { data, error } = await q.limit(500);
-      if (error) throw new Error(error.message);
-      merge(data as ImportConflictCandidate[]);
+    for (let i = 0; i < phoneQueryValues.length; i += 100) {
+      const chunk = phoneQueryValues.slice(i, i + 100);
+      let qPhone = supabase.from("clients").select(select).in("phone", chunk);
+      let qWa = supabase.from("clients").select(select).in("whatsapp", chunk);
+      if (!isAdmin && currentUserId) {
+        qPhone = qPhone.eq("assigned_to", currentUserId);
+        qWa = qWa.eq("assigned_to", currentUserId);
+      }
+      const [phoneRes, waRes] = await Promise.all([qPhone.limit(500), qWa.limit(500)]);
+      if (phoneRes.error) throw new Error(phoneRes.error.message);
+      if (waRes.error) throw new Error(waRes.error.message);
+      merge(phoneRes.data as ImportConflictCandidate[]);
+      merge(waRes.data as ImportConflictCandidate[]);
     }
 
-    // Digits-normalized phone match against owned portfolio (handles +91 vs local format).
+    // Digits-normalized phone/whatsapp match against owned portfolio (handles +91 vs local format).
     if (!isAdmin && currentUserId) {
       const { data, error } = await supabase
         .from("clients")
         .select(select)
         .eq("assigned_to", currentUserId)
-        .limit(3000);
+        .limit(5000);
       if (error) throw new Error(error.message);
       merge(data as ImportConflictCandidate[]);
-    } else if (isAdmin) {
-      const wanted = new Set(payloads.map((p) => normalizeImportPhone(p.phone)).filter(Boolean));
-      if (wanted.size) {
-        const { data, error } = await supabase.from("clients").select(select).not("phone", "is", null).limit(5000);
-        if (error) throw new Error(error.message);
-        merge(
-          ((data as ImportConflictCandidate[]) ?? []).filter((c) =>
-            wanted.has(normalizeImportPhone(c.phone)),
-          ),
-        );
-      }
+    } else if (isAdmin && wantedPhones.size) {
+      const { data, error } = await supabase
+        .from("clients")
+        .select(select)
+        .or("phone.not.is.null,whatsapp.not.is.null")
+        .limit(8000);
+      if (error) throw new Error(error.message);
+      merge(
+        ((data as ImportConflictCandidate[]) ?? []).filter((c) =>
+          importContactPhones(c).some((p) => wantedPhones.has(p)),
+        ),
+      );
     }
 
     return [...byId.values()];
@@ -2611,6 +2643,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
             <LeadImportCleanupPanel
               supabase={supabase}
               adminUserId={currentUserId}
+              employees={employeesForSelect}
               onDone={() => void reload()}
               onError={(message) => setError(message)}
               onSuccess={(message) => setSuccess(message)}
