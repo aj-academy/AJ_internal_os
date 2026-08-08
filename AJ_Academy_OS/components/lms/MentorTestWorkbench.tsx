@@ -110,6 +110,13 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
   const [review, setReview] = useState<ProctoringReview | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [testSection, setTestSection] = useState<"create" | "insights">("create");
+  const [snapshotViewer, setSnapshotViewer] = useState<{
+    url: string;
+    title: string;
+    studentName: string;
+    capturedAt: string;
+  } | null>(null);
+  const [snapshotLoadingId, setSnapshotLoadingId] = useState<string | null>(null);
 
   const [importing, setImporting] = useState(false);
   const [importIssues, setImportIssues] = useState<TestQuestionImportIssue[]>([]);
@@ -343,8 +350,12 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
     setReview(json);
   };
 
-  const openMedia = async (media: ProctoringReview["media"][number]) => {
+  const openMedia = async (
+    media: ProctoringReview["media"][number],
+    studentName: string,
+  ) => {
     setError(null);
+    setSnapshotLoadingId(media.id);
     try {
       const res = await fetch("/api/lms/storage/signed-url", {
         method: "POST",
@@ -364,19 +375,54 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
         if (json.hint) setHint(json.hint);
         return;
       }
-      // Open image in a new browser tab (signed URL is short-lived; no cookie fetch).
-      const a = document.createElement("a");
-      a.href = json.url;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      setSnapshotViewer({
+        url: json.url,
+        title: media.capture_reason.replaceAll("_", " "),
+        studentName,
+        capturedAt: media.captured_at,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not open snapshot.");
+    } finally {
+      setSnapshotLoadingId(null);
     }
   };
+
+  const closeReview = () => {
+    setReviewTestId(null);
+    setReview(null);
+    setSnapshotViewer(null);
+    setSnapshotLoadingId(null);
+  };
+
+  const mediaByStudentId = useMemo(() => {
+    const map = new Map<string, ProctoringReview["media"]>();
+    if (!review) return map;
+    const attemptStudent = new Map((review.attempts ?? []).map((a) => [a.id, a.student_id]));
+    for (const m of review.media ?? []) {
+      const studentId = attemptStudent.get(m.attempt_id);
+      if (!studentId) continue;
+      const list = map.get(studentId) ?? [];
+      list.push(m);
+      map.set(studentId, list);
+    }
+    for (const [, list] of map) {
+      list.sort((a, b) => new Date(a.captured_at).getTime() - new Date(b.captured_at).getTime());
+    }
+    return map;
+  }, [review]);
+
+  const eventsByStudentId = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!review) return map;
+    const attemptStudent = new Map((review.attempts ?? []).map((a) => [a.id, a.student_id]));
+    for (const e of review.events ?? []) {
+      const studentId = attemptStudent.get(e.attempt_id);
+      if (!studentId) continue;
+      map.set(studentId, (map.get(studentId) ?? 0) + 1);
+    }
+    return map;
+  }, [review]);
 
   const scoreRows = useMemo(() => {
     if (!review) return [];
@@ -808,7 +854,7 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
 
       {reviewTestId ? (
         <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/45 p-3 sm:p-6"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/45 p-2 sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="test-scores-title"
@@ -817,33 +863,25 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
             type="button"
             aria-label="Close scores"
             className="absolute inset-0 cursor-default"
-            onClick={() => {
-              setReviewTestId(null);
-              setReview(null);
-            }}
+            onClick={closeReview}
           />
-          <div className="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#e8dcc8] bg-white shadow-[0_24px_60px_rgba(61,52,40,0.22)]">
+          <div className="relative flex h-[96vh] max-h-[96vh] w-[98vw] max-w-[1400px] flex-col overflow-hidden rounded-2xl border border-[#e8dcc8] bg-white shadow-[0_24px_60px_rgba(61,52,40,0.22)]">
             <div className="flex items-start justify-between gap-3 border-b border-[#e8dcc8] bg-[#fffdf8] px-5 py-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-[#a68b2e]">Test insights</p>
                 <h3 id="test-scores-title" className="text-lg font-semibold text-[#0f172a]">
                   {tests.find((t) => t.id === reviewTestId)?.title || "Student scores"}
                 </h3>
-                <p className="mt-0.5 text-xs text-[#64748b]">Stats and scores for assigned students</p>
+                <p className="mt-0.5 text-xs text-[#64748b]">
+                  Stats, scores, and proctoring snapshots for each assigned student
+                </p>
               </div>
-              <Button
-                variant="outline"
-                className="rounded-full border-[#e8dcc8] text-xs"
-                onClick={() => {
-                  setReviewTestId(null);
-                  setReview(null);
-                }}
-              >
+              <Button variant="outline" className="rounded-full border-[#e8dcc8] text-xs" onClick={closeReview}>
                 Close
               </Button>
             </div>
 
-            <div className="overflow-y-auto px-5 py-4 text-sm">
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 text-sm">
               {reviewLoading ? (
                 <p className="py-8 text-center text-[#64748b]">Loading scores…</p>
               ) : !review ? (
@@ -884,72 +922,115 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
                           <th className="px-3 py-2 font-semibold">Status</th>
                           <th className="px-3 py-2 font-semibold">Attempts</th>
                           <th className="px-3 py-2 font-semibold">Submitted at</th>
+                          <th className="px-3 py-2 font-semibold">Snapshots</th>
                         </tr>
                       </thead>
                       <tbody>
                         {!scoreRows.length ? (
                           <tr>
-                            <td colSpan={5} className="px-3 py-4 text-center text-[#64748b]">
+                            <td colSpan={6} className="px-3 py-4 text-center text-[#64748b]">
                               No students assigned to this test yet.
                             </td>
                           </tr>
                         ) : (
-                          scoreRows.map((row) => (
-                            <tr key={row.studentId} className="border-t border-[#eef2f7]">
-                              <td className="px-3 py-2 font-medium text-[#0f172a]">{row.studentName}</td>
-                              <td className="px-3 py-2 text-[#0f172a]">
-                                {row.score != null
-                                  ? `${row.score}${row.maxScore != null ? ` / ${row.maxScore}` : ""}`
-                                  : "—"}
-                              </td>
-                              <td className="px-3 py-2 capitalize text-[#475569]">{row.status}</td>
-                              <td className="px-3 py-2 text-[#475569]">{row.attemptsUsed}</td>
-                              <td className="px-3 py-2 text-[#475569]">
-                                {row.submittedAt ? new Date(row.submittedAt).toLocaleString() : "—"}
-                              </td>
-                            </tr>
-                          ))
+                          scoreRows.map((row) => {
+                            const snapshots = mediaByStudentId.get(row.studentId) ?? [];
+                            const eventCount = eventsByStudentId.get(row.studentId) ?? 0;
+                            return (
+                              <tr key={row.studentId} className="border-t border-[#eef2f7] align-top">
+                                <td className="px-3 py-3 font-medium text-[#0f172a]">{row.studentName}</td>
+                                <td className="px-3 py-3 text-[#0f172a]">
+                                  {row.score != null
+                                    ? `${row.score}${row.maxScore != null ? ` / ${row.maxScore}` : ""}`
+                                    : "—"}
+                                </td>
+                                <td className="px-3 py-3 capitalize text-[#475569]">{row.status}</td>
+                                <td className="px-3 py-3 text-[#475569]">{row.attemptsUsed}</td>
+                                <td className="px-3 py-3 text-[#475569]">
+                                  {row.submittedAt ? new Date(row.submittedAt).toLocaleString() : "—"}
+                                </td>
+                                <td className="px-3 py-3">
+                                  {!snapshots.length ? (
+                                    <span className="text-[#94a3b8]">No snapshots</span>
+                                  ) : (
+                                    <div className="space-y-1.5">
+                                      <p className="text-[11px] text-[#64748b]">
+                                        {snapshots.length} photo{snapshots.length === 1 ? "" : "s"}
+                                        {eventCount > 0 ? ` · ${eventCount} event${eventCount === 1 ? "" : "s"}` : ""}
+                                      </p>
+                                      <div className="flex flex-col gap-1">
+                                        {snapshots.map((m, idx) => (
+                                          <button
+                                            key={m.id}
+                                            type="button"
+                                            disabled={snapshotLoadingId === m.id}
+                                            className="text-left text-xs font-medium text-[#a68b2e] underline underline-offset-2 disabled:opacity-60"
+                                            onClick={() => void openMedia(m, row.studentName)}
+                                          >
+                                            {snapshotLoadingId === m.id
+                                              ? "Opening…"
+                                              : `${m.capture_reason.replaceAll("_", " ")} ${idx + 1}`}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
                         )}
                       </tbody>
                     </table>
                   </div>
-
-                  {(review.events.length > 0 || review.media.length > 0) && (
-                    <details className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
-                      <summary className="cursor-pointer text-sm font-semibold text-[#0f172a]">
-                        Proctoring details ({review.events.length} events · {review.media.length} snapshots)
-                      </summary>
-                      <div className="mt-3 grid gap-4 lg:grid-cols-2">
-                        <ul className="max-h-40 space-y-2 overflow-y-auto text-xs">
-                          {review.events.slice(0, 40).map((e) => (
-                            <li key={e.id} className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2">
-                              <p className="font-medium capitalize">{e.event_type.replaceAll("_", " ")}</p>
-                              <p className="text-[#64748b]">
-                                {e.severity} · {new Date(e.created_at).toLocaleString()}
-                              </p>
-                            </li>
-                          ))}
-                        </ul>
-                        <ul className="max-h-40 space-y-2 overflow-y-auto text-xs">
-                          {review.media.map((m) => (
-                            <li key={m.id} className="rounded-lg border border-[#e2e8f0] bg-white px-3 py-2">
-                              <p className="capitalize">{m.capture_reason.replaceAll("_", " ")}</p>
-                              <p className="text-[#64748b]">{new Date(m.captured_at).toLocaleString()}</p>
-                              <button
-                                type="button"
-                                className="mt-1 text-[#c9a227] underline"
-                                onClick={() => void openMedia(m)}
-                              >
-                                Open snapshot
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </details>
-                  )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {snapshotViewer ? (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/70 p-3 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Proctoring snapshot"
+        >
+          <button
+            type="button"
+            aria-label="Close snapshot"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setSnapshotViewer(null)}
+          />
+          <div className="relative flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#e8dcc8] bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-[#e8dcc8] bg-[#fffdf8] px-4 py-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#a68b2e]">Proctoring snapshot</p>
+                <h4 className="text-base font-semibold capitalize text-[#0f172a]">{snapshotViewer.title}</h4>
+                <p className="text-xs text-[#64748b]">
+                  {snapshotViewer.studentName}
+                  {snapshotViewer.capturedAt
+                    ? ` · ${new Date(snapshotViewer.capturedAt).toLocaleString()}`
+                    : ""}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full border-[#e8dcc8] text-xs"
+                onClick={() => setSnapshotViewer(null)}
+              >
+                Close
+              </Button>
+            </div>
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[#0f172a] p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={snapshotViewer.url}
+                alt={`${snapshotViewer.title} for ${snapshotViewer.studentName}`}
+                className="max-h-[78vh] max-w-full rounded-lg object-contain"
+              />
             </div>
           </div>
         </div>

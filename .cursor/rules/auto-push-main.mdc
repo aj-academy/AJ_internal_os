@@ -1,0 +1,21 @@
+---
+description: Auto commit and push finished work to main
+alwaysApply: true
+---
+
+# Auto push finished work to main
+
+When a coding task is finished and the user can verify changes on the deployed app:
+
+1. **Commit** the relevant changed files (never secrets, never `AJ_ACADEMY_OS_COMPANY_OVERVIEW.md` unless asked).
+2. **Push to `origin main`** without waiting for the user to say "commit and push", unless they said not to push.
+3. Use a concise commit message focused on why.
+4. If push is rejected because remote is ahead, `git pull --rebase origin main` then push again.
+5. Tell the user the commit hash briefly when done.
+
+Exceptions — do **not** auto-push when:
+
+- The user explicitly says not to commit/push
+- Only exploratory/read-only work was done with no file changes
+- Changes are incomplete, broken, or still mid-task
+- The user asked only for an explanation with no implementation
