@@ -41,8 +41,18 @@ export async function downloadUrlInSameWindow(
   fallbackFilename = "download",
   init?: RequestInit,
 ): Promise<void> {
+  // Cross-origin signed URLs (Supabase Storage) must not send cookies —
+  // credentials: "include" triggers CORS failures → "Failed to fetch".
+  let crossOrigin = false;
+  try {
+    crossOrigin = new URL(url, typeof window !== "undefined" ? window.location.origin : undefined).origin !==
+      (typeof window !== "undefined" ? window.location.origin : "");
+  } catch {
+    crossOrigin = true;
+  }
+
   const res = await fetch(url, {
-    credentials: "include",
+    credentials: crossOrigin ? "omit" : "include",
     ...init,
   });
   if (!res.ok) {

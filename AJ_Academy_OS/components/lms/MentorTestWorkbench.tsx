@@ -344,25 +344,35 @@ export function MentorTestWorkbench({ mode = "mentor" }: Props) {
   };
 
   const openMedia = async (media: ProctoringReview["media"][number]) => {
-    const res = await fetch("/api/lms/storage/signed-url", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        kind: "proctoring_media",
-        bucket: "test-proctoring",
-        path: media.storage_path,
-        media_id: media.id,
-        fileName: `${media.capture_reason}.jpg`,
-      }),
-    });
-    const json = (await res.json()) as { url?: string; error?: string };
-    if (!res.ok || !json.url) {
-      setError(json.error || "Could not open snapshot.");
-      return;
-    }
+    setError(null);
     try {
-      await downloadUrlInSameWindow(json.url, `${media.capture_reason}.jpg`);
+      const res = await fetch("/api/lms/storage/signed-url", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "proctoring_media",
+          bucket: "test-proctoring",
+          path: media.storage_path,
+          media_id: media.id,
+          fileName: `${media.capture_reason}.jpg`,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { url?: string; error?: string; hint?: string };
+      if (!res.ok || !json.url) {
+        setError(json.error || "Could not open snapshot.");
+        if (json.hint) setHint(json.hint);
+        return;
+      }
+      // Open image in a new browser tab (signed URL is short-lived; no cookie fetch).
+      const a = document.createElement("a");
+      a.href = json.url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not open snapshot.");
     }

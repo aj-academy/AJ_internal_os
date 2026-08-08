@@ -172,7 +172,9 @@ export async function POST(request: Request) {
     if (role === "student") {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
-    const { data: media } = await supabase
+    // Service-role read after authz — mentor RLS on media can hide rows the mentor is allowed to review.
+    const adminLookup = createAdminClient();
+    const { data: media } = await adminLookup
       .from("lms_test_proctoring_media")
       .select("id, storage_path, test_id")
       .eq("id", body.media_id)
@@ -181,9 +183,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Media not found." }, { status: 404 });
     }
     if (role === "mentor") {
-      const { data: t } = await supabase.from("lms_tests").select("assigned_by").eq("id", media.test_id).maybeSingle();
-      if (!t || t.assigned_by !== gate.user.id) {
-        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      const { data: t } = await adminLookup.from("lms_tests").select("assigned_by,department_id,course_id,batch_id,module_id").eq("id", media.test_id).maybeSingle();
+      if (!t) {
+        return NextResponse.json({ error: "Test not found." }, { status: 404 });
+      }
+      if (t.assigned_by !== gate.user.id) {
+        const { data: allowed } = await supabase.rpc("lms_mentor_has_active_allocation", {
+          p_mentor_id: gate.user.id,
+          p_department_id: t.department_id,
+          p_course_id: t.course_id,
+          p_batch_id: t.batch_id,
+          p_module_id: t.module_id,
+        });
+        if (!allowed) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
       }
     }
     if (bucket !== "test-proctoring") {
