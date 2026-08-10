@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { requireE2eEnv } from "../helpers/env";
 import { credsFor, loginAs } from "../helpers/login";
+import { expectProtectedRoute, gotoAppRoute } from "../helpers/navigation";
 
 test.describe("Student smoke", () => {
   test.beforeAll(() => {
@@ -8,7 +9,7 @@ test.describe("Student smoke", () => {
   });
 
   test("login page loads", async ({ page }) => {
-    await page.goto("/login");
+    await gotoAppRoute(page, "/login");
     await expect(page.locator("#login-email")).toBeVisible();
     await expect(page.locator("#login-role")).toBeVisible();
   });
@@ -17,51 +18,41 @@ test.describe("Student smoke", () => {
     const creds = credsFor("STUDENT");
     test.skip(!creds, "Set E2E_STUDENT_EMAIL and E2E_STUDENT_PASSWORD to run this test");
     await loginAs(page, "student", creds!);
-    await expect(page).toHaveURL(/\/student\//, { timeout: 45_000 });
+    await expect(page).toHaveURL(/\/student\//);
   });
 
   test("student dashboard opens", async ({ page }) => {
     const creds = credsFor("STUDENT");
     test.skip(!creds, "Set E2E_STUDENT_EMAIL and E2E_STUDENT_PASSWORD to run this test");
     await loginAs(page, "student", creds!);
-    await page.waitForURL(/\/student\//, { timeout: 45_000 });
-    await page.goto("/student/dashboard");
-    await expect(page).toHaveURL(/\/student\/dashboard/);
+    await expectProtectedRoute(page, "/student/dashboard", /\/student\/dashboard/);
   });
 
   test("assignment page opens", async ({ page }) => {
     const creds = credsFor("STUDENT");
     test.skip(!creds, "Set E2E_STUDENT_EMAIL and E2E_STUDENT_PASSWORD to run this test");
     await loginAs(page, "student", creds!);
-    await page.waitForURL(/\/student\//, { timeout: 45_000 });
-    await page.goto("/student/learning/assignments");
-    await expect(page).toHaveURL(/\/student\/learning\/assignments/);
+    await expectProtectedRoute(page, "/student/learning/assignments", /\/student\/learning\/assignments/);
   });
 
   test("test page opens", async ({ page }) => {
     const creds = credsFor("STUDENT");
     test.skip(!creds, "Set E2E_STUDENT_EMAIL and E2E_STUDENT_PASSWORD to run this test");
     await loginAs(page, "student", creds!);
-    await page.waitForURL(/\/student\//, { timeout: 45_000 });
-    await page.goto("/student/learning/tests");
-    await expect(page).toHaveURL(/\/student\/learning\/tests/);
+    await expectProtectedRoute(page, "/student/learning/tests", /\/student\/learning\/tests/);
   });
 
   test("material page opens", async ({ page }) => {
     const creds = credsFor("STUDENT");
     test.skip(!creds, "Set E2E_STUDENT_EMAIL and E2E_STUDENT_PASSWORD to run this test");
     await loginAs(page, "student", creds!);
-    await page.waitForURL(/\/student\//, { timeout: 45_000 });
-    await page.goto("/student/learning/materials");
-    await expect(page).toHaveURL(/\/student\/learning\/materials/);
+    await expectProtectedRoute(page, "/student/learning/materials", /\/student\/learning\/materials/);
   });
 
   test("queries page opens", async ({ page }) => {
     const creds = credsFor("STUDENT");
     test.skip(!creds, "Set E2E_STUDENT_EMAIL and E2E_STUDENT_PASSWORD to run this test");
     await loginAs(page, "student", creds!);
-    await page.waitForURL(/\/student\//, { timeout: 45_000 });
-    await page.goto("/student/learning/queries");
-    await expect(page).toHaveURL(/\/student\/learning\/queries/);
+    await expectProtectedRoute(page, "/student/learning/queries", /\/student\/learning\/queries/);
   });
 });

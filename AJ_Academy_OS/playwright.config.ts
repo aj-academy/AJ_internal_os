@@ -51,6 +51,16 @@ export default defineConfig({
     video: "off",
     ...devices["Desktop Chrome"],
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: {
+          args: ["--disable-dev-shm-usage"],
+        },
+      },
+    },
+  ],
   outputDir: "test-results",
 });

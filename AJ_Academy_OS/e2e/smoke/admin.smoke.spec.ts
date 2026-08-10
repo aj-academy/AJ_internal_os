@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { requireE2eEnv } from "../helpers/env";
 import { credsFor, loginAs } from "../helpers/login";
+import { expectProtectedRoute, gotoAppRoute } from "../helpers/navigation";
 
 /**
  * Admin smoke — selects Role = Admin before Sign in.
@@ -11,7 +12,7 @@ test.describe("Admin smoke", () => {
   });
 
   test("login page loads", async ({ page }) => {
-    await page.goto("/login");
+    await gotoAppRoute(page, "/login");
     await expect(page.locator("#login-email")).toBeVisible();
     await expect(page.locator("#login-password")).toBeVisible();
     await expect(page.locator("#login-role")).toBeVisible();
@@ -19,7 +20,7 @@ test.describe("Admin smoke", () => {
   });
 
   test("incorrect login is rejected", async ({ page }) => {
-    await page.goto("/login");
+    await gotoAppRoute(page, "/login");
     await page.locator("#login-role").selectOption("admin");
     await page.locator("#login-email").fill("qa.invalid@example.com");
     await page.locator("#login-password").fill("definitely-wrong-password-000");
@@ -32,33 +33,27 @@ test.describe("Admin smoke", () => {
     const creds = credsFor("ADMIN");
     test.skip(!creds, "Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to run this test");
     await loginAs(page, "admin", creds!);
-    await expect(page).toHaveURL(/\/admin\//, { timeout: 45_000 });
+    await expect(page).toHaveURL(/\/admin\//);
   });
 
   test("admin dashboard opens", async ({ page }) => {
     const creds = credsFor("ADMIN");
     test.skip(!creds, "Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to run this test");
     await loginAs(page, "admin", creds!);
-    await page.waitForURL(/\/admin\//, { timeout: 45_000 });
-    await page.goto("/admin/dashboard");
-    await expect(page).toHaveURL(/\/admin\/dashboard/);
+    await expectProtectedRoute(page, "/admin/dashboard", /\/admin\/dashboard/);
   });
 
   test("academic page opens", async ({ page }) => {
     const creds = credsFor("ADMIN");
     test.skip(!creds, "Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to run this test");
     await loginAs(page, "admin", creds!);
-    await page.waitForURL(/\/admin\//, { timeout: 45_000 });
-    await page.goto("/admin/academic/overview");
-    await expect(page).toHaveURL(/\/admin\/academic\/overview/);
+    await expectProtectedRoute(page, "/admin/academic/overview", /\/admin\/academic\/overview/);
   });
 
   test("student management page opens", async ({ page }) => {
     const creds = credsFor("ADMIN");
     test.skip(!creds, "Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to run this test");
     await loginAs(page, "admin", creds!);
-    await page.waitForURL(/\/admin\//, { timeout: 45_000 });
-    await page.goto("/admin/students/directory");
-    await expect(page).toHaveURL(/\/admin\/students\/directory/);
+    await expectProtectedRoute(page, "/admin/students/directory", /\/admin\/students\/directory/);
   });
 });
