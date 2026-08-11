@@ -1,12 +1,39 @@
 import { defineConfig, devices } from "@playwright/test";
+import fs from "node:fs";
 import path from "node:path";
 
 /**
  * AJ OS Playwright config — smoke / e2e preparation.
  * Does not hardcode production. Requires E2E_BASE_URL when tests are run.
+ * Loads `.env.e2e` into process.env when present (harness only).
  */
+
+function loadEnvE2e() {
+  const envPath = path.join(__dirname, ".env.e2e");
+  if (!fs.existsSync(envPath)) return;
+  const text = fs.readFileSync(envPath, "utf8");
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (!process.env[key]) process.env[key] = value;
+  }
+}
+
+loadEnvE2e();
+
 const rawBase = (process.env.E2E_BASE_URL || "").trim().replace(/\/$/, "");
 const KNOWN_PRODUCTION_HOSTS = ["aj-academy.vercel.app"];
+const authDir = path.join(__dirname, "e2e", ".auth");
 
 function assertSafeBaseUrl(url: string) {
   if (!url) {
@@ -27,11 +54,7 @@ function assertSafeBaseUrl(url: string) {
   }
 }
 
-// Only enforce when a test run is actually starting (config load during `playwright test`).
-// `playwright --help` / install do not need this; scripts that list tests may still load config.
 if (process.env.PLAYWRIGHT_SKIP_BASE_URL_CHECK !== "1") {
-  // Soft check at config load: allow `npx playwright test --list` only with skip flag.
-  // Hard fail remains in e2e/helpers/env.ts when tests execute.
   if (rawBase) assertSafeBaseUrl(rawBase);
 }
 
@@ -53,12 +76,69 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "chromium",
+      name: "setup",
+      testMatch: /auth\.setup\.ts/,
       use: {
         ...devices["Desktop Chrome"],
-        launchOptions: {
-          args: ["--disable-dev-shm-usage"],
-        },
+        launchOptions: { args: ["--disable-dev-shm-usage"] },
+      },
+    },
+    {
+      name: "smoke-login",
+      testMatch: /smoke\/login\.smoke\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: { args: ["--disable-dev-shm-usage"] },
+      },
+    },
+    {
+      name: "smoke-admin",
+      dependencies: ["setup"],
+      testMatch: /smoke\/admin\.smoke\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: path.join(authDir, "admin.json"),
+        launchOptions: { args: ["--disable-dev-shm-usage"] },
+      },
+    },
+    {
+      name: "smoke-mentor",
+      dependencies: ["setup"],
+      testMatch: /smoke\/mentor\.smoke\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: path.join(authDir, "mentor.json"),
+        launchOptions: { args: ["--disable-dev-shm-usage"] },
+      },
+    },
+    {
+      name: "smoke-student",
+      dependencies: ["setup"],
+      testMatch: /smoke\/student\.smoke\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: path.join(authDir, "student.json"),
+        launchOptions: { args: ["--disable-dev-shm-usage"] },
+      },
+    },
+    {
+      name: "smoke-authz-student",
+      dependencies: ["setup"],
+      testMatch: /smoke\/authz\.student\.smoke\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: path.join(authDir, "student.json"),
+        launchOptions: { args: ["--disable-dev-shm-usage"] },
+      },
+    },
+    {
+      name: "smoke-authz-mentor",
+      dependencies: ["setup"],
+      testMatch: /smoke\/authz\.mentor\.smoke\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: path.join(authDir, "mentor.json"),
+        launchOptions: { args: ["--disable-dev-shm-usage"] },
       },
     },
   ],

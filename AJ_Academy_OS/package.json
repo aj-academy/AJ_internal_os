@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:e2e": "playwright test",
-    "test:e2e:smoke": "playwright test e2e/smoke"
+    "test:e2e:smoke": "playwright test e2e/auth.setup.ts e2e/smoke"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
