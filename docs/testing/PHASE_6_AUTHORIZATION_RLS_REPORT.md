@@ -66,7 +66,7 @@ Portal UI/API role gates largely held. **Direct Supabase RLS `SELECT` on `public
 | MEN-UI-STUDENTS | UI | `/mentor/students` opens | **Pass** |
 | MEN-API-ADMIN-DENY | API | Admin directory → 403 | **Pass** |
 | MEN-RLS-ASSIGNED-STUDENTS | RLS | `student_mentor_assignments` only own mentor (21 rows) | **Pass** |
-| MEN-RLS-UNRELATED-STUDENT | RLS | Out-of-scope student denied | **Blocked** |
+| MEN-RLS-UNRELATED-STUDENT | RLS | Out-of-scope student denied | **Blocked** (supplied QA id still has **1 active** assignment to QA mentor; test not run) |
 | MEN-SENSITIVE-TICKETS | RLS/API | No sensitive tickets visible | **Pass** (0 tickets total) |
 | MEN-API-LMS-LISTS | API | LMS lists 200 | **Pass** |
 
@@ -103,11 +103,30 @@ Portal UI/API role gates largely held. **Direct Supabase RLS `SELECT` on `public
 
 ### Mentor out-of-scope student (MEN-RLS-UNRELATED-STUDENT)
 
-All 21 catalog students appear assigned to the QA mentor and/or share department scope under `profiles_mentor_students_select` (assigned **or same department**).
+#### Attempt 11 Aug 2026 (post–Phase 6B)
 
-**Provide one of:**
-1. `E2E_UNRELATED_STUDENT_ID` — a student **not** assigned to QA mentor and **not** in mentor’s department, **or**
-2. Create (manually, outside this SAFE run) a student in another department with no mentee link to QA mentor.
+`E2E_UNRELATED_STUDENT_ID` was supplied (UUID length 36; value not repeated here).
+
+**Read-only scope verification (no data/policy changes):**
+
+| Check | Result |
+|-------|--------|
+| Profile exists, `role=student`, `status=active` | Yes |
+| Same department as QA mentor | **No** (departments differ) |
+| Active `student_mentor_assignments` to QA mentor | **Yes — 1 active row** |
+| Genuinely out-of-scope? | **No** |
+
+**Outcome:** Verification **failed**. `MEN-RLS-UNRELATED-STUDENT` was **not executed** (would be an in-scope mentee read, not an out-of-scope deny test).
+
+**No automatic fix.** To proceed, provide a **different dedicated QA student** who has:
+1. **zero** active assignment to QA mentor (`mentor@gmail.com`), and  
+2. a **different** `profiles.department` than that mentor.
+
+Then set `E2E_UNRELATED_STUDENT_ID` to that profile id and re-run only this case.
+
+#### Earlier note
+
+Previously all catalog students appeared assigned and/or same-department; a dedicated out-of-scope QA id is still required.
 
 ### Stronger positive deny proofs (optional)
 
@@ -138,9 +157,13 @@ All 21 catalog students appear assigned to the QA mentor and/or share department
 | **Confirmed application / RLS defects** | 1 | Student→other student `profiles` SELECT |
 | **Harness failures** | 0 | Final run |
 | **Environment / auth rate-limit** | 0 | Setup logins succeeded |
-| **Blocked (missing QA data)** | 1 | Unrelated student for mentor scope |
+| **Blocked (missing / invalid QA data)** | 1 | Unrelated student still **assigned** to QA mentor — deny test not run |
 
 ---
+
+## Phase 6 completion status
+
+**Not complete.** Profiles CRITICAL from Phase 6B is fixed; mentor out-of-scope authorization case remains **Blocked** until a genuinely unassigned, different-department QA student id is provided.
 
 ## Conclusion
 
