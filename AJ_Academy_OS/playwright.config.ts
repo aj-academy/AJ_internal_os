@@ -8,8 +8,8 @@ import path from "node:path";
  * Loads `.env.e2e` into process.env when present (harness only).
  */
 
-function loadEnvE2e() {
-  const envPath = path.join(__dirname, ".env.e2e");
+function loadEnvFile(fileName: string) {
+  const envPath = path.join(__dirname, fileName);
   if (!fs.existsSync(envPath)) return;
   const text = fs.readFileSync(envPath, "utf8");
   for (const rawLine of text.split(/\r?\n/)) {
@@ -29,7 +29,9 @@ function loadEnvE2e() {
   }
 }
 
-loadEnvE2e();
+// Harness only: e2e creds + public supabase URL/anon for RLS SELECT probes.
+loadEnvFile(".env.local");
+loadEnvFile(".env.e2e");
 
 const rawBase = (process.env.E2E_BASE_URL || "").trim().replace(/\/$/, "");
 const KNOWN_PRODUCTION_HOSTS = ["aj-academy.vercel.app"];
@@ -138,6 +140,45 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         storageState: path.join(authDir, "mentor.json"),
+        launchOptions: { args: ["--disable-dev-shm-usage"] },
+      },
+    },
+    {
+      name: "phase6-reset",
+      dependencies: ["setup"],
+      testMatch: /phase6\/00-reset\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: { args: ["--disable-dev-shm-usage"] },
+      },
+    },
+    {
+      name: "phase6-student",
+      dependencies: ["phase6-reset"],
+      testMatch: /phase6\/student\.authz\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: path.join(authDir, "student.json"),
+        launchOptions: { args: ["--disable-dev-shm-usage"] },
+      },
+    },
+    {
+      name: "phase6-mentor",
+      dependencies: ["phase6-reset"],
+      testMatch: /phase6\/mentor\.authz\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: path.join(authDir, "mentor.json"),
+        launchOptions: { args: ["--disable-dev-shm-usage"] },
+      },
+    },
+    {
+      name: "phase6-admin",
+      dependencies: ["phase6-reset"],
+      testMatch: /phase6\/admin\.authz\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: path.join(authDir, "admin.json"),
         launchOptions: { args: ["--disable-dev-shm-usage"] },
       },
     },
