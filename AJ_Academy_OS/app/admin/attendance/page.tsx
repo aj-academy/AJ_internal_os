@@ -443,7 +443,7 @@ export default async function AdminAttendancePage({ searchParams }: AdminAttenda
                     <tr key={row.id}>
                       <td className="px-4 py-3">
                         <AttendanceSelfieThumb
-                          url={row.check_in_selfie_url}
+                          attendanceId={row.id}
                           alt={`${displayName} selfie`}
                           size="md"
                         />

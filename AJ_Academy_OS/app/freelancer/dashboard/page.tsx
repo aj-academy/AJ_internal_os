@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarClock, ClipboardList, UserCircle } from "lucide-react";
 import { AttendanceLocationBlock } from "@/components/attendance/AttendanceLocationBlock";
+import { AttendanceSelfieThumb } from "@/components/attendance/AttendanceSelfieThumb";
 import { getUserProfile } from "@/lib/auth/getUserProfile";
 import { createClient } from "@/lib/supabase/server";
 import { formatTimeIST, todayDateIST } from "@/lib/datetime";
@@ -12,6 +13,7 @@ export default async function FreelancerDashboardPage() {
   const today = todayDateIST();
 
   let todayAttendance: {
+    id: string;
     status: string | null;
     check_in_time: string | null;
     check_out_time: string | null;
@@ -32,7 +34,7 @@ export default async function FreelancerDashboardPage() {
       supabase
         .from("attendance_records")
         .select(
-          "status,check_in_time,check_out_time,check_in_selfie_url,check_in_address,check_out_address,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude",
+          "id,status,check_in_time,check_out_time,check_in_selfie_url,check_in_address,check_out_address,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude",
         )
         .eq("employee_id", uid)
         .eq("attendance_date", today)
@@ -94,13 +96,14 @@ export default async function FreelancerDashboardPage() {
             />
           </div>
         ) : null}
-        {todayAttendance?.check_in_selfie_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={todayAttendance.check_in_selfie_url}
-            alt="Today's check-in selfie"
-            className="mt-4 max-h-40 rounded-lg border border-[#ede4d4]"
-          />
+        {todayAttendance?.id && todayAttendance.check_in_selfie_url ? (
+          <div className="mt-4">
+            <AttendanceSelfieThumb
+              attendanceId={todayAttendance.id}
+              alt="Today's check-in selfie"
+              size="md"
+            />
+          </div>
         ) : null}
       </article>
 

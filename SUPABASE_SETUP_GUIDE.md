@@ -19,6 +19,8 @@ NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
+# Optional: identifiable User-Agent for Nominatim reverse-geocode (attendance)
+# NOMINATIM_USER_AGENT=AJ-Academy-OS/1.0 (ops@your-domain.example)
 RESEND_API_KEY=re_...
 TASK_EMAIL_FROM="AJ Academy <onboarding@resend.dev>"
 GMAIL_OUTREACH_USER=ajacademy.co.in@gmail.com
@@ -89,6 +91,9 @@ Run files from **`AJ_Academy_SB`** in order (`DATABASE_SETUP_ORDER.txt`):
 
 1. `schema.sql`  
 2. `attendance_module.sql`  
+2b. `attendance_accuracy_meters.sql` (required for GPS accuracy persistence)  
+2c. `attendance_mentor_mentees_select.sql` (mentor read of allotted students’ attendance; active assignments only)  
+2d. `attendance_selfies_private.sql` (private selfie bucket + path normalization; required after public selfie era)  
 3. `attendance_selfie_schema.sql`  
 4. `task_schema.sql`  
 5. `aj_academy_roles_patch.sql`  

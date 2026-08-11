@@ -493,8 +493,7 @@ export default function AdminDashboardPage() {
         return (p?.role ?? "").toLowerCase() === "freelancer";
       })
       .map((a) => ({
-        id: a.id ?? a.employee_id!,
-        selfie: a.check_in_selfie_url!,
+        id: a.id!,
         name: nameMap[a.employee_id!] ?? "Freelancer",
         checkIn: a.check_in_time
           ? new Date(a.check_in_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -714,7 +713,7 @@ export default function AdminDashboardPage() {
               {todayFreelancerSelfies.map((row) => (
                 <tr key={row.id} className="border-t border-[#eef2ff]">
                   <td className="px-3 py-2">
-                    <AttendanceSelfieThumb url={row.selfie} alt={`${row.name} selfie`} size="md" />
+                    <AttendanceSelfieThumb attendanceId={row.id} alt={`${row.name} selfie`} size="md" />
                   </td>
                   <td className="px-3 py-2 font-medium">{row.name}</td>
                   <td className="px-3 py-2">{row.checkIn}</td>

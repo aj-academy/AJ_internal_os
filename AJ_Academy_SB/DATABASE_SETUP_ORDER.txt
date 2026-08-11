@@ -9,6 +9,17 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 2) attendance_module.sql
    Attendance tables + RLS (includes check_in_selfie_url column).
 
+2b) attendance_accuracy_meters.sql
+   Additive check_in_accuracy_meters / check_out_accuracy_meters (nullable).
+
+2c) attendance_mentor_mentees_select.sql
+   Mentor SELECT mentee attendance ONLY via active student_mentor_assignments
+   (helper sma_mentor_can_read_student_attendance — NOT the broader sma_mentor_can_access_student).
+
+2d) attendance_selfies_private.sql
+   Make attendance-selfies bucket private; normalize check_in_selfie_url to object paths;
+   tighten storage RLS (owner + admin). App uses /api/attendance/selfie signed URLs.
+
 3) attendance_selfie_schema.sql
    Storage bucket attendance-selfies for freelancer check-in photos.
 

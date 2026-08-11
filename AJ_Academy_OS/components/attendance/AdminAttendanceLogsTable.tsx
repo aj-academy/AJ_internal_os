@@ -209,7 +209,7 @@ export function AdminAttendanceLogsTable({
                   <td className="px-5 py-3">{row.date}</td>
                   <td className="px-5 py-3">
                     <AttendanceSelfieThumb
-                      url={row.checkInSelfieUrl}
+                      attendanceId={row.id}
                       alt={`${row.employeeName} check-in`}
                       size="md"
                     />

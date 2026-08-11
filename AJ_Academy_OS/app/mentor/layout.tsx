@@ -6,6 +6,7 @@ const mentorSidebarItems = [
   { label: "Dashboard", href: "/mentor/dashboard" },
   { label: "My Students", href: "/mentor/students" },
   { label: "My Attendance", href: "/mentor/attendance" },
+  { label: "Student Attendance", href: "/mentor/student-attendance" },
   {
     label: "Learning Management",
     href: "/mentor/learning/overview",

@@ -6,9 +6,12 @@ import { createClient } from "@/lib/supabase/client";
 import { AttendanceSelfieThumb } from "@/components/attendance/AttendanceSelfieThumb";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { usePagination } from "@/lib/usePagination";
+import { formatDateIST, formatTimeIST, todayDateIST } from "@/lib/datetime";
+import { stopCameraStream } from "@/lib/attendance/stopCameraStream";
+import { NOMINATIM_ATTRIBUTION, type ReverseGeocodeResult } from "@/lib/location/reverseGeocode";
 import type { Profile } from "@/types/profile";
 
-type LocationPoint = { latitude: number; longitude: number };
+type LocationPoint = { latitude: number; longitude: number; accuracyMeters: number | null };
 
 interface AttendanceRecord {
   id: string;
@@ -22,6 +25,8 @@ interface AttendanceRecord {
   check_out_longitude: number | null;
   check_in_address: string | null;
   check_out_address: string | null;
+  check_in_accuracy_meters?: number | null;
+  check_out_accuracy_meters?: number | null;
   check_in_selfie_url?: string | null;
   location_type: string | null;
   status: string | null;
@@ -39,6 +44,8 @@ interface AttendanceWritePayload {
   check_out_longitude: number | null;
   check_in_address: string | null;
   check_out_address: string | null;
+  check_in_accuracy_meters?: number | null;
+  check_out_accuracy_meters?: number | null;
   check_in_selfie_url?: string | null;
   location_type: string | null;
   status: string | null;
@@ -69,22 +76,8 @@ const initialCheckoutForm: CheckoutFormState = {
   additionalRemarks: "",
 };
 
-function getTodayLocalDate() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = `${now.getMonth() + 1}`.padStart(2, "0");
-  const day = `${now.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function formatTime(value: string | null) {
-  if (!value) return "-";
-  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatDate(value: string) {
-  return new Date(`${value}T00:00:00`).toLocaleDateString();
-}
+const ATTENDANCE_SELECT =
+  "id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,check_in_address,check_out_address,check_in_accuracy_meters,check_out_accuracy_meters,check_in_selfie_url,location_type,status,total_working_minutes";
 
 function formatHours(minutes: number | null) {
   if (minutes === null || minutes < 0) return "-";
@@ -93,21 +86,27 @@ function formatHours(minutes: number | null) {
   return `${hours}h ${mins}m`;
 }
 
-async function resolveAddress(location: LocationPoint): Promise<string | null> {
+/** One reverse-geocode attempt per attendance action via protected server route. */
+async function resolveAddress(location: LocationPoint): Promise<{
+  address: string | null;
+  lookupFailed: boolean;
+}> {
   try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${location.latitude}&lon=${location.longitude}`,
-      {
-        headers: {
-          Accept: "application/json",
-        },
-      },
-    );
-    if (!response.ok) return null;
-    const data = (await response.json()) as { display_name?: string };
-    return data.display_name ?? null;
+    const response = await fetch("/api/location/reverse-geocode", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        latitude: location.latitude,
+        longitude: location.longitude,
+      }),
+    });
+    if (!response.ok) return { address: null, lookupFailed: true };
+    const data = (await response.json()) as ReverseGeocodeResult;
+    const address = data.formatted_address?.trim() || null;
+    return { address, lookupFailed: !address };
   } catch {
-    return null;
+    return { address: null, lookupFailed: true };
   }
 }
 
@@ -119,9 +118,11 @@ function getGeoLocation(): Promise<LocationPoint> {
     }
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        const accuracy = position.coords.accuracy;
         resolve({
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
+          accuracyMeters: Number.isFinite(accuracy) ? accuracy : null,
         });
       },
       () => reject(new Error("Location permission is required for check-in.")),
@@ -149,27 +150,57 @@ function toReadableAttendanceError(input: unknown) {
   return raw;
 }
 
+async function selectAttendance(
+  supabase: ReturnType<typeof createClient>,
+  currentEmployeeId: string,
+  opts: { attendanceDate?: string; limit?: number },
+): Promise<AttendanceRecord[]> {
+  const base = () => {
+    let q = supabase.from("attendance_records").select(ATTENDANCE_SELECT).eq("employee_id", currentEmployeeId);
+    if (opts.attendanceDate) q = q.eq("attendance_date", opts.attendanceDate);
+    if (opts.limit) {
+      q = q
+        .order(opts.attendanceDate ? "check_in_time" : "attendance_date", {
+          ascending: false,
+          nullsFirst: false,
+        })
+        .limit(opts.limit);
+    } else {
+      q = q.order("attendance_date", { ascending: false });
+    }
+    return q;
+  };
+
+  let { data, error } = await base().returns<AttendanceRecord[]>();
+  if (error && /check_in_accuracy_meters|check_out_accuracy_meters|column/i.test(error.message)) {
+    const legacySelect =
+      "id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,check_in_address,check_out_address,check_in_selfie_url,location_type,status,total_working_minutes";
+    let q = supabase.from("attendance_records").select(legacySelect).eq("employee_id", currentEmployeeId);
+    if (opts.attendanceDate) q = q.eq("attendance_date", opts.attendanceDate);
+    q = q
+      .order(opts.attendanceDate ? "check_in_time" : "attendance_date", {
+        ascending: false,
+        nullsFirst: false,
+      })
+      .limit(opts.limit ?? 50);
+    const retry = await q.returns<AttendanceRecord[]>();
+    data = retry.data;
+    error = retry.error;
+  }
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
 async function getLatestTodayRecord(
   supabase: ReturnType<typeof createClient>,
   currentEmployeeId: string,
+  attendanceDate: string,
 ): Promise<AttendanceRecord | null> {
-  const today = getTodayLocalDate();
-  const { data, error } = await supabase
-    .from("attendance_records")
-    .select(
-      "id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,check_in_address,check_out_address,check_in_selfie_url,location_type,status,total_working_minutes",
-    )
-    .eq("employee_id", currentEmployeeId)
-    .eq("attendance_date", today)
-    .order("check_in_time", { ascending: false, nullsFirst: false })
-    .limit(1)
-    .returns<AttendanceRecord[]>();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data?.[0] ?? null;
+  const rows = await selectAttendance(supabase, currentEmployeeId, {
+    attendanceDate,
+    limit: 1,
+  });
+  return rows[0] ?? null;
 }
 
 export function MemberAttendancePage({
@@ -182,10 +213,11 @@ export function MemberAttendancePage({
   const supabase = useMemo(() => createClient(), []);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const selfieObjectUrlRef = useRef<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [userEmail, setUserEmail] = useState<string>("");
   const [employeeId, setEmployeeId] = useState<string | null>(null);
-  const [todayKey, setTodayKey] = useState(getTodayLocalDate());
+  const [todayKey, setTodayKey] = useState(todayDateIST());
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
   const [history, setHistory] = useState<AttendanceRecord[]>([]);
   const [summaryStatusMap, setSummaryStatusMap] = useState<Record<string, string>>({});
@@ -196,16 +228,26 @@ export function MemberAttendancePage({
   const [liveNow, setLiveNow] = useState(new Date());
   const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
+  const [showCameraPreview, setShowCameraPreview] = useState(false);
+  const [lastAccuracyMeters, setLastAccuracyMeters] = useState<number | null>(null);
 
   const stopCamera = useCallback(() => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
+    streamRef.current = stopCameraStream(streamRef.current, videoRef.current);
     setCameraReady(false);
+    setShowCameraPreview(false);
+  }, []);
+
+  const revokeSelfiePreview = useCallback(() => {
+    if (selfieObjectUrlRef.current) {
+      URL.revokeObjectURL(selfieObjectUrlRef.current);
+      selfieObjectUrlRef.current = null;
+    }
   }, []);
 
   const startCamera = useCallback(async () => {
     if (!requireSelfie) return;
     stopCamera();
+    setShowCameraPreview(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user" },
@@ -219,7 +261,9 @@ export function MemberAttendancePage({
       setCameraReady(true);
       setMessage((prev) => (prev?.type === "error" && prev.text.toLowerCase().includes("camera") ? null : prev));
     } catch {
+      streamRef.current = stopCameraStream(streamRef.current, videoRef.current);
       setCameraReady(false);
+      setShowCameraPreview(false);
       setMessage({
         type: "error",
         text: "Camera access is required for selfie check-in. Use Allow camera & location on first login, or enable camera in browser settings.",
@@ -247,43 +291,30 @@ export function MemberAttendancePage({
     });
   };
 
-  const uploadSelfie = async (uid: string, blob: Blob): Promise<string> => {
-    const path = `${uid}/${getTodayLocalDate()}-checkin.jpg`;
+  const uploadSelfie = async (uid: string, blob: Blob, attendanceDate: string): Promise<string> => {
+    const path = `${uid}/${attendanceDate}-checkin.jpg`;
     const { error } = await supabase.storage.from("attendance-selfies").upload(path, blob, {
       upsert: true,
       contentType: "image/jpeg",
     });
     if (error) throw error;
-    const { data } = supabase.storage.from("attendance-selfies").getPublicUrl(path);
-    return data.publicUrl;
+    // Store object path only — signed URLs are minted on demand.
+    return path;
   };
 
   const loadAttendanceData = useCallback(
-    async (currentEmployeeId: string) => {
-      const [todayRow, { data: historyData, error: historyError }] = await Promise.all([
-        getLatestTodayRecord(supabase, currentEmployeeId),
-        supabase
-          .from("attendance_records")
-          .select(
-            "id,employee_id,attendance_date,check_in_time,check_out_time,check_in_latitude,check_in_longitude,check_out_latitude,check_out_longitude,check_in_address,check_out_address,check_in_selfie_url,location_type,status,total_working_minutes",
-          )
-          .eq("employee_id", currentEmployeeId)
-          .order("attendance_date", { ascending: false })
-          .limit(50)
-          .returns<AttendanceRecord[]>(),
+    async (currentEmployeeId: string, attendanceDate: string) => {
+      const [todayRow, records] = await Promise.all([
+        getLatestTodayRecord(supabase, currentEmployeeId, attendanceDate),
+        selectAttendance(supabase, currentEmployeeId, { limit: 50 }),
       ]);
 
-      if (historyError) {
-        throw new Error(historyError.message);
-      }
-
       setTodayRecord(todayRow);
-      const records = historyData ?? [];
       setHistory(records);
 
       if (!records.length) {
         setSummaryStatusMap({});
-        return;
+        return todayRow;
       }
 
       const attendanceIds = records.map((record) => record.id);
@@ -301,6 +332,7 @@ export function MemberAttendancePage({
         }
       });
       setSummaryStatusMap(map);
+      return todayRow;
     },
     [supabase],
   );
@@ -321,28 +353,39 @@ export function MemberAttendancePage({
         setUserEmail(user.email ?? "");
         setEmployeeId(user.id);
 
-        const [{ data: profileData }] = await Promise.all([
+        const attendanceDate = todayDateIST();
+        const [{ data: profileData }, todayRow] = await Promise.all([
           supabase
             .from("profiles")
             .select("id,full_name,email,role,department,designation,status,created_at")
             .eq("id", user.id)
             .maybeSingle<Profile>(),
-          loadAttendanceData(user.id),
+          loadAttendanceData(user.id, attendanceDate),
         ]);
 
         setProfile(profileData ?? null);
-        if (requireSelfie) await startCamera();
+        // Only open camera when selfie check-in is still possible for IST today.
+        const needsCheckIn = !todayRow?.check_in_time;
+        if (requireSelfie && needsCheckIn) {
+          await startCamera();
+        } else {
+          stopCamera();
+        }
       } catch (error) {
         const text = toReadableAttendanceError(error);
         setMessage({ type: "error", text });
+        stopCamera();
       } finally {
         setBusy("idle");
       }
     };
 
     void bootstrap();
-    return () => stopCamera();
-  }, [loadAttendanceData, requireSelfie, startCamera, stopCamera, supabase, todayKey]);
+    return () => {
+      stopCamera();
+      revokeSelfiePreview();
+    };
+  }, [loadAttendanceData, requireSelfie, revokeSelfiePreview, startCamera, stopCamera, supabase, todayKey]);
 
   useEffect(() => {
     const interval = setInterval(() => setLiveNow(new Date()), 1000);
@@ -351,7 +394,7 @@ export function MemberAttendancePage({
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const nextToday = getTodayLocalDate();
+      const nextToday = todayDateIST();
       setTodayKey((prev) => (prev === nextToday ? prev : nextToday));
     }, 30000);
     return () => clearInterval(interval);
@@ -416,24 +459,28 @@ export function MemberAttendancePage({
     setBusy("checkin");
 
     try {
-      const existingToday = await getLatestTodayRecord(supabase, employeeId);
+      const today = todayDateIST();
+      const existingToday = await getLatestTodayRecord(supabase, employeeId, today);
       if (existingToday?.check_in_time) {
         setMessage({ type: "error", text: "You have already checked in for today." });
+        stopCamera();
         setBusy("idle");
         return;
       }
 
       const location = await getGeoLocation();
-      const address = await resolveAddress(location);
+      setLastAccuracyMeters(location.accuracyMeters);
+      const { address, lookupFailed } = await resolveAddress(location);
       const nowIso = new Date().toISOString();
-      const today = getTodayLocalDate();
 
       let selfieUrl: string | null = null;
       if (requireSelfie) {
         const selfieBlob = await captureSelfieBlob();
+        revokeSelfiePreview();
         const previewUrl = URL.createObjectURL(selfieBlob);
+        selfieObjectUrlRef.current = previewUrl;
         setSelfiePreview(previewUrl);
-        selfieUrl = await uploadSelfie(employeeId, selfieBlob);
+        selfieUrl = await uploadSelfie(employeeId, selfieBlob, today);
       }
 
       const payload: AttendanceWritePayload = {
@@ -447,6 +494,8 @@ export function MemberAttendancePage({
         check_out_longitude: null,
         check_in_address: address,
         check_out_address: null,
+        check_in_accuracy_meters: location.accuracyMeters,
+        check_out_accuracy_meters: null,
         status: "present",
         location_type: "Remote",
         total_working_minutes: null,
@@ -461,6 +510,7 @@ export function MemberAttendancePage({
             check_in_latitude: location.latitude,
             check_in_longitude: location.longitude,
             check_in_address: address,
+            check_in_accuracy_meters: location.accuracyMeters,
             check_in_selfie_url: selfieUrl,
             status: "present",
             location_type: "Remote",
@@ -476,11 +526,41 @@ export function MemberAttendancePage({
         error = insertResult.error;
       }
 
+      // If accuracy columns not migrated yet, retry without them (additive migration pending).
+      if (error && /check_in_accuracy_meters|column/i.test(error.message)) {
+        if (existingToday?.id) {
+          const retry = await supabase
+            .from("attendance_records")
+            .update({
+              check_in_time: nowIso,
+              check_in_latitude: location.latitude,
+              check_in_longitude: location.longitude,
+              check_in_address: address,
+              check_in_selfie_url: selfieUrl,
+              status: "present",
+              location_type: "Remote",
+            })
+            .eq("id", existingToday.id)
+            .eq("employee_id", employeeId);
+          error = retry.error;
+        } else {
+          const { check_in_accuracy_meters: _a, check_out_accuracy_meters: _b, ...rest } = payload;
+          void _a;
+          void _b;
+          const retry = await supabase.from("attendance_records").insert({
+            ...rest,
+            check_in_selfie_url: selfieUrl,
+          });
+          error = retry.error;
+        }
+      }
+
       if (error) throw error;
 
-      await loadAttendanceData(employeeId);
+      // Attendance confirmed — release camera immediately (do not wait for navigation).
+      stopCamera();
+      await loadAttendanceData(employeeId, today);
 
-      // Await late-mail so cookies/session are still active; show soft hint when emailed.
       let lateHint = "";
       try {
         const lateRes = await fetch("/api/notifications/attendance-late", {
@@ -492,26 +572,42 @@ export function MemberAttendancePage({
         const lateJson = (await lateRes.json().catch(() => ({}))) as {
           late?: boolean;
           emailed?: boolean;
-          skipped?: boolean;
-          reason?: string;
         };
         if (lateJson.late && lateJson.emailed) {
           lateHint = " Late check-in email sent to your work email.";
         } else if (lateJson.late && !lateJson.emailed) {
-          lateHint = " Late check-in noted (email could not be sent — ask admin to check mail settings).";
+          lateHint =
+            " Late check-in noted (email could not be sent — ask admin to check mail settings).";
         }
       } catch {
         /* never block check-in on mail */
       }
 
+      const accuracyHint =
+        location.accuracyMeters != null && location.accuracyMeters > 100
+          ? ` Low location accuracy: ±${Math.round(location.accuracyMeters)} m.`
+          : location.accuracyMeters != null
+            ? ` Accuracy ±${Math.round(location.accuracyMeters)} m.`
+            : "";
+
+      const addressHint = lookupFailed
+        ? " Location captured, address lookup unavailable."
+        : address
+          ? ` Location: ${address}.`
+          : "";
+
       setMessage({
         type: "success",
         text:
-          (requireSelfie ? "Check-in recorded with selfie and location." : "Check in successful.") + lateHint,
+          (requireSelfie ? "Check-in recorded with selfie and location." : "Check in successful.") +
+          addressHint +
+          accuracyHint +
+          lateHint,
       });
     } catch (error) {
       const text = toReadableAttendanceError(error);
       setMessage({ type: "error", text });
+      stopCamera();
     } finally {
       setBusy("idle");
     }
@@ -521,7 +617,8 @@ export function MemberAttendancePage({
     if (!employeeId) return;
     setMessage(null);
 
-    const latestToday = await getLatestTodayRecord(supabase, employeeId);
+    const today = todayDateIST();
+    const latestToday = await getLatestTodayRecord(supabase, employeeId, today);
     if (!latestToday?.check_in_time) {
       setMessage({ type: "error", text: "Cannot check out before check in." });
       return;
@@ -542,33 +639,55 @@ export function MemberAttendancePage({
 
     try {
       const location = await getGeoLocation();
-      const address = await resolveAddress(location);
+      setLastAccuracyMeters(location.accuracyMeters);
+      const { address, lookupFailed } = await resolveAddress(location);
       const now = new Date();
       const nowIso = now.toISOString();
       const checkInAt = new Date(latestToday.check_in_time);
       const diffMs = now.getTime() - checkInAt.getTime();
       const totalMinutes = diffMs > 0 ? Math.max(1, Math.ceil(diffMs / 60000)) : 0;
 
-      const { error: updateError } = await supabase
-        .from("attendance_records")
-        .update({
-          check_out_time: nowIso,
-          check_out_latitude: location.latitude,
-          check_out_longitude: location.longitude,
-          check_out_address: address,
-          total_working_minutes: totalMinutes,
-          status: "completed",
-          location_type: "Remote",
-        })
-        .eq("id", latestToday.id)
-        .eq("employee_id", employeeId);
+      let updateError: { message: string } | null = null;
+      {
+        const updateResult = await supabase
+          .from("attendance_records")
+          .update({
+            check_out_time: nowIso,
+            check_out_latitude: location.latitude,
+            check_out_longitude: location.longitude,
+            check_out_address: address,
+            check_out_accuracy_meters: location.accuracyMeters,
+            total_working_minutes: totalMinutes,
+            status: "completed",
+            location_type: "Remote",
+          })
+          .eq("id", latestToday.id)
+          .eq("employee_id", employeeId);
+        updateError = updateResult.error;
+        if (updateError && /check_out_accuracy_meters|column/i.test(updateError.message)) {
+          const retry = await supabase
+            .from("attendance_records")
+            .update({
+              check_out_time: nowIso,
+              check_out_latitude: location.latitude,
+              check_out_longitude: location.longitude,
+              check_out_address: address,
+              total_working_minutes: totalMinutes,
+              status: "completed",
+              location_type: "Remote",
+            })
+            .eq("id", latestToday.id)
+            .eq("employee_id", employeeId);
+          updateError = retry.error;
+        }
+      }
 
       if (updateError) throw updateError;
 
       const { error: summaryError } = await supabase.from("work_summaries").insert({
         employee_id: employeeId,
         attendance_id: latestToday.id,
-        summary_date: getTodayLocalDate(),
+        summary_date: today,
         completed_work: checkoutForm.completedWork,
         pending_work: checkoutForm.pendingWork,
         challenges: checkoutForm.challenges,
@@ -583,7 +702,7 @@ export function MemberAttendancePage({
           const { error: fbErr } = await supabase.from("work_summaries").insert({
             employee_id: employeeId,
             attendance_id: latestToday.id,
-            summary_date: getTodayLocalDate(),
+            summary_date: today,
             completed_work: checkoutForm.completedWork,
             pending_work: checkoutForm.pendingWork,
             challenges: checkoutForm.challenges,
@@ -596,10 +715,19 @@ export function MemberAttendancePage({
         }
       }
 
-      await loadAttendanceData(employeeId);
+      await loadAttendanceData(employeeId, today);
       setCheckoutForm(initialCheckoutForm);
       setShowCheckoutForm(false);
-      setMessage({ type: "success", text: "Check out and work summary submitted successfully." });
+      setMessage({
+        type: "success",
+        text:
+          "Check out and work summary submitted successfully." +
+          (lookupFailed
+            ? " Location captured, address lookup unavailable."
+            : address
+              ? ` Location: ${address}.`
+              : ""),
+      });
     } catch (error) {
       const text = toReadableAttendanceError(error);
       setMessage({ type: "error", text });
@@ -608,49 +736,87 @@ export function MemberAttendancePage({
     }
   };
 
+  const istTodayLabel = formatDateIST(todayKey);
+
   return (
     <section className="space-y-6 rounded-[24px] border border-[#d4deea] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <div>
         <h2 className="text-3xl font-semibold text-slate-900">My Attendance</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Check in{requireSelfie ? " with a live selfie" : ""}, check out, submit work summary and track attendance history.
+          Check in{requireSelfie ? " with a live selfie" : ""}, check out, submit work summary and track
+          attendance history. Attendance date uses India time (Asia/Kolkata).
         </p>
       </div>
 
-      {requireSelfie ? (
+      {requireSelfie && (showCameraPreview || canCheckIn) ? (
         <article className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-5">
-          <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-slate-900">
-            <Camera className="h-5 w-5 text-[#2563eb]" />
-            Selfie check-in
-          </h3>
-          <div className="flex flex-col gap-4 lg:flex-row">
-            <div className="relative aspect-[4/3] w-full max-w-sm overflow-hidden rounded-xl border border-[#dbe6f3] bg-black">
-              <video ref={videoRef} className="h-full w-full scale-x-[-1] object-cover" playsInline muted />
-              {!cameraReady ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center">
-                  <p className="text-sm text-white/80">Camera not ready</p>
-                  <button
-                    type="button"
-                    className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900"
-                    onClick={() => void startCamera()}
-                  >
-                    Enable camera
-                  </button>
-                </div>
-              ) : null}
-            </div>
-            {selfiePreview || todayRecord?.check_in_selfie_url ? (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <Camera className="h-5 w-5 text-[#2563eb]" />
+              Selfie check-in
+            </h3>
+            {showCameraPreview || cameraReady ? (
+              <button
+                type="button"
+                className="rounded-full border border-[#cfdceb] bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-[#eef4ff]"
+                onClick={() => stopCamera()}
+              >
+                Cancel camera
+              </button>
+            ) : null}
+          </div>
+          {showCameraPreview || cameraReady ? (
+            <div className="flex flex-col gap-4 lg:flex-row">
+              <div className="relative aspect-[4/3] w-full max-w-sm overflow-hidden rounded-xl border border-[#dbe6f3] bg-black">
+                <video ref={videoRef} className="h-full w-full scale-x-[-1] object-cover" playsInline muted />
+                {!cameraReady ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center">
+                    <p className="text-sm text-white/80">Camera not ready</p>
+                    <button
+                      type="button"
+                      className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900"
+                      onClick={() => void startCamera()}
+                    >
+                      Enable camera
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            {selfiePreview ? (
               <div className="text-sm text-slate-600">
                 <p className="font-medium text-slate-900">Last check-in photo</p>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={selfiePreview ?? todayRecord?.check_in_selfie_url ?? ""}
+                  src={selfiePreview}
                   alt="Check-in selfie"
                   className="mt-2 max-h-48 rounded-lg border border-[#dbe6f3]"
                 />
               </div>
+            ) : todayRecord?.id && todayRecord.check_in_selfie_url ? (
+              <div className="text-sm text-slate-600">
+                <p className="mb-2 font-medium text-slate-900">Last check-in photo</p>
+                <AttendanceSelfieThumb
+                  attendanceId={todayRecord.id}
+                  alt="Check-in selfie"
+                  size="md"
+                />
+              </div>
             ) : null}
-          </div>
+            </div>
+          ) : canCheckIn ? (
+            <button
+              type="button"
+              className="rounded-xl border border-[#cfdceb] bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-[#eef4ff]"
+              onClick={() => void startCamera()}
+            >
+              Open camera for check-in
+            </button>
+          ) : null}
+        </article>
+      ) : requireSelfie && todayRecord?.id && todayRecord.check_in_selfie_url ? (
+        <article className="rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-5">
+          <h3 className="mb-2 text-lg font-semibold text-slate-900">Check-in selfie</h3>
+          <AttendanceSelfieThumb attendanceId={todayRecord.id} alt="Check-in selfie" size="md" />
         </article>
       ) : null}
 
@@ -671,24 +837,41 @@ export function MemberAttendancePage({
         <h3 className="mb-3 text-lg font-semibold text-slate-900">Today Attendance</h3>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Info label={`${memberLabel} Name`} value={displayEmployeeName} />
-          <Info
-            label="Today Date"
-            value={liveNow.toLocaleDateString([], { year: "numeric", month: "short", day: "2-digit" })}
-          />
+          <Info label="Today Date (IST)" value={istTodayLabel} />
           <Info
             label="Current Time"
-            value={liveNow.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            value={liveNow.toLocaleTimeString("en-IN", {
+              timeZone: "Asia/Kolkata",
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            })}
           />
           <Info label="Status" value={todayStatusLabel} />
           <Info label="Time Gap" value={formatHours(todayRecord?.total_working_minutes ?? null)} />
           <Info label="Location Type" value={todayRecord?.location_type ?? "Remote"} />
+          {lastAccuracyMeters != null ? (
+            <Info label="Last GPS accuracy" value={`±${Math.round(lastAccuracyMeters)} m`} />
+          ) : null}
         </div>
+        {todayRecord?.check_in_address ? (
+          <p className="mt-3 text-sm text-slate-700">
+            <span className="font-medium text-slate-900">Check-in location: </span>
+            {todayRecord.check_in_address}
+          </p>
+        ) : todayRecord?.check_in_latitude != null && todayRecord?.check_in_longitude != null ? (
+          <p className="mt-3 text-sm text-amber-800">
+            Location captured ({todayRecord.check_in_latitude}, {todayRecord.check_in_longitude}); address
+            lookup unavailable.
+          </p>
+        ) : null}
+        <p className="mt-2 text-[11px] text-slate-500">{NOMINATIM_ATTRIBUTION}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
             data-requires-online
-            disabled={!canCheckIn || busy !== "idle"}
-            onClick={handleCheckIn}
+            disabled={!canCheckIn || busy !== "idle" || (requireSelfie && !cameraReady)}
+            onClick={() => void handleCheckIn()}
             className="rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#98b5ef] hover:bg-[#1d4ed8]"
           >
             {busy === "checkin" ? "Checking In..." : requireSelfie ? "Check In with Selfie" : "Check In"}
@@ -743,7 +926,7 @@ export function MemberAttendancePage({
             <button
               type="button"
               data-requires-online
-              onClick={handleCheckOut}
+              onClick={() => void handleCheckOut()}
               disabled={!canCheckOut || busy === "checkout"}
               className="rounded-xl bg-[#2563eb] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#98b5ef] hover:bg-[#1d4ed8]"
             >
@@ -769,14 +952,17 @@ export function MemberAttendancePage({
             <tbody className="divide-y divide-[#e8edf5] text-slate-700">
               {paginatedHistory.map((record) => (
                 <tr key={record.id}>
-                  <td className="px-4 py-3">{formatDate(record.attendance_date)}</td>
+                  <td className="px-4 py-3">{formatDateIST(record.attendance_date)}</td>
                   {requireSelfie ? (
                     <td className="px-4 py-3">
-                      <AttendanceSelfieThumb url={record.check_in_selfie_url} alt={`Selfie ${record.attendance_date}`} />
+                      <AttendanceSelfieThumb
+                        attendanceId={record.id}
+                        alt={`Selfie ${record.attendance_date}`}
+                      />
                     </td>
                   ) : null}
-                  <td className="px-4 py-3">{formatTime(record.check_in_time)}</td>
-                  <td className="px-4 py-3">{formatTime(record.check_out_time)}</td>
+                  <td className="px-4 py-3">{formatTimeIST(record.check_in_time)}</td>
+                  <td className="px-4 py-3">{formatTimeIST(record.check_out_time)}</td>
                   <td className="px-4 py-3">{formatHours(record.total_working_minutes)}</td>
                   <td className="px-4 py-3 capitalize">{record.status ?? "-"}</td>
                   <td className="px-4 py-3">{record.location_type ?? "-"}</td>
