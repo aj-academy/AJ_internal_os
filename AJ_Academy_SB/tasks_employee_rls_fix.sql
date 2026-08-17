@@ -42,4 +42,12 @@ using (
 );
 
 comment on policy tasks_employee_select_assigned on public.tasks is 'Employee sees tasks assigned to them (admin or peer assignee).';
-comment on policy tasks_employee_delete_own on public.tasks is 'Employee can delete tasks they own as assignee or assigner (My Tasks Delete selected).';
+-- Assigner can update link fields on tasks they delegated (merge leads/colleges onto existing task).
+drop policy if exists tasks_employee_update_delegated on public.tasks;
+create policy tasks_employee_update_delegated
+on public.tasks for update to authenticated
+using (public.is_employee() and assigned_by = auth.uid())
+with check (public.is_employee() and assigned_by = auth.uid());
+
+comment on policy tasks_employee_update_delegated on public.tasks is 'Employee who assigned a task can merge additional leads/colleges onto it.';
+

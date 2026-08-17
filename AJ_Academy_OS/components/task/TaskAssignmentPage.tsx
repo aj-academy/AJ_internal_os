@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button";
 import { CrmFlash } from "@/components/ui/CrmFlash";
 import { BulkSelectionBar } from "@/components/ui/BulkSelectionBar";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
+import { TablePagination } from "@/components/ui/TablePagination";
 import { Input } from "@/components/ui/input";
 import { LeadSummaryCard } from "@/components/ui/LeadSummaryCard";
 import { TaskForm, type TaskFormValue } from "@/components/task/TaskForm";
-import { TaskTable } from "@/components/task/TaskTable";
 import { TaskCompleteDialog } from "@/components/task/TaskCompleteDialog";
 import { TaskAttachmentUpload } from "@/components/task/TaskAttachmentUpload";
-import { TaskViewPanel } from "@/components/task/TaskViewPanel";
+import { TaskAssignmentDetailWorkbench } from "@/components/task/TaskAssignmentDetailWorkbench";
+import { TaskAssignmentRowList } from "@/components/task/TaskAssignmentRowList";
 import type { AssigneeProfile } from "@/components/task/TaskAssigneePicker";
 import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
@@ -26,13 +27,6 @@ import {
   resolveTaskAssignment,
 } from "@/lib/taskAssignmentDedupe";
 import { mapClientRowToTaskLinkedLead } from "@/lib/taskLeadOutreach";
-import { TaskLeadOutreachBlock } from "@/components/task/TaskLeadOutreachBlock";
-import {
-  flattenTaskColleges,
-  flattenTaskLeads,
-  TaskSubsectionCollegesTable,
-  TaskSubsectionLeadsTable,
-} from "@/components/task/TaskSubsectionEntityTables";
 import { displayLeadName, STUDENT_LEAD_SELECT, STUDENT_LEAD_SELECT_NO_PROPOSAL_FILES, isMissingStudentProposalFileColumn, type CrmClientRow } from "@/components/student-lead-master/studentMasterHelpers";
 import { StudentLeadFormPanel, type StudentLeadFormValue } from "@/components/student-lead-master/StudentLeadFormPanel";
 import {
@@ -193,7 +187,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<TaskFormValue>(initialForm);
-  const [viewTask, setViewTask] = useState<TaskRecord | null>(null);
+  const [focusedTask, setFocusedTask] = useState<TaskRecord | null>(null);
   const [editLeadId, setEditLeadId] = useState<string | null>(null);
   const [editLeadForm, setEditLeadForm] = useState<StudentLeadFormValue>(() => emptyStudentLeadForm());
   const [editLeadSubmitting, setEditLeadSubmitting] = useState(false);
@@ -912,15 +906,6 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     [rows],
   );
 
-  const subsectionLeadRows = useMemo(
-    () => flattenTaskLeads(filteredRows, linkedLeadById),
-    [filteredRows, linkedLeadById],
-  );
-  const subsectionCollegeRows = useMemo(
-    () => flattenTaskColleges(filteredRows, linkedCollegeById),
-    [filteredRows, linkedCollegeById],
-  );
-
   const {
     paginatedItems: paginatedRows,
     page: taskPage,
@@ -932,17 +917,6 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   } = usePagination(filteredRows, 10);
 
   const taskSelection = useRowSelection(filteredRows, (task) => task.id, paginatedRows);
-  const leadSelection = useRowSelection(subsectionLeadRows, (row) => row.key);
-  const collegeSelection = useRowSelection(subsectionCollegeRows, (row) => row.key);
-
-  const leadTaskIdByRowKey = useMemo(
-    () => Object.fromEntries(subsectionLeadRows.map((row) => [row.key, row.task.id])),
-    [subsectionLeadRows],
-  );
-  const collegeTaskIdByRowKey = useMemo(
-    () => Object.fromEntries(subsectionCollegeRows.map((row) => [row.key, row.task.id])),
-    [subsectionCollegeRows],
-  );
 
   const assigneeDisplayName = useCallback(
     (assigneeId: string) => {
@@ -964,8 +938,6 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
 
   useEffect(() => {
     taskSelection.clearSelection();
-    leadSelection.clearSelection();
-    collegeSelection.clearSelection();
   }, [employeeTaskView, linkTypeFilter, statusFilter, priorityFilter, assignedFilter, dueDateFilter, searchDebounced]);
 
   useEffect(() => {
@@ -978,52 +950,12 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     setTaskPage(1);
   }, [linkTypeFilter, setTaskPage]);
 
-  const bulkSelectedTaskIds = useMemo(() => {
-    if (linkTypeFilter === "lead") {
-      return Array.from(
-        new Set([...leadSelection.selected].map((rowKey) => leadTaskIdByRowKey[rowKey]).filter(Boolean)),
-      );
-    }
-    if (linkTypeFilter === "college") {
-      return Array.from(
-        new Set([...collegeSelection.selected].map((rowKey) => collegeTaskIdByRowKey[rowKey]).filter(Boolean)),
-      );
-    }
-    return [...taskSelection.selected];
-  }, [
-    collegeSelection.selected,
-    collegeTaskIdByRowKey,
-    leadSelection.selected,
-    leadTaskIdByRowKey,
-    linkTypeFilter,
-    taskSelection.selected,
-  ]);
-
-  const bulkSelectedCount =
-    linkTypeFilter === "lead"
-      ? leadSelection.selectedCount
-      : linkTypeFilter === "college"
-        ? collegeSelection.selectedCount
-        : taskSelection.selectedCount;
-
-  const bulkTotalCount =
-    linkTypeFilter === "lead"
-      ? subsectionLeadRows.length
-      : linkTypeFilter === "college"
-        ? subsectionCollegeRows.length
-        : filteredRows.length;
-
+  const bulkSelectedTaskIds = useMemo(() => [...taskSelection.selected], [taskSelection.selected]);
+  const bulkSelectedCount = taskSelection.selectedCount;
+  const bulkTotalCount = filteredRows.length;
   const clearBulkSelection = useCallback(() => {
-    if (linkTypeFilter === "lead") {
-      leadSelection.clearSelection();
-      return;
-    }
-    if (linkTypeFilter === "college") {
-      collegeSelection.clearSelection();
-      return;
-    }
     taskSelection.clearSelection();
-  }, [collegeSelection, leadSelection, linkTypeFilter, taskSelection]);
+  }, [taskSelection]);
 
   const filtersActive = Boolean(
     searchText.trim() || statusFilter || priorityFilter || assignedFilter || dueDateFilter,
@@ -1080,7 +1012,6 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     const base = {
       ...initialForm,
       assignment_type: (type || "") as TaskFormValue["assignment_type"],
-      ...(isEmployee && currentUserId ? { assigned_to: currentUserId } : {}),
     };
     setForm(base);
     setPendingAttachmentFiles([]);
@@ -1304,8 +1235,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         kind: "skipped",
         message:
           resolved.reason === "project_exists"
-            ? "This employee already has an active task for that project."
-            : "These linked records are already on an active task for this employee.",
+            ? "This employee already has an active task for that project. Open it from the task list to review."
+            : "These records are already on an active task for this employee. Open the existing task from the list to add more or review activity.",
       };
     }
 
@@ -1838,7 +1769,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       setError("Lead details are not loaded yet. Refresh My Tasks and try View again.");
       return;
     }
-    setViewTask(null);
+    setFocusedTask(null);
     setEditCollegeId(null);
     setEditLeadId(lead.id);
     setEditLeadForm(crmClientRowToStudentForm(lead));
@@ -1896,7 +1827,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       setError("College details are not loaded yet. Refresh My Tasks and try View again.");
       return;
     }
-    setViewTask(null);
+    setFocusedTask(null);
     setEditLeadId(null);
     setEditCollegeId(college.id);
     setEditCollegeForm(collegeVisitRowToForm(college));
@@ -2218,8 +2149,6 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
               onClick={() => {
                 setLinkTypeFilter(tab.id);
                 taskSelection.clearSelection();
-                leadSelection.clearSelection();
-                collegeSelection.clearSelection();
               }}
               className={
                 linkTypeFilter === tab.id
@@ -2262,118 +2191,16 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         </BulkSelectionBar>
       ) : null}
 
-      {linkTypeFilter === "lead" ? (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-[#64748b]">
-            Student Lead tasks - one row per linked lead. View opens the Student Master edit form; Activity opens history separately. Pin selected saves leads into Student Master {"->"} All Students.
-          </p>
-          <TaskSubsectionLeadsTable
-            rows={subsectionLeadRows}
-            employeeNameMap={employeeNameMap}
-            loading={loading}
-            onViewLead={(_task, lead, leadLoaded) => openLeadEdit(lead, leadLoaded)}
-            onActivityLead={(_task, lead) => void openLeadActivity(lead)}
-            currentUserId={currentUserId}
-            supabase={supabase}
-            onOutreachUpdated={() => void reload()}
-            onOutreachError={setError}
-            onOutreachSuccess={setSuccess}
-            selection={{
-              allSelected: leadSelection.allSelected,
-              someSelected: leadSelection.someSelected,
-              isSelected: leadSelection.isSelected,
-              onToggleAll: leadSelection.toggleAll,
-              onToggle: leadSelection.toggleOne,
-            }}
-          />
-        </div>
-      ) : null}
-
-      {linkTypeFilter === "college" ? (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-[#64748b]">
-            College Visit tasks - columns match College Visits. View / Edit open the college form; Activity opens history. Pin selected saves into College Visits.
-          </p>
-          <TaskSubsectionCollegesTable
-            rows={subsectionCollegeRows}
-            ownerNameMap={employeeNameMap}
-            loading={loading}
-            onViewCollege={(_task, college, collegeLoaded) => openCollegeEdit(college, collegeLoaded)}
-            onActivityCollege={(_task, college) => void openCollegeActivity(college)}
-            onEditCollege={(_task, college, collegeLoaded) => openCollegeEdit(college, collegeLoaded)}
-            currentUserId={currentUserId}
-            supabase={supabase}
-            onOutreachUpdated={() => void reload()}
-            onOutreachError={setError}
-            onOutreachSuccess={setSuccess}
-            selection={{
-              allSelected: collegeSelection.allSelected,
-              someSelected: collegeSelection.someSelected,
-              isSelected: collegeSelection.isSelected,
-              onToggleAll: collegeSelection.toggleAll,
-              onToggle: collegeSelection.toggleOne,
-            }}
-          />
-        </div>
-      ) : null}
-
-      {linkTypeFilter === "all" || linkTypeFilter === "project" ? (
-      <div className="responsive-table-wrap">
-        <TaskTable
+      <div className="space-y-3">
+        <p className="text-xs font-medium text-[#64748b]">
+          Click a task row to open the full linked table and activity history — same workflow as before, in a cleaner layout.
+        </p>
+        <TaskAssignmentRowList
           tasks={paginatedRows}
           loading={loading}
-          tableMissing={tasksTableMissing}
           employeeNameMap={employeeNameMap}
-          canManageTasks={canManageTasks}
-          assigneeColumn={
-            isEmployee
-              ? employeeDelegatedView
-                ? "assigned-to"
-                : "assigned-by"
-              : isPortalAssignee
-                ? "assigned-by"
-                : "assigned-to"
-          }
-          showDepartment={isEmployee}
-          readOnlyList={employeeDelegatedView}
-          statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
-          priorityFilter={priorityFilter}
-          setPriorityFilter={setPriorityFilter}
-          assignedFilter={assignedFilter}
-          setAssignedFilter={setAssignedFilter}
-          dueDateFilter={dueDateFilter}
-          setDueDateFilter={setDueDateFilter}
-          employeeOptions={employeeOptions}
-          assigneeFilterDisabled={
-            tasksTableMissing ||
-            (isEmployee ? !employeeDelegatedView : !seesAllTasks && !mentorManagesTeam)
-          }
-          filtersDisabled={tasksTableMissing}
-          onView={(task) => setViewTask(task)}
-          onEdit={(task) => void openEdit(task)}
-          onDelete={(taskId) => void handleDeleteTask(taskId)}
-          onEmployeeStatusChange={(taskId, status, progress) => void handleEmployeeStatusChange(taskId, status, progress)}
-          onEmployeeProgressChange={(taskId, status, progress) => handleEmployeeProgressAdjust(taskId, status, progress)}
-          onRequestCompleteTask={
-            !canManageTasks && !employeeDelegatedView ? (task) => setCompleteTask(task) : undefined
-          }
-          linkTypePreset={linkTypeFilter}
-          showLinkedColumn={!isStudent}
-          showLeadOutreach={isEmployee || isAdmin}
-          currentUserId={currentUserId}
-          supabase={supabase}
-          onLeadOutreachUpdated={() => void reload()}
-          onLeadOutreachError={setError}
-          onLeadOutreachSuccess={setSuccess}
-          pagination={{
-            page: taskPage,
-            totalPages: taskTotalPages,
-            totalItems: taskTotalItems,
-            pageSize: taskPageSize,
-            onPageChange: setTaskPage,
-            onPageSizeChange: setTaskPageSize,
-          }}
+          showAssignedTo={!isEmployee || employeeDelegatedView || isAdmin}
+          showAssignedBy={isEmployee && !employeeDelegatedView ? true : isAdmin || employeeDelegatedView}
           selection={{
             allSelected: taskSelection.allSelected,
             someSelected: taskSelection.someSelected,
@@ -2381,9 +2208,17 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             onToggleAll: taskSelection.toggleAll,
             onToggle: taskSelection.toggleOne,
           }}
+          onOpenTask={(task) => setFocusedTask(task)}
+        />
+        <TablePagination
+          page={taskPage}
+          totalPages={taskTotalPages}
+          totalItems={taskTotalItems}
+          pageSize={taskPageSize}
+          onPageChange={setTaskPage}
+          onPageSizeChange={setTaskPageSize}
         />
       </div>
-      ) : null}
 
       <TaskCompleteDialog
         task={completeTask}
@@ -2392,25 +2227,35 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         onSubmit={handleCompleteTaskSubmit}
       />
 
-      {viewTask ? (
-        <TaskViewPanel
-          task={viewTask}
+      {focusedTask ? (
+        <TaskAssignmentDetailWorkbench
+          task={focusedTask}
           employeeNameMap={employeeNameMap}
-          supabase={supabase}
+          linkedLeadById={linkedLeadById}
+          linkedCollegeById={linkedCollegeById}
+          loading={loading}
+          canManageTasks={canManageTasks}
+          readOnlyList={employeeDelegatedView}
+          showAssignedTo={!isEmployee || employeeDelegatedView || isAdmin}
+          showAssignedBy={isEmployee && !employeeDelegatedView ? true : isAdmin || employeeDelegatedView}
           currentUserId={currentUserId}
-          linkedLeadRows={
-            (viewTask.client_ids ?? [])
-              .map((id) => linkedLeadById[id])
-              .filter(Boolean) as CrmClientRow[]
-          }
-          canEdit={!employeeDelegatedView}
-          onClose={() => setViewTask(null)}
-          onSaved={() => {
-            void reload();
-          }}
-          onLeadOutreachUpdated={() => void reload()}
+          supabase={supabase}
+          onClose={() => setFocusedTask(null)}
+          onReload={() => void reload()}
           onError={setError}
           onSuccess={setSuccess}
+          onViewLead={(_task, lead, leadLoaded) => openLeadEdit(lead, leadLoaded)}
+          onActivityLead={(_task, lead) => void openLeadActivity(lead)}
+          onViewCollege={(_task, college, collegeLoaded) => openCollegeEdit(college, collegeLoaded)}
+          onActivityCollege={(_task, college) => void openCollegeActivity(college)}
+          onEditCollege={(_task, college, collegeLoaded) => openCollegeEdit(college, collegeLoaded)}
+          onEditTask={(task) => void openEdit(task)}
+          onDeleteTask={(taskId) => void handleDeleteTask(taskId)}
+          onEmployeeStatusChange={(taskId, status, progress) => void handleEmployeeStatusChange(taskId, status, progress)}
+          onEmployeeProgressChange={(taskId, status, progress) => handleEmployeeProgressAdjust(taskId, status, progress)}
+          onRequestCompleteTask={
+            !canManageTasks && !employeeDelegatedView ? (task) => setCompleteTask(task) : undefined
+          }
         />
       ) : null}
 
@@ -2518,17 +2363,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
                     : "Pick Student, Freelancer, Mentor, or Employee - then department and person."
                 }
                 submitting={submitting}
-                onChange={(next) => {
-                  if (next.assigned_to !== form.assigned_to) {
-                    setSelectedClientIds([]);
-                    setSelectedLeadLabels([]);
-                    setLeadSelectionPath("");
-                    setSelectedCollegeVisitIds([]);
-                    setSelectedCollegeLabels([]);
-                    setCollegeSelectionPath("");
-                  }
-                  setForm(next);
-                }}
+                onChange={setForm}
                 onClose={() => setPanelOpen(false)}
                 onSubmit={() => void handleSaveTask()}
               />

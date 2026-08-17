@@ -118,14 +118,7 @@ export function TaskForm({
               profiles={assigneeProfiles}
               value={value.assigned_to}
               disabled={submitting}
-              onChange={(profileId) =>
-                onChange({
-                  ...value,
-                  assigned_to: profileId,
-                  assignment_type: "",
-                  project_id: "",
-                })
-              }
+              onChange={(profileId) => onChange({ ...value, assigned_to: profileId })}
             />
             {assigneeHelperText ? <p className="mt-1.5 text-xs text-[#64748b]">{assigneeHelperText}</p> : null}
           </Field>
