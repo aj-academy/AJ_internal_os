@@ -931,7 +931,25 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     setPageSize: setTaskPageSize,
   } = usePagination(filteredRows, 10);
 
-  const taskSelection = useRowSelection(filteredRows, (task) => task.id);
+  const taskSelection = useRowSelection(filteredRows, (task) => task.id, paginatedRows);
+
+  const assigneeDisplayName = useCallback(
+    (assigneeId: string) => {
+      const trimmed = assigneeId.trim();
+      if (!trimmed) return "Unknown";
+      return employeeNameMap[trimmed] || assigneeProfiles.find((p) => p.id === trimmed)?.full_name || "Unknown";
+    },
+    [assigneeProfiles, employeeNameMap],
+  );
+
+  const taskAssignedSuccessMessage = useCallback(
+    (assigneeId: string, title: string) => {
+      const who = assigneeDisplayName(assigneeId);
+      const taskLabel = title.trim() || "Task";
+      return `“${taskLabel}” assigned to ${who}.`;
+    },
+    [assigneeDisplayName],
+  );
 
   useEffect(() => {
     taskSelection.clearSelection();
@@ -1378,7 +1396,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             },
           });
         }
-        setSuccess("Task assigned.");
+        setSuccess(taskAssignedSuccessMessage(form.assigned_to, form.title));
         setPanelOpen(false);
         setForm(initialForm);
         setSelectedClientIds([]);
@@ -1565,7 +1583,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             },
           });
         }
-        setSuccess("Task assigned successfully.");
+        setSuccess(taskAssignedSuccessMessage(form.assigned_to, form.title));
         setPanelOpen(false);
         setForm(initialForm);
         setEditId(null);

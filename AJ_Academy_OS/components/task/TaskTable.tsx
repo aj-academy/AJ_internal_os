@@ -182,8 +182,8 @@ export function TaskTable({
                 checked: selection!.allSelected,
                 indeterminate: selection!.someSelected,
                 onChange: selection!.onToggleAll,
-                label: "Select all",
-                countLabel: `${tasks.filter((t) => selection!.isSelected(t.id)).length} selected`,
+                label: "Select all on this page",
+                countLabel: `${tasks.filter((t) => selection!.isSelected(t.id)).length} on this page`,
               }
             : undefined
         }

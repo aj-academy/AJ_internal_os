@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TableHeaderCell } from "@/components/ui/TableHeaderFilter";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { usePagination } from "@/lib/usePagination";
+import { buildPageSelectionScope } from "@/lib/useRowSelection";
 import { STUDENT_MASTER_CSV_HEADERS } from "@/components/student-lead-master/studentMasterCsv";
 import { displayLeadName, type CrmClientRow } from "@/components/student-lead-master/studentMasterHelpers";
 import { StudentOutreachButtons } from "@/components/student-lead-master/StudentOutreachButtons";
@@ -258,11 +259,20 @@ export function TaskSubsectionLeadsTable({
   );
   const [outreachBusy, setOutreachBusy] = useState(false);
 
+  const pageTaskIds = useMemo(() => pageRows.map(({ task }) => task.id), [pageRows]);
+  const pageSelection = useMemo(
+    () =>
+      selection
+        ? buildPageSelectionScope(selection.isSelected, selection.onToggle, pageTaskIds)
+        : null,
+    [selection, pageTaskIds],
+  );
+
   const th =
     "min-w-[10.5rem] whitespace-nowrap px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-[#64748b]";
   const td = "whitespace-nowrap px-4 py-3 text-center text-xs text-[#334155]";
   const tdTrunc = `${td} max-w-[160px] truncate`;
-  const colSpan = STUDENT_MASTER_CSV_HEADERS.length + 5 + (selection ? 1 : 0);
+  const colSpan = STUDENT_MASTER_CSV_HEADERS.length + 6 + (selection ? 1 : 0);
 
   const canOutreach = Boolean(currentUserId && supabase);
 
@@ -275,17 +285,17 @@ export function TaskSubsectionLeadsTable({
         >
           <thead className="bg-[#f1f6fc]">
             <tr>
-              {selection ? (
+              {selection && pageSelection ? (
                 <th className={`${th} w-10 min-w-[2.5rem]`}>
                   <input
                     type="checkbox"
                     className="h-4 w-4 accent-[#1e3a5f]"
-                    checked={selection.allSelected}
+                    checked={pageSelection.allSelected}
                     ref={(el) => {
-                      if (el) el.indeterminate = selection.someSelected && !selection.allSelected;
+                      if (el) el.indeterminate = pageSelection.someSelected && !pageSelection.allSelected;
                     }}
-                    onChange={selection.onToggleAll}
-                    aria-label="Select all tasks"
+                    onChange={pageSelection.onToggleAll}
+                    aria-label="Select all tasks on this page"
                   />
                 </th>
               ) : null}
@@ -299,6 +309,7 @@ export function TaskSubsectionLeadsTable({
               />
               <TableHeaderCell label="Progress" className={th} />
               <TableHeaderCell label="Assigned by" className={th} />
+              <TableHeaderCell label="Assigned To" className={th} />
               {STUDENT_MASTER_CSV_HEADERS.map((h) => (
                 <TableHeaderCell key={h} label={h} className={th} />
               ))}
@@ -344,6 +355,9 @@ export function TaskSubsectionLeadsTable({
                   <td className={`${td} sticky-col sticky-col-2 w-[9rem] min-w-[9rem]`}>{task.status}</td>
                   <td className={td}>{task.progress}%</td>
                   <td className={td}>{task.assigner_display_name || "-"}</td>
+                  <td className={`${td} font-medium text-[#0f172a]`}>
+                    {(task.assigned_to && employeeNameMap[task.assigned_to]) || task.assignee_name || "-"}
+                  </td>
                   <td
                     className={`${td} font-semibold`}
                     title={leadLoaded ? displayLeadName(lead) : "Run AJ_Academy_SB/tasks_linked_lead_access.sql to load student data"}
@@ -700,6 +714,15 @@ export function TaskSubsectionCollegesTable({
     setPageSize,
   } = usePagination(rows, 25);
 
+  const pageTaskIds = useMemo(() => pageRows.map(({ task }) => task.id), [pageRows]);
+  const pageSelection = useMemo(
+    () =>
+      selection
+        ? buildPageSelectionScope(selection.isSelected, selection.onToggle, pageTaskIds)
+        : null,
+    [selection, pageTaskIds],
+  );
+
   const [contactByRow, setContactByRow] = useState<Record<string, string>>({});
   const [emailTarget, setEmailTarget] = useState<{
     taskId: string;
@@ -715,7 +738,7 @@ export function TaskSubsectionCollegesTable({
   const [emailBusy, setEmailBusy] = useState(false);
   const th = TABLE_DATA_TH;
   const td = TABLE_DATA_TD;
-  const colSpan = 25 + (selection ? 1 : 0);
+  const colSpan = 26 + (selection ? 1 : 0);
   const canEmail = Boolean(currentUserId);
 
   return (
@@ -732,17 +755,17 @@ export function TaskSubsectionCollegesTable({
         >
           <thead className="cv-head bg-[#f8fbff]">
             <tr>
-              {selection ? (
+              {selection && pageSelection ? (
                 <th className={TABLE_CHECK_TH}>
                   <input
                     type="checkbox"
                     className="h-4 w-4 accent-[#1e3a5f]"
-                    checked={selection.allSelected}
+                    checked={pageSelection.allSelected}
                     ref={(el) => {
-                      if (el) el.indeterminate = selection.someSelected && !selection.allSelected;
+                      if (el) el.indeterminate = pageSelection.someSelected && !pageSelection.allSelected;
                     }}
-                    onChange={selection.onToggleAll}
-                    aria-label="Select all tasks"
+                    onChange={pageSelection.onToggleAll}
+                    aria-label="Select all tasks on this page"
                   />
                 </th>
               ) : (
@@ -754,6 +777,7 @@ export function TaskSubsectionCollegesTable({
                 className={`${th} sticky-col sticky-col-after-check-2 min-w-[14rem]`}
               />
               <TableHeaderCell label="Task" className={`${th} min-w-[11rem]`} />
+              <TableHeaderCell label="Assigned To" className={`${th} min-w-[10rem]`} />
               <TableHeaderCell label="Location" className={th} />
               <TableHeaderCell label="Call" className={`${th} min-w-[5.5rem]`} />
               <TableHeaderCell label="WhatsApp" className={`${th} min-w-[5.5rem]`} />
@@ -828,6 +852,9 @@ export function TaskSubsectionCollegesTable({
                     </td>
                     <td className={`${td} min-w-[11rem] max-w-[14rem] truncate`} title={`${task.title} (${task.status})`}>
                       {task.title}
+                    </td>
+                    <td className={`${td} min-w-[10rem] font-medium text-[#0f172a]`}>
+                      {(task.assigned_to && ownerNameMap[task.assigned_to]) || task.assignee_name || "-"}
                     </td>
                     <td className={td}>{college.location || "-"}</td>
                     <td className={`${td} min-w-[5.5rem]`}>
