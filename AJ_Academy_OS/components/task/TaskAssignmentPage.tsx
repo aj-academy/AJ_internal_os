@@ -932,6 +932,17 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   } = usePagination(filteredRows, 10);
 
   const taskSelection = useRowSelection(filteredRows, (task) => task.id, paginatedRows);
+  const leadSelection = useRowSelection(subsectionLeadRows, (row) => row.key);
+  const collegeSelection = useRowSelection(subsectionCollegeRows, (row) => row.key);
+
+  const leadTaskIdByRowKey = useMemo(
+    () => Object.fromEntries(subsectionLeadRows.map((row) => [row.key, row.task.id])),
+    [subsectionLeadRows],
+  );
+  const collegeTaskIdByRowKey = useMemo(
+    () => Object.fromEntries(subsectionCollegeRows.map((row) => [row.key, row.task.id])),
+    [subsectionCollegeRows],
+  );
 
   const assigneeDisplayName = useCallback(
     (assigneeId: string) => {
@@ -953,6 +964,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
 
   useEffect(() => {
     taskSelection.clearSelection();
+    leadSelection.clearSelection();
+    collegeSelection.clearSelection();
   }, [employeeTaskView, linkTypeFilter, statusFilter, priorityFilter, assignedFilter, dueDateFilter, searchDebounced]);
 
   useEffect(() => {
@@ -964,6 +977,53 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   useEffect(() => {
     setTaskPage(1);
   }, [linkTypeFilter, setTaskPage]);
+
+  const bulkSelectedTaskIds = useMemo(() => {
+    if (linkTypeFilter === "lead") {
+      return Array.from(
+        new Set([...leadSelection.selected].map((rowKey) => leadTaskIdByRowKey[rowKey]).filter(Boolean)),
+      );
+    }
+    if (linkTypeFilter === "college") {
+      return Array.from(
+        new Set([...collegeSelection.selected].map((rowKey) => collegeTaskIdByRowKey[rowKey]).filter(Boolean)),
+      );
+    }
+    return [...taskSelection.selected];
+  }, [
+    collegeSelection.selected,
+    collegeTaskIdByRowKey,
+    leadSelection.selected,
+    leadTaskIdByRowKey,
+    linkTypeFilter,
+    taskSelection.selected,
+  ]);
+
+  const bulkSelectedCount =
+    linkTypeFilter === "lead"
+      ? leadSelection.selectedCount
+      : linkTypeFilter === "college"
+        ? collegeSelection.selectedCount
+        : taskSelection.selectedCount;
+
+  const bulkTotalCount =
+    linkTypeFilter === "lead"
+      ? subsectionLeadRows.length
+      : linkTypeFilter === "college"
+        ? subsectionCollegeRows.length
+        : filteredRows.length;
+
+  const clearBulkSelection = useCallback(() => {
+    if (linkTypeFilter === "lead") {
+      leadSelection.clearSelection();
+      return;
+    }
+    if (linkTypeFilter === "college") {
+      collegeSelection.clearSelection();
+      return;
+    }
+    taskSelection.clearSelection();
+  }, [collegeSelection, leadSelection, linkTypeFilter, taskSelection]);
 
   const filtersActive = Boolean(
     searchText.trim() || statusFilter || priorityFilter || assignedFilter || dueDateFilter,
@@ -1627,10 +1687,14 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   };
 
   const handleBulkDeleteTasks = async () => {
-    if (tasksTableMissing || taskSelection.selectedCount === 0) return;
-    const confirmed = window.confirm(`Delete ${taskSelection.selectedCount} selected task(s)?`);
+    if (tasksTableMissing || bulkSelectedCount === 0) return;
+    const ids = bulkSelectedTaskIds;
+    if (!ids.length) {
+      setError("No task IDs found from selected rows. Please select again.");
+      return;
+    }
+    const confirmed = window.confirm(`Delete ${ids.length} selected task(s)?`);
     if (!confirmed) return;
-    const ids = [...taskSelection.selected];
     let q = supabase.from("tasks").delete().in("id", ids).select("id");
     if (!canManageTasks && currentUserId) {
       q = q.or(`assigned_to.eq.${currentUserId},assigned_by.eq.${currentUserId}`);
@@ -1645,13 +1709,13 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       setError("No tasks were deleted (permission denied).");
       return;
     }
-    taskSelection.clearSelection();
+    clearBulkSelection();
     setSuccess(n === ids.length ? `${n} task(s) deleted.` : `${n} of ${ids.length} task(s) deleted.`);
     await reload();
   };
 
   const handleBulkPinSelected = async () => {
-    if (taskSelection.selectedCount === 0) {
+    if (bulkSelectedCount === 0) {
       setError("Select at least one task row, then click Pin selected.");
       return;
     }
@@ -1659,7 +1723,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       setError("Session not ready. Refresh the page and try pinning again.");
       return;
     }
-    const ids = [...taskSelection.selected];
+    const ids = bulkSelectedTaskIds;
+    if (!ids.length) {
+      setError("No task IDs found from selected rows. Please select again.");
+      return;
+    }
     const taskById = Object.fromEntries(rows.map((t) => [t.id, t]));
     const sectionFor = (taskId: string): string => {
       if (linkTypeFilter === "lead" || linkTypeFilter === "college" || linkTypeFilter === "project") {
@@ -1755,7 +1823,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         return;
       }
 
-      taskSelection.clearSelection();
+      clearBulkSelection();
       setSuccess(messages.join(" "));
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e) {
@@ -2150,6 +2218,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
               onClick={() => {
                 setLinkTypeFilter(tab.id);
                 taskSelection.clearSelection();
+                leadSelection.clearSelection();
+                collegeSelection.clearSelection();
               }}
               className={
                 linkTypeFilter === tab.id
@@ -2166,8 +2236,8 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         </div>
       ) : null}
 
-      {taskSelection.selectedCount > 0 ? (
-        <BulkSelectionBar selectedCount={taskSelection.selectedCount} totalCount={filteredRows.length} onClear={taskSelection.clearSelection}>
+      {bulkSelectedCount > 0 ? (
+        <BulkSelectionBar selectedCount={bulkSelectedCount} totalCount={bulkTotalCount} onClear={clearBulkSelection}>
           {(isEmployee || canManageTasks) && !employeeDelegatedView ? (
             <Button
               type="button"
@@ -2209,11 +2279,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             onOutreachError={setError}
             onOutreachSuccess={setSuccess}
             selection={{
-              allSelected: taskSelection.allSelected,
-              someSelected: taskSelection.someSelected,
-              isSelected: taskSelection.isSelected,
-              onToggleAll: taskSelection.toggleAll,
-              onToggle: taskSelection.toggleOne,
+              allSelected: leadSelection.allSelected,
+              someSelected: leadSelection.someSelected,
+              isSelected: leadSelection.isSelected,
+              onToggleAll: leadSelection.toggleAll,
+              onToggle: leadSelection.toggleOne,
             }}
           />
         </div>
@@ -2237,11 +2307,11 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
             onOutreachError={setError}
             onOutreachSuccess={setSuccess}
             selection={{
-              allSelected: taskSelection.allSelected,
-              someSelected: taskSelection.someSelected,
-              isSelected: taskSelection.isSelected,
-              onToggleAll: taskSelection.toggleAll,
-              onToggle: taskSelection.toggleOne,
+              allSelected: collegeSelection.allSelected,
+              someSelected: collegeSelection.someSelected,
+              isSelected: collegeSelection.isSelected,
+              onToggleAll: collegeSelection.toggleAll,
+              onToggle: collegeSelection.toggleOne,
             }}
           />
         </div>

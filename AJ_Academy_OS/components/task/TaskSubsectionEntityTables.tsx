@@ -206,8 +206,8 @@ function LeadStatusBadge({ status }: { status: string | null | undefined }) {
 }
 
 type SubsectionSelection = {
-  isSelected: (taskId: string) => boolean;
-  onToggle: (taskId: string) => void;
+  isSelected: (rowKey: string) => boolean;
+  onToggle: (rowKey: string) => void;
   allSelected: boolean;
   someSelected: boolean;
   onToggleAll: () => void;
@@ -259,13 +259,13 @@ export function TaskSubsectionLeadsTable({
   );
   const [outreachBusy, setOutreachBusy] = useState(false);
 
-  const pageTaskIds = useMemo(() => pageRows.map(({ task }) => task.id), [pageRows]);
+  const pageRowKeys = useMemo(() => pageRows.map(({ key }) => key), [pageRows]);
   const pageSelection = useMemo(
     () =>
       selection
-        ? buildPageSelectionScope(selection.isSelected, selection.onToggle, pageTaskIds)
+        ? buildPageSelectionScope(selection.isSelected, selection.onToggle, pageRowKeys)
         : null,
-    [selection, pageTaskIds],
+    [selection, pageRowKeys],
   );
 
   const th =
@@ -340,9 +340,9 @@ export function TaskSubsectionLeadsTable({
                       <input
                         type="checkbox"
                         className="h-4 w-4 accent-[#1e3a5f]"
-                        checked={selection.isSelected(task.id)}
-                        onChange={() => selection.onToggle(task.id)}
-                        aria-label={`Select task ${task.title}`}
+                        checked={selection.isSelected(key)}
+                        onChange={() => selection.onToggle(key)}
+                        aria-label={`Select row for ${task.title}`}
                       />
                     </td>
                   ) : null}
@@ -714,13 +714,13 @@ export function TaskSubsectionCollegesTable({
     setPageSize,
   } = usePagination(rows, 25);
 
-  const pageTaskIds = useMemo(() => pageRows.map(({ task }) => task.id), [pageRows]);
+  const pageRowKeys = useMemo(() => pageRows.map(({ key }) => key), [pageRows]);
   const pageSelection = useMemo(
     () =>
       selection
-        ? buildPageSelectionScope(selection.isSelected, selection.onToggle, pageTaskIds)
+        ? buildPageSelectionScope(selection.isSelected, selection.onToggle, pageRowKeys)
         : null,
-    [selection, pageTaskIds],
+    [selection, pageRowKeys],
   );
 
   const [contactByRow, setContactByRow] = useState<Record<string, string>>({});
@@ -834,9 +834,9 @@ export function TaskSubsectionCollegesTable({
                         <input
                           type="checkbox"
                           className="h-4 w-4 accent-[#1e3a5f]"
-                          checked={selection.isSelected(task.id)}
-                          onChange={() => selection.onToggle(task.id)}
-                          aria-label={`Select task ${task.title}`}
+                          checked={selection.isSelected(key)}
+                          onChange={() => selection.onToggle(key)}
+                          aria-label={`Select row for ${task.title}`}
                         />
                       </td>
                     ) : (
