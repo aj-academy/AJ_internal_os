@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MultiSelectFilter } from "@/components/ui/MultiSelectFilter";
 import type { AnalyticsFilters, DatePreset } from "@/lib/analytics/types";
 import { resolveDateRange } from "@/lib/analytics/dateRanges";
 
@@ -15,12 +16,22 @@ const PRESETS: { id: DatePreset; label: string }[] = [
   { id: "custom", label: "Custom" },
 ];
 
+const TASK_STATUS_OPTIONS = [
+  { value: "Pending", label: "Pending" },
+  { value: "In Progress", label: "In Progress" },
+  { value: "Completed", label: "Completed" },
+];
+
 export function AnalyticsFiltersBar({
   filters,
   onChange,
   employees,
   departments,
   roles,
+  courses,
+  leadSources,
+  leadStatuses,
+  admissionStatuses,
   lockEmployee,
   onRefresh,
   loading,
@@ -30,6 +41,10 @@ export function AnalyticsFiltersBar({
   employees: EmployeeOpt[];
   departments: string[];
   roles: string[];
+  courses: string[];
+  leadSources: string[];
+  leadStatuses: string[];
+  admissionStatuses: string[];
   lockEmployee?: boolean;
   onRefresh: () => void;
   loading?: boolean;
@@ -41,6 +56,8 @@ export function AnalyticsFiltersBar({
 
   const field =
     "h-9 rounded-lg border border-[#dbe6f3] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#c4a35a]";
+
+  const toOpts = (items: string[]) => items.filter(Boolean).map((v) => ({ value: v, label: v }));
 
   return (
     <div className="space-y-3 rounded-2xl border border-[#dbe6f3] bg-[#f8fbff] p-4">
@@ -94,110 +111,74 @@ export function AnalyticsFiltersBar({
           </>
         ) : null}
 
-        <label className="space-y-1 text-xs font-semibold text-[#64748b]">
-          Employee
-          <select
-            className={`${field} w-full`}
-            disabled={lockEmployee}
-            value={filters.employeeId}
-            onChange={(e) => onChange({ ...filters, employeeId: e.target.value })}
-          >
-            {!lockEmployee ? <option value="">All employees</option> : null}
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <MultiSelectFilter
+          label="Employee"
+          values={filters.employeeIds}
+          onChange={(employeeIds) => onChange({ ...filters, employeeIds })}
+          options={employees.map((e) => ({ value: e.id, label: e.label }))}
+          allLabel="All employees"
+          disabled={lockEmployee}
+          searchable
+        />
 
-        <label className="space-y-1 text-xs font-semibold text-[#64748b]">
-          Department
-          <select
-            className={`${field} w-full`}
-            value={filters.department}
-            onChange={(e) => onChange({ ...filters, department: e.target.value })}
-            disabled={lockEmployee}
-          >
-            <option value="">All departments</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-        </label>
+        <MultiSelectFilter
+          label="Department"
+          values={filters.departments}
+          onChange={(departments) => onChange({ ...filters, departments })}
+          options={toOpts(departments)}
+          allLabel="All departments"
+          disabled={lockEmployee}
+        />
 
-        <label className="space-y-1 text-xs font-semibold text-[#64748b]">
-          Role
-          <select
-            className={`${field} w-full`}
-            value={filters.role}
-            onChange={(e) => onChange({ ...filters, role: e.target.value })}
-            disabled={lockEmployee}
-          >
-            <option value="">All roles</option>
-            {roles.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        </label>
+        <MultiSelectFilter
+          label="Role"
+          values={filters.roles}
+          onChange={(roles) => onChange({ ...filters, roles })}
+          options={toOpts(roles)}
+          allLabel="All roles"
+          disabled={lockEmployee}
+        />
 
-        <label className="space-y-1 text-xs font-semibold text-[#64748b]">
-          Course
-          <Input
-            className={field}
-            placeholder="Program / course"
-            value={filters.course}
-            onChange={(e) => onChange({ ...filters, course: e.target.value })}
-          />
-        </label>
+        <MultiSelectFilter
+          label="Course"
+          values={filters.courses}
+          onChange={(courses) => onChange({ ...filters, courses })}
+          options={toOpts(courses)}
+          allLabel="All courses"
+          searchable
+        />
 
-        <label className="space-y-1 text-xs font-semibold text-[#64748b]">
-          Lead source
-          <Input
-            className={field}
-            placeholder="Website, Facebook…"
-            value={filters.leadSource}
-            onChange={(e) => onChange({ ...filters, leadSource: e.target.value })}
-          />
-        </label>
+        <MultiSelectFilter
+          label="Lead source"
+          values={filters.leadSources}
+          onChange={(leadSources) => onChange({ ...filters, leadSources })}
+          options={toOpts(leadSources)}
+          allLabel="All sources"
+        />
 
-        <label className="space-y-1 text-xs font-semibold text-[#64748b]">
-          Lead status
-          <Input
-            className={field}
-            placeholder="Interested, Admitted…"
-            value={filters.leadStatus}
-            onChange={(e) => onChange({ ...filters, leadStatus: e.target.value })}
-          />
-        </label>
+        <MultiSelectFilter
+          label="Lead status"
+          values={filters.leadStatuses}
+          onChange={(leadStatuses) => onChange({ ...filters, leadStatuses })}
+          options={toOpts(leadStatuses)}
+          allLabel="All statuses"
+        />
 
-        <label className="space-y-1 text-xs font-semibold text-[#64748b]">
-          Task status
-          <select
-            className={`${field} w-full`}
-            value={filters.taskStatus}
-            onChange={(e) => onChange({ ...filters, taskStatus: e.target.value })}
-          >
-            <option value="">All</option>
-            <option value="Pending">Pending</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Completed">Completed</option>
-          </select>
-        </label>
+        <MultiSelectFilter
+          label="Task status"
+          values={filters.taskStatuses}
+          onChange={(taskStatuses) => onChange({ ...filters, taskStatuses })}
+          options={TASK_STATUS_OPTIONS}
+          allLabel="All"
+        />
 
-        <label className="space-y-1 text-xs font-semibold text-[#64748b]">
-          Admission status
-          <Input
-            className={field}
-            placeholder="Admitted, Cancelled…"
-            value={filters.admissionStatus}
-            onChange={(e) => onChange({ ...filters, admissionStatus: e.target.value })}
-          />
-        </label>
+        <MultiSelectFilter
+          label="Admission status"
+          values={filters.admissionStatuses}
+          onChange={(admissionStatuses) => onChange({ ...filters, admissionStatuses })}
+          options={toOpts(admissionStatuses)}
+          allLabel="All admission statuses"
+        />
 
         <label className="space-y-1 text-xs font-semibold text-[#64748b] sm:col-span-2">
           Search

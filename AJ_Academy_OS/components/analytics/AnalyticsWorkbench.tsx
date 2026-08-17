@@ -185,7 +185,19 @@ export function AnalyticsWorkbench({
     employees: { id: string; label: string; department?: string | null; role?: string | null }[];
     departments: string[];
     roles: string[];
-  }>({ employees: [], departments: [], roles: [] });
+    courses: string[];
+    leadSources: string[];
+    leadStatuses: string[];
+    admissionStatuses: string[];
+  }>({
+    employees: [],
+    departments: [],
+    roles: [],
+    courses: [],
+    leadSources: [],
+    leadStatuses: [],
+    admissionStatuses: [],
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -200,14 +212,14 @@ export function AnalyticsWorkbench({
           preset: filters.preset,
           from: filters.from,
           to: filters.to,
-          employeeId: filters.employeeId || undefined,
-          department: filters.department || undefined,
-          role: filters.role || undefined,
-          course: filters.course || undefined,
-          leadSource: filters.leadSource || undefined,
-          leadStatus: filters.leadStatus || undefined,
-          taskStatus: filters.taskStatus || undefined,
-          admissionStatus: filters.admissionStatus || undefined,
+          employeeIds: filters.employeeIds.length ? filters.employeeIds : undefined,
+          departments: filters.departments.length ? filters.departments : undefined,
+          roles: filters.roles.length ? filters.roles : undefined,
+          courses: filters.courses.length ? filters.courses : undefined,
+          leadSources: filters.leadSources.length ? filters.leadSources : undefined,
+          leadStatuses: filters.leadStatuses.length ? filters.leadStatuses : undefined,
+          taskStatuses: filters.taskStatuses.length ? filters.taskStatuses : undefined,
+          admissionStatuses: filters.admissionStatuses.length ? filters.admissionStatuses : undefined,
           search: filters.search || undefined,
           page: filters.page,
           pageSize: filters.pageSize,
@@ -218,19 +230,23 @@ export function AnalyticsWorkbench({
       setData(json);
       if (json.viewer) setViewer(json.viewer);
       if (json.filterOptions) {
-        const fo = json.filterOptions as {
-          employees?: typeof filterOpts.employees;
-          departments?: string[];
-          roles?: string[];
-        };
+        const fo = json.filterOptions as Partial<typeof filterOpts>;
         setFilterOpts({
           employees: fo.employees ?? [],
           departments: fo.departments ?? [],
           roles: fo.roles ?? [],
+          courses: fo.courses ?? [],
+          leadSources: fo.leadSources ?? [],
+          leadStatuses: fo.leadStatuses ?? [],
+          admissionStatuses: fo.admissionStatuses ?? [],
         });
       }
       if (isEmployee && json.viewer?.id) {
-        setFilters((prev) => (prev.employeeId === json.viewer!.id ? prev : { ...prev, employeeId: json.viewer!.id }));
+        setFilters((prev) =>
+          prev.employeeIds.length === 1 && prev.employeeIds[0] === json.viewer!.id
+            ? prev
+            : { ...prev, employeeIds: [json.viewer!.id] },
+        );
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load analytics.");
@@ -397,6 +413,10 @@ export function AnalyticsWorkbench({
         employees={filterOpts.employees}
         departments={filterOpts.departments}
         roles={filterOpts.roles}
+        courses={filterOpts.courses}
+        leadSources={filterOpts.leadSources}
+        leadStatuses={filterOpts.leadStatuses}
+        admissionStatuses={filterOpts.admissionStatuses}
         lockEmployee={isEmployee}
         onRefresh={() => void load()}
         loading={loading}
@@ -558,7 +578,7 @@ export function AnalyticsWorkbench({
             (This week / This month / Custom) for older activity, then page through the table below.
           </p>
           <DataTable
-            key={`calls-${filters.from}-${filters.to}-${filters.employeeId}-${filters.search}`}
+            key={`calls-${filters.from}-${filters.to}-${filters.employeeIds.join(",")}-${filters.search}`}
             initialPageSize={25}
             columns={[
               { key: "employee", label: "Employee" },
@@ -692,12 +712,12 @@ export function AnalyticsWorkbench({
       {section === "timeline" ? (
         <div className="space-y-3">
           <p className="text-xs text-[#64748b]">
-            {filters.employeeId
+            {filters.employeeIds.length === 1
               ? "Chronological log for the selected person: attendance, calls, CRM, college, tasks, follow-ups, and EOD."
-              : "Team activity for the selected dates. Pick an employee in the filter to see only that person."}
+              : "Team activity for the selected dates. Pick one employee to see only that person, or several to narrow the team feed."}
           </p>
           <h3 className="text-sm font-semibold text-[#0f172a]">
-            Timeline — {(data?.employeeName as string) || (filters.employeeId ? "Employee" : "Team")}
+            Timeline — {(data?.employeeName as string) || (filters.employeeIds.length === 1 ? "Employee" : "Team")}
           </h3>
           <ol className="space-y-3 border-l-2 border-[#e8dcc8] pl-4">
             {(((data?.events || []) as { at: string; kind: string; title: string; detail?: string }[]) ?? []).map(
@@ -799,7 +819,7 @@ export function AnalyticsWorkbench({
           </div>
           <p className="text-xs text-[#94a3b8]">
             Branding: AJ OS · Generated {new Date().toLocaleString("en-IN")} · Filters {filters.from} → {filters.to}
-            {filters.employeeId ? ` · Employee scoped` : " · Company / team"}
+            {filters.employeeIds.length ? ` · Employee scoped` : " · Company / team"}
           </p>
         </div>
       ) : null}

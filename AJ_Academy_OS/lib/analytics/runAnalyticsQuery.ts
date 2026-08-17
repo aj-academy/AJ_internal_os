@@ -4,7 +4,9 @@ import {
   isAdmissionLead,
   isConnectedOutcome,
 } from "@/lib/analytics/productivity";
-import type { AnalyticsFilters, AnalyticsSectionId, DatePreset } from "@/lib/analytics/types";
+import { asFilterList, type AnalyticsFilters, type AnalyticsSectionId, type DatePreset } from "@/lib/analytics/types";
+import { parseCrmSettingsLists } from "@/lib/crmSettings";
+import { ADMISSION_STATUSES } from "@/components/student-lead-master/studentMasterConfig";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type ProfileRow = {
@@ -57,6 +59,22 @@ function inRange(iso: string | null | undefined, from: string, to: string): bool
   return key >= from && key <= to;
 }
 
+function inList(value: string | null | undefined, selected: string[]): boolean {
+  if (!selected.length) return true;
+  return selected.includes((value || "").trim());
+}
+
+function courseInList(
+  program: string | null | undefined,
+  service: string | null | undefined,
+  selected: string[],
+): boolean {
+  if (!selected.length) return true;
+  const p = (program || "").trim();
+  const s = (service || "").trim();
+  return selected.includes(p) || selected.includes(s);
+}
+
 function num(v: unknown): number {
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -68,13 +86,21 @@ export type AnalyticsQueryBody = {
   from?: string;
   to?: string;
   employeeId?: string;
+  employeeIds?: string[] | string;
   department?: string;
+  departments?: string[] | string;
   role?: string;
+  roles?: string[] | string;
   course?: string;
+  courses?: string[] | string;
   leadSource?: string;
+  leadSources?: string[] | string;
   leadStatus?: string;
+  leadStatuses?: string[] | string;
   taskStatus?: string;
+  taskStatuses?: string[] | string;
   admissionStatus?: string;
+  admissionStatuses?: string[] | string;
   search?: string;
   page?: number;
   pageSize?: number;
@@ -92,47 +118,62 @@ export async function runAnalyticsQuery(
     body.to,
   );
 
+  const employeeIds = body.forceEmployeeId
+    ? [body.forceEmployeeId]
+    : asFilterList(body.employeeIds ?? body.employeeId);
+  const departments = asFilterList(body.departments ?? body.department);
+  const roles = asFilterList(body.roles ?? body.role);
+  const courses = asFilterList(body.courses ?? body.course);
+  const leadSources = asFilterList(body.leadSources ?? body.leadSource);
+  const leadStatuses = asFilterList(body.leadStatuses ?? body.leadStatus);
+  const taskStatuses = asFilterList(body.taskStatuses ?? body.taskStatus);
+  const admissionStatuses = asFilterList(body.admissionStatuses ?? body.admissionStatus);
+
   const filters: AnalyticsFilters = {
     preset: body.preset || "today",
     from,
     to,
-    employeeId: body.forceEmployeeId || body.employeeId || "",
-    department: body.department || "",
-    role: body.role || "",
-    course: body.course || "",
-    leadSource: body.leadSource || "",
-    leadStatus: body.leadStatus || "",
-    taskStatus: body.taskStatus || "",
-    admissionStatus: body.admissionStatus || "",
+    employeeIds,
+    departments,
+    roles,
+    courses,
+    leadSources,
+    leadStatuses,
+    taskStatuses,
+    admissionStatuses,
     search: (body.search || "").trim().toLowerCase(),
     page: Math.max(1, body.page || 1),
     pageSize: Math.min(200, Math.max(10, body.pageSize || 50)),
   };
 
-  const { data: profileRows } = await supabase
-    .from("profiles")
-    .select("id,full_name,email,role,department,status")
-    .in("role", ["employee", "admin", "super_admin", "mentor", "freelancer", "student"])
-    .or("status.is.null,status.eq.active")
-    .order("full_name", { ascending: true })
-    .limit(2000);
+  const [{ data: profileRows }, { data: crmSetting }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id,full_name,email,role,department,status")
+      .in("role", ["employee", "admin", "super_admin", "mentor", "freelancer", "student"])
+      .or("status.is.null,status.eq.active")
+      .order("full_name", { ascending: true })
+      .limit(2000),
+    supabase.from("system_settings").select("setting_value").eq("setting_key", "crm").maybeSingle(),
+  ]);
 
   const allProfiles = (profileRows ?? []) as ProfileRow[];
   // Full name map so assigner/assignee labels stay correct when a filter is applied.
   const profileMap = Object.fromEntries(allProfiles.map((p) => [p.id, p]));
+  const crmLists = parseCrmSettingsLists(crmSetting?.setting_value);
 
   let profiles = allProfiles.filter((p) => {
-    if (filters.role) return (p.role || "") === filters.role;
+    if (filters.roles.length) return filters.roles.includes(p.role || "");
     return STAFF_ROLES.has(p.role || "");
   });
-  if (filters.department) {
-    profiles = profiles.filter((p) => (p.department || "") === filters.department);
+  if (filters.departments.length) {
+    profiles = profiles.filter((p) => filters.departments.includes(p.department || ""));
   }
-  if (filters.employeeId) {
-    profiles = allProfiles.filter((p) => p.id === filters.employeeId);
+  if (filters.employeeIds.length) {
+    profiles = allProfiles.filter((p) => filters.employeeIds.includes(p.id));
   }
 
-  const scopeIds = filters.employeeId ? [filters.employeeId] : profiles.map((p) => p.id);
+  const scopeIds = filters.employeeIds.length ? filters.employeeIds : profiles.map((p) => p.id);
 
   const filterOptions = {
     departments: [...new Set(allProfiles.map((p) => p.department).filter(Boolean))] as string[],
@@ -140,6 +181,10 @@ export async function runAnalyticsQuery(
     employees: allProfiles
       .filter((p) => STAFF_ROLES.has(p.role || ""))
       .map((p) => ({ id: p.id, label: nameOf(p), department: p.department, role: p.role })),
+    courses: crmLists.interestedPrograms,
+    leadSources: crmLists.leadSources,
+    leadStatuses: crmLists.leadStatuses,
+    admissionStatuses: [...ADMISSION_STATUSES],
   };
 
   const meta = {
@@ -310,17 +355,13 @@ async function buildAggregates(
     return !eid || scopeIds.includes(eid);
   });
   let clients = clientsRes.data ?? [];
-  if (filters.leadSource) clients = clients.filter((c) => (c.source || "") === filters.leadSource);
-  if (filters.leadStatus) clients = clients.filter((c) => (c.status || "") === filters.leadStatus);
-  if (filters.admissionStatus) {
-    clients = clients.filter((c) => (c.admission_status || "") === filters.admissionStatus);
+  if (filters.leadSources.length) clients = clients.filter((c) => inList(c.source, filters.leadSources));
+  if (filters.leadStatuses.length) clients = clients.filter((c) => inList(c.status, filters.leadStatuses));
+  if (filters.admissionStatuses.length) {
+    clients = clients.filter((c) => inList(c.admission_status, filters.admissionStatuses));
   }
-  if (filters.course) {
-    clients = clients.filter(
-      (c) =>
-        (c.interested_program || "").toLowerCase().includes(filters.course.toLowerCase()) ||
-        (c.service_interest || "").toLowerCase().includes(filters.course.toLowerCase()),
-    );
+  if (filters.courses.length) {
+    clients = clients.filter((c) => courseInList(c.interested_program, c.service_interest, filters.courses));
   }
 
   const completionTaskIds = [...new Set(completionActs.map((a) => a.task_id).filter(Boolean))];
@@ -337,10 +378,14 @@ async function buildAggregates(
   const taskById = Object.fromEntries([...allTasks, ...extraCompletedTasks].map((t) => [t.id, t]));
 
   const matchesTaskScope = (assignedTo: string | null | undefined, assignedBy: string | null | undefined, actorId: string | null | undefined) => {
-    if (filters.employeeId) {
-      return assignedTo === filters.employeeId || assignedBy === filters.employeeId || actorId === filters.employeeId;
+    if (filters.employeeIds.length) {
+      return (
+        filters.employeeIds.includes(assignedTo || "") ||
+        filters.employeeIds.includes(assignedBy || "") ||
+        filters.employeeIds.includes(actorId || "")
+      );
     }
-    if (filters.department || filters.role) {
+    if (filters.departments.length || filters.roles.length) {
       return scopeIds.includes(assignedTo || "") || scopeIds.includes(actorId || "");
     }
     return true;
@@ -781,8 +826,8 @@ async function buildCalls(
         r.source.toLowerCase().includes(filters.search),
     );
   }
-  if (filters.course) {
-    rows = rows.filter((r) => r.course.toLowerCase().includes(filters.course.toLowerCase()));
+  if (filters.courses.length) {
+    rows = rows.filter((r) => inList(r.course, filters.courses));
   }
 
   // Strip technical fields before UI/export so PDF never receives id / employeeId / startedAt.
@@ -940,10 +985,14 @@ async function buildTasks(
     "id,title,assigned_to,assigned_by,status,priority,progress,due_date,start_date,created_at,updated_at,completion_summary,assignment_type";
 
   const matchesScope = (assignedTo?: string | null, assignedBy?: string | null, actorId?: string | null) => {
-    if (filters.employeeId) {
-      return assignedTo === filters.employeeId || assignedBy === filters.employeeId || actorId === filters.employeeId;
+    if (filters.employeeIds.length) {
+      return (
+        filters.employeeIds.includes(assignedTo || "") ||
+        filters.employeeIds.includes(assignedBy || "") ||
+        filters.employeeIds.includes(actorId || "")
+      );
     }
-    if (filters.department || filters.role) {
+    if (filters.departments.length || filters.roles.length) {
       return scopeIds.includes(assignedTo || "") || scopeIds.includes(actorId || "");
     }
     return true;
@@ -965,9 +1014,11 @@ async function buildTasks(
         .neq("status", "Completed")
         .order("due_date", { ascending: true })
         .limit(2000);
-      if (filters.employeeId) {
-        q = q.or(`assigned_to.eq.${filters.employeeId},assigned_by.eq.${filters.employeeId}`);
-      } else if ((filters.department || filters.role) && scopeIds.length) {
+      if (filters.employeeIds.length === 1) {
+        q = q.or(`assigned_to.eq.${filters.employeeIds[0]},assigned_by.eq.${filters.employeeIds[0]}`);
+      } else if (filters.employeeIds.length > 1) {
+        q = q.in("assigned_to", filters.employeeIds);
+      } else if ((filters.departments.length || filters.roles.length) && scopeIds.length) {
         q = q.in("assigned_to", scopeIds);
       }
       return q;
@@ -1074,13 +1125,13 @@ async function buildTasks(
       overdue: Boolean(t.status !== "Completed" && t.due_date && t.due_date < today),
     }));
 
-  const statusFilter = filters.taskStatus;
-  let rows =
-    statusFilter === "Completed"
-      ? completedRows
-      : statusFilter === "Pending" || statusFilter === "In Progress"
-        ? openRows.filter((r) => r.status === statusFilter)
-        : [...completedRows, ...openRows];
+  const statusFilter = filters.taskStatuses;
+  let rows = !statusFilter.length
+    ? [...completedRows, ...openRows]
+    : [
+        ...(statusFilter.includes("Completed") ? completedRows : []),
+        ...openRows.filter((r) => statusFilter.includes(r.status)),
+      ];
 
   if (filters.search) {
     const q = filters.search;
@@ -1118,11 +1169,9 @@ async function buildConversion(
     .limit(8000);
 
   let clients = data ?? [];
-  if (filters.leadSource) clients = clients.filter((c) => (c.source || "") === filters.leadSource);
-  if (filters.course) {
-    clients = clients.filter((c) =>
-      (c.interested_program || "").toLowerCase().includes(filters.course.toLowerCase()),
-    );
+  if (filters.leadSources.length) clients = clients.filter((c) => inList(c.source, filters.leadSources));
+  if (filters.courses.length) {
+    clients = clients.filter((c) => courseInList(c.interested_program, null, filters.courses));
   }
 
   const bySource: Record<
@@ -1182,15 +1231,11 @@ async function buildAdmissionsRevenue(
       ["Partial", "Paid", "Refunded"].includes(c.payment_status || "") ||
       num(c.final_fee) > 0,
   );
-  if (filters.admissionStatus) {
-    clients = clients.filter((c) => (c.admission_status || "") === filters.admissionStatus);
+  if (filters.admissionStatuses.length) {
+    clients = clients.filter((c) => inList(c.admission_status, filters.admissionStatuses));
   }
-  if (filters.course) {
-    clients = clients.filter(
-      (c) =>
-        (c.interested_program || "").toLowerCase().includes(filters.course.toLowerCase()) ||
-        (c.service_interest || "").toLowerCase().includes(filters.course.toLowerCase()),
-    );
+  if (filters.courses.length) {
+    clients = clients.filter((c) => courseInList(c.interested_program, c.service_interest, filters.courses));
   }
 
   const byCourse: Record<string, { course: string; admissions: number; revenue: number; pending: number; cancelled: number; refund: number }> = {};
@@ -1261,7 +1306,7 @@ async function buildTimeline(
   scopeIds: string[],
   meta: Record<string, unknown>,
 ) {
-  const employeeId = filters.employeeId;
+  const employeeId = filters.employeeIds.length === 1 ? filters.employeeIds[0] : "";
   if (!employeeId) {
     return buildTeamTimeline(supabase, filters, profileMap, scopeIds, meta);
   }

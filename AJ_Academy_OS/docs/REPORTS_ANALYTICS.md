@@ -29,7 +29,7 @@ Legacy `ReportsWorkbench` remains in the codebase under `components/reports/` fo
 
 ## Global filters
 
-Today · Yesterday · This Week · This Month · Custom range, plus Employee, Department, Role, Course, Lead Source, Lead Status, Task Status, Admission Status, Search.
+Today · Yesterday · This Week · This Month · Custom range, plus **multiselect** Employee, Department, Role, Course, Lead Source, Lead Status, Task Status, Admission Status, and free-text Search. Course / source / status lists come from CRM settings. Close a dropdown (or click Apply / Refresh) to apply the selection.
 
 ## APIs
 
@@ -39,7 +39,7 @@ Today · Yesterday · This Week · This Month · Custom range, plus Employee, De
 | `POST` | `/api/analytics/eod` | Employee upsert EOD |
 | `PATCH` | `/api/analytics/eod` | Admin review / approve |
 
-Body for query: `{ section, preset, from, to, employeeId, department, role, course, leadSource, leadStatus, taskStatus, admissionStatus, search, page, pageSize }`.
+Body for query: `{ section, preset, from, to, employeeIds, departments, roles, courses, leadSources, leadStatuses, taskStatuses, admissionStatuses, search, page, pageSize }` (legacy singular fields still accepted).
 
 ## Database
 

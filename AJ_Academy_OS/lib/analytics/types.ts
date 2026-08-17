@@ -51,14 +51,14 @@ export type AnalyticsFilters = {
   preset: DatePreset;
   from: string;
   to: string;
-  employeeId: string;
-  department: string;
-  role: string;
-  course: string;
-  leadSource: string;
-  leadStatus: string;
-  taskStatus: string;
-  admissionStatus: string;
+  employeeIds: string[];
+  departments: string[];
+  roles: string[];
+  courses: string[];
+  leadSources: string[];
+  leadStatuses: string[];
+  taskStatuses: string[];
+  admissionStatuses: string[];
   search: string;
   page?: number;
   pageSize?: number;
@@ -68,15 +68,28 @@ export const EMPTY_ANALYTICS_FILTERS: AnalyticsFilters = {
   preset: "today",
   from: "",
   to: "",
-  employeeId: "",
-  department: "",
-  role: "",
-  course: "",
-  leadSource: "",
-  leadStatus: "",
-  taskStatus: "",
-  admissionStatus: "",
+  employeeIds: [],
+  departments: [],
+  roles: [],
+  courses: [],
+  leadSources: [],
+  leadStatuses: [],
+  taskStatuses: [],
+  admissionStatuses: [],
   search: "",
   page: 1,
   pageSize: 50,
 };
+
+export function asFilterList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map((x) => String(x).trim()).filter(Boolean))];
+  }
+  if (typeof value === "string" && value.trim()) {
+    if (value.includes(",")) {
+      return [...new Set(value.split(",").map((s) => s.trim()).filter(Boolean))];
+    }
+    return [value.trim()];
+  }
+  return [];
+}
