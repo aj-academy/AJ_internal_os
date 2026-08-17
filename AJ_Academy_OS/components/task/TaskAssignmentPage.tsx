@@ -18,7 +18,7 @@ import { TaskAssignmentRowList } from "@/components/task/TaskAssignmentRowList";
 import type { AssigneeProfile } from "@/components/task/TaskAssigneePicker";
 import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
-import { assignerDisplayFromProfile } from "@/lib/profileDisplayName";
+import { assignerDisplayFromProfile, isGenericRoleLabel, profilePersonName } from "@/lib/profileDisplayName";
 import { parseTaskAttachments, uploadTaskAttachments, type TaskAttachment } from "@/lib/taskAttachments";
 import { fetchTaskActivities, logTaskActivity, parseClientIds, type TaskActivityRow } from "@/lib/taskActivities";
 import {
@@ -327,6 +327,26 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
     }
 
     if (isAdmin) {
+      const { data: rpcRows, error: rpcError } = await supabase.rpc("get_task_assignees");
+      if (!rpcError && Array.isArray(rpcRows)) {
+        const rows = rpcRows as {
+          id: string;
+          full_name: string | null;
+          email: string | null;
+          department: string | null;
+          role: string | null;
+        }[];
+        setEmployees(
+          rows.map((r) => ({
+            id: r.id,
+            full_name: r.full_name,
+            email: r.email,
+            department: r.department,
+            role: r.role,
+          })),
+        );
+        return;
+      }
       const { data, error: profilesError } = await supabase
         .from("profiles")
         .select("id,full_name,email,department,role")
@@ -483,7 +503,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
         new Set(rawRows.map((r) => r.assigned_to).filter((id): id is string => Boolean(id))),
       );
       let assignerMap: Record<string, { full_name: string | null; email: string | null; role: string | null; department: string | null }> = {};
-      let assigneeMap: Record<string, { department: string | null }> = {};
+      let assigneeMap: Record<string, { full_name: string | null; email: string | null; department: string | null }> = {};
       if (assignerIds.length) {
         const { data: profs, error: profErr } = await supabase
           .from("profiles")
@@ -501,11 +521,14 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       if (assigneeIds.length) {
         const { data: assigneeProfs, error: assigneeErr } = await supabase
           .from("profiles")
-          .select("id,department")
+          .select("id,full_name,email,department")
           .in("id", assigneeIds);
         if (!assigneeErr && assigneeProfs) {
           assigneeMap = Object.fromEntries(
-            assigneeProfs.map((p: { id: string; department: string | null }) => [p.id, p]),
+            assigneeProfs.map((p: { id: string; full_name: string | null; email: string | null; department: string | null }) => [
+              p.id,
+              p,
+            ]),
           );
         }
       }
@@ -520,6 +543,12 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
           ? assignerDisplayFromProfile(assignerMap[row.assigned_by] ?? null) ?? null
           : null,
         assigner_department: row.assigned_by ? assignerMap[row.assigned_by]?.department ?? null : null,
+        assignee_name:
+          (row.assigned_to ? profilePersonName(assigneeMap[row.assigned_to]) : null) ||
+          (isGenericRoleLabel(row.assignee_name) ? null : row.assignee_name) ||
+          row.assignee_email ||
+          row.assignee_name ||
+          null,
         assignee_department: row.assigned_to ? assigneeMap[row.assigned_to]?.department ?? null : null,
       }));
 
@@ -848,7 +877,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const employeeOptions = useMemo(
     () =>
       employees.map((employee) => {
-        const name = employee.full_name || employee.email || "Unnamed";
+        const name = profilePersonName(employee) || "Unnamed";
         const dept = employee.department?.trim();
         const label = dept ? `${name} - ${dept}` : name;
         return { id: employee.id, label };
@@ -865,15 +894,20 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const employeeNameMap = useMemo(() => {
     const map: Record<string, string> = {};
     employees.forEach((employee) => {
-      map[employee.id] = employee.full_name || employee.email || "Unknown";
+      const name = profilePersonName(employee);
+      if (name) map[employee.id] = name;
     });
-    if (selfProfile?.id && !map[selfProfile.id]) {
-      map[selfProfile.id] = selfProfile.full_name || selfProfile.email || "Unknown";
+    if (selfProfile?.id) {
+      const selfName = profilePersonName(selfProfile);
+      if (selfName) map[selfProfile.id] = selfName;
     }
     rows.forEach((task) => {
-      if (task.assignee_name) {
-        const key = task.assigned_to ?? `archived:${task.assignee_email ?? task.id}`;
-        map[key] = task.assignee_name;
+      const key = task.assigned_to ?? `archived:${task.assignee_email ?? task.id}`;
+      const snapshot = task.assignee_name?.trim() || "";
+      const existing = map[key];
+      if (!existing || isGenericRoleLabel(existing)) {
+        if (snapshot && !isGenericRoleLabel(snapshot)) map[key] = snapshot;
+        else if (task.assignee_email && !isGenericRoleLabel(task.assignee_email)) map[key] = task.assignee_email;
       }
     });
     return map;

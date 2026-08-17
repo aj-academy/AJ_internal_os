@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { profilePersonName } from "@/lib/profileDisplayName";
 
 export type TaskActivityRow = {
   id: string;
@@ -52,11 +53,14 @@ export async function fetchTaskActivities(
   const rows = (data ?? []) as TaskActivityRow[];
   const actorIds = [...new Set(rows.map((r) => r.actor_id).filter(Boolean))] as string[];
   if (!actorIds.length) return rows;
-  const { data: profs } = await supabase.from("profiles").select("id,full_name,email").in("id", actorIds);
+  const { data: profs } = await supabase
+    .from("profiles")
+    .select("id,full_name,email")
+    .in("id", actorIds);
   const nameMap = Object.fromEntries(
     (profs ?? []).map((p: { id: string; full_name: string | null; email: string | null }) => [
       p.id,
-      p.full_name || p.email || "User",
+      profilePersonName(p) || p.email || "User",
     ]),
   );
   return rows.map((r) => ({

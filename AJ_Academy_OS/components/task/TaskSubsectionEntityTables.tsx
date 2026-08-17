@@ -42,6 +42,7 @@ import {
 import { formatEmailActivityNotes, MAX_EMAIL_MESSAGE_LENGTH } from "@/lib/whatsappOutreach";
 import { logTaskActivity } from "@/lib/taskActivities";
 import { formatDisplayDate } from "@/lib/datetime";
+import { isGenericRoleLabel } from "@/lib/profileDisplayName";
 import { createClient } from "@/lib/supabase/client";
 import type { TaskRecord } from "@/types/task";
 import type { CSSProperties } from "react";
@@ -356,7 +357,10 @@ export function TaskSubsectionLeadsTable({
                   <td className={td}>{task.progress}%</td>
                   <td className={td}>{task.assigner_display_name || "-"}</td>
                   <td className={`${td} font-medium text-[#0f172a]`}>
-                    {(task.assigned_to && employeeNameMap[task.assigned_to]) || task.assignee_name || "-"}
+                    {(task.assigned_to && employeeNameMap[task.assigned_to]) ||
+                      (!isGenericRoleLabel(task.assignee_name) ? task.assignee_name : null) ||
+                      task.assignee_email ||
+                      "-"}
                   </td>
                   <td
                     className={`${td} font-semibold`}
@@ -854,7 +858,10 @@ export function TaskSubsectionCollegesTable({
                       {task.title}
                     </td>
                     <td className={`${td} min-w-[10rem] font-medium text-[#0f172a]`}>
-                      {(task.assigned_to && ownerNameMap[task.assigned_to]) || task.assignee_name || "-"}
+                      {(task.assigned_to && ownerNameMap[task.assigned_to]) ||
+                        (!isGenericRoleLabel(task.assignee_name) ? task.assignee_name : null) ||
+                        task.assignee_email ||
+                        "-"}
                     </td>
                     <td className={td}>{college.location || "-"}</td>
                     <td className={`${td} min-w-[5.5rem]`}>

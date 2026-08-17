@@ -12,6 +12,7 @@ import {
 import { TaskTable } from "@/components/task/TaskTable";
 import { fetchTaskActivities, type TaskActivityRow } from "@/lib/taskActivities";
 import { formatDisplayDate } from "@/lib/datetime";
+import { isGenericRoleLabel } from "@/lib/profileDisplayName";
 import type { createClient } from "@/lib/supabase/client";
 import type { CrmClientRow } from "@/components/student-lead-master/studentMasterHelpers";
 import type { CollegeVisitRow } from "@/components/college-visits/collegeVisitsHelpers";
@@ -83,7 +84,10 @@ export function TaskAssignmentDetailWorkbench({
   const [activitiesLoading, setActivitiesLoading] = useState(true);
 
   const assignee =
-    (task.assigned_to && employeeNameMap[task.assigned_to]) || task.assignee_name || "Unknown";
+    (task.assigned_to && employeeNameMap[task.assigned_to]) ||
+    (!isGenericRoleLabel(task.assignee_name) ? task.assignee_name : null) ||
+    task.assignee_email ||
+    "Unknown";
 
   const leadRows = useMemo(() => flattenTaskLeads([task], linkedLeadById), [task, linkedLeadById]);
   const collegeRows = useMemo(() => flattenTaskColleges([task], linkedCollegeById), [task, linkedCollegeById]);
@@ -264,7 +268,12 @@ export function TaskAssignmentDetailWorkbench({
                   <div key={a.id} className="rounded-lg border border-[#e8edf5] bg-[#f8fbff] px-3 py-2 text-xs">
                     <p className="font-medium text-[#0f172a]">
                       {a.activity_type.replace(/_/g, " ")}
-                      {a.actor_name ? ` · ${a.actor_name}` : ""}
+                    {(() => {
+                      const actor =
+                        (a.actor_id && employeeNameMap[a.actor_id]) ||
+                        (!isGenericRoleLabel(a.actor_name) ? a.actor_name : null);
+                      return actor ? ` · ${actor}` : "";
+                    })()}
                     </p>
                     {a.notes ? <p className="mt-1 whitespace-pre-wrap text-[#475569]">{a.notes}</p> : null}
                     <p className="mt-1 text-[#94a3b8]">{new Date(a.created_at).toLocaleString("en-IN")}</p>

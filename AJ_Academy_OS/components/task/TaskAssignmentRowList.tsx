@@ -3,6 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
 import { formatDisplayDate } from "@/lib/datetime";
+import { isGenericRoleLabel } from "@/lib/profileDisplayName";
 import type { TaskRecord } from "@/types/task";
 
 type TaskAssignmentRowListProps = {
@@ -91,7 +92,10 @@ export function TaskAssignmentRowList({
       <ul className="divide-y divide-[#e8edf5]">
         {tasks.map((task) => {
           const assignee =
-            (task.assigned_to && employeeNameMap[task.assigned_to]) || task.assignee_name || "Unknown";
+            (task.assigned_to && employeeNameMap[task.assigned_to]) ||
+            (!isGenericRoleLabel(task.assignee_name) ? task.assignee_name : null) ||
+            task.assignee_email ||
+            "Unknown";
           return (
             <li key={task.id}>
               <div className="flex items-stretch gap-3 px-4 py-3 hover:bg-[#fafcff]">
