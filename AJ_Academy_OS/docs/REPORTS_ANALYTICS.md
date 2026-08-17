@@ -14,15 +14,15 @@ Legacy `ReportsWorkbench` remains in the codebase under `components/reports/` fo
 ## Sections
 
 1. Dashboard Overview — KPIs, charts, accountability alerts  
-2. Daily Employee Report — per-employee scorecard  
+2. Daily Employee Report — per-employee scorecard (Tasks Done = finished in the selected IST dates, with task titles)  
 3. Team Performance — team rollups + top/least performers  
 4. Call Activity — Student Master `lead_call_sessions` **plus** College Visits dialer `Phone Call` rows from `college_visit_activities`  
 5. Follow-up Report — `lead_followups` + client follow-up dates  
-6. Task Completion — `tasks`  
+6. Task Completion — work **finished in the selected IST dates** from `task_activities` (`task_completed`) plus the completion note; open/overdue listed separately (not “due today”)  
 7. Lead Conversion — by `clients.source`  
 8. Admission Report — by course  
 9. Revenue Report — by employee (`final_fee` / payment status)  
-10. Employee Timeline — attendance, calls, CRM activities, tasks, EOD  
+10. Employee Timeline — team activity feed by default; pick an employee for one person’s log (attendance, calls, CRM, college, tasks, EOD)  
 11. Productivity Report — weighted score (calls, CRM, tasks, follow-ups, admissions, attendance)  
 12. End Of Day Tracker — `work_summaries`  
 13. Download Centre — CSV / Excel / PDF / print  
@@ -72,14 +72,16 @@ Employee Student Master saves require:
 
 ## Testing checklist
 
-1. Admin opens Reports & Analytics → Overview loads with live KPIs.  
-2. Filter one employee → Daily / Timeline update.  
+1. Admin opens Reports & Analytics → Overview loads with live KPIs. Tasks Completed is work finished in the selected dates, not due-date matches.  
+2. Filter one employee → Daily / Timeline update. Daily **Completed work** shows task titles; check-in times are IST.  
 3. Call Activity shows Student Master call sessions and College Visits Phone Call logs (IST day bounds).
-4. Employee My Reports only shows self.  
-5. Export CSV / Excel / PDF from Download Centre.  
-6. Checkout EOD requires achievement, pending, tomorrow plan.  
-7. Employee lead edit blocked without status / remarks / follow-up.  
-8. Run SQL script; EOD columns + unique upsert succeed.  
+4. Task Completion shows completion notes and IST completed-at. Student assignees are named, not Unknown.  
+5. Employee Timeline with All employees shows a team feed; picking one person still works.  
+6. Employee My Reports only shows self.  
+7. Export CSV / Excel / PDF from Download Centre.  
+8. Checkout EOD requires achievement, pending, tomorrow plan.  
+9. Employee lead edit blocked without status / remarks / follow-up.  
+10. Run SQL script; EOD columns + unique upsert succeed.  
 
 ## Performance notes
 

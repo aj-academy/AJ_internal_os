@@ -216,6 +216,7 @@ Run **`analytics_reporting_schema.sql`** after attendance, tasks, CRM, and `lead
 - APIs: `POST /api/analytics/query`, `POST|PATCH /api/analytics/eod`
 - Call Activity includes sessions by all staff roles (`admin`, `super_admin`, `employee`, `mentor`, `freelancer`) unless Employee filter is applied.
 - Call Activity also includes **College Visits dialer Phone Call** logs from `college_visit_activities` (not only Student Master `lead_call_sessions`). Report day bounds use Asia/Kolkata.
+- **Task Completion** lists work **finished in the selected IST dates** from `task_activities` (`task_completed`) plus the completion note. It is not “tasks due today.” Open/overdue tasks are separate rows. Assignee names include students. **Daily Employee Report → Tasks Done** uses the same completion events. **Employee Timeline** shows the team feed when no employee is selected.
 - Full module docs: `AJ_Academy_OS/docs/REPORTS_ANALYTICS.md`
 
 Also run **`reports_analytics_schema.sql`** after `lead_call_workflow_schema.sql` (and ideally after `student_lead_master_aux_schema.sql` + `student_master_columns_patch.sql` for follow-ups / admissions). Safe to re-run. Adds:

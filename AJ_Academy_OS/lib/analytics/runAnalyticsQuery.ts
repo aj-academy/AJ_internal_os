@@ -1,4 +1,4 @@
-import { eachDateKey, isoEndOfDay, isoStartOfDay, resolveDateRange } from "@/lib/analytics/dateRanges";
+import { eachDateKey, isoEndOfDay, isoStartOfDay, resolveDateRange, toDateKeyIst } from "@/lib/analytics/dateRanges";
 import {
   computeProductivityScore,
   isAdmissionLead,
@@ -16,13 +16,44 @@ type ProfileRow = {
   status: string | null;
 };
 
+const STAFF_ROLES = new Set(["employee", "admin", "super_admin", "mentor", "freelancer"]);
+
 function nameOf(p: ProfileRow | undefined): string {
   return p?.full_name?.trim() || p?.email?.trim() || "Unknown";
 }
 
+function istDateKeyFromIso(iso: string | null | undefined): string {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+function istTimeFromIso(iso: string | null | undefined): string {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleTimeString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatIstDateTime(iso: string | null | undefined): string {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Inclusive range on IST calendar dates. Date-only values (due_date) stay as stored. */
 function inRange(iso: string | null | undefined, from: string, to: string): boolean {
   if (!iso) return false;
-  const key = iso.slice(0, 10);
+  const raw = iso.trim();
+  const key = raw.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : istDateKeyFromIso(raw);
+  if (!key || key === "-") return false;
   return key >= from && key <= to;
 }
 
@@ -81,26 +112,35 @@ export async function runAnalyticsQuery(
   const { data: profileRows } = await supabase
     .from("profiles")
     .select("id,full_name,email,role,department,status")
-    .in("role", ["employee", "admin", "super_admin", "mentor", "freelancer"])
+    .in("role", ["employee", "admin", "super_admin", "mentor", "freelancer", "student"])
     .or("status.is.null,status.eq.active")
     .order("full_name", { ascending: true })
-    .limit(800);
+    .limit(2000);
 
-  let profiles = (profileRows ?? []) as ProfileRow[];
+  const allProfiles = (profileRows ?? []) as ProfileRow[];
+  // Full name map so assigner/assignee labels stay correct when a filter is applied.
+  const profileMap = Object.fromEntries(allProfiles.map((p) => [p.id, p]));
+
+  let profiles = allProfiles.filter((p) => {
+    if (filters.role) return (p.role || "") === filters.role;
+    return STAFF_ROLES.has(p.role || "");
+  });
   if (filters.department) {
     profiles = profiles.filter((p) => (p.department || "") === filters.department);
   }
-  if (filters.role) {
-    profiles = profiles.filter((p) => (p.role || "") === filters.role);
-  }
   if (filters.employeeId) {
-    profiles = profiles.filter((p) => p.id === filters.employeeId);
+    profiles = allProfiles.filter((p) => p.id === filters.employeeId);
   }
 
-  const profileMap = Object.fromEntries(profiles.map((p) => [p.id, p]));
-  // Analytics should include all operational staff roles (admin/super_admin/employee/mentor/freelancer),
-  // not only "employee", otherwise real call activity done by admins disappears.
   const scopeIds = filters.employeeId ? [filters.employeeId] : profiles.map((p) => p.id);
+
+  const filterOptions = {
+    departments: [...new Set(allProfiles.map((p) => p.department).filter(Boolean))] as string[],
+    roles: [...new Set(allProfiles.map((p) => p.role).filter(Boolean))] as string[],
+    employees: allProfiles
+      .filter((p) => STAFF_ROLES.has(p.role || ""))
+      .map((p) => ({ id: p.id, label: nameOf(p), department: p.department, role: p.role })),
+  };
 
   const meta = {
     from,
@@ -111,19 +151,20 @@ export async function runAnalyticsQuery(
   };
 
   const section = body.section;
+  const withOpts = (data: Record<string, unknown>) => ({ ...data, filterOptions });
 
   if (section === "overview" || section === "team" || section === "productivity" || section === "daily") {
-    return buildAggregates(supabase, filters, profiles, profileMap, scopeIds, meta, section);
+    return withOpts(await buildAggregates(supabase, filters, profiles, profileMap, scopeIds, meta, section));
   }
-  if (section === "calls") return buildCalls(supabase, filters, profileMap, scopeIds, meta);
-  if (section === "followups") return buildFollowups(supabase, filters, profileMap, scopeIds, meta);
-  if (section === "tasks") return buildTasks(supabase, filters, profileMap, scopeIds, meta);
-  if (section === "conversion") return buildConversion(supabase, filters, scopeIds, meta);
+  if (section === "calls") return withOpts(await buildCalls(supabase, filters, profileMap, scopeIds, meta));
+  if (section === "followups") return withOpts(await buildFollowups(supabase, filters, profileMap, scopeIds, meta));
+  if (section === "tasks") return withOpts(await buildTasks(supabase, filters, profileMap, scopeIds, meta));
+  if (section === "conversion") return withOpts(await buildConversion(supabase, filters, scopeIds, meta));
   if (section === "admissions" || section === "revenue") {
-    return buildAdmissionsRevenue(supabase, filters, profileMap, scopeIds, meta, section);
+    return withOpts(await buildAdmissionsRevenue(supabase, filters, profileMap, scopeIds, meta, section));
   }
-  if (section === "timeline") return buildTimeline(supabase, filters, profileMap, meta);
-  if (section === "eod") return buildEod(supabase, filters, profileMap, scopeIds, meta);
+  if (section === "timeline") return withOpts(await buildTimeline(supabase, filters, profileMap, scopeIds, meta));
+  if (section === "eod") return withOpts(await buildEod(supabase, filters, profileMap, scopeIds, meta));
   if (section === "download") {
     const [daily, calls, tasks, eod] = await Promise.all([
       buildAggregates(supabase, filters, profiles, profileMap, scopeIds, meta, "daily"),
@@ -131,10 +172,10 @@ export async function runAnalyticsQuery(
       buildTasks(supabase, filters, profileMap, scopeIds, meta),
       buildEod(supabase, filters, profileMap, scopeIds, meta),
     ]);
-    return { meta, daily, calls, tasks, eod };
+    return withOpts({ meta, daily, calls, tasks, eod });
   }
 
-  return { meta, error: "Unknown section" };
+  return withOpts({ meta, error: "Unknown section" });
 }
 
 async function buildAggregates(
@@ -167,6 +208,7 @@ async function buildAggregates(
     collegeActsRes,
     followupsRes,
     clientsRes,
+    completionActsRes,
   ] = await Promise.all([
     supabase
       .from("attendance_records")
@@ -192,7 +234,7 @@ async function buildAggregates(
       .limit(8000),
     supabase
       .from("tasks")
-      .select("id,title,assigned_to,assigned_by,status,priority,progress,due_date,created_at,updated_at")
+      .select("id,title,assigned_to,assigned_by,status,priority,progress,due_date,created_at,updated_at,completion_summary")
       .in("assigned_to", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
       .limit(5000),
     supabase
@@ -222,6 +264,14 @@ async function buildAggregates(
       )
       .in("assigned_to", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
       .limit(8000),
+    supabase
+      .from("task_activities")
+      .select("id,task_id,actor_id,notes,created_at")
+      .eq("activity_type", "task_completed")
+      .gte("created_at", fromTs)
+      .lte("created_at", toTs)
+      .order("created_at", { ascending: false })
+      .limit(4000),
   ]);
 
   const attendance = attendanceRes.data ?? [];
@@ -243,6 +293,7 @@ async function buildAggregates(
     })),
   ];
   const allTasks = tasksRes.data ?? [];
+  const completionActs = completionActsRes.data ?? [];
   const activities = [
     ...(activitiesRes.data ?? []),
     ...(collegeActsRes.data ?? []).map((a) => ({
@@ -272,66 +323,112 @@ async function buildAggregates(
     );
   }
 
-  const tasksInRange = allTasks.filter(
-    (t) =>
-      inRange(t.updated_at, filters.from, filters.to) ||
-      inRange(t.created_at, filters.from, filters.to) ||
-      inRange(t.due_date, filters.from, filters.to),
-  );
-  const tasks = filters.taskStatus
-    ? tasksInRange.filter((t) => t.status === filters.taskStatus)
-    : tasksInRange;
+  const completionTaskIds = [...new Set(completionActs.map((a) => a.task_id).filter(Boolean))];
+  const knownTaskIds = new Set(allTasks.map((t) => t.id));
+  const missingCompletionTaskIds = completionTaskIds.filter((id) => !knownTaskIds.has(id));
+  let extraCompletedTasks = allTasks.slice(0, 0);
+  if (missingCompletionTaskIds.length) {
+    const extra = await supabase
+      .from("tasks")
+      .select("id,title,assigned_to,assigned_by,status,priority,progress,due_date,created_at,updated_at,completion_summary")
+      .in("id", missingCompletionTaskIds.slice(0, 1000));
+    extraCompletedTasks = extra.data ?? [];
+  }
+  const taskById = Object.fromEntries([...allTasks, ...extraCompletedTasks].map((t) => [t.id, t]));
 
-  const todayKey = filters.to;
+  const matchesTaskScope = (assignedTo: string | null | undefined, assignedBy: string | null | undefined, actorId: string | null | undefined) => {
+    if (filters.employeeId) {
+      return assignedTo === filters.employeeId || assignedBy === filters.employeeId || actorId === filters.employeeId;
+    }
+    if (filters.department || filters.role) {
+      return scopeIds.includes(assignedTo || "") || scopeIds.includes(actorId || "");
+    }
+    return true;
+  };
+
+  const completionsInRange = completionActs.filter((a) => {
+    const t = taskById[a.task_id];
+    return matchesTaskScope(t?.assigned_to, t?.assigned_by, a.actor_id);
+  });
+  const completionTaskIdSet = new Set(completionsInRange.map((a) => a.task_id));
+  const fallbackCompleted = allTasks.filter(
+    (t) =>
+      t.status === "Completed" &&
+      inRange(t.updated_at, filters.from, filters.to) &&
+      !completionTaskIdSet.has(t.id) &&
+      matchesTaskScope(t.assigned_to, t.assigned_by, t.assigned_to),
+  );
+
+  const liveToday = toDateKeyIst();
+  const attendanceTodayKey = filters.from <= liveToday && filters.to >= liveToday ? liveToday : filters.to;
   const presentEmployees = new Set(
     attendance
-      .filter((a) => a.attendance_date === todayKey && ["present", "completed", "late"].includes((a.status || "").toLowerCase()))
+      .filter((a) =>
+        (filters.from === filters.to ? a.attendance_date === filters.from : true) &&
+        ["present", "completed", "late"].includes((a.status || "").toLowerCase()),
+      )
       .map((a) => a.employee_id),
   );
   const workingEmployees = new Set(
     attendance
-      .filter((a) => a.attendance_date === todayKey && a.check_in_time && !a.check_out_time)
+      .filter((a) => a.attendance_date === attendanceTodayKey && a.check_in_time && !a.check_out_time)
       .map((a) => a.employee_id),
   );
   const checkedOut = new Set(
     attendance
-      .filter((a) => a.attendance_date === todayKey && a.check_out_time)
+      .filter((a) => a.attendance_date === attendanceTodayKey && a.check_out_time)
       .map((a) => a.employee_id),
   );
 
   const connectedCalls = calls.filter((c) => isConnectedOutcome(c.call_outcome));
   const pendingFollowups = followups.filter((f) => {
     const st = (f.status || "Pending").toLowerCase();
-    return st === "pending" || st === "missed" || (f.follow_up_date < todayKey && st === "pending");
+    return st === "pending" || st === "missed" || (f.follow_up_date < attendanceTodayKey && st === "pending");
   });
-  const admissions = clients.filter((c) => isAdmissionLead(c));
+  const admissionsLifetime = clients.filter((c) => isAdmissionLead(c));
+  const admissions = admissionsLifetime.filter(
+    (c) => inRange(c.updated_at, filters.from, filters.to) || inRange(c.created_at, filters.from, filters.to),
+  );
   const revenue = admissions.reduce((s, c) => s + num(c.final_fee), 0);
   const pendingRevenue = clients
     .filter((c) => ["Partial", "Not Paid"].includes(c.payment_status || ""))
     .reduce((s, c) => s + Math.max(0, num(c.final_fee) || num(c.fee_quoted)), 0);
-  const tasksCompleted = tasks.filter((t) => t.status === "Completed").length;
-  const tasksPending = tasks.filter((t) => t.status !== "Completed").length;
+  const tasksCompleted = completionsInRange.length + fallbackCompleted.length;
+  const tasksPending = allTasks.filter((t) => t.status !== "Completed").length;
+  const todayKey = attendanceTodayKey;
 
   const perEmployee = scopeIds.map((id) => {
     const empCalls = calls.filter((c) => c.employee_id === id);
     const empTasks = allTasks.filter((t) => t.assigned_to === id);
-    const empTasksRange = tasks.filter((t) => t.assigned_to === id);
+    const empCompletions = [
+      ...completionsInRange.filter((a) => {
+        const t = taskById[a.task_id];
+        return t?.assigned_to === id || a.actor_id === id;
+      }),
+      ...fallbackCompleted.filter((t) => t.assigned_to === id),
+    ];
     const empActs = activities.filter((a) => a.created_by === id);
     const empFu = followups.filter((f) => f.assigned_employee_id === id);
     const empClients = clients.filter((c) => c.assigned_to === id);
     const empAtt = attendance.filter((a) => a.employee_id === id);
-    const empAdmissions = empClients.filter((c) => isAdmissionLead(c));
+    const empAdmissions = empClients.filter(
+      (c) =>
+        isAdmissionLead(c) &&
+        (inRange(c.updated_at, filters.from, filters.to) || inRange(c.created_at, filters.from, filters.to)),
+    );
     const fuDone = empFu.filter((f) => (f.status || "").toLowerCase() === "completed").length;
     const fuDue = empFu.length;
     const presentDays = empAtt.filter((a) =>
       ["present", "completed", "late"].includes((a.status || "").toLowerCase()),
     ).length;
+    const empTasksCompleted = empCompletions.length;
+    const empTasksPending = empTasks.filter((t) => t.status !== "Completed").length;
     const prod = computeProductivityScore({
       callsAttempted: empCalls.length,
       callsConnected: empCalls.filter((c) => isConnectedOutcome(c.call_outcome)).length,
       crmUpdates: empActs.length,
-      tasksCompleted: empTasksRange.filter((t) => t.status === "Completed").length,
-      tasksAssigned: empTasksRange.length || empTasks.length,
+      tasksCompleted: empTasksCompleted,
+      tasksAssigned: empTasks.length || empTasksCompleted,
       followupsCompleted: fuDone,
       followupsDue: fuDue,
       admissions: empAdmissions.length,
@@ -348,6 +445,18 @@ async function buildAggregates(
       const key = c.call_outcome || "No Outcome";
       outcomeCounts[key] = (outcomeCounts[key] || 0) + 1;
     }
+
+    const completedWork = empCompletions
+      .map((item) => {
+        if ("task_id" in item) {
+          const t = taskById[item.task_id];
+          return (t?.title || item.notes || "").trim();
+        }
+        return (item.title || "").trim();
+      })
+      .filter(Boolean)
+      .slice(0, 4)
+      .join("; ");
 
     return {
       employeeId: id,
@@ -367,9 +476,10 @@ async function buildAggregates(
       pendingRevenue: empClients
         .filter((c) => ["Partial", "Not Paid"].includes(c.payment_status || ""))
         .reduce((s, c) => s + Math.max(0, num(c.final_fee) || num(c.fee_quoted)), 0),
-      tasksAssigned: empTasksRange.length,
-      tasksCompleted: empTasksRange.filter((t) => t.status === "Completed").length,
-      tasksPending: empTasksRange.filter((t) => t.status !== "Completed").length,
+      tasksAssigned: empTasks.length,
+      tasksCompleted: empTasksCompleted,
+      tasksPending: empTasksPending,
+      completedWork: completedWork || "-",
       overdueTasks: empTasks.filter(
         (t) => t.status !== "Completed" && t.due_date && t.due_date < todayKey,
       ).length,
@@ -388,7 +498,7 @@ async function buildAggregates(
           (t) => t.status !== "Completed" && t.due_date && t.due_date < todayKey,
         ),
         noAdmissions: empAdmissions.length === 0,
-        noActivity: empCalls.length === 0 && empActs.length === 0 && empTasksRange.length === 0,
+        noActivity: empCalls.length === 0 && empActs.length === 0 && empTasksCompleted === 0,
         lowProductivity: prod.score < 60,
       },
     };
@@ -488,8 +598,10 @@ async function buildAggregates(
       })),
       taskTrend: days.map((d) => ({
         date: d,
-        completed: tasks.filter((t) => t.status === "Completed" && inRange(t.updated_at, d, d)).length,
-        pending: tasks.filter((t) => t.status !== "Completed" && inRange(t.updated_at || t.created_at, d, d)).length,
+        completed:
+          completionsInRange.filter((a) => inRange(a.created_at, d, d)).length +
+          fallbackCompleted.filter((t) => inRange(t.updated_at, d, d)).length,
+        pending: allTasks.filter((t) => t.status !== "Completed" && inRange(t.due_date || t.created_at, d, d)).length,
       })),
     },
     employees: perEmployee,
@@ -509,31 +621,12 @@ async function buildAggregates(
       mostCalls,
     },
     accountability,
-    filterOptions: {
-      departments: [...new Set(profiles.map((p) => p.department).filter(Boolean))] as string[],
-      roles: [...new Set(profiles.map((p) => p.role).filter(Boolean))] as string[],
-      employees: profiles.map((p) => ({ id: p.id, label: nameOf(p), department: p.department, role: p.role })),
-    },
   };
 }
 
 function parsePhoneFromCallNotes(notes: string | null | undefined): string {
   const m = String(notes || "").match(/Called\s+(\d[\d\s-]{6,}\d)/i);
   return m?.[1]?.replace(/\s+/g, "") || "-";
-}
-
-function istDateKeyFromIso(iso: string | null | undefined): string {
-  if (!iso) return "-";
-  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-}
-
-function istTimeFromIso(iso: string | null | undefined): string {
-  if (!iso) return "-";
-  return new Date(iso).toLocaleTimeString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 type CallActivityRow = {
@@ -840,56 +933,175 @@ async function buildTasks(
   scopeIds: string[],
   meta: Record<string, unknown>,
 ) {
-  let q = supabase
+  const fromTs = isoStartOfDay(filters.from);
+  const toTs = isoEndOfDay(filters.to);
+  const today = toDateKeyIst();
+  const taskSelect =
+    "id,title,assigned_to,assigned_by,status,priority,progress,due_date,start_date,created_at,updated_at,completion_summary,assignment_type";
+
+  const matchesScope = (assignedTo?: string | null, assignedBy?: string | null, actorId?: string | null) => {
+    if (filters.employeeId) {
+      return assignedTo === filters.employeeId || assignedBy === filters.employeeId || actorId === filters.employeeId;
+    }
+    if (filters.department || filters.role) {
+      return scopeIds.includes(assignedTo || "") || scopeIds.includes(actorId || "");
+    }
+    return true;
+  };
+
+  const [actsRes, openRes] = await Promise.all([
+    supabase
+      .from("task_activities")
+      .select("id,task_id,actor_id,notes,created_at")
+      .eq("activity_type", "task_completed")
+      .gte("created_at", fromTs)
+      .lte("created_at", toTs)
+      .order("created_at", { ascending: false })
+      .limit(3000),
+    (() => {
+      let q = supabase
+        .from("tasks")
+        .select(taskSelect)
+        .neq("status", "Completed")
+        .order("due_date", { ascending: true })
+        .limit(2000);
+      if (filters.employeeId) {
+        q = q.or(`assigned_to.eq.${filters.employeeId},assigned_by.eq.${filters.employeeId}`);
+      } else if ((filters.department || filters.role) && scopeIds.length) {
+        q = q.in("assigned_to", scopeIds);
+      }
+      return q;
+    })(),
+  ]);
+
+  const acts = actsRes.data ?? [];
+  const completedIds = [...new Set(acts.map((a) => a.task_id).filter(Boolean))];
+  const completedTasksRes = completedIds.length
+    ? await supabase.from("tasks").select(taskSelect).in("id", completedIds.slice(0, 1000))
+    : { data: [] as Record<string, unknown>[] };
+  const completedById = Object.fromEntries((completedTasksRes.data ?? []).map((t) => [t.id, t]));
+
+  const fallbackCompletedRes = await supabase
     .from("tasks")
-    .select(
-      "id,title,assigned_to,assigned_by,status,priority,progress,due_date,start_date,created_at,updated_at,completion_summary,assignment_type",
-    )
-    .order("updated_at", { ascending: false })
-    .limit(2000);
+    .select(taskSelect)
+    .eq("status", "Completed")
+    .gte("updated_at", fromTs)
+    .lte("updated_at", toTs)
+    .limit(1000);
+  const fallbackCompleted = (fallbackCompletedRes.data ?? []).filter((t) => !completedById[t.id]);
 
-  if (scopeIds.length) q = q.in("assigned_to", scopeIds);
-  if (filters.taskStatus) q = q.eq("status", filters.taskStatus);
+  type TaskRow = {
+    id: string;
+    task: string;
+    assignedBy: string;
+    assignedTo: string;
+    assignedToId: string | null;
+    completedBy: string;
+    priority: string | null;
+    deadline: string;
+    status: string;
+    progress: number;
+    completionTime: string;
+    completionSummary: string;
+    type: string;
+    overdue: boolean;
+  };
 
-  const { data } = await q;
-  const today = filters.to;
-  let rows = (data ?? [])
+  const completedRows: TaskRow[] = [];
+  for (const a of acts) {
+    const t = completedById[a.task_id];
+    if (!t) continue;
+    if (!matchesScope(t.assigned_to, t.assigned_by, a.actor_id)) continue;
+    completedRows.push({
+      id: `${t.id}:${a.id}`,
+      task: t.title,
+      assignedBy: nameOf(profileMap[t.assigned_by || ""]),
+      assignedTo: nameOf(profileMap[t.assigned_to || ""]),
+      assignedToId: t.assigned_to,
+      completedBy: nameOf(profileMap[a.actor_id || t.assigned_to || ""]),
+      priority: t.priority,
+      deadline: t.due_date || "-",
+      status: "Completed",
+      progress: t.progress ?? 100,
+      completionTime: formatIstDateTime(a.created_at),
+      completionSummary: String(t.completion_summary || a.notes || "").trim() || "-",
+      type: t.assignment_type || "-",
+      overdue: Boolean(t.due_date && t.due_date < istDateKeyFromIso(a.created_at)),
+    });
+  }
+  for (const t of fallbackCompleted) {
+    if (!matchesScope(t.assigned_to, t.assigned_by, t.assigned_to)) continue;
+    completedRows.push({
+      id: t.id,
+      task: t.title,
+      assignedBy: nameOf(profileMap[t.assigned_by || ""]),
+      assignedTo: nameOf(profileMap[t.assigned_to || ""]),
+      assignedToId: t.assigned_to,
+      completedBy: nameOf(profileMap[t.assigned_to || ""]),
+      priority: t.priority,
+      deadline: t.due_date || "-",
+      status: "Completed",
+      progress: t.progress ?? 100,
+      completionTime: formatIstDateTime(t.updated_at),
+      completionSummary: String(t.completion_summary || "").trim() || "-",
+      type: t.assignment_type || "-",
+      overdue: Boolean(t.due_date && t.due_date < today),
+    });
+  }
+
+  let openRows: TaskRow[] = (openRes.data ?? [])
     .filter(
       (t) =>
-        inRange(t.updated_at, filters.from, filters.to) ||
+        inRange(t.due_date, filters.from, filters.to) ||
         inRange(t.created_at, filters.from, filters.to) ||
-        inRange(t.due_date, filters.from, filters.to),
+        Boolean(t.due_date && t.due_date < today),
     )
+    .filter((t) => matchesScope(t.assigned_to, t.assigned_by, t.assigned_to))
     .map((t) => ({
       id: t.id,
       task: t.title,
       assignedBy: nameOf(profileMap[t.assigned_by || ""]),
       assignedTo: nameOf(profileMap[t.assigned_to || ""]),
       assignedToId: t.assigned_to,
+      completedBy: "-",
       priority: t.priority,
       deadline: t.due_date || "-",
       status: t.status,
       progress: t.progress ?? 0,
-      completionTime: t.status === "Completed" ? (t.updated_at || "").slice(0, 16).replace("T", " ") : "-",
+      completionTime: "-",
+      completionSummary: "-",
       type: t.assignment_type || "-",
-      overdue: t.status !== "Completed" && t.due_date && t.due_date < today,
+      overdue: Boolean(t.status !== "Completed" && t.due_date && t.due_date < today),
     }));
 
+  const statusFilter = filters.taskStatus;
+  let rows =
+    statusFilter === "Completed"
+      ? completedRows
+      : statusFilter === "Pending" || statusFilter === "In Progress"
+        ? openRows.filter((r) => r.status === statusFilter)
+        : [...completedRows, ...openRows];
+
   if (filters.search) {
+    const q = filters.search;
     rows = rows.filter(
       (r) =>
-        r.task.toLowerCase().includes(filters.search) ||
-        r.assignedTo.toLowerCase().includes(filters.search),
+        r.task.toLowerCase().includes(q) ||
+        r.assignedTo.toLowerCase().includes(q) ||
+        r.assignedBy.toLowerCase().includes(q) ||
+        r.completionSummary.toLowerCase().includes(q),
     );
   }
 
   return {
     meta,
     total: rows.length,
-    completed: rows.filter((r) => r.status === "Completed").length,
-    pending: rows.filter((r) => r.status !== "Completed").length,
-    overdue: rows.filter((r) => r.overdue).length,
+    completed: completedRows.length,
+    pending: openRows.filter((r) => !r.overdue).length,
+    overdue: openRows.filter((r) => r.overdue).length,
     rows,
+    completedRows,
+    openRows,
   };
 }
 
@@ -1046,16 +1258,12 @@ async function buildTimeline(
   supabase: SupabaseClient,
   filters: AnalyticsFilters,
   profileMap: Record<string, ProfileRow>,
+  scopeIds: string[],
   meta: Record<string, unknown>,
 ) {
   const employeeId = filters.employeeId;
   if (!employeeId) {
-    return {
-      meta,
-      error: "Select an employee to view their timeline.",
-      events: [],
-      employeeName: null,
-    };
+    return buildTeamTimeline(supabase, filters, profileMap, scopeIds, meta);
   }
 
   const fromTs = isoStartOfDay(filters.from);
@@ -1174,11 +1382,21 @@ async function buildTimeline(
       detail: a.notes || undefined,
     });
   }
+  const taskIds = [...new Set((tasks.data ?? []).map((t) => t.task_id).filter(Boolean))];
+  const { data: taskNames } = taskIds.length
+    ? await supabase.from("tasks").select("id,title").in("id", taskIds)
+    : { data: [] as { id: string; title?: string | null }[] };
+  const tmap = Object.fromEntries((taskNames ?? []).map((t) => [t.id, t.title || "Task"]));
+
   for (const t of tasks.data ?? []) {
+    const label =
+      t.activity_type === "task_completed"
+        ? `Completed: ${tmap[t.task_id] || "Task"}`
+        : `${t.activity_type || "Task activity"} · ${tmap[t.task_id] || "Task"}`;
     events.push({
       at: t.created_at,
       kind: "task",
-      title: t.activity_type || "Task activity",
+      title: label,
       detail: t.notes || undefined,
     });
   }
@@ -1205,7 +1423,145 @@ async function buildTimeline(
     meta,
     employeeId,
     employeeName: nameOf(profileMap[employeeId]),
+    teamMode: false,
     events,
+  };
+}
+
+async function buildTeamTimeline(
+  supabase: SupabaseClient,
+  filters: AnalyticsFilters,
+  profileMap: Record<string, ProfileRow>,
+  scopeIds: string[],
+  meta: Record<string, unknown>,
+) {
+  const fromTs = isoStartOfDay(filters.from);
+  const toTs = isoEndOfDay(filters.to);
+  const emptyScope = scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"];
+
+  const [calls, acts, collegeActs, taskActs, eod] = await Promise.all([
+    supabase
+      .from("lead_call_sessions")
+      .select("started_at,call_outcome,phone_number,lead_id,notes,employee_id")
+      .gte("started_at", fromTs)
+      .lte("started_at", toTs)
+      .in("employee_id", emptyScope)
+      .order("started_at", { ascending: false })
+      .limit(200),
+    supabase
+      .from("lead_activities")
+      .select("created_at,activity_type,notes,client_id,created_by")
+      .gte("created_at", fromTs)
+      .lte("created_at", toTs)
+      .in("created_by", emptyScope)
+      .order("created_at", { ascending: false })
+      .limit(200),
+    supabase
+      .from("college_visit_activities")
+      .select("created_at,activity_type,notes,college_visit_id,created_by")
+      .gte("created_at", fromTs)
+      .lte("created_at", toTs)
+      .in("created_by", emptyScope)
+      .order("created_at", { ascending: false })
+      .limit(200),
+    supabase
+      .from("task_activities")
+      .select("created_at,activity_type,notes,task_id,actor_id")
+      .eq("activity_type", "task_completed")
+      .gte("created_at", fromTs)
+      .lte("created_at", toTs)
+      .order("created_at", { ascending: false })
+      .limit(200),
+    supabase
+      .from("work_summaries")
+      .select("summary_date,completed_work,status,created_at,employee_id")
+      .gte("summary_date", filters.from)
+      .lte("summary_date", filters.to)
+      .in("employee_id", emptyScope)
+      .limit(200),
+  ]);
+
+  const taskIds = [...new Set((taskActs.data ?? []).map((t) => t.task_id).filter(Boolean))];
+  const leadIds = [
+    ...new Set([
+      ...(calls.data ?? []).map((c) => c.lead_id),
+      ...(acts.data ?? []).map((a) => a.client_id),
+    ].filter(Boolean)),
+  ];
+  const visitIds = [...new Set((collegeActs.data ?? []).map((a) => a.college_visit_id).filter(Boolean))];
+  const [{ data: taskNames }, { data: leadNames }, { data: visitNames }] = await Promise.all([
+    taskIds.length
+      ? supabase.from("tasks").select("id,title,assigned_to").in("id", taskIds)
+      : Promise.resolve({ data: [] as { id: string; title?: string | null; assigned_to?: string | null }[] }),
+    leadIds.length
+      ? supabase.from("clients").select("id,lead_name,name").in("id", leadIds)
+      : Promise.resolve({ data: [] as { id: string; lead_name?: string | null; name?: string | null }[] }),
+    visitIds.length
+      ? supabase.from("college_visits").select("id,college_name").in("id", visitIds)
+      : Promise.resolve({ data: [] as { id: string; college_name?: string | null }[] }),
+  ]);
+  const tmap = Object.fromEntries((taskNames ?? []).map((t) => [t.id, t.title || "Task"]));
+  const lmap = Object.fromEntries((leadNames ?? []).map((l) => [l.id, l.lead_name || l.name || "Lead"]));
+  const vmap = Object.fromEntries((visitNames ?? []).map((v) => [v.id, v.college_name || "College"]));
+
+  type Ev = { at: string; kind: string; title: string; detail?: string; employee?: string };
+  const events: Ev[] = [];
+  const who = (id: string | null | undefined) => nameOf(profileMap[id || ""]);
+
+  for (const c of calls.data ?? []) {
+    events.push({
+      at: c.started_at,
+      kind: "call",
+      employee: who(c.employee_id),
+      title: `${who(c.employee_id)} called ${lmap[c.lead_id] || c.phone_number || "candidate"}`,
+      detail: [c.call_outcome, c.notes].filter(Boolean).join(" · "),
+    });
+  }
+  for (const a of acts.data ?? []) {
+    events.push({
+      at: a.created_at,
+      kind: "crm",
+      employee: who(a.created_by),
+      title: `${who(a.created_by)} · ${a.activity_type || "CRM update"}`,
+      detail: a.notes || lmap[a.client_id] || undefined,
+    });
+  }
+  for (const a of collegeActs.data ?? []) {
+    events.push({
+      at: a.created_at,
+      kind: "college",
+      employee: who(a.created_by),
+      title: `${who(a.created_by)} · ${a.activity_type || "College update"} · ${vmap[a.college_visit_id] || "College"}`,
+      detail: a.notes || undefined,
+    });
+  }
+  for (const t of taskActs.data ?? []) {
+    events.push({
+      at: t.created_at,
+      kind: "task",
+      employee: who(t.actor_id),
+      title: `${who(t.actor_id)} completed ${tmap[t.task_id] || "a task"}`,
+      detail: t.notes || undefined,
+    });
+  }
+  for (const s of eod.data ?? []) {
+    events.push({
+      at: s.created_at || `${s.summary_date}T18:00:00`,
+      kind: "eod",
+      employee: who(s.employee_id),
+      title: `${who(s.employee_id)} submitted End of Day`,
+      detail: s.completed_work?.slice(0, 160) || s.status || undefined,
+    });
+  }
+
+  events.sort((a, b) => b.at.localeCompare(a.at));
+
+  return {
+    meta,
+    employeeId: null,
+    employeeName: "Team",
+    teamMode: true,
+    events: events.slice(0, 250),
   };
 }
 

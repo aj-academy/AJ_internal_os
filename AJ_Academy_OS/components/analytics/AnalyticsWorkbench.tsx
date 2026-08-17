@@ -81,12 +81,23 @@ function EmptyState({ text }: { text: string }) {
   );
 }
 
+function formatIstTime(iso: string | null | undefined): string {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleTimeString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function DataTable({
   columns,
   rows,
   initialPageSize = 25,
 }: {
-  columns: { key: string; label: string }[];
+  columns: { key: string; label: string; wrap?: boolean }[];
   rows: Record<string, unknown>[];
   initialPageSize?: number;
 }) {
@@ -122,7 +133,14 @@ function DataTable({
             {paginatedItems.map((row, idx) => (
               <tr key={`${page}-${idx}`} className="hover:bg-[#fafcff]">
                 {columns.map((c) => (
-                  <td key={c.key} className="whitespace-nowrap px-3 py-2 text-[#334155]">
+                  <td
+                    key={c.key}
+                    className={
+                      c.wrap
+                        ? "max-w-[320px] whitespace-normal break-words px-3 py-2 text-[#334155]"
+                        : "whitespace-nowrap px-3 py-2 text-[#334155]"
+                    }
+                  >
                     {row[c.key] == null || row[c.key] === "" ? "-" : String(row[c.key])}
                   </td>
                 ))}
@@ -392,18 +410,18 @@ export function AnalyticsWorkbench({
         <div className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
             <StatCard title="Total Employees" value={kpis.totalEmployees ?? 0} loading={loading} />
-            <StatCard title="Present" value={kpis.employeesPresent ?? 0} loading={loading} />
-            <StatCard title="Working Now" value={kpis.employeesWorking ?? 0} loading={loading} />
+            <StatCard title="Present" value={kpis.employeesPresent ?? 0} loading={loading} subtitle="Check-ins in this date range" />
+            <StatCard title="Working Now" value={kpis.employeesWorking ?? 0} loading={loading} subtitle="Checked in, not yet out" />
             <StatCard title="Checked Out" value={kpis.employeesCheckedOut ?? 0} loading={loading} />
-            <StatCard title="Leads Assigned" value={kpis.totalLeadsAssigned ?? 0} loading={loading} />
-            <StatCard title="Total Calls" value={kpis.totalCalls ?? 0} loading={loading} />
+            <StatCard title="Leads Assigned" value={kpis.totalLeadsAssigned ?? 0} loading={loading} subtitle="Currently assigned, not only today" />
+            <StatCard title="Total Calls" value={kpis.totalCalls ?? 0} loading={loading} subtitle="Calls logged in this date range" />
             <StatCard title="Connected Calls" value={kpis.connectedCalls ?? 0} loading={loading} />
             <StatCard title="Pending Follow-ups" value={kpis.pendingFollowups ?? 0} loading={loading} />
-            <StatCard title="Admissions" value={kpis.admissions ?? 0} loading={loading} />
+            <StatCard title="Admissions" value={kpis.admissions ?? 0} loading={loading} subtitle="Admitted / updated in this date range" />
             <StatCard title="Revenue" value={formatInr(kpis.revenueGenerated ?? 0)} loading={loading} />
             <StatCard title="Pending Revenue" value={formatInr(kpis.pendingRevenue ?? 0)} loading={loading} />
-            <StatCard title="Tasks Completed" value={kpis.tasksCompleted ?? 0} loading={loading} />
-            <StatCard title="Tasks Pending" value={kpis.tasksPending ?? 0} loading={loading} />
+            <StatCard title="Tasks Completed" value={kpis.tasksCompleted ?? 0} loading={loading} subtitle="Finished in this date range" />
+            <StatCard title="Tasks Pending" value={kpis.tasksPending ?? 0} loading={loading} subtitle="Still open on assigned staff" />
             <StatCard title="Avg Productivity" value={`${kpis.averageProductivity ?? 0}%`} loading={loading} />
           </div>
 
@@ -475,6 +493,10 @@ export function AnalyticsWorkbench({
           <h3 className="text-sm font-semibold text-[#0f172a]">
             {section === "daily" ? "Daily employee scorecard" : "Productivity ranking"}
           </h3>
+          <p className="text-xs text-[#64748b]">
+            Tasks Done is work finished in the selected dates (IST), not every task that happens to be due.
+            Completed work shows the task titles. Check-in times are India time.
+          </p>
           <DataTable
             columns={[
               { key: "employeeName", label: "Employee" },
@@ -489,7 +511,8 @@ export function AnalyticsWorkbench({
               { key: "admissions", label: "Admissions" },
               { key: "revenue", label: "Revenue" },
               { key: "tasksCompleted", label: "Tasks Done" },
-              { key: "tasksPending", label: "Tasks Pending" },
+              { key: "completedWork", label: "Completed work", wrap: true },
+              { key: "tasksPending", label: "Still Open" },
               { key: "overdueTasks", label: "Overdue" },
               { key: "crmUpdates", label: "CRM Updates" },
               { key: "followupsPending", label: "FU Pending" },
@@ -497,8 +520,8 @@ export function AnalyticsWorkbench({
             ]}
             rows={employees.map((e) => ({
               ...e,
-              checkIn: e.checkIn ? String(e.checkIn).slice(11, 16) : "-",
-              checkOut: e.checkOut ? String(e.checkOut).slice(11, 16) : "-",
+              checkIn: formatIstTime(e.checkIn ? String(e.checkIn) : null),
+              checkOut: formatIstTime(e.checkOut ? String(e.checkOut) : null),
               revenue: formatInr(Number(e.revenue || 0)),
               scoreLabel: `${e.productivityScore}% (${e.productivityBand})`,
             }))}
@@ -580,22 +603,29 @@ export function AnalyticsWorkbench({
 
       {section === "tasks" ? (
         <div className="space-y-4">
+          <p className="text-xs text-[#64748b]">
+            Completed rows are tasks actually finished in this date range (India time), with the completion note the
+            person typed. Open / overdue tasks are listed below the same table with status Pending or In Progress.
+            Use Task status = Completed if you only want finished work.
+          </p>
           <div className="grid gap-3 sm:grid-cols-4">
             <StatCard title="Total" value={Number(data?.total || 0)} loading={loading} />
-            <StatCard title="Completed" value={Number(data?.completed || 0)} loading={loading} />
-            <StatCard title="Pending" value={Number(data?.pending || 0)} loading={loading} />
+            <StatCard title="Completed" value={Number(data?.completed || 0)} loading={loading} subtitle="Finished in this date range" />
+            <StatCard title="Pending" value={Number(data?.pending || 0)} loading={loading} subtitle="Still open, due in range" />
             <StatCard title="Overdue" value={Number(data?.overdue || 0)} loading={loading} />
           </div>
           <DataTable
             columns={[
-              { key: "task", label: "Task" },
+              { key: "task", label: "Task", wrap: true },
               { key: "assignedBy", label: "Assigned By" },
               { key: "assignedTo", label: "Assigned To" },
+              { key: "completedBy", label: "Completed By" },
               { key: "priority", label: "Priority" },
               { key: "deadline", label: "Deadline" },
               { key: "status", label: "Status" },
               { key: "progress", label: "%" },
               { key: "completionTime", label: "Completed At" },
+              { key: "completionSummary", label: "What was completed", wrap: true },
             ]}
             rows={((data?.rows || []) as Record<string, unknown>[]) ?? []}
           />
@@ -661,32 +691,31 @@ export function AnalyticsWorkbench({
 
       {section === "timeline" ? (
         <div className="space-y-3">
-          {!filters.employeeId ? (
-            <EmptyState text="Select an employee in the filters to open their chronological timeline." />
-          ) : (
-            <>
-              <h3 className="text-sm font-semibold text-[#0f172a]">
-                Timeline — {(data?.employeeName as string) || "Employee"}
-              </h3>
-              <ol className="space-y-3 border-l-2 border-[#e8dcc8] pl-4">
-                {(((data?.events || []) as { at: string; kind: string; title: string; detail?: string }[]) ?? []).map(
-                  (ev, i) => (
-                    <li key={`${ev.at}-${i}`} className="relative">
-                      <span className="absolute -left-[1.4rem] top-1.5 h-2.5 w-2.5 rounded-full bg-[#c9a227]" />
-                      <p className="text-xs font-semibold uppercase tracking-wide text-[#94a3b8]">
-                        {ev.at ? new Date(ev.at).toLocaleString("en-IN") : "-"} · {ev.kind}
-                      </p>
-                      <p className="text-sm font-medium text-[#0f172a]">{ev.title}</p>
-                      {ev.detail ? <p className="text-xs text-[#64748b]">{ev.detail}</p> : null}
-                    </li>
-                  ),
-                )}
-              </ol>
-              {!((data?.events as unknown[]) || []).length ? (
-                <EmptyState text="No timeline events in this date range." />
-              ) : null}
-            </>
-          )}
+          <p className="text-xs text-[#64748b]">
+            {filters.employeeId
+              ? "Chronological log for the selected person: attendance, calls, CRM, college, tasks, follow-ups, and EOD."
+              : "Team activity for the selected dates. Pick an employee in the filter to see only that person."}
+          </p>
+          <h3 className="text-sm font-semibold text-[#0f172a]">
+            Timeline — {(data?.employeeName as string) || (filters.employeeId ? "Employee" : "Team")}
+          </h3>
+          <ol className="space-y-3 border-l-2 border-[#e8dcc8] pl-4">
+            {(((data?.events || []) as { at: string; kind: string; title: string; detail?: string }[]) ?? []).map(
+              (ev, i) => (
+                <li key={`${ev.at}-${i}`} className="relative">
+                  <span className="absolute -left-[1.4rem] top-1.5 h-2.5 w-2.5 rounded-full bg-[#c9a227]" />
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[#94a3b8]">
+                    {ev.at ? new Date(ev.at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "-"} · {ev.kind}
+                  </p>
+                  <p className="text-sm font-medium text-[#0f172a]">{ev.title}</p>
+                  {ev.detail ? <p className="text-xs text-[#64748b]">{ev.detail}</p> : null}
+                </li>
+              ),
+            )}
+          </ol>
+          {!((data?.events as unknown[]) || []).length ? (
+            <EmptyState text="No timeline events in this date range." />
+          ) : null}
         </div>
       ) : null}
 
