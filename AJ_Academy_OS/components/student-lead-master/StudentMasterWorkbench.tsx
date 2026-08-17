@@ -19,7 +19,7 @@ import {
   TABLE_CHECK_TH,
 } from "@/components/ui/ResponsiveDataView";
 import { usePagination } from "@/lib/usePagination";
-import { useRowSelection } from "@/lib/useRowSelection";
+import { buildPageSelectionScope, useRowSelection } from "@/lib/useRowSelection";
 import { saveTaskLeadSelection } from "@/lib/taskLeadPickStorage";
 import { resolveTaskAssignment } from "@/lib/taskAssignmentDedupe";
 import { deleteOwnedClients } from "@/lib/crmOwnedDelete";
@@ -840,7 +840,12 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     return [];
   }, [activeTab, filteredClients, pickForTask]);
 
-  const leadBulk = useRowSelection(leadsForBulk, (lead) => lead.id);
+  const leadBulkPageItems = useMemo(() => {
+    if (pickForTask || activeTab !== "all-leads") return undefined;
+    return paginatedClients;
+  }, [activeTab, paginatedClients, pickForTask]);
+
+  const leadBulk = useRowSelection(leadsForBulk, (lead) => lead.id, leadBulkPageItems);
   const [bulkAssignTo, setBulkAssignTo] = useState("");
 
   const rowsForExport = useMemo(() => {
@@ -3430,7 +3435,7 @@ function AllLeadsTable({
                 checked: bulkSelection!.allSelected,
                 indeterminate: bulkSelection!.someSelected,
                 onChange: bulkSelection!.onToggleAll,
-                label: "Select all",
+                label: "Select all on this page",
               }
             : undefined
         }
@@ -3456,7 +3461,7 @@ function AllLeadsTable({
                           indeterminate={bulkSelection!.someSelected}
                           disabled={!leads.length}
                           onChange={bulkSelection!.onToggleAll}
-                          ariaLabel="Select all leads"
+                          ariaLabel="Select all students on this page"
                         />
                       </div>
                     </th>
@@ -3967,17 +3972,25 @@ function ConvertedTable({
     pageSize,
     setPageSize,
   } = usePagination(rows, 25);
-  const showBulk = Boolean(bulkSelection);
+  const pageLeadIds = useMemo(() => pageRows.map((lead) => lead.id), [pageRows]);
+  const pageSelection = useMemo(
+    () =>
+      bulkSelection
+        ? buildPageSelectionScope(bulkSelection.isSelected, bulkSelection.onToggle, pageLeadIds)
+        : null,
+    [bulkSelection, pageLeadIds],
+  );
+  const showBulk = Boolean(bulkSelection && pageSelection);
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white">
       <ResponsiveDataView
         selectAll={
           showBulk
             ? {
-                checked: bulkSelection!.allSelected,
-                indeterminate: bulkSelection!.someSelected,
-                onChange: bulkSelection!.onToggleAll,
-                label: "Select all",
+                checked: pageSelection!.allSelected,
+                indeterminate: pageSelection!.someSelected,
+                onChange: pageSelection!.onToggleAll,
+                label: "Select all on this page",
               }
             : undefined
         }
@@ -3989,11 +4002,11 @@ function ConvertedTable({
                   {showBulk ? (
                     <th className="w-10 px-3 py-2">
                       <TableBulkCheckbox
-                        checked={bulkSelection!.allSelected}
-                        indeterminate={bulkSelection!.someSelected}
+                        checked={pageSelection!.allSelected}
+                        indeterminate={pageSelection!.someSelected}
                         disabled={!rows.length}
-                        onChange={bulkSelection!.onToggleAll}
-                        ariaLabel="Select all converted leads"
+                        onChange={pageSelection!.onToggleAll}
+                        ariaLabel="Select all converted leads on this page"
                       />
                     </th>
                   ) : null}
@@ -4162,17 +4175,25 @@ function ProposalTrackerTable({
     pageSize,
     setPageSize,
   } = usePagination(leads, 25);
-  const showBulk = Boolean(bulkSelection);
+  const pageLeadIds = useMemo(() => pageRows.map((lead) => lead.id), [pageRows]);
+  const pageSelection = useMemo(
+    () =>
+      bulkSelection
+        ? buildPageSelectionScope(bulkSelection.isSelected, bulkSelection.onToggle, pageLeadIds)
+        : null,
+    [bulkSelection, pageLeadIds],
+  );
+  const showBulk = Boolean(bulkSelection && pageSelection);
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
       <ResponsiveDataView
         selectAll={
           showBulk
             ? {
-                checked: bulkSelection!.allSelected,
-                indeterminate: bulkSelection!.someSelected,
-                onChange: bulkSelection!.onToggleAll,
-                label: "Select all",
+                checked: pageSelection!.allSelected,
+                indeterminate: pageSelection!.someSelected,
+                onChange: pageSelection!.onToggleAll,
+                label: "Select all on this page",
               }
             : undefined
         }
@@ -4184,11 +4205,11 @@ function ProposalTrackerTable({
                   {showBulk ? (
                     <th className="w-10 px-3 py-2">
                       <TableBulkCheckbox
-                        checked={bulkSelection!.allSelected}
-                        indeterminate={bulkSelection!.someSelected}
+                        checked={pageSelection!.allSelected}
+                        indeterminate={pageSelection!.someSelected}
                         disabled={!totalItems}
-                        onChange={bulkSelection!.onToggleAll}
-                        ariaLabel="Select all proposal leads"
+                        onChange={pageSelection!.onToggleAll}
+                        ariaLabel="Select all proposal leads on this page"
                       />
                     </th>
                   ) : null}
