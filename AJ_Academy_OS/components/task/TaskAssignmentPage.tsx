@@ -458,7 +458,7 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
       if (dueDateFilter) query = query.eq("due_date", dueDateFilter);
       if (searchDebounced) query = query.ilike("title", `%${searchDebounced}%`);
 
-      query = query.order("due_date", { ascending: true, nullsFirst: false }).limit(250);
+      query = query.order("created_at", { ascending: false }).limit(250);
 
       const { data, error: taskError } = await query;
       if (taskError) {
@@ -926,8 +926,13 @@ export function TaskAssignmentPage({ role, variant }: TaskAssignmentPageProps) {
   const filteredRows = useMemo(() => {
     const list =
       linkTypeFilter === "all" ? rows : rows.filter((t) => (t.assignment_type ?? "") === linkTypeFilter);
-    if (linkTypeFilter === "project") return dedupeTasksByProjectId(list);
-    return list;
+    const newestFirst = [...list].sort((a, b) => {
+      const byCreated = (b.created_at || "").localeCompare(a.created_at || "");
+      if (byCreated) return byCreated;
+      return (b.updated_at || "").localeCompare(a.updated_at || "");
+    });
+    if (linkTypeFilter === "project") return dedupeTasksByProjectId(newestFirst);
+    return newestFirst;
   }, [linkTypeFilter, rows]);
 
   const linkTypeCounts = useMemo(

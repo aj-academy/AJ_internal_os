@@ -1,4 +1,3 @@
-import { parseClientIds } from "@/lib/taskActivities";
 import type { TaskAssignmentType, TaskRecord } from "@/types/task";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -42,24 +41,6 @@ export type ResolveTaskAssignmentResult =
       reason: "all_linked" | "project_exists";
     };
 
-function mergeUniqueIds(existing: string[], incoming: string[]): string[] {
-  return [...new Set([...existing, ...incoming])];
-}
-
-function pickLatestOpenTask(tasks: ExistingTaskRow[]): ExistingTaskRow | null {
-  if (!tasks.length) return null;
-  return [...tasks].sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0] ?? null;
-}
-
-function collectLinkedIds(tasks: ExistingTaskRow[], field: "client_ids" | "college_visit_ids"): Set<string> {
-  const linked = new Set<string>();
-  for (const task of tasks) {
-    const ids = field === "client_ids" ? parseClientIds(task.client_ids) : parseClientIds(task.college_visit_ids);
-    for (const id of ids) linked.add(id);
-  }
-  return linked;
-}
-
 export async function fetchOpenTasksForAssignee(
   supabase: SupabaseClient,
   assigneeId: string,
@@ -92,9 +73,8 @@ export async function resolveTaskAssignment(
     };
   }
 
-  const existing = await fetchOpenTasksForAssignee(supabase, assigneeId, assignmentType, excludeTaskId);
-
   if (assignmentType === "project") {
+    const existing = await fetchOpenTasksForAssignee(supabase, assigneeId, assignmentType, excludeTaskId);
     const projectId = input.projectId?.trim() || null;
     if (!projectId) {
       return {
@@ -116,67 +96,21 @@ export async function resolveTaskAssignment(
     };
   }
 
+  // Always create a new task row for lead/college assignments so same-day
+  // work for the same employee stays separate in Task Assignment.
   if (assignmentType === "lead") {
-    const requested = [...new Set(input.clientIds.map((id) => id.trim()).filter(Boolean))];
-    const alreadyLinked = collectLinkedIds(existing, "client_ids");
-    const duplicateIds = requested.filter((id) => alreadyLinked.has(id));
-    const newIds = requested.filter((id) => !alreadyLinked.has(id));
-
-    if (!newIds.length && duplicateIds.length) {
-      const host =
-        existing.find((task) => parseClientIds(task.client_ids).some((id) => duplicateIds.includes(id))) ??
-        pickLatestOpenTask(existing);
-      return { action: "skip", taskId: host?.id ?? "", reason: "all_linked" };
-    }
-
-    const host = pickLatestOpenTask(existing);
-    if (host && newIds.length) {
-      const merged = mergeUniqueIds(parseClientIds(host.client_ids), newIds);
-      return {
-        action: "merge",
-        taskId: host.id,
-        clientIds: merged,
-        addedCount: newIds.length,
-        skippedCount: duplicateIds.length,
-      };
-    }
-
     return {
       action: "insert",
-      clientIds: requested,
+      clientIds: [...new Set(input.clientIds.map((id) => id.trim()).filter(Boolean))],
       collegeVisitIds: [],
       projectId: null,
-    };
-  }
-
-  const requested = [...new Set(input.collegeVisitIds.map((id) => id.trim()).filter(Boolean))];
-  const alreadyLinked = collectLinkedIds(existing, "college_visit_ids");
-  const duplicateIds = requested.filter((id) => alreadyLinked.has(id));
-  const newIds = requested.filter((id) => !alreadyLinked.has(id));
-
-  if (!newIds.length && duplicateIds.length) {
-    const host =
-      existing.find((task) => parseClientIds(task.college_visit_ids).some((id) => duplicateIds.includes(id))) ??
-      pickLatestOpenTask(existing);
-    return { action: "skip", taskId: host?.id ?? "", reason: "all_linked" };
-  }
-
-  const host = pickLatestOpenTask(existing);
-  if (host && newIds.length) {
-    const merged = mergeUniqueIds(parseClientIds(host.college_visit_ids), newIds);
-    return {
-      action: "merge",
-      taskId: host.id,
-      collegeVisitIds: merged,
-      addedCount: newIds.length,
-      skippedCount: duplicateIds.length,
     };
   }
 
   return {
     action: "insert",
     clientIds: [],
-    collegeVisitIds: requested,
+    collegeVisitIds: [...new Set(input.collegeVisitIds.map((id) => id.trim()).filter(Boolean))],
     projectId: null,
   };
 }
