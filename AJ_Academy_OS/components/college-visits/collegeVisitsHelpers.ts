@@ -57,6 +57,9 @@ export type CollegeVisitRow = {
   updated_at: string;
 };
 
+/** Single legacy folder for all colleges without an import_batch_id. */
+export const LEGACY_ALL_COLLEGES_BATCH_KEY = "all";
+
 /** Groups pre-batch imports so each upload burst appears as its own file row. */
 export function legacyCollegeVisitGroupKey(v: Pick<CollegeVisitRow, "source_reference" | "created_at">): string {
   const ref = (v.source_reference || "").trim().toLowerCase();

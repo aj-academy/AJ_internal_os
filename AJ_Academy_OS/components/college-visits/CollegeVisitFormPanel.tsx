@@ -48,6 +48,8 @@ interface CollegeVisitFormPanelProps {
   mouStatusOptions?: readonly string[];
   finalStatusOptions?: readonly string[];
   proposalStatusOptions?: readonly string[];
+  /** Raise above the college import batch full-screen overlay (z-70). */
+  elevatedStack?: boolean;
 }
 
 function ensureFormContacts(contacts: CollegeContact[]): CollegeContact[] {
@@ -92,9 +94,13 @@ export function CollegeVisitFormPanel({
   mouStatusOptions,
   finalStatusOptions,
   proposalStatusOptions,
+  elevatedStack = false,
 }: CollegeVisitFormPanelProps) {
   const { onBackdropClick } = useSuppressBackdropClose(1500);
   if (!open) return null;
+
+  const backdropZ = elevatedStack ? "z-[80]" : "z-40";
+  const panelZ = elevatedStack ? "z-[90]" : "z-50";
 
   const visitStatuses = visitStatusOptions?.length ? visitStatusOptions : VISIT_STATUSES;
   const mouStatuses = mouStatusOptions?.length ? mouStatusOptions : MOU_STATUSES;
@@ -159,10 +165,10 @@ export function CollegeVisitFormPanel({
       <button
         type="button"
         aria-label="Close"
-        className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px]"
+        className={`fixed inset-0 ${backdropZ} bg-slate-900/40 backdrop-blur-[2px]`}
         onClick={() => onBackdropClick(onClose)}
       />
-      <aside className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white shadow-[0_16px_30px_rgba(61,52,40,0.12)] lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[560px] lg:max-w-[100vw] lg:rounded-l-[24px] lg:border-l lg:border-[#e8dcc8]">
+      <aside className={`fixed inset-0 ${panelZ} flex flex-col overflow-hidden bg-white shadow-[0_16px_30px_rgba(61,52,40,0.12)] lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[560px] lg:max-w-[100vw] lg:rounded-l-[24px] lg:border-l lg:border-[#e8dcc8]`}>
         <div className="flex shrink-0 items-center justify-between border-b border-[#e8edf5] px-4 py-4 sm:px-5">
           <h3 className="text-lg font-semibold text-[#0f172a]">{title}</h3>
           <button

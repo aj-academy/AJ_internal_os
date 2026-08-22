@@ -131,8 +131,15 @@ export async function POST(request: Request) {
     payload.last_outcome_remarks = appendOutcomeRemarkLog(null, parsed.form.last_outcome_remarks);
   }
 
+  const record = body as Record<string, unknown>;
+  const importBatchId =
+    typeof record.import_batch_id === "string" && record.import_batch_id.trim()
+      ? record.import_batch_id.trim()
+      : null;
+
   const supabase = await createClient();
   let insertPayload: Record<string, unknown> = { ...payload, created_by: user.id, assigned_to: user.id };
+  if (importBatchId) insertPayload.import_batch_id = importBatchId;
   let select = COLLEGE_VISIT_SELECT;
   let { data, error } = await supabase.from("college_visits").insert(insertPayload).select(select).single();
 

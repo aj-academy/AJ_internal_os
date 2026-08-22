@@ -22,6 +22,8 @@ type LeadActivityModalProps = {
   activities: LeadActivityItem[];
   employeeNameMap?: Record<string, string>;
   onClose: () => void;
+  /** Raise above the college import batch full-screen overlay (z-70). */
+  elevatedStack?: boolean;
 };
 
 export function LeadActivityModal({
@@ -32,11 +34,14 @@ export function LeadActivityModal({
   activities,
   employeeNameMap = {},
   onClose,
+  elevatedStack = false,
 }: LeadActivityModalProps) {
   if (!open) return null;
 
+  const overlayZ = elevatedStack ? "z-[80]" : "z-[70]";
+
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4">
+    <div className={`fixed inset-0 ${overlayZ} flex items-center justify-center bg-slate-900/40 p-4`}>
       <div className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded-2xl border border-[#d4deea] bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-[#eef2f7] px-4 py-3">
           <div>

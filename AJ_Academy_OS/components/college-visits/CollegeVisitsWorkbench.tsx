@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Download, FileText, Upload } from "lucide-react";
+import { Download, FileText, Plus, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 import { formatDisplayDate } from "@/lib/datetime";
@@ -91,6 +91,7 @@ import {
   isFollowUpDue,
   isMissingCollegeVisitsTable,
   legacyCollegeVisitGroupKey,
+  LEGACY_ALL_COLLEGES_BATCH_KEY,
   primaryOutreachPhone,
   collegeOutreachTargets,
   collegeOutreachTargetsForContact,
@@ -869,35 +870,29 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const syntheticLegacyBatches = useMemo((): CollegeImportBatchRow[] => {
     const legacy = visits.filter((v) => !v.import_batch_id);
-    const groups = new Map<string, CollegeVisitRow[]>();
-    for (const v of legacy) {
-      const key = legacyCollegeVisitGroupKey(v);
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(v);
-    }
-    return [...groups.entries()].map(([legacyGroupKey, rows]) => {
-      const ref = rows[0]?.source_reference?.trim();
-      const latest = rows.reduce(
-        (max, row) => ((row.created_at || "") > max ? row.created_at : max),
-        rows[0]?.created_at ?? "",
-      );
-      return {
-        id: `legacy:${legacyGroupKey}`,
+    if (!legacy.length) return [];
+    const latest = legacy.reduce(
+      (max, row) => ((row.created_at || "") > max ? row.created_at : max),
+      legacy[0]?.created_at ?? "",
+    );
+    return [
+      {
+        id: `legacy:${LEGACY_ALL_COLLEGES_BATCH_KEY}`,
         isLegacy: true,
-        legacyGroupKey,
-        batch_number: "LEGACY",
-        file_name: ref || `Colleges added ${formatDisplayDate(latest, "—")}`,
-        row_count: rows.length,
-        new_count: rows.length,
+        legacyGroupKey: LEGACY_ALL_COLLEGES_BATCH_KEY,
+        batch_number: "ALL",
+        file_name: "All Colleges",
+        row_count: legacy.length,
+        new_count: legacy.length,
         duplicate_count: 0,
         invalid_count: 0,
-        created_count: rows.length,
+        created_count: legacy.length,
         skipped_count: 0,
         failed_count: 0,
         status: "completed",
         uploaded_at: latest,
-      };
-    });
+      },
+    ];
   }, [visits]);
 
   const displayImportBatches = useMemo(() => {
@@ -909,6 +904,9 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const visitsForFocusedBatch = useMemo(() => {
     if (!focusedImportBatch) return [];
     if (focusedImportBatch.legacyGroupKey) {
+      if (focusedImportBatch.legacyGroupKey === LEGACY_ALL_COLLEGES_BATCH_KEY) {
+        return visits.filter((v) => !v.import_batch_id);
+      }
       return visits.filter(
         (v) => !v.import_batch_id && legacyCollegeVisitGroupKey(v) === focusedImportBatch.legacyGroupKey,
       );
@@ -1235,7 +1233,13 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         const res = await fetch("/api/college-visits", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...form, assigned_to: payload.assigned_to ?? "" }),
+          body: JSON.stringify({
+            ...form,
+            assigned_to: payload.assigned_to ?? "",
+            ...(focusedImportBatch && !focusedImportBatch.isLegacy && !editingId
+              ? { import_batch_id: focusedImportBatch.id }
+              : {}),
+          }),
         });
         const json = (await res.json()) as { visit?: { id?: string }; error?: string };
         if (!res.ok) throw new Error(json.error ?? "Create failed.");
@@ -1387,9 +1391,15 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
     for (const batch of selectedBatches) {
       if (batch.isLegacy && batch.legacyGroupKey) {
-        for (const v of visits) {
-          if (!v.import_batch_id && legacyCollegeVisitGroupKey(v) === batch.legacyGroupKey) {
-            collegeIds.add(v.id);
+        if (batch.legacyGroupKey === LEGACY_ALL_COLLEGES_BATCH_KEY) {
+          for (const v of visits) {
+            if (!v.import_batch_id) collegeIds.add(v.id);
+          }
+        } else {
+          for (const v of visits) {
+            if (!v.import_batch_id && legacyCollegeVisitGroupKey(v) === batch.legacyGroupKey) {
+              collegeIds.add(v.id);
+            }
           }
         }
       } else if (!batch.isLegacy) {
@@ -1519,6 +1529,17 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     try {
       const body = new FormData();
       body.append("file", file);
+      const appendToBatchId =
+        focusedImportBatch?.isLegacy
+          ? "legacy"
+          : focusedImportBatch &&
+              !focusedImportBatch.isLegacy &&
+              (focusedImportBatch.status === "completed" ||
+                focusedImportBatch.status === "completed_with_errors")
+            ? focusedImportBatch.id
+            : null;
+      if (appendToBatchId) body.append("appendToBatchId", appendToBatchId);
+
       const res = await fetch("/api/college-visits/import/upload", {
         method: "POST",
         credentials: "include",
@@ -1526,6 +1547,10 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       });
       const json = (await res.json()) as {
         batch?: CollegeImportBatchRow;
+        append?: boolean;
+        created?: number;
+        skipped?: number;
+        duplicateCount?: number;
         summary?: { newCount: number; duplicateCount: number; invalidCount: number; parseErrors?: string[] };
         error?: string;
         hint?: string;
@@ -1533,6 +1558,27 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       if (!res.ok) {
         setError(json.error || "Upload failed.");
         if (json.hint) setSuccess(json.hint);
+        return;
+      }
+      if (json.append) {
+        await silentRefreshVisits();
+        await loadImportBatches();
+        if (focusedImportBatch && !focusedImportBatch.isLegacy) {
+          const listRes = await fetch("/api/college-visits/import", { credentials: "include" });
+          const listJson = (await listRes.json()) as { batches?: CollegeImportBatchRow[] };
+          if (listRes.ok) {
+            setImportBatches(listJson.batches ?? []);
+            const updated = (listJson.batches ?? []).find((b) => b.id === focusedImportBatch.id);
+            if (updated) setFocusedImportBatch(updated);
+          }
+        }
+        const created = json.created ?? 0;
+        const skipped = json.skipped ?? 0;
+        setSuccess(
+          skipped > 0
+            ? `Added ${created} college(s) to this folder. ${skipped} duplicate(s) skipped.`
+            : `Added ${created} college(s) to this folder.`,
+        );
         return;
       }
       if (!json.batch) {
@@ -1590,6 +1636,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const thClass = TABLE_DATA_TH;
   const tdClass = TABLE_DATA_TD;
   const dash = (v: unknown) => (v == null || v === "" ? "—" : String(v));
+  const stackElevated = Boolean(focusedImportBatch);
 return (
     <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -1812,7 +1859,7 @@ return (
 
       {activeTab === "all-colleges" ? (
         <div className="space-y-3">
-          {!pickForTask ? (
+          {!pickForTask && !focusedImportBatch ? (
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
               <Button type="button" variant="outline" className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm" onClick={handleDownloadTemplate}>
                 <FileText className="mr-1 h-4 w-4 shrink-0" />
@@ -1921,18 +1968,64 @@ return (
                       >
                         ← Back to uploads
                       </Button>
-                      {batchAwaitingImport ? (
-                        <Button
-                          type="button"
-                          className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]"
-                          disabled={batchImportExecuting || focusedImportBatch.new_count <= 0}
-                          onClick={() => void handleExecuteBatchImport()}
-                        >
-                          {batchImportExecuting
-                            ? "Importing…"
-                            : `Import ${focusedImportBatch.new_count} new college${focusedImportBatch.new_count === 1 ? "" : "s"}`}
-                        </Button>
-                      ) : null}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {batchAwaitingImport ? (
+                          <Button
+                            type="button"
+                            className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]"
+                            disabled={batchImportExecuting || focusedImportBatch.new_count <= 0}
+                            onClick={() => void handleExecuteBatchImport()}
+                          >
+                            {batchImportExecuting
+                              ? "Importing…"
+                              : `Import ${focusedImportBatch.new_count} new college${focusedImportBatch.new_count === 1 ? "" : "s"}`}
+                          </Button>
+                        ) : null}
+                        {!pickForTask && isDbAdmin && !batchAwaitingImport ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm"
+                              onClick={handleDownloadTemplate}
+                            >
+                              <FileText className="mr-1 h-4 w-4 shrink-0" />
+                              Import template
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm"
+                              disabled={importing || schemaMissing}
+                              onClick={() => importFileRef.current?.click()}
+                            >
+                              <Upload className="mr-1 h-4 w-4 shrink-0" />
+                              {importing ? "Uploading…" : "Bulk upload"}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm"
+                              onClick={openCreate}
+                            >
+                              <Plus className="mr-1 h-4 w-4 shrink-0" />
+                              Add college
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm"
+                              disabled={!rowsForExport.length}
+                              onClick={handleExport}
+                            >
+                              <Download className="mr-1 h-4 w-4 shrink-0" />
+                              {visitBulk.selectedCount > 0
+                                ? `Export selected (${rowsForExport.length})`
+                                : `Export (${rowsForExport.length})`}
+                            </Button>
+                          </>
+                        ) : null}
+                      </div>
                     </div>
                     <section className="rounded-2xl border border-[#c9a227] bg-[#fffdf8] p-4 shadow-sm sm:p-5">
                       <p className="text-xs font-semibold uppercase tracking-wide text-[#a68b2e]">College visit upload</p>
@@ -2424,6 +2517,7 @@ return (
         owners={ownerOptions}
         submitting={submitting}
         canAssign={false}
+        elevatedStack={stackElevated}
         onChange={setForm}
         onClose={() => setPanelOpen(false)}
         onSubmit={() => void handleSave()}
@@ -2487,8 +2581,15 @@ return (
 
       {viewVisit ? (
         <>
-          <button type="button" aria-label="Close" className="fixed inset-0 z-40 bg-slate-900/40" onClick={() => setViewVisit(null)} />
-          <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-[#e8dcc8] bg-white shadow-xl">
+          <button
+            type="button"
+            aria-label="Close"
+            className={`fixed inset-0 ${stackElevated ? "z-[80]" : "z-40"} bg-slate-900/40`}
+            onClick={() => setViewVisit(null)}
+          />
+          <aside
+            className={`fixed inset-y-0 right-0 ${stackElevated ? "z-[90]" : "z-50"} flex w-full max-w-md flex-col border-l border-[#e8dcc8] bg-white shadow-xl`}
+          >
             <div className="flex items-center justify-between border-b px-4 py-3">
               <div>
                 <h3 className="font-semibold text-[#0f172a]">{viewVisit.college_name}</h3>
@@ -2584,6 +2685,7 @@ return (
         loading={activityModalLoading}
         activities={activityModalRows}
         employeeNameMap={ownerNameMap}
+        elevatedStack={stackElevated}
         onClose={() => setActivityVisit(null)}
       />
 

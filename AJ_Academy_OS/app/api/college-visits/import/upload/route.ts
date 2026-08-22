@@ -11,6 +11,7 @@ import {
   hashCollegeImportBuffer,
   parseCollegeVisitImportFile,
 } from "@/lib/collegeVisitsImport";
+import { buildCollegeVisitPayload } from "@/components/college-visits/collegeVisitsHelpers";
 
 export const runtime = "nodejs";
 
@@ -82,6 +83,132 @@ export async function POST(request: Request) {
   }
 
   const analysis = analyzeCollegeImportRows(parsed.forms, parsed.errors, existingVisits);
+
+  const appendToBatchId = form.get("appendToBatchId");
+  if (typeof appendToBatchId === "string" && appendToBatchId.trim()) {
+    const target = appendToBatchId.trim();
+    let created = 0;
+    let skipped = 0;
+    let failed = 0;
+    const activityRows: {
+      college_visit_id: string;
+      activity_type: string;
+      notes: string;
+      created_by: string;
+    }[] = [];
+
+    const pendingRows = analysis.rows.filter((row) => row.status === "pending");
+    skipped += analysis.rows.length - pendingRows.length;
+
+    if (target === "legacy") {
+      for (let i = 0; i < pendingRows.length; i += 75) {
+        const slice = pendingRows.slice(i, i + 75);
+        const inserts = slice.map((row) => {
+          const formValue = row.form;
+          const payload = buildCollegeVisitPayload(formValue, { userId: auth.user!.id, isDbAdmin: true });
+          return {
+            ...payload,
+            assigned_to: auth.user!.id,
+            assigned_by: auth.user!.id,
+            created_by: auth.user!.id,
+            import_batch_id: null,
+            source_reference: formValue.source_reference?.trim() || file.name,
+          };
+        });
+        const { data: inserted, error: insertError } = await admin.from("college_visits").insert(inserts).select("id");
+        if (insertError) {
+          failed += slice.length;
+          continue;
+        }
+        created += inserted?.length ?? 0;
+        for (const row of inserted ?? []) {
+          if (row.id) {
+            activityRows.push({
+              college_visit_id: row.id,
+              activity_type: "College Created",
+              notes: `Bulk upload to All Colleges (${file.name})`,
+              created_by: auth.user!.id,
+            });
+          }
+        }
+      }
+    } else {
+      const { data: targetBatch, error: targetError } = await admin
+        .from("college_visit_import_batches")
+        .select("id,status,file_name,row_count,created_count,skipped_count,failed_count")
+        .eq("id", target)
+        .maybeSingle();
+
+      if (targetError) {
+        return NextResponse.json({ error: targetError.message }, { status: 400 });
+      }
+      if (!targetBatch) {
+        return NextResponse.json({ error: "Target upload folder not found." }, { status: 404 });
+      }
+      if (targetBatch.status === "ready_for_review" || targetBatch.status === "importing") {
+        return NextResponse.json(
+          { error: "Complete the pending import first, or use Back to uploads for a new file." },
+          { status: 400 },
+        );
+      }
+
+      for (let i = 0; i < pendingRows.length; i += 75) {
+        const slice = pendingRows.slice(i, i + 75);
+        const inserts = slice.map((row) => {
+          const formValue = row.form;
+          const payload = buildCollegeVisitPayload(formValue, { userId: auth.user!.id, isDbAdmin: true });
+          return {
+            ...payload,
+            assigned_to: auth.user!.id,
+            assigned_by: auth.user!.id,
+            created_by: auth.user!.id,
+            import_batch_id: target,
+            source_reference: formValue.source_reference?.trim() || targetBatch.file_name,
+          };
+        });
+        const { data: inserted, error: insertError } = await admin.from("college_visits").insert(inserts).select("id");
+        if (insertError) {
+          failed += slice.length;
+          continue;
+        }
+        created += inserted?.length ?? 0;
+        for (const row of inserted ?? []) {
+          if (row.id) {
+            activityRows.push({
+              college_visit_id: row.id,
+              activity_type: "College Created",
+              notes: `Added to upload folder ${targetBatch.file_name}`,
+              created_by: auth.user!.id,
+            });
+          }
+        }
+      }
+
+      await admin
+        .from("college_visit_import_batches")
+        .update({
+          row_count: (targetBatch.row_count ?? 0) + analysis.rowCount,
+          created_count: (targetBatch.created_count ?? 0) + created,
+          skipped_count: (targetBatch.skipped_count ?? 0) + skipped,
+          failed_count: (targetBatch.failed_count ?? 0) + failed,
+        })
+        .eq("id", target);
+    }
+
+    if (activityRows.length) {
+      for (let i = 0; i < activityRows.length; i += 100) {
+        await admin.from("college_visit_activities").insert(activityRows.slice(i, i + 100));
+      }
+    }
+
+    return NextResponse.json({
+      append: true,
+      created,
+      skipped,
+      failed,
+      duplicateCount: analysis.duplicateCount,
+    });
+  }
 
   const { data: batchNumber, error: numError } = await admin.rpc("college_visit_import_next_batch_number");
   if (numError || !batchNumber) {
