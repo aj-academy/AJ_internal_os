@@ -224,6 +224,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [batchImportExecuting, setBatchImportExecuting] = useState(false);
   const [batchStagingRows, setBatchStagingRows] = useState<CollegeImportStagingRow[]>([]);
   const [batchStagingLoading, setBatchStagingLoading] = useState(false);
+  const [importPreviewFilter, setImportPreviewFilter] = useState<"all" | "new" | "duplicates">("all");
   const [outreachDone, setOutreachDone] = useState<Record<string, CollegeOutreachFlags>>({});
   const [whatsAppTemplates, setWhatsAppTemplates] = useState<string[]>([]);
   const [cvLists, setCvLists] = useState<CollegeVisitSettingsLists>(() => defaultCollegeVisitSettingsLists());
@@ -938,6 +939,30 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     return batchStagingRows.map((row) => stagingImportRowToVisit(row, focusedImportBatch.id));
   }, [batchNeedsPreview, batchStagingRows, focusedImportBatch]);
 
+  const stagingRowByVisitId = useMemo(() => {
+    const map = new Map<string, CollegeImportStagingRow>();
+    for (const row of batchStagingRows) map.set(`staging:${row.id}`, row);
+    return map;
+  }, [batchStagingRows]);
+
+  const duplicateStagingRows = useMemo(
+    () => batchStagingRows.filter((r) => r.status === "duplicate"),
+    [batchStagingRows],
+  );
+
+  const duplicateMatchLabel = useCallback(
+    (row: CollegeImportStagingRow) => {
+      if (row.error_message?.trim()) return row.error_message;
+      if (row.duplicate_of) {
+        const match = visits.find((v) => v.id === row.duplicate_of);
+        if (match) return `Already in system: ${match.college_name}${match.location ? ` (${match.location})` : ""}`;
+        return "Already exists in College Visits.";
+      }
+      return "Duplicate row in this file.";
+    },
+    [visits],
+  );
+
   const loadBatchStagingPreview = useCallback(async (batch: CollegeImportBatchRow) => {
     if (batch.isLegacy) {
       setBatchStagingRows([]);
@@ -1015,9 +1040,18 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     if (fltFinalStatus) list = list.filter((v) => v.final_status === fltFinalStatus);
     if (fltFollowUpDue === "yes") list = list.filter((v) => isFollowUpDue(v));
     if (fltFollowUpDue === "no") list = list.filter((v) => !isFollowUpDue(v));
+    if (batchNeedsPreview && importPreviewFilter !== "all") {
+      list = list.filter((v) => {
+        const staging = stagingRowByVisitId.get(v.id);
+        if (importPreviewFilter === "duplicates") return staging?.status === "duplicate";
+        if (importPreviewFilter === "new") return staging?.status === "pending";
+        return true;
+      });
+    }
     return list;
   }, [
     activeTab,
+    batchNeedsPreview,
     filteredVisits,
     fltFinalStatus,
     fltFollowUpDue,
@@ -1025,10 +1059,11 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     fltPriority,
     fltVisitStatus,
     focusedImportBatch,
+    importPreviewFilter,
     searchText,
     showImportBatchList,
+    stagingRowByVisitId,
     stagingVisitsForTable,
-    batchNeedsPreview,
     visits,
     visitsForFocusedBatch,
   ]);
@@ -1667,6 +1702,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         return;
       }
       await loadImportBatches();
+      setImportPreviewFilter("all");
       setFocusedImportBatch(json.batch);
       const dup = json.summary?.duplicateCount ?? json.batch.duplicate_count ?? 0;
       const fresh = json.summary?.newCount ?? json.batch.new_count ?? 0;
@@ -2024,6 +2060,7 @@ return (
                 onOpenBatch={(batch) => {
                   setFocusedImportBatch(batch);
                   setBatchStagingRows([]);
+                  setImportPreviewFilter("all");
                   setPage(1);
                   visitBulk.clearSelection();
                 }}
@@ -2059,16 +2096,21 @@ return (
                       </Button>
                       <div className="flex flex-wrap items-center gap-2">
                         {batchAwaitingImport ? (
-                          <Button
-                            type="button"
-                            className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]"
-                            disabled={batchImportExecuting || focusedImportBatch.new_count <= 0}
-                            onClick={() => void handleExecuteBatchImport()}
-                          >
-                            {batchImportExecuting
-                              ? "Importing…"
-                              : `Import ${focusedImportBatch.new_count} new college${focusedImportBatch.new_count === 1 ? "" : "s"}`}
-                          </Button>
+                          <div className="flex flex-col items-end gap-1">
+                            <Button
+                              type="button"
+                              className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]"
+                              disabled={batchImportExecuting || focusedImportBatch.new_count <= 0}
+                              onClick={() => void handleExecuteBatchImport()}
+                            >
+                              {batchImportExecuting
+                                ? "Importing…"
+                                : `Save ${focusedImportBatch.new_count} new college${focusedImportBatch.new_count === 1 ? "" : "s"}`}
+                            </Button>
+                            <p className="max-w-xs text-right text-[11px] leading-snug text-[#64748b]">
+                              Saves only new rows into the system. Duplicates below are preview-only and are skipped.
+                            </p>
+                          </div>
                         ) : null}
                         {!pickForTask && isDbAdmin && !batchAwaitingImport ? (
                           <>
@@ -2141,15 +2183,75 @@ return (
                       </div>
                     </section>
                     {batchAwaitingImport && focusedImportBatch.duplicate_count > 0 ? (
-                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                        <strong>{focusedImportBatch.duplicate_count} row(s)</strong> match colleges already in the system
-                        and will be skipped. Click Import above to save only the new rows, then use this table to assign
-                        and work the colleges.
+                      <div className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-950">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-amber-900">Duplicate preview</p>
+                            <p className="mt-1 text-amber-900/90">
+                              These rows match colleges already in your system and will <strong>not</strong> be saved when
+                              you click Save above.
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 rounded-full border-amber-400 bg-white text-amber-900 hover:bg-amber-100"
+                            onClick={() => {
+                              setImportPreviewFilter("duplicates");
+                              setPage(1);
+                            }}
+                          >
+                            Show duplicates in table
+                          </Button>
+                        </div>
+                        <ul className="max-h-48 space-y-2 overflow-y-auto">
+                          {duplicateStagingRows.map((row) => (
+                            <li
+                              key={row.id}
+                              className="rounded-lg border border-amber-200 bg-white px-3 py-2.5 text-sm shadow-sm"
+                            >
+                              <p className="font-semibold text-[#0f172a]">
+                                Row {row.row_number}: {row.payload.college_name}
+                                {row.payload.location?.trim() ? ` · ${row.payload.location.trim()}` : ""}
+                              </p>
+                              <p className="mt-1 text-xs text-amber-800">{duplicateMatchLabel(row)}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {batchAwaitingImport ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-medium text-[#64748b]">Preview filter:</span>
+                        {(
+                          [
+                            ["all", `All rows (${batchStagingRows.length})`],
+                            ["new", `New only (${focusedImportBatch.new_count})`],
+                            ["duplicates", `Duplicates (${focusedImportBatch.duplicate_count})`],
+                          ] as const
+                        ).map(([key, label]) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              setImportPreviewFilter(key);
+                              setPage(1);
+                            }}
+                            className={
+                              importPreviewFilter === key
+                                ? "rounded-full bg-[#c9a227] px-3 py-1.5 text-xs font-semibold text-white"
+                                : "rounded-full border border-[#e8dcc8] bg-white px-3 py-1.5 text-xs font-semibold text-[#64748b] hover:bg-[#f8fbff]"
+                            }
+                          >
+                            {label}
+                          </button>
+                        ))}
                       </div>
                     ) : null}
                     {batchAwaitingImport ? (
                       <p className="text-sm text-[#64748b]">
-                        Import saves new colleges into the system. After import, View / Edit / Activity and bulk assign
+                        This is a file preview only. After you save new colleges, View / Edit / Activity and bulk assign
                         work here exactly like the main College Visits table.
                       </p>
                     ) : null}
@@ -2307,8 +2409,14 @@ return (
                     const flags = outreachDone[row.id] ?? {};
                     const person = selectedContact?.name?.trim() || row.connected_person_name || "-";
                     const personRole = selectedContact?.role?.trim() || row.connected_person_role || "";
+                    const stagingRow = stagingRowByVisitId.get(row.id);
+                    const isPreviewDuplicate = stagingRow?.status === "duplicate";
+                    const isPreviewRow = row.id.startsWith("staging:");
                     return (
-                      <tr key={row.id} className="border-t border-[#eef2f7] hover:bg-[#fafcff]">
+                      <tr
+                        key={row.id}
+                        className={`border-t border-[#eef2f7] hover:bg-[#fafcff] ${isPreviewDuplicate ? "bg-amber-50/60" : ""}`}
+                      >
                         {pickForTask ? (
                           <td className={TABLE_CHECK_TD}>
                             <div className="flex justify-center">
@@ -2333,10 +2441,17 @@ return (
                         ) : null}
                         <td className={TABLE_SNO_TD}>{(page - 1) * pageSize + idx + 1}</td>
                         <td
-                          className={`${tdClass} sticky-col sticky-col-after-check-2 min-w-[14rem] max-w-[18rem] truncate font-medium`}
+                          className={`${tdClass} sticky-col sticky-col-after-check-2 min-w-[14rem] max-w-[18rem] font-medium`}
                           title={row.college_name}
                         >
-                          {row.college_name}
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="truncate">{row.college_name}</span>
+                            {isPreviewDuplicate ? (
+                              <Badge className="shrink-0 border-amber-300 bg-amber-100 text-[10px] text-amber-900">
+                                Duplicate
+                              </Badge>
+                            ) : null}
+                          </div>
                         </td>
                         <td className={tdClass}>{row.location || "-"}</td>
                         <td className={`${tdClass} min-w-[5.5rem]`}>
@@ -2416,32 +2531,36 @@ return (
                         <td className={`${tdClass} min-w-[11rem]`}>{row.source_reference || "-"}</td>
                         {!pickForTask ? (
                           <td className={`${tdClass} min-w-[14rem]`}>
-                            <div className="flex flex-wrap items-center justify-center gap-1">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 rounded-full px-2 text-[11px]"
-                                onClick={() => setViewVisit(row)}
-                              >
-                                View
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 rounded-full px-2 text-[11px]"
-                                onClick={() => void openCollegeActivity(row)}
-                              >
-                                Activity
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 rounded-full px-2 text-[11px]"
-                                onClick={() => openEdit(row)}
-                              >
-                                Edit
-                              </Button>
-                            </div>
+                            {isPreviewRow ? (
+                              <span className="text-[11px] text-[#64748b]">Preview only</span>
+                            ) : (
+                              <div className="flex flex-wrap items-center justify-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 rounded-full px-2 text-[11px]"
+                                  onClick={() => setViewVisit(row)}
+                                >
+                                  View
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 rounded-full px-2 text-[11px]"
+                                  onClick={() => void openCollegeActivity(row)}
+                                >
+                                  Activity
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 rounded-full px-2 text-[11px]"
+                                  onClick={() => openEdit(row)}
+                                >
+                                  Edit
+                                </Button>
+                              </div>
+                            )}
                           </td>
                         ) : null}
                       </tr>
