@@ -142,3 +142,38 @@ export async function insertCollegeVisitsBulk(
 
   return { results, lastError };
 }
+
+async function updateOneWithFallback(
+  admin: SupabaseClient,
+  visitId: string,
+  row: Record<string, unknown>,
+): Promise<{ id: string; error: string | null }> {
+  let updatePayload = sanitizeCollegeVisitInsertPayload(row);
+  delete updatePayload.created_by;
+  delete updatePayload.import_batch_id;
+  let select = COLLEGE_VISIT_SELECT;
+  let { data, error } = await admin.from("college_visits").update(updatePayload).eq("id", visitId).select("id").single();
+  let lastError = error?.message ?? null;
+
+  while (error) {
+    const stripped = stripUnavailableColumns(updatePayload, error.message);
+    const fallbackSelect = nextCollegeVisitSelect(select, error.message);
+    const payloadChanged = JSON.stringify(stripped) !== JSON.stringify(updatePayload);
+    if (!fallbackSelect && !payloadChanged) break;
+    updatePayload = stripped;
+    if (fallbackSelect) select = fallbackSelect;
+    ({ data, error } = await admin.from("college_visits").update(updatePayload).eq("id", visitId).select("id").single());
+    lastError = error?.message ?? lastError;
+  }
+
+  if (error || !data?.id) return { id: "", error: lastError ?? "Update failed." };
+  return { id: String(data.id), error: null };
+}
+
+export async function updateCollegeVisitFromImport(
+  admin: SupabaseClient,
+  visitId: string,
+  row: Record<string, unknown>,
+): Promise<{ id: string; error: string | null }> {
+  return updateOneWithFallback(admin, visitId, row);
+}

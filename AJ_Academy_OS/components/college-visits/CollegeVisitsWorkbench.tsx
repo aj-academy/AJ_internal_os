@@ -53,6 +53,18 @@ import {
   stagingImportRowToVisit,
 } from "@/lib/collegeVisitsImport";
 import {
+  CollegeVisitDuplicateResolutionButtons,
+  CollegeVisitImportUploadDialog,
+} from "@/components/college-visits/CollegeVisitImportDialogs";
+import {
+  parseDuplicateResolutions,
+  resolutionForRow,
+  resolutionLabel,
+  stripFileExtension,
+  type CollegeDuplicateResolution,
+  type CollegeDuplicateResolutionMap,
+} from "@/lib/collegeVisitsImportResolutions";
+import {
   CollegeCallOutcomeModal,
   CollegePendingCallBanner,
   type CollegePendingCall,
@@ -225,6 +237,10 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [batchStagingRows, setBatchStagingRows] = useState<CollegeImportStagingRow[]>([]);
   const [batchStagingLoading, setBatchStagingLoading] = useState(false);
   const [importPreviewFilter, setImportPreviewFilter] = useState<"all" | "new" | "duplicates">("all");
+  const [duplicateResolutions, setDuplicateResolutions] = useState<CollegeDuplicateResolutionMap>({});
+  const [resolutionSaving, setResolutionSaving] = useState(false);
+  const [importUploadDialogFile, setImportUploadDialogFile] = useState<File | null>(null);
+  const [importDisplayName, setImportDisplayName] = useState("");
   const [outreachDone, setOutreachDone] = useState<Record<string, CollegeOutreachFlags>>({});
   const [whatsAppTemplates, setWhatsAppTemplates] = useState<string[]>([]);
   const [cvLists, setCvLists] = useState<CollegeVisitSettingsLists>(() => defaultCollegeVisitSettingsLists());
@@ -950,6 +966,73 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     [batchStagingRows],
   );
 
+  const duplicateResolutionSummary = useMemo(() => {
+    let add = 0;
+    let update = 0;
+    let skip = 0;
+    for (const row of duplicateStagingRows) {
+      const action = resolutionForRow(duplicateResolutions, row.id);
+      if (action === "add") add += 1;
+      else if (action === "update") update += 1;
+      else skip += 1;
+    }
+    return { add, update, skip };
+  }, [duplicateResolutions, duplicateStagingRows]);
+
+  const queueImportFile = (file: File) => {
+    setImportUploadDialogFile(file);
+    setImportDisplayName(stripFileExtension(file.name));
+    setError(null);
+  };
+
+  const saveDuplicateResolutions = useCallback(
+    async (batchId: string, patch: CollegeDuplicateResolutionMap) => {
+      setResolutionSaving(true);
+      try {
+        const res = await fetch(`/api/college-visits/import/${batchId}/resolutions`, {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resolutions: patch }),
+        });
+        const json = (await res.json()) as { duplicate_resolutions?: CollegeDuplicateResolutionMap; error?: string };
+        if (!res.ok) throw new Error(json.error || "Could not save duplicate action.");
+        if (json.duplicate_resolutions) setDuplicateResolutions(json.duplicate_resolutions);
+      } finally {
+        setResolutionSaving(false);
+      }
+    },
+    [],
+  );
+
+  const setDuplicateResolution = useCallback(
+    async (rowId: string, action: CollegeDuplicateResolution) => {
+      if (!focusedImportBatch || focusedImportBatch.isLegacy) return;
+      setDuplicateResolutions((prev) => ({ ...prev, [rowId]: action }));
+      try {
+        await saveDuplicateResolutions(focusedImportBatch.id, { [rowId]: action });
+      } catch (e) {
+        setError(friendlyCollegeVisitError(e));
+      }
+    },
+    [focusedImportBatch, saveDuplicateResolutions],
+  );
+
+  const setBulkDuplicateResolution = useCallback(
+    async (action: CollegeDuplicateResolution) => {
+      if (!focusedImportBatch || focusedImportBatch.isLegacy || !duplicateStagingRows.length) return;
+      const patch = Object.fromEntries(duplicateStagingRows.map((r) => [r.id, action])) as CollegeDuplicateResolutionMap;
+      setDuplicateResolutions((prev) => ({ ...prev, ...patch }));
+      try {
+        await saveDuplicateResolutions(focusedImportBatch.id, patch);
+        setSuccess(`All ${duplicateStagingRows.length} duplicate(s) set to "${resolutionLabel(action)}".`);
+      } catch (e) {
+        setError(friendlyCollegeVisitError(e));
+      }
+    },
+    [duplicateStagingRows, focusedImportBatch, saveDuplicateResolutions],
+  );
+
   const duplicateMatchLabel = useCallback(
     (row: CollegeImportStagingRow) => {
       if (row.error_message?.trim()) return row.error_message;
@@ -994,6 +1077,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       };
       if (!res.ok) throw new Error(json.error || "Could not load import preview.");
       setBatchStagingRows(json.rows ?? []);
+      setDuplicateResolutions(parseDuplicateResolutions(json.batch?.meta));
       if (json.batch) {
         setFocusedImportBatch((prev) =>
           prev?.id === batch.id ? { ...prev, ...json.batch, isLegacy: false } : prev,
@@ -1076,6 +1160,25 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   ]);
 
   const batchAwaitingImport = batchNeedsPreview;
+
+  const importSaveLabel = useMemo(() => {
+    if (!focusedImportBatch) return "Save colleges";
+    const newRows = focusedImportBatch.new_count ?? 0;
+    const { add, update, skip } = duplicateResolutionSummary;
+    const totalNew = newRows + add;
+    const parts: string[] = [];
+    if (totalNew) parts.push(`${totalNew} new`);
+    if (update) parts.push(`${update} update${update === 1 ? "" : "s"}`);
+    if (skip) parts.push(`skip ${skip}`);
+    return parts.length ? `Save — ${parts.join(", ")}` : "Save colleges";
+  }, [duplicateResolutionSummary, focusedImportBatch]);
+
+  const importCanSave = useMemo(() => {
+    if (!focusedImportBatch || focusedImportBatch.isLegacy) return false;
+    const processable =
+      (focusedImportBatch.new_count ?? 0) + (focusedImportBatch.duplicate_count ?? 0);
+    return processable > 0;
+  }, [focusedImportBatch]);
 
   const clearTableFilters = () => {
     setSearchText("");
@@ -1644,7 +1747,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     );
   };
 
-  const handleImportFile = async (file: File) => {
+  const handleImportFile = async (file: File, displayName?: string) => {
     if (!currentUserId || !isDbAdmin) return;
     setImporting(true);
     setError(null);
@@ -1652,6 +1755,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     try {
       const body = new FormData();
       body.append("file", file);
+      if (displayName?.trim()) body.append("displayName", displayName.trim());
       const appendToBatchId =
         focusedImportBatch?.isLegacy
           ? "legacy"
@@ -1710,18 +1814,19 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       }
       await loadImportBatches();
       setImportPreviewFilter("all");
+      setDuplicateResolutions({});
       setFocusedImportBatch(json.batch);
       const dup = json.summary?.duplicateCount ?? json.batch.duplicate_count ?? 0;
-      const fresh = json.summary?.newCount ?? json.batch.new_count ?? 0;
       setSuccess(
         dup > 0
-          ? `“${file.name}” uploaded — ${fresh} new, ${dup} duplicate(s) to review before import.`
-          : `“${file.name}” uploaded — ${fresh} new row(s) ready to import.`,
+          ? `“${displayName?.trim() || json.batch.file_name}” uploaded — review duplicates below, then Save.`
+          : `“${displayName?.trim() || json.batch.file_name}” uploaded — ${json.summary?.newCount ?? json.batch.new_count ?? 0} row(s) ready to save.`,
       );
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
     } finally {
       setImporting(false);
+      setImportUploadDialogFile(null);
       if (importFileRef.current) importFileRef.current.value = "";
     }
   };
@@ -1738,6 +1843,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       const json = (await res.json()) as {
         error?: string;
         created?: number;
+        updated?: number;
         skipped?: number;
         failed?: number;
         status?: string;
@@ -1745,6 +1851,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       if (!res.ok) throw new Error(json.error || "Import failed.");
 
       const created = json.created ?? 0;
+      const updated = json.updated ?? 0;
       const failed = json.failed ?? 0;
       const skipped = json.skipped ?? 0;
 
@@ -1773,10 +1880,11 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       }
 
       setBatchStagingRows([]);
+      setDuplicateResolutions({});
       setSuccess(
         failed > 0
-          ? `Saved ${created} college(s), ${skipped} duplicate(s) skipped, ${failed} failed.${json.error ? ` Last error: ${json.error}` : ""}`
-          : `Saved ${created} college(s)${skipped ? `, ${skipped} duplicate(s) skipped` : ""}. You can now edit, assign, and call from this table.`,
+          ? `Saved ${created} new, updated ${updated}, skipped ${skipped} duplicate(s), ${failed} failed.${json.error ? ` Last error: ${json.error}` : ""}`
+          : `Saved ${created} new college(s)${updated ? `, updated ${updated}` : ""}${skipped ? `, skipped ${skipped} duplicate(s)` : ""}. You can now edit, assign, and call from this table.`,
       );
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
@@ -2030,7 +2138,7 @@ return (
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  if (f) void handleImportFile(f);
+                  if (f) queueImportFile(f);
                 }}
               />
               {isDbAdmin ? (
@@ -2134,15 +2242,13 @@ return (
                             <Button
                               type="button"
                               className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]"
-                              disabled={batchImportExecuting || focusedImportBatch.new_count <= 0}
+                              disabled={batchImportExecuting || !importCanSave}
                               onClick={() => void handleExecuteBatchImport()}
                             >
-                              {batchImportExecuting
-                                ? "Importing…"
-                                : `Save ${focusedImportBatch.new_count} new college${focusedImportBatch.new_count === 1 ? "" : "s"}`}
-                            </Button>
+                            {batchImportExecuting ? "Saving…" : importSaveLabel}
+                          </Button>
                             <p className="max-w-xs text-right text-[11px] leading-snug text-[#64748b]">
-                              Saves only new rows into the system. Duplicates below are preview-only and are skipped.
+                              Saves new rows, applies your duplicate choices (skip / add / update), then opens the live table.
                             </p>
                           </div>
                         ) : null}
@@ -2230,10 +2336,10 @@ return (
                       <div className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-950">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <p className="font-semibold text-amber-900">Duplicate preview</p>
+                            <p className="font-semibold text-amber-900">Duplicate preview — choose what to do</p>
                             <p className="mt-1 text-amber-900/90">
-                              These rows match colleges already in your system and will <strong>not</strong> be saved when
-                              you click Save above.
+                              For each duplicate: <strong>Skip</strong> (default), <strong>Add as new</strong>, or{" "}
+                              <strong>Update existing</strong> college from the file row.
                             </p>
                           </div>
                           <Button
@@ -2246,10 +2352,43 @@ return (
                               setPage(1);
                             }}
                           >
-                            Show duplicates in table
+                            Show in table
                           </Button>
                         </div>
-                        <ul className="max-h-48 space-y-2 overflow-y-auto">
+                        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2">
+                          <span className="text-xs font-semibold text-[#64748b]">Bulk for all duplicates:</span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 rounded-full border-emerald-300 px-2.5 text-[11px] text-emerald-800"
+                            disabled={resolutionSaving}
+                            onClick={() => void setBulkDuplicateResolution("add")}
+                          >
+                            Add all as new
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 rounded-full border-[#c9a227]/40 px-2.5 text-[11px] text-[#8a7020]"
+                            disabled={resolutionSaving}
+                            onClick={() => void setBulkDuplicateResolution("update")}
+                          >
+                            Update all from file
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 rounded-full px-2.5 text-[11px]"
+                            disabled={resolutionSaving}
+                            onClick={() => void setBulkDuplicateResolution("skip")}
+                          >
+                            Skip all
+                          </Button>
+                        </div>
+                        <ul className="max-h-56 space-y-2 overflow-y-auto">
                           {duplicateStagingRows.map((row) => (
                             <li
                               key={row.id}
@@ -2260,6 +2399,11 @@ return (
                                 {row.payload.location?.trim() ? ` · ${row.payload.location.trim()}` : ""}
                               </p>
                               <p className="mt-1 text-xs text-amber-800">{duplicateMatchLabel(row)}</p>
+                              <CollegeVisitDuplicateResolutionButtons
+                                value={resolutionForRow(duplicateResolutions, row.id)}
+                                disabled={resolutionSaving}
+                                onChange={(action) => void setDuplicateResolution(row.id, action)}
+                              />
                             </li>
                           ))}
                         </ul>
@@ -2455,6 +2599,7 @@ return (
                     const personRole = selectedContact?.role?.trim() || row.connected_person_role || "";
                     const stagingRow = stagingRowByVisitId.get(row.id);
                     const isPreviewDuplicate = stagingRow?.status === "duplicate";
+                    const duplicateAction = stagingRow ? resolutionForRow(duplicateResolutions, stagingRow.id) : null;
                     const isPreviewRow = row.id.startsWith("staging:");
                     return (
                       <tr
@@ -2492,7 +2637,7 @@ return (
                             <span className="truncate">{row.college_name}</span>
                             {isPreviewDuplicate ? (
                               <Badge className="shrink-0 border-amber-300 bg-amber-100 text-[10px] text-amber-900">
-                                Duplicate
+                                {duplicateAction ? resolutionLabel(duplicateAction) : "Duplicate"}
                               </Badge>
                             ) : null}
                           </div>
@@ -2576,7 +2721,16 @@ return (
                         {!pickForTask ? (
                           <td className={`${tdClass} min-w-[14rem]`}>
                             {isPreviewRow ? (
-                              <span className="text-[11px] text-[#64748b]">Preview only</span>
+                              isPreviewDuplicate && stagingRow ? (
+                                <CollegeVisitDuplicateResolutionButtons
+                                  compact
+                                  value={resolutionForRow(duplicateResolutions, stagingRow.id)}
+                                  disabled={resolutionSaving}
+                                  onChange={(action) => void setDuplicateResolution(stagingRow.id, action)}
+                                />
+                              ) : (
+                                <span className="text-[11px] text-[#64748b]">Preview only</span>
+                              )
                             ) : (
                               <div className="flex flex-wrap items-center justify-center gap-1">
                                 <Button
@@ -3095,6 +3249,23 @@ return (
         submitting={collegeCallOutcomeSubmitting}
         onClose={() => setCollegeCallOutcomeOpen(false)}
         onSubmit={submitCollegeCallOutcome}
+      />
+
+      <CollegeVisitImportUploadDialog
+        open={Boolean(importUploadDialogFile)}
+        file={importUploadDialogFile}
+        displayName={importDisplayName}
+        uploading={importing}
+        onDisplayNameChange={setImportDisplayName}
+        onCancel={() => {
+          setImportUploadDialogFile(null);
+          if (importFileRef.current) importFileRef.current.value = "";
+        }}
+        onConfirm={() => {
+          if (importUploadDialogFile) {
+            void handleImportFile(importUploadDialogFile, importDisplayName);
+          }
+        }}
       />
     </section>
   );

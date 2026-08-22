@@ -30,6 +30,9 @@ export async function POST(request: Request) {
   }
 
   const file = form.get("file");
+  const displayNameRaw = form.get("displayName");
+  const displayName =
+    typeof displayNameRaw === "string" && displayNameRaw.trim() ? displayNameRaw.trim() : null;
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "file is required." }, { status: 400 });
   }
@@ -224,7 +227,7 @@ export async function POST(request: Request) {
     .from("college_visit_import_batches")
     .insert({
       batch_number: batchNumber,
-      file_name: file.name,
+      file_name: displayName || file.name,
       file_hash: fileHash,
       row_count: analysis.rowCount,
       new_count: analysis.newCount,
@@ -234,6 +237,8 @@ export async function POST(request: Request) {
       uploaded_by: auth.user.id,
       meta: {
         parse_errors: parsed.errors.slice(0, 50),
+        original_file_name: file.name,
+        duplicate_resolutions: {},
       },
     })
     .select(

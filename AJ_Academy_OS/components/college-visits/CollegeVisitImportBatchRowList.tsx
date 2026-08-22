@@ -18,6 +18,7 @@ export type CollegeImportBatchRow = {
   status: string;
   uploaded_at: string;
   error_message?: string | null;
+  meta?: { duplicate_resolutions?: Record<string, string>; original_file_name?: string } | null;
   isLegacy?: boolean;
   /** For visits imported before batch tracking — groups rows from the same file/upload. */
   legacyGroupKey?: string;
