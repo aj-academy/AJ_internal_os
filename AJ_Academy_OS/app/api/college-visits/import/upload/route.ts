@@ -12,6 +12,7 @@ import {
   parseCollegeVisitImportFile,
 } from "@/lib/collegeVisitsImport";
 import { buildCollegeVisitPayload } from "@/components/college-visits/collegeVisitsHelpers";
+import { insertCollegeVisitsBulk } from "@/lib/collegeVisitInsert";
 
 export const runtime = "nodejs";
 
@@ -115,20 +116,19 @@ export async function POST(request: Request) {
             source_reference: formValue.source_reference?.trim() || file.name,
           };
         });
-        const { data: inserted, error: insertError } = await admin.from("college_visits").insert(inserts).select("id");
-        if (insertError) {
-          failed += slice.length;
-          continue;
-        }
-        created += inserted?.length ?? 0;
-        for (const row of inserted ?? []) {
-          if (row.id) {
+        const { results, lastError } = await insertCollegeVisitsBulk(admin, inserts);
+        if (lastError && !results.some(Boolean)) failed += slice.length;
+        for (const row of results) {
+          if (row?.id) {
+            created += 1;
             activityRows.push({
               college_visit_id: row.id,
               activity_type: "College Created",
               notes: `Bulk upload to All Colleges (${file.name})`,
               created_by: auth.user!.id,
             });
+          } else {
+            failed += 1;
           }
         }
       }
@@ -166,20 +166,19 @@ export async function POST(request: Request) {
             source_reference: formValue.source_reference?.trim() || targetBatch.file_name,
           };
         });
-        const { data: inserted, error: insertError } = await admin.from("college_visits").insert(inserts).select("id");
-        if (insertError) {
-          failed += slice.length;
-          continue;
-        }
-        created += inserted?.length ?? 0;
-        for (const row of inserted ?? []) {
-          if (row.id) {
+        const { results, lastError } = await insertCollegeVisitsBulk(admin, inserts);
+        if (lastError && !results.some(Boolean)) failed += slice.length;
+        for (const row of results) {
+          if (row?.id) {
+            created += 1;
             activityRows.push({
               college_visit_id: row.id,
               activity_type: "College Created",
               notes: `Added to upload folder ${targetBatch.file_name}`,
               created_by: auth.user!.id,
             });
+          } else {
+            failed += 1;
           }
         }
       }

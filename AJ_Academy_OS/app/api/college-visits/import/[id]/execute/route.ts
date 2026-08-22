@@ -4,6 +4,7 @@ import { requireAdminApiSession } from "@/lib/security/auth/requireAdminApi";
 import { buildCollegeVisitPayload } from "@/components/college-visits/collegeVisitsHelpers";
 import type { CollegeVisitFormValue } from "@/components/college-visits/collegeVisitsHelpers";
 import { COLLEGE_IMPORT_EXECUTE_CHUNK } from "@/lib/collegeVisitsImport";
+import { insertCollegeVisitsBulk } from "@/lib/collegeVisitInsert";
 
 export const runtime = "nodejs";
 
@@ -18,14 +19,16 @@ export async function POST(_request: Request, { params }: RouteParams) {
 
   const { data: batch, error: batchError } = await admin
     .from("college_visit_import_batches")
-    .select("id,status,file_name")
+    .select("id,status,file_name,created_count")
     .eq("id", id)
     .maybeSingle();
 
   if (batchError) return NextResponse.json({ error: batchError.message }, { status: 400 });
   if (!batch) return NextResponse.json({ error: "Import batch not found." }, { status: 404 });
   if (batch.status === "completed" || batch.status === "completed_with_errors") {
-    return NextResponse.json({ error: "This import was already executed." }, { status: 400 });
+    if ((batch.created_count ?? 0) > 0) {
+      return NextResponse.json({ error: "This import was already executed." }, { status: 400 });
+    }
   }
 
   await admin
@@ -51,6 +54,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
   let created = 0;
   let skipped = 0;
   let failed = 0;
+  let lastInsertError: string | null = null;
   const activityRows: { college_visit_id: string; activity_type: string; notes: string; created_by: string }[] = [];
 
   const toInsert = (pendingRows ?? []).map((row) => {
@@ -71,36 +75,35 @@ export async function POST(_request: Request, { params }: RouteParams) {
 
   for (let i = 0; i < toInsert.length; i += COLLEGE_IMPORT_EXECUTE_CHUNK) {
     const slice = toInsert.slice(i, i + COLLEGE_IMPORT_EXECUTE_CHUNK);
-    const { data: inserted, error: insertError } = await admin
-      .from("college_visits")
-      .insert(slice.map((s) => s.insert))
-      .select("id");
+    const { results, lastError } = await insertCollegeVisitsBulk(
+      admin,
+      slice.map((s) => s.insert),
+    );
 
-    if (insertError) {
-      failed += slice.length;
-      for (const item of slice) {
-        await admin
-          .from("college_visit_import_rows")
-          .update({ status: "failed", error_message: insertError.message })
-          .eq("id", item.importRowId);
-      }
-      continue;
-    }
+    if (lastError) lastInsertError = lastError;
 
-    created += inserted?.length ?? 0;
-    for (let j = 0; j < (inserted ?? []).length; j += 1) {
-      const visitId = inserted![j]?.id;
+    for (let j = 0; j < slice.length; j += 1) {
+      const result = results[j];
       const importRowId = slice[j]?.importRowId;
-      if (visitId) {
+      if (result?.id) {
+        created += 1;
         activityRows.push({
-          college_visit_id: visitId,
+          college_visit_id: result.id,
           activity_type: "College Created",
           notes: `Import batch ${batch.file_name}`,
           created_by: auth.user!.id,
         });
-      }
-      if (importRowId) {
-        await admin.from("college_visit_import_rows").update({ status: "imported" }).eq("id", importRowId);
+        if (importRowId) {
+          await admin.from("college_visit_import_rows").update({ status: "imported" }).eq("id", importRowId);
+        }
+      } else {
+        failed += 1;
+        if (importRowId) {
+          await admin
+            .from("college_visit_import_rows")
+            .update({ status: "failed", error_message: lastError ?? "Insert failed." })
+            .eq("id", importRowId);
+        }
       }
     }
   }
@@ -125,14 +128,15 @@ export async function POST(_request: Request, { params }: RouteParams) {
     }
   }
 
-  const finalStatus = failed > 0 ? "completed_with_errors" : "completed";
+  const finalStatus = failed > 0 && created === 0 ? "completed_with_errors" : failed > 0 ? "completed_with_errors" : "completed";
   await admin
     .from("college_visit_import_batches")
     .update({
-      status: finalStatus,
+      status: created > 0 ? finalStatus : failed > 0 ? "completed_with_errors" : "completed",
       created_count: created,
       skipped_count: skipped,
       failed_count: failed,
+      error_message: failed > 0 ? lastInsertError : null,
     })
     .eq("id", id);
 
@@ -140,6 +144,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     created,
     skipped,
     failed,
-    status: finalStatus,
+    status: created > 0 ? finalStatus : failed > 0 ? "completed_with_errors" : "completed",
+    error: failed > 0 ? lastInsertError : undefined,
   });
 }

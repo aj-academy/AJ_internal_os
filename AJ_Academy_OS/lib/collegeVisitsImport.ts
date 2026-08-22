@@ -5,6 +5,7 @@ import {
   parseCollegeVisitMatrix,
   pickCollegeVisitImportSheetName,
 } from "@/components/college-visits/collegeVisitsCsv";
+import { flatFieldsFromPrimary, resolveCollegeContacts } from "@/components/college-visits/collegeVisitsHelpers";
 
 export type CollegeImportRowStatus = "pending" | "duplicate" | "invalid" | "imported" | "failed" | "skipped";
 
@@ -178,3 +179,73 @@ export function analyzeCollegeImportRows(
 }
 
 export const COLLEGE_IMPORT_EXECUTE_CHUNK = 75;
+
+export type CollegeImportStagingRow = {
+  id: string;
+  row_number: number;
+  payload: CollegeVisitFormValue;
+  status: string;
+  duplicate_of?: string | null;
+  error_message?: string | null;
+};
+
+/** Preview row for the import table before execute saves to college_visits. */
+export function stagingImportRowToVisit(
+  row: CollegeImportStagingRow,
+  batchId: string,
+): CollegeVisitRow {
+  const form = row.payload;
+  const contacts = resolveCollegeContacts({
+    contacts: form.contacts,
+    contact_number: form.contact_number,
+    email: form.email,
+    connected_person_name: form.connected_person_name,
+    connected_person_role: form.connected_person_role,
+  });
+  const flat = flatFieldsFromPrimary(contacts);
+  const now = new Date().toISOString();
+  return {
+    id: `staging:${row.id}`,
+    college_name: form.college_name,
+    location: form.location?.trim() || null,
+    contact_number: flat.contact_number,
+    email: flat.email,
+    connected_person_name: flat.connected_person_name,
+    connected_person_role: flat.connected_person_role,
+    contacts,
+    visit_status: form.visit_status || "Not Visited",
+    visited_by_name: form.visited_by_name?.trim() || null,
+    visit_date: form.visit_date || null,
+    visited_by: form.visited_by?.trim() || null,
+    mou_signed_status: form.mou_signed_status || "Not Signed",
+    follow_up_stage: form.follow_up_stage?.trim() || null,
+    last_follow_up_date: form.last_follow_up_date || null,
+    next_follow_up_date: form.next_follow_up_date || null,
+    priority: form.priority || "Warm",
+    assigned_to: form.assigned_to?.trim() || null,
+    assigned_by: null,
+    description: form.description?.trim() || null,
+    last_outcome_remarks: form.last_outcome_remarks?.trim() || null,
+    lead_score: Number(form.lead_score) || 0,
+    final_status: form.final_status || "Open",
+    source_reference:
+      row.status === "duplicate"
+        ? `[Duplicate preview] ${form.source_reference?.trim() || ""}`.trim()
+        : form.source_reference?.trim() || null,
+    proposal_status: form.proposal_status || "Not Sent",
+    proposal_amount: null,
+    proposal_sent_date: null,
+    proposal_link: null,
+    proposal_pdf_url: null,
+    proposal_pdf_name: null,
+    proposal_file_name: null,
+    proposal_file_path: null,
+    proposal_file_type: null,
+    proposal_file_size: null,
+    proposal_uploaded_at: null,
+    import_batch_id: batchId,
+    created_by: null,
+    created_at: now,
+    updated_at: now,
+  };
+}

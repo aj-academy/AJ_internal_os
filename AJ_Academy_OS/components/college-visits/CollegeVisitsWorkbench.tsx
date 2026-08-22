@@ -49,6 +49,10 @@ import {
   type CollegeImportBatchRow,
 } from "@/components/college-visits/CollegeVisitImportBatchRowList";
 import {
+  type CollegeImportStagingRow,
+  stagingImportRowToVisit,
+} from "@/lib/collegeVisitsImport";
+import {
   CollegeCallOutcomeModal,
   CollegePendingCallBanner,
   type CollegePendingCall,
@@ -218,6 +222,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [importBatchesLoading, setImportBatchesLoading] = useState(false);
   const [focusedImportBatch, setFocusedImportBatch] = useState<CollegeImportBatchRow | null>(null);
   const [batchImportExecuting, setBatchImportExecuting] = useState(false);
+  const [batchStagingRows, setBatchStagingRows] = useState<CollegeImportStagingRow[]>([]);
+  const [batchStagingLoading, setBatchStagingLoading] = useState(false);
   const [outreachDone, setOutreachDone] = useState<Record<string, CollegeOutreachFlags>>({});
   const [whatsAppTemplates, setWhatsAppTemplates] = useState<string[]>([]);
   const [cvLists, setCvLists] = useState<CollegeVisitSettingsLists>(() => defaultCollegeVisitSettingsLists());
@@ -914,12 +920,86 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     return visits.filter((v) => v.import_batch_id === focusedImportBatch.id);
   }, [focusedImportBatch, visits]);
 
+  const batchNeedsPreview = useMemo(() => {
+    if (!focusedImportBatch || focusedImportBatch.isLegacy) return false;
+    if (focusedImportBatch.status === "ready_for_review") return true;
+    if (
+      (focusedImportBatch.status === "completed_with_errors" || focusedImportBatch.status === "failed") &&
+      (focusedImportBatch.created_count ?? 0) === 0 &&
+      (focusedImportBatch.new_count ?? 0) > 0
+    ) {
+      return true;
+    }
+    return false;
+  }, [focusedImportBatch]);
+
+  const stagingVisitsForTable = useMemo(() => {
+    if (!batchNeedsPreview || !focusedImportBatch || !batchStagingRows.length) return [];
+    return batchStagingRows.map((row) => stagingImportRowToVisit(row, focusedImportBatch.id));
+  }, [batchNeedsPreview, batchStagingRows, focusedImportBatch]);
+
+  const loadBatchStagingPreview = useCallback(async (batch: CollegeImportBatchRow) => {
+    if (batch.isLegacy) {
+      setBatchStagingRows([]);
+      return;
+    }
+    setBatchStagingLoading(true);
+    try {
+      if (
+        (batch.status === "completed_with_errors" || batch.status === "failed") &&
+        (batch.created_count ?? 0) === 0
+      ) {
+        const resetRes = await fetch(`/api/college-visits/import/${batch.id}/reset`, {
+          method: "POST",
+          credentials: "include",
+        });
+        const resetJson = (await resetRes.json()) as { batch?: CollegeImportBatchRow; reset?: boolean };
+        if (resetRes.ok && resetJson.batch) {
+          setFocusedImportBatch((prev) =>
+            prev?.id === batch.id ? { ...prev, ...resetJson.batch, isLegacy: false } : prev,
+          );
+          batch = { ...batch, ...resetJson.batch };
+        }
+      }
+      const res = await fetch(`/api/college-visits/import/${batch.id}`, { credentials: "include" });
+      const json = (await res.json()) as {
+        batch?: CollegeImportBatchRow;
+        rows?: CollegeImportStagingRow[];
+        error?: string;
+      };
+      if (!res.ok) throw new Error(json.error || "Could not load import preview.");
+      setBatchStagingRows(json.rows ?? []);
+      if (json.batch) {
+        setFocusedImportBatch((prev) =>
+          prev?.id === batch.id ? { ...prev, ...json.batch, isLegacy: false } : prev,
+        );
+      }
+    } catch (e) {
+      setError(friendlyCollegeVisitError(e));
+      setBatchStagingRows([]);
+    } finally {
+      setBatchStagingLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!focusedImportBatch || !batchNeedsPreview) {
+      setBatchStagingRows([]);
+      return;
+    }
+    void loadBatchStagingPreview(focusedImportBatch);
+  }, [batchNeedsPreview, focusedImportBatch?.id, loadBatchStagingPreview]);
+
   const showImportBatchList = isDbAdmin && !pickForTask && activeTab === "all-colleges";
 
   const allCollegesTableVisits = useMemo(() => {
     if (activeTab !== "all-colleges") return filteredVisits;
     if (showImportBatchList && !focusedImportBatch) return [];
-    const base = focusedImportBatch ? visitsForFocusedBatch : visits;
+    const base = focusedImportBatch
+      ? batchNeedsPreview
+        ? stagingVisitsForTable
+        : visitsForFocusedBatch
+      : visits;
     let list = [...base];
     const q = searchText.trim().toLowerCase();
     if (q) {
@@ -947,12 +1027,13 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     focusedImportBatch,
     searchText,
     showImportBatchList,
+    stagingVisitsForTable,
+    batchNeedsPreview,
     visits,
     visitsForFocusedBatch,
   ]);
 
-  const batchAwaitingImport =
-    Boolean(focusedImportBatch && !focusedImportBatch.isLegacy && focusedImportBatch.status === "ready_for_review");
+  const batchAwaitingImport = batchNeedsPreview;
 
   const clearTableFilters = () => {
     setSearchText("");
@@ -1603,7 +1684,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   };
 
   const handleExecuteBatchImport = async () => {
-    if (!focusedImportBatch || focusedImportBatch.isLegacy || focusedImportBatch.status !== "ready_for_review") return;
+    if (!focusedImportBatch || focusedImportBatch.isLegacy || !batchAwaitingImport) return;
     setBatchImportExecuting(true);
     setError(null);
     try {
@@ -1623,6 +1704,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       } else {
         await loadImportBatches();
       }
+      setBatchStagingRows([]);
       setSuccess(
         `Import complete: ${json.created ?? 0} added, ${json.skipped ?? 0} duplicate(s) skipped${json.failed ? `, ${json.failed} failed` : ""}. You can now edit, assign, and call from this table.`,
       );
@@ -1799,7 +1881,13 @@ return (
           onClear={clearTableFilters}
           hint={
             activeTab === "all-colleges"
-              ? `Showing ${pageRows.length} of ${filteredVisits.length} college(s) | page ${page}/${totalPages}`
+              ? showImportBatchList && !focusedImportBatch
+                ? `${displayImportBatches.length} upload folder(s) — open one to view colleges`
+                : batchNeedsPreview
+                  ? batchStagingLoading
+                    ? "Loading duplicate preview from file…"
+                    : `Preview: ${allCollegesTableVisits.length} row(s) — ${focusedImportBatch?.new_count ?? 0} new, ${focusedImportBatch?.duplicate_count ?? 0} duplicate(s). Click Import to save.`
+                  : `Showing ${pageRows.length} of ${allCollegesTableVisits.length} college(s) | page ${page}/${totalPages}`
               : `Showing ${filteredVisits.length} of ${visits.length} college(s)${searchText.trim() ? " (filtered)" : ""} · ${CV_TAB_LABELS[activeTab]}`
           }
         />
@@ -1935,6 +2023,7 @@ return (
                 }}
                 onOpenBatch={(batch) => {
                   setFocusedImportBatch(batch);
+                  setBatchStagingRows([]);
                   setPage(1);
                   visitBulk.clearSelection();
                 }}
@@ -2193,17 +2282,17 @@ return (
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
+                {loading || (batchNeedsPreview && batchStagingLoading) ? (
                   <tr>
                     <td colSpan={26} className="px-4 py-8 text-center text-sm text-[#64748b]">
-                      Loading...
+                      {batchNeedsPreview && batchStagingLoading ? "Loading duplicate preview…" : "Loading..."}
                     </td>
                   </tr>
                 ) : pageRows.length === 0 ? (
                   <tr>
                     <td colSpan={26} className="px-4 py-8 text-center text-sm text-[#64748b]">
                       {batchAwaitingImport
-                        ? "No new colleges to show yet. Click Import above to save rows from this file, then edit and assign here."
+                        ? "No rows in this file. Upload a different spreadsheet or go back to uploads."
                         : "No college visits found."}
                     </td>
                   </tr>

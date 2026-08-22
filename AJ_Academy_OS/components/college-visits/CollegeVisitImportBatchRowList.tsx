@@ -44,10 +44,14 @@ const statusClass: Record<string, string> = {
   failed: "bg-rose-100 text-rose-700 border-rose-200",
 };
 
-function statusLabel(status: string): string {
-  if (status === "ready_for_review") return "Review duplicates";
-  if (status === "completed_with_errors") return "Completed with errors";
-  return status.replace(/_/g, " ");
+function statusLabel(batch: CollegeImportBatchRow): string {
+  if (batch.status === "ready_for_review") return "Review duplicates";
+  if (batch.status === "completed_with_errors") {
+    if ((batch.created_count ?? 0) === 0) return "Import failed — open to retry";
+    return "Completed with errors";
+  }
+  if (batch.status === "failed") return "Import failed — open to retry";
+  return batch.status.replace(/_/g, " ");
 }
 
 export function CollegeVisitImportBatchRowList({
@@ -113,11 +117,14 @@ export function CollegeVisitImportBatchRowList({
                       <span className="rounded-full bg-[#f1f6fc] px-2 py-0.5 font-medium text-[#475569]">
                         {batch.row_count} row{batch.row_count === 1 ? "" : "s"}
                       </span>
-                      {!batch.isLegacy && batch.duplicate_count > 0 ? (
+                      {!batch.isLegacy && batch.status === "ready_for_review" && batch.duplicate_count > 0 ? (
                         <span className="font-medium text-amber-700">{batch.duplicate_count} duplicate preview</span>
                       ) : null}
-                      {!batch.isLegacy && batch.new_count > 0 ? (
+                      {!batch.isLegacy && batch.status === "ready_for_review" && batch.new_count > 0 ? (
                         <span className="font-medium text-emerald-700">{batch.new_count} new</span>
+                      ) : null}
+                      {!batch.isLegacy && batch.status === "completed" && batch.created_count > 0 ? (
+                        <span className="font-medium text-emerald-700">{batch.created_count} imported</span>
                       ) : null}
                       <span>{formatDisplayDate(batch.uploaded_at, "—")}</span>
                       {!batch.isLegacy ? <span>{batch.batch_number}</span> : null}
@@ -125,7 +132,7 @@ export function CollegeVisitImportBatchRowList({
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                     <Badge className={statusClass[batch.status] ?? statusClass.ready_for_review}>
-                      {batch.isLegacy ? "Imported" : statusLabel(batch.status)}
+                      {batch.isLegacy ? "Imported" : statusLabel(batch)}
                     </Badge>
                     <span className="text-xs font-semibold text-[#c9a227]">Open →</span>
                   </div>
