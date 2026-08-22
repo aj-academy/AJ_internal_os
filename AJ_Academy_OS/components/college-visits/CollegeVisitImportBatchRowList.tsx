@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { TableBulkCheckbox } from "@/components/ui/TableBulkCheckbox";
 import { formatDisplayDate } from "@/lib/datetime";
 
 export type CollegeImportBatchRow = {
@@ -25,6 +26,13 @@ export type CollegeImportBatchRow = {
 type CollegeVisitImportBatchRowListProps = {
   batches: CollegeImportBatchRow[];
   loading?: boolean;
+  selection?: {
+    allSelected: boolean;
+    someSelected: boolean;
+    isSelected: (id: string) => boolean;
+    onToggleAll: () => void;
+    onToggle: (id: string) => void;
+  };
   onOpenBatch: (batch: CollegeImportBatchRow) => void;
 };
 
@@ -45,8 +53,11 @@ function statusLabel(status: string): string {
 export function CollegeVisitImportBatchRowList({
   batches,
   loading,
+  selection,
   onOpenBatch,
 }: CollegeVisitImportBatchRowListProps) {
+  const showSelection = Boolean(selection);
+
   if (loading) {
     return (
       <div className="rounded-[20px] border border-[#dbe6f3] bg-white px-4 py-10 text-center text-sm text-[#64748b]">
@@ -65,37 +76,62 @@ export function CollegeVisitImportBatchRowList({
 
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
+      {showSelection ? (
+        <div className="flex items-center gap-3 border-b border-[#e8edf5] bg-[#f8fbff] px-4 py-2">
+          <TableBulkCheckbox
+            checked={selection!.allSelected}
+            indeterminate={selection!.someSelected}
+            disabled={!batches.length}
+            onChange={selection!.onToggleAll}
+            ariaLabel="Select all uploads on this page"
+          />
+          <span className="text-xs font-medium text-[#64748b]">Select all on this page</span>
+        </div>
+      ) : null}
       <ul className="divide-y divide-[#e8edf5]">
         {batches.map((batch) => (
           <li key={batch.id}>
-            <button
-              type="button"
-              className="flex w-full items-stretch gap-3 px-4 py-3 text-left hover:bg-[#fafcff]"
-              onClick={() => onOpenBatch(batch)}
-            >
-              <div className="min-w-0 flex-1 space-y-1">
-                <p className="truncate text-sm font-semibold text-[#0f172a]">{batch.file_name}</p>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-[#64748b]">
-                  <span className="rounded-full bg-[#f1f6fc] px-2 py-0.5 font-medium text-[#475569]">
-                    {batch.row_count} row{batch.row_count === 1 ? "" : "s"}
-                  </span>
-                  {!batch.isLegacy && batch.duplicate_count > 0 ? (
-                    <span className="font-medium text-amber-700">{batch.duplicate_count} duplicate preview</span>
-                  ) : null}
-                  {!batch.isLegacy && batch.new_count > 0 ? (
-                    <span className="font-medium text-emerald-700">{batch.new_count} new</span>
-                  ) : null}
-                  <span>{formatDisplayDate(batch.uploaded_at, "—")}</span>
-                  {!batch.isLegacy ? <span>{batch.batch_number}</span> : null}
+            <div className="flex items-stretch gap-3 px-4 py-3 hover:bg-[#fafcff]">
+              {showSelection ? (
+                <div className="flex shrink-0 items-center pt-1">
+                  <TableBulkCheckbox
+                    checked={selection!.isSelected(batch.id)}
+                    onChange={() => selection!.onToggle(batch.id)}
+                    ariaLabel={`Select upload ${batch.file_name}`}
+                  />
                 </div>
-              </div>
-              <div className="flex shrink-0 flex-wrap items-center gap-2">
-                <Badge className={statusClass[batch.status] ?? statusClass.ready_for_review}>
-                  {batch.isLegacy ? "Imported" : statusLabel(batch.status)}
-                </Badge>
-                <span className="text-xs font-semibold text-[#c9a227]">Open →</span>
-              </div>
-            </button>
+              ) : null}
+              <button
+                type="button"
+                className="min-w-0 flex-1 text-left"
+                onClick={() => onOpenBatch(batch)}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 space-y-1">
+                    <p className="truncate text-sm font-semibold text-[#0f172a]">{batch.file_name}</p>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-[#64748b]">
+                      <span className="rounded-full bg-[#f1f6fc] px-2 py-0.5 font-medium text-[#475569]">
+                        {batch.row_count} row{batch.row_count === 1 ? "" : "s"}
+                      </span>
+                      {!batch.isLegacy && batch.duplicate_count > 0 ? (
+                        <span className="font-medium text-amber-700">{batch.duplicate_count} duplicate preview</span>
+                      ) : null}
+                      {!batch.isLegacy && batch.new_count > 0 ? (
+                        <span className="font-medium text-emerald-700">{batch.new_count} new</span>
+                      ) : null}
+                      <span>{formatDisplayDate(batch.uploaded_at, "—")}</span>
+                      {!batch.isLegacy ? <span>{batch.batch_number}</span> : null}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <Badge className={statusClass[batch.status] ?? statusClass.ready_for_review}>
+                      {batch.isLegacy ? "Imported" : statusLabel(batch.status)}
+                    </Badge>
+                    <span className="text-xs font-semibold text-[#c9a227]">Open →</span>
+                  </div>
+                </div>
+              </button>
+            </div>
           </li>
         ))}
       </ul>

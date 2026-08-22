@@ -975,14 +975,31 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setPageSize,
   } = usePagination(activeTab === "all-colleges" ? allCollegesTableVisits : filteredVisits, 25);
 
+  const {
+    paginatedItems: paginatedImportBatches,
+    page: importBatchPage,
+    setPage: setImportBatchPage,
+    totalPages: importBatchTotalPages,
+    totalItems: importBatchTotalItems,
+    pageSize: importBatchPageSize,
+    setPageSize: setImportBatchPageSize,
+  } = usePagination(displayImportBatches, 25);
+
   /** Select across the full filtered set (not only the current page). */
   const visitBulk = useRowSelection(
     activeTab === "all-colleges" ? allCollegesTableVisits : filteredVisits,
     (v) => v.id,
   );
 
+  const batchBulk = useRowSelection(
+    displayImportBatches,
+    (b) => b.id,
+    paginatedImportBatches,
+  );
+
   useEffect(() => {
     visitBulk.clearSelection();
+    batchBulk.clearSelection();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset selection on tab change
   }, [activeTab, pickForTask]);
 
@@ -1352,6 +1369,81 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
           : `${resolved.collegeVisitIds.length} college(s) sent to ${label} as My Tasks -> College Visit.`,
       );
       await silentRefreshVisits();
+    } catch (e) {
+      setError(friendlyCollegeVisitError(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleBulkDeleteBatches = async () => {
+    if (!isDbAdmin || !currentUserId || batchBulk.selectedCount === 0) return;
+
+    const selectedBatches = displayImportBatches.filter((b) => batchBulk.isSelected(b.id));
+    if (!selectedBatches.length) return;
+
+    const collegeIds = new Set<string>();
+    const dbBatchIds: string[] = [];
+
+    for (const batch of selectedBatches) {
+      if (batch.isLegacy && batch.legacyGroupKey) {
+        for (const v of visits) {
+          if (!v.import_batch_id && legacyCollegeVisitGroupKey(v) === batch.legacyGroupKey) {
+            collegeIds.add(v.id);
+          }
+        }
+      } else if (!batch.isLegacy) {
+        dbBatchIds.push(batch.id);
+        for (const v of visits) {
+          if (v.import_batch_id === batch.id) collegeIds.add(v.id);
+        }
+      }
+    }
+
+    const collegeCount = collegeIds.size;
+    const batchCount = selectedBatches.length;
+    const confirmMsg =
+      collegeCount > 0
+        ? `Delete ${batchCount} selected upload${batchCount === 1 ? "" : "s"} and ${collegeCount} linked college visit${collegeCount === 1 ? "" : "s"}?`
+        : `Delete ${batchCount} selected upload${batchCount === 1 ? "" : "s"}? Pending imports with no saved colleges will be removed.`;
+    if (!confirm(confirmMsg)) return;
+
+    setSubmitting(true);
+    try {
+      if (collegeIds.size) {
+        const { deleted, error: deleteError } = await deleteOwnedCollegeVisits(
+          supabase,
+          [...collegeIds],
+          currentUserId,
+          { isAdmin: isDbAdmin },
+        );
+        if (deleteError) throw new Error(deleteError);
+        if (!deleted) {
+          throw new Error(
+            "No college visits were deleted. Re-run AJ_Academy_SB/crm_delete_fix.sql in Supabase if needed.",
+          );
+        }
+      }
+
+      if (dbBatchIds.length) {
+        const { error: batchError } = await supabase
+          .from("college_visit_import_batches")
+          .delete()
+          .in("id", dbBatchIds);
+        if (batchError) throw new Error(batchError.message);
+      }
+
+      if (focusedImportBatch && batchBulk.isSelected(focusedImportBatch.id)) {
+        setFocusedImportBatch(null);
+      }
+      batchBulk.clearSelection();
+      setSuccess(
+        collegeCount
+          ? `${batchCount} upload${batchCount === 1 ? "" : "s"} removed (${collegeCount} college visit${collegeCount === 1 ? "" : "s"} deleted).`
+          : `${batchCount} upload${batchCount === 1 ? "" : "s"} removed.`,
+      );
+      await silentRefreshVisits();
+      await loadImportBatches();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
     } finally {
@@ -1771,14 +1863,42 @@ return (
                 Each uploaded file appears separately with its upload date. Click a row to open the full college table
                 — edit, assign to employees, call, WhatsApp, and email work exactly as before.
               </p>
+              {batchBulk.selectedCount > 0 ? (
+                <BulkSelectionBar selectedCount={batchBulk.selectedCount} onClear={batchBulk.clearSelection}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 rounded-full border-rose-200 text-rose-700"
+                    onClick={() => void handleBulkDeleteBatches()}
+                    disabled={submitting}
+                  >
+                    Delete selected
+                  </Button>
+                </BulkSelectionBar>
+              ) : null}
               <CollegeVisitImportBatchRowList
-                batches={displayImportBatches}
+                batches={paginatedImportBatches}
                 loading={importBatchesLoading || loading}
+                selection={{
+                  allSelected: batchBulk.allSelected,
+                  someSelected: batchBulk.someSelected,
+                  isSelected: batchBulk.isSelected,
+                  onToggleAll: batchBulk.toggleAll,
+                  onToggle: batchBulk.toggleOne,
+                }}
                 onOpenBatch={(batch) => {
                   setFocusedImportBatch(batch);
                   setPage(1);
                   visitBulk.clearSelection();
                 }}
+              />
+              <TablePagination
+                page={importBatchPage}
+                totalPages={importBatchTotalPages}
+                totalItems={importBatchTotalItems}
+                pageSize={importBatchPageSize}
+                onPageChange={setImportBatchPage}
+                onPageSizeChange={setImportBatchPageSize}
               />
             </div>
           ) : null}
