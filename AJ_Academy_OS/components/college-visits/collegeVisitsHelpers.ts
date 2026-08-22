@@ -57,6 +57,14 @@ export type CollegeVisitRow = {
   updated_at: string;
 };
 
+/** Groups pre-batch imports so each upload burst appears as its own file row. */
+export function legacyCollegeVisitGroupKey(v: Pick<CollegeVisitRow, "source_reference" | "created_at">): string {
+  const ref = (v.source_reference || "").trim().toLowerCase();
+  const day = (v.created_at || "").slice(0, 10);
+  if (ref) return `ref:${ref}|${day}`;
+  return `burst:${(v.created_at || "").slice(0, 16)}`;
+}
+
 export type CollegeVisitActivityRow = {
   id: string;
   college_visit_id: string;

@@ -18,6 +18,8 @@ export type CollegeImportBatchRow = {
   uploaded_at: string;
   error_message?: string | null;
   isLegacy?: boolean;
+  /** For visits imported before batch tracking — groups rows from the same file/upload. */
+  legacyGroupKey?: string;
 };
 
 type CollegeVisitImportBatchRowListProps = {
@@ -72,15 +74,11 @@ export function CollegeVisitImportBatchRowList({
               onClick={() => onOpenBatch(batch)}
             >
               <div className="min-w-0 flex-1 space-y-1">
-                <p className="truncate text-sm font-semibold text-[#0f172a]">
-                  {batch.isLegacy ? "Manual / earlier entries" : batch.file_name}
-                </p>
+                <p className="truncate text-sm font-semibold text-[#0f172a]">{batch.file_name}</p>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-[#64748b]">
-                  {!batch.isLegacy ? (
-                    <span className="rounded-full bg-[#f1f6fc] px-2 py-0.5 font-medium text-[#475569]">
-                      {batch.row_count} row{batch.row_count === 1 ? "" : "s"}
-                    </span>
-                  ) : null}
+                  <span className="rounded-full bg-[#f1f6fc] px-2 py-0.5 font-medium text-[#475569]">
+                    {batch.row_count} row{batch.row_count === 1 ? "" : "s"}
+                  </span>
                   {!batch.isLegacy && batch.duplicate_count > 0 ? (
                     <span className="font-medium text-amber-700">{batch.duplicate_count} duplicate preview</span>
                   ) : null}
@@ -93,7 +91,7 @@ export function CollegeVisitImportBatchRowList({
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2">
                 <Badge className={statusClass[batch.status] ?? statusClass.ready_for_review}>
-                  {batch.isLegacy ? "All colleges" : statusLabel(batch.status)}
+                  {batch.isLegacy ? "Imported" : statusLabel(batch.status)}
                 </Badge>
                 <span className="text-xs font-semibold text-[#c9a227]">Open →</span>
               </div>

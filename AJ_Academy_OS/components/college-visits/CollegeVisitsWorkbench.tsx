@@ -24,6 +24,7 @@ import {
 } from "@/lib/whatsappOutreach";
 import { navigateWithoutAppPopup } from "@/lib/browser/sameWindowDownload";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { CrmFlash } from "@/components/ui/CrmFlash";
 import { TableHeaderCell, TableHeaderFilter } from "@/components/ui/TableHeaderFilter";
 import { TableSearchBar } from "@/components/ui/TableSearchBar";
@@ -47,7 +48,6 @@ import {
   CollegeVisitImportBatchRowList,
   type CollegeImportBatchRow,
 } from "@/components/college-visits/CollegeVisitImportBatchRowList";
-import { CollegeVisitImportDetailWorkbench } from "@/components/college-visits/CollegeVisitImportDetailWorkbench";
 import {
   CollegeCallOutcomeModal,
   CollegePendingCallBanner,
@@ -90,6 +90,7 @@ import {
   friendlyCollegeVisitError,
   isFollowUpDue,
   isMissingCollegeVisitsTable,
+  legacyCollegeVisitGroupKey,
   primaryOutreachPhone,
   collegeOutreachTargets,
   collegeOutreachTargetsForContact,
@@ -215,6 +216,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [importBatches, setImportBatches] = useState<CollegeImportBatchRow[]>([]);
   const [importBatchesLoading, setImportBatchesLoading] = useState(false);
   const [focusedImportBatch, setFocusedImportBatch] = useState<CollegeImportBatchRow | null>(null);
+  const [batchImportExecuting, setBatchImportExecuting] = useState(false);
   const [outreachDone, setOutreachDone] = useState<Record<string, CollegeOutreachFlags>>({});
   const [whatsAppTemplates, setWhatsAppTemplates] = useState<string[]>([]);
   const [cvLists, setCvLists] = useState<CollegeVisitSettingsLists>(() => defaultCollegeVisitSettingsLists());
@@ -865,43 +867,94 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     searchText.trim() || fltVisitStatus || fltPriority || fltOwner || fltFinalStatus || fltFollowUpDue,
   );
 
-  const legacyImportBatch = useMemo((): CollegeImportBatchRow | null => {
+  const syntheticLegacyBatches = useMemo((): CollegeImportBatchRow[] => {
     const legacy = visits.filter((v) => !v.import_batch_id);
-    if (!legacy.length) return null;
-    const latest = legacy.reduce(
-      (max, row) => (row.created_at > max ? row.created_at : max),
-      legacy[0]?.created_at ?? "",
-    );
-    return {
-      id: "legacy",
-      isLegacy: true,
-      batch_number: "LEGACY",
-      file_name: "Manual / earlier entries",
-      row_count: legacy.length,
-      new_count: legacy.length,
-      duplicate_count: 0,
-      invalid_count: 0,
-      created_count: legacy.length,
-      skipped_count: 0,
-      failed_count: 0,
-      status: "completed",
-      uploaded_at: latest,
-    };
+    const groups = new Map<string, CollegeVisitRow[]>();
+    for (const v of legacy) {
+      const key = legacyCollegeVisitGroupKey(v);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(v);
+    }
+    return [...groups.entries()].map(([legacyGroupKey, rows]) => {
+      const ref = rows[0]?.source_reference?.trim();
+      const latest = rows.reduce(
+        (max, row) => ((row.created_at || "") > max ? row.created_at : max),
+        rows[0]?.created_at ?? "",
+      );
+      return {
+        id: `legacy:${legacyGroupKey}`,
+        isLegacy: true,
+        legacyGroupKey,
+        batch_number: "LEGACY",
+        file_name: ref || `Colleges added ${formatDisplayDate(latest, "—")}`,
+        row_count: rows.length,
+        new_count: rows.length,
+        duplicate_count: 0,
+        invalid_count: 0,
+        created_count: rows.length,
+        skipped_count: 0,
+        failed_count: 0,
+        status: "completed",
+        uploaded_at: latest,
+      };
+    });
   }, [visits]);
 
   const displayImportBatches = useMemo(() => {
-    const list = [...importBatches];
-    if (legacyImportBatch) list.push(legacyImportBatch);
-    return list.sort((a, b) => (b.uploaded_at || "").localeCompare(a.uploaded_at || ""));
-  }, [importBatches, legacyImportBatch]);
+    return [...importBatches, ...syntheticLegacyBatches].sort((a, b) =>
+      (b.uploaded_at || "").localeCompare(a.uploaded_at || ""),
+    );
+  }, [importBatches, syntheticLegacyBatches]);
 
   const visitsForFocusedBatch = useMemo(() => {
     if (!focusedImportBatch) return [];
-    if (focusedImportBatch.isLegacy) return visits.filter((v) => !v.import_batch_id);
+    if (focusedImportBatch.legacyGroupKey) {
+      return visits.filter(
+        (v) => !v.import_batch_id && legacyCollegeVisitGroupKey(v) === focusedImportBatch.legacyGroupKey,
+      );
+    }
     return visits.filter((v) => v.import_batch_id === focusedImportBatch.id);
   }, [focusedImportBatch, visits]);
 
   const showImportBatchList = isDbAdmin && !pickForTask && activeTab === "all-colleges";
+
+  const allCollegesTableVisits = useMemo(() => {
+    if (activeTab !== "all-colleges") return filteredVisits;
+    if (showImportBatchList && !focusedImportBatch) return [];
+    const base = focusedImportBatch ? visitsForFocusedBatch : visits;
+    let list = [...base];
+    const q = searchText.trim().toLowerCase();
+    if (q) {
+      list = list.filter((v) =>
+        `${v.college_name} ${v.location ?? ""} ${v.contact_number ?? ""} ${v.email ?? ""} ${v.connected_person_name ?? ""} ${v.source_reference ?? ""} ${v.visit_status ?? ""} ${v.mou_signed_status ?? ""} ${v.final_status ?? ""} ${v.priority ?? ""} ${v.follow_up_stage ?? ""} ${v.proposal_status ?? ""} ${v.visited_by_name ?? ""}`
+          .toLowerCase()
+          .includes(q),
+      );
+    }
+    if (fltVisitStatus) list = list.filter((v) => v.visit_status === fltVisitStatus);
+    if (fltPriority) list = list.filter((v) => v.priority === fltPriority);
+    if (fltOwner) list = list.filter((v) => (v.assigned_to ?? "") === fltOwner);
+    if (fltFinalStatus) list = list.filter((v) => v.final_status === fltFinalStatus);
+    if (fltFollowUpDue === "yes") list = list.filter((v) => isFollowUpDue(v));
+    if (fltFollowUpDue === "no") list = list.filter((v) => !isFollowUpDue(v));
+    return list;
+  }, [
+    activeTab,
+    filteredVisits,
+    fltFinalStatus,
+    fltFollowUpDue,
+    fltOwner,
+    fltPriority,
+    fltVisitStatus,
+    focusedImportBatch,
+    searchText,
+    showImportBatchList,
+    visits,
+    visitsForFocusedBatch,
+  ]);
+
+  const batchAwaitingImport =
+    Boolean(focusedImportBatch && !focusedImportBatch.isLegacy && focusedImportBatch.status === "ready_for_review");
 
   const clearTableFilters = () => {
     setSearchText("");
@@ -920,10 +973,13 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     totalItems,
     pageSize,
     setPageSize,
-  } = usePagination(filteredVisits, 25);
+  } = usePagination(activeTab === "all-colleges" ? allCollegesTableVisits : filteredVisits, 25);
 
   /** Select across the full filtered set (not only the current page). */
-  const visitBulk = useRowSelection(filteredVisits, (v) => v.id);
+  const visitBulk = useRowSelection(
+    activeTab === "all-colleges" ? allCollegesTableVisits : filteredVisits,
+    (v) => v.id,
+  );
 
   useEffect(() => {
     visitBulk.clearSelection();
@@ -961,11 +1017,12 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   }, [activeTab, filteredVisits, supabase]);
 
   const rowsForExport = useMemo(() => {
+    const scope = activeTab === "all-colleges" ? allCollegesTableVisits : filteredVisits;
     if (visitBulk.selectedCount > 0) {
-      return filteredVisits.filter((v) => visitBulk.selected.has(v.id));
+      return scope.filter((v) => visitBulk.selected.has(v.id));
     }
-    return filteredVisits;
-  }, [filteredVisits, visitBulk.selected, visitBulk.selectedCount]);
+    return scope;
+  }, [activeTab, allCollegesTableVisits, filteredVisits, visitBulk.selected, visitBulk.selectedCount]);
 
   const changePipelineStatus = async (row: CollegeVisitRow, visit_status: string) => {
     if (!currentUserId || row.visit_status === visit_status) return;
@@ -1407,6 +1464,37 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     }
   };
 
+  const handleExecuteBatchImport = async () => {
+    if (!focusedImportBatch || focusedImportBatch.isLegacy || focusedImportBatch.status !== "ready_for_review") return;
+    setBatchImportExecuting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/college-visits/import/${focusedImportBatch.id}/execute`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const json = (await res.json()) as { error?: string; created?: number; skipped?: number; failed?: number };
+      if (!res.ok) throw new Error(json.error || "Import failed.");
+      await silentRefreshVisits();
+      const listRes = await fetch("/api/college-visits/import", { credentials: "include" });
+      const listJson = (await listRes.json()) as { batches?: CollegeImportBatchRow[] };
+      if (listRes.ok) {
+        setImportBatches(listJson.batches ?? []);
+        const updated = (listJson.batches ?? []).find((b) => b.id === focusedImportBatch.id);
+        if (updated) setFocusedImportBatch(updated);
+      } else {
+        await loadImportBatches();
+      }
+      setSuccess(
+        `Import complete: ${json.created ?? 0} added, ${json.skipped ?? 0} duplicate(s) skipped${json.failed ? `, ${json.failed} failed` : ""}. You can now edit, assign, and call from this table.`,
+      );
+    } catch (e) {
+      setError(friendlyCollegeVisitError(e));
+    } finally {
+      setBatchImportExecuting(false);
+    }
+  };
+
   const thClass = TABLE_DATA_TH;
   const tdClass = TABLE_DATA_TD;
   const dash = (v: unknown) => (v == null || v === "" ? "—" : String(v));
@@ -1677,6 +1765,95 @@ return (
             </div>
           ) : null}
 
+          {showImportBatchList && !focusedImportBatch ? (
+            <div className="space-y-3">
+              <p className="text-xs font-medium text-[#64748b]">
+                Each uploaded file appears separately with its upload date. Click a row to open the full college table
+                — edit, assign to employees, call, WhatsApp, and email work exactly as before.
+              </p>
+              <CollegeVisitImportBatchRowList
+                batches={displayImportBatches}
+                loading={importBatchesLoading || loading}
+                onOpenBatch={(batch) => {
+                  setFocusedImportBatch(batch);
+                  setPage(1);
+                  visitBulk.clearSelection();
+                }}
+              />
+            </div>
+          ) : null}
+
+          {(!showImportBatchList || focusedImportBatch) ? (
+            <div
+              className={
+                focusedImportBatch ? "fixed inset-0 z-[70] overflow-y-auto bg-[#f4f7fb]" : undefined
+              }
+            >
+              <div className={focusedImportBatch ? "mx-auto max-w-[1680px] space-y-4 p-4 sm:p-6" : "space-y-3"}>
+                {focusedImportBatch ? (
+                  <>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-full border-[#dbe6f3]"
+                        onClick={() => setFocusedImportBatch(null)}
+                      >
+                        ← Back to uploads
+                      </Button>
+                      {batchAwaitingImport ? (
+                        <Button
+                          type="button"
+                          className="rounded-full bg-[#c9a227] text-white hover:bg-[#b8921f]"
+                          disabled={batchImportExecuting || focusedImportBatch.new_count <= 0}
+                          onClick={() => void handleExecuteBatchImport()}
+                        >
+                          {batchImportExecuting
+                            ? "Importing…"
+                            : `Import ${focusedImportBatch.new_count} new college${focusedImportBatch.new_count === 1 ? "" : "s"}`}
+                        </Button>
+                      ) : null}
+                    </div>
+                    <section className="rounded-2xl border border-[#c9a227] bg-[#fffdf8] p-4 shadow-sm sm:p-5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[#a68b2e]">College visit upload</p>
+                      <h2 className="mt-1 text-xl font-semibold text-[#0f172a] sm:text-2xl">{focusedImportBatch.file_name}</h2>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {!focusedImportBatch.isLegacy ? (
+                          <Badge className="border-[#dbe6f3] bg-white">{focusedImportBatch.batch_number}</Badge>
+                        ) : null}
+                        <Badge className="border-[#dbe6f3] bg-white">
+                          {formatDisplayDate(focusedImportBatch.uploaded_at, "—")}
+                        </Badge>
+                        {!focusedImportBatch.isLegacy && batchAwaitingImport ? (
+                          <>
+                            <Badge className="border-emerald-200 bg-emerald-50 text-emerald-800">
+                              {focusedImportBatch.new_count} new
+                            </Badge>
+                            <Badge className="border-amber-200 bg-amber-50 text-amber-800">
+                              {focusedImportBatch.duplicate_count} duplicates
+                            </Badge>
+                          </>
+                        ) : (
+                          <Badge className="border-[#dbe6f3] bg-white">{visitsForFocusedBatch.length} colleges</Badge>
+                        )}
+                      </div>
+                    </section>
+                    {batchAwaitingImport && focusedImportBatch.duplicate_count > 0 ? (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        <strong>{focusedImportBatch.duplicate_count} row(s)</strong> match colleges already in the system
+                        and will be skipped. Click Import above to save only the new rows, then use this table to assign
+                        and work the colleges.
+                      </div>
+                    ) : null}
+                    {batchAwaitingImport ? (
+                      <p className="text-sm text-[#64748b]">
+                        Import saves new colleges into the system. After import, View / Edit / Activity and bulk assign
+                        work here exactly like the main College Visits table.
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
+
           {!pickForTask && visitBulk.selectedCount > 0 ? (
             <BulkSelectionBar selectedCount={visitBulk.selectedCount} onClear={visitBulk.clearSelection}>
               {isDbAdmin ? (
@@ -1715,20 +1892,6 @@ return (
             </BulkSelectionBar>
           ) : null}
 
-          {showImportBatchList ? (
-            <div className="space-y-3">
-              <p className="text-xs font-medium text-[#64748b]">
-                Each uploaded file appears below with upload date. Click a row to review duplicate preview and open the
-                full column table before importing.
-              </p>
-              <CollegeVisitImportBatchRowList
-                batches={displayImportBatches}
-                loading={importBatchesLoading || loading}
-                onOpenBatch={setFocusedImportBatch}
-              />
-            </div>
-          ) : (
-            <>
           <ResponsiveDataView
             stickyToolbar
             selectAll={
@@ -1826,7 +1989,9 @@ return (
                 ) : pageRows.length === 0 ? (
                   <tr>
                     <td colSpan={26} className="px-4 py-8 text-center text-sm text-[#64748b]">
-                      No college visits found.
+                      {batchAwaitingImport
+                        ? "No new colleges to show yet. Click Import above to save rows from this file, then edit and assign here."
+                        : "No college visits found."}
                     </td>
                   </tr>
                 ) : (
@@ -2126,24 +2291,10 @@ return (
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
           />
-            </>
-          )}
+              </div>
+            </div>
+          ) : null}
         </div>
-      ) : null}
-
-      {focusedImportBatch ? (
-        <CollegeVisitImportDetailWorkbench
-          batch={focusedImportBatch}
-          completedVisits={visitsForFocusedBatch}
-          ownerNameMap={ownerNameMap}
-          onClose={() => setFocusedImportBatch(null)}
-          onReload={async () => {
-            await silentRefreshVisits();
-            await loadImportBatches();
-          }}
-          onSuccess={setSuccess}
-          onError={setError}
-        />
       ) : null}
 
       <CollegeVisitFormPanel
