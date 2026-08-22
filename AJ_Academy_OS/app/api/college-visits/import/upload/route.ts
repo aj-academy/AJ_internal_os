@@ -257,7 +257,8 @@ export async function POST(request: Request) {
     row_number: row.rowNumber,
     payload: row.form,
     status: row.status,
-    duplicate_of: row.duplicateOf,
+    duplicate_of:
+      row.duplicateOf && /^[0-9a-f-]{36}$/i.test(row.duplicateOf) ? row.duplicateOf : null,
     error_message: row.errorMessage,
   }));
 

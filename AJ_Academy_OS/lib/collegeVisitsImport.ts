@@ -160,7 +160,6 @@ export function analyzeCollegeImportRows(
         duplicateOf: null,
         errorMessage: null,
       });
-      existingByKey.set(key, `pending:${rowNumber}`);
     }
     rowNumber += 1;
   }
