@@ -44,6 +44,11 @@ import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { CollegeVisitFormPanel } from "@/components/college-visits/CollegeVisitFormPanel";
 import {
+  CollegeVisitImportBatchRowList,
+  type CollegeImportBatchRow,
+} from "@/components/college-visits/CollegeVisitImportBatchRowList";
+import { CollegeVisitImportDetailWorkbench } from "@/components/college-visits/CollegeVisitImportDetailWorkbench";
+import {
   CollegeCallOutcomeModal,
   CollegePendingCallBanner,
   type CollegePendingCall,
@@ -51,8 +56,6 @@ import {
 import {
   downloadCollegeVisitImportTemplate,
   exportCollegeVisitsCsv,
-  collegeVisitFileToMatrix,
-  parseCollegeVisitMatrix,
 } from "@/components/college-visits/collegeVisitsCsv";
 import {
   COLLEGE_PRIORITIES,
@@ -209,6 +212,9 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [pickedCollegeIds, setPickedCollegeIds] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
+  const [importBatches, setImportBatches] = useState<CollegeImportBatchRow[]>([]);
+  const [importBatchesLoading, setImportBatchesLoading] = useState(false);
+  const [focusedImportBatch, setFocusedImportBatch] = useState<CollegeImportBatchRow | null>(null);
   const [outreachDone, setOutreachDone] = useState<Record<string, CollegeOutreachFlags>>({});
   const [whatsAppTemplates, setWhatsAppTemplates] = useState<string[]>([]);
   const [cvLists, setCvLists] = useState<CollegeVisitSettingsLists>(() => defaultCollegeVisitSettingsLists());
@@ -291,6 +297,18 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setVisits(json.visits ?? []);
   }, []);
 
+  const loadImportBatches = useCallback(async () => {
+    if (!isDbAdmin) return;
+    setImportBatchesLoading(true);
+    try {
+      const res = await fetch("/api/college-visits/import", { credentials: "include" });
+      const json = (await res.json()) as { batches?: CollegeImportBatchRow[]; hint?: string };
+      if (res.ok) setImportBatches(json.batches ?? []);
+    } finally {
+      setImportBatchesLoading(false);
+    }
+  }, [isDbAdmin]);
+
   const togglePickCollege = (id: string) => {
     setPickedCollegeIds((prev) => {
       const next = new Set(prev);
@@ -326,6 +344,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       const lists = await fetchCollegeVisitSettingsLists(supabase);
       setCvLists(lists);
       await loadVisits();
+      if (isDbAdmin) await loadImportBatches();
       hasLoadedOnceRef.current = true;
       setHasLoadedOnce(true);
     } catch (e) {
@@ -335,7 +354,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       if (isInitial) setLoading(false);
       else setCvRefreshing(false);
     }
-  }, [currentUserId, loadVisits, supabase]);
+  }, [currentUserId, isDbAdmin, loadImportBatches, loadVisits, supabase]);
 
   /** Background refetch — keep current visits visible until a valid response arrives. */
   const silentRefreshVisits = useCallback(async () => {
@@ -846,6 +865,44 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     searchText.trim() || fltVisitStatus || fltPriority || fltOwner || fltFinalStatus || fltFollowUpDue,
   );
 
+  const legacyImportBatch = useMemo((): CollegeImportBatchRow | null => {
+    const legacy = visits.filter((v) => !v.import_batch_id);
+    if (!legacy.length) return null;
+    const latest = legacy.reduce(
+      (max, row) => (row.created_at > max ? row.created_at : max),
+      legacy[0]?.created_at ?? "",
+    );
+    return {
+      id: "legacy",
+      isLegacy: true,
+      batch_number: "LEGACY",
+      file_name: "Manual / earlier entries",
+      row_count: legacy.length,
+      new_count: legacy.length,
+      duplicate_count: 0,
+      invalid_count: 0,
+      created_count: legacy.length,
+      skipped_count: 0,
+      failed_count: 0,
+      status: "completed",
+      uploaded_at: latest,
+    };
+  }, [visits]);
+
+  const displayImportBatches = useMemo(() => {
+    const list = [...importBatches];
+    if (legacyImportBatch) list.push(legacyImportBatch);
+    return list.sort((a, b) => (b.uploaded_at || "").localeCompare(a.uploaded_at || ""));
+  }, [importBatches, legacyImportBatch]);
+
+  const visitsForFocusedBatch = useMemo(() => {
+    if (!focusedImportBatch) return [];
+    if (focusedImportBatch.isLegacy) return visits.filter((v) => !v.import_batch_id);
+    return visits.filter((v) => v.import_batch_id === focusedImportBatch.id);
+  }, [focusedImportBatch, visits]);
+
+  const showImportBatchList = isDbAdmin && !pickForTask && activeTab === "all-colleges";
+
   const clearTableFilters = () => {
     setSearchText("");
     setFltVisitStatus("");
@@ -1306,44 +1363,41 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   };
 
   const handleImportFile = async (file: File) => {
-    if (!currentUserId || !isAdmin) return;
+    if (!currentUserId || !isDbAdmin) return;
     setImporting(true);
     setError(null);
     setSuccess(null);
     try {
-      const matrix = await collegeVisitFileToMatrix(file);
-      const { forms, errors } = parseCollegeVisitMatrix(matrix, {
-        owners: ownerPeopleFromProfiles(employees),
-        defaultOwnerId: currentUserId,
-        isDbAdmin,
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/college-visits/import/upload", {
+        method: "POST",
+        credentials: "include",
+        body,
       });
-      let ok = 0;
-      let fail = errors.length;
-      const rowErrors = [...errors];
-
-      for (const formRow of forms) {
-        const payload = buildCollegeVisitPayload(formRow, { userId: currentUserId, isDbAdmin });
-        const res = await fetch("/api/college-visits", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...formRow,
-            ...payload,
-            assigned_to: payload.assigned_to ?? currentUserId,
-          }),
-        });
-        if (!res.ok) {
-          const json = (await res.json()) as { error?: string };
-          fail += 1;
-          rowErrors.push(json.error ?? "Insert failed.");
-        } else {
-          ok += 1;
-        }
+      const json = (await res.json()) as {
+        batch?: CollegeImportBatchRow;
+        summary?: { newCount: number; duplicateCount: number; invalidCount: number; parseErrors?: string[] };
+        error?: string;
+        hint?: string;
+      };
+      if (!res.ok) {
+        setError(json.error || "Upload failed.");
+        if (json.hint) setSuccess(json.hint);
+        return;
       }
-
-      await silentRefreshVisits();
+      if (!json.batch) {
+        setError("Upload did not return a batch.");
+        return;
+      }
+      await loadImportBatches();
+      setFocusedImportBatch(json.batch);
+      const dup = json.summary?.duplicateCount ?? json.batch.duplicate_count ?? 0;
+      const fresh = json.summary?.newCount ?? json.batch.new_count ?? 0;
       setSuccess(
-        `Import complete: ${ok} added, ${fail} failed.${rowErrors.length ? ` ${rowErrors.slice(0, 3).join(" ")}` : ""}`,
+        dup > 0
+          ? `“${file.name}” uploaded — ${fresh} new, ${dup} duplicate(s) to review before import.`
+          : `“${file.name}” uploaded — ${fresh} new row(s) ready to import.`,
       );
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
@@ -1594,7 +1648,7 @@ return (
                   if (f) void handleImportFile(f);
                 }}
               />
-              {isAdmin ? (
+              {isDbAdmin ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -1603,7 +1657,7 @@ return (
                   onClick={() => importFileRef.current?.click()}
                 >
                   <Upload className="mr-1 h-4 w-4 shrink-0" />
-                  {importing ? "Importing..." : "Import"}
+                  {importing ? "Uploading..." : "Import"}
                 </Button>
               ) : null}
               <Button
@@ -1661,6 +1715,20 @@ return (
             </BulkSelectionBar>
           ) : null}
 
+          {showImportBatchList ? (
+            <div className="space-y-3">
+              <p className="text-xs font-medium text-[#64748b]">
+                Each uploaded file appears below with upload date. Click a row to review duplicate preview and open the
+                full column table before importing.
+              </p>
+              <CollegeVisitImportBatchRowList
+                batches={displayImportBatches}
+                loading={importBatchesLoading || loading}
+                onOpenBatch={setFocusedImportBatch}
+              />
+            </div>
+          ) : (
+            <>
           <ResponsiveDataView
             stickyToolbar
             selectAll={
@@ -2058,7 +2126,24 @@ return (
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
           />
+            </>
+          )}
         </div>
+      ) : null}
+
+      {focusedImportBatch ? (
+        <CollegeVisitImportDetailWorkbench
+          batch={focusedImportBatch}
+          completedVisits={visitsForFocusedBatch}
+          ownerNameMap={ownerNameMap}
+          onClose={() => setFocusedImportBatch(null)}
+          onReload={async () => {
+            await silentRefreshVisits();
+            await loadImportBatches();
+          }}
+          onSuccess={setSuccess}
+          onError={setError}
+        />
       ) : null}
 
       <CollegeVisitFormPanel

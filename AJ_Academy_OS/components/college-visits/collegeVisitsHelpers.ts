@@ -51,6 +51,7 @@ export type CollegeVisitRow = {
   proposal_file_type: string | null;
   proposal_file_size: number | null;
   proposal_uploaded_at: string | null;
+  import_batch_id?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -103,6 +104,7 @@ export const COLLEGE_VISIT_SELECT = [
   "proposal_file_type",
   "proposal_file_size",
   "proposal_uploaded_at",
+  "import_batch_id",
   "created_by",
   "created_at",
   "updated_at",
@@ -147,6 +149,14 @@ export function isMissingProposalFileColumn(msg: string) {
   return m.includes("proposal_file_") && (m.includes("column") || m.includes("schema cache") || m.includes("does not exist"));
 }
 
+export function isMissingImportBatchColumn(msg: string) {
+  const m = msg.toLowerCase();
+  return (
+    m.includes("import_batch_id") &&
+    (m.includes("column") || m.includes("schema cache") || m.includes("does not exist"))
+  );
+}
+
 export function isMissingVisitedByColumn(msg: string) {
   const m = msg.toLowerCase();
   return (
@@ -159,7 +169,8 @@ export function isMissingVisitedByColumn(msg: string) {
 export function isMissingCollegeVisitsTable(msg: string) {
   const m = msg.toLowerCase();
   if (m.includes("column")) return false;
-  if (m.includes("proposal_file_") || m.includes("contacts") || m.includes("visited_by")) return false;
+  if (m.includes("proposal_file_") || m.includes("contacts") || m.includes("visited_by") || m.includes("import_batch_id"))
+    return false;
   return (
     (m.includes("college_visits") && (m.includes("does not exist") || m.includes("schema cache"))) ||
     (m.includes("could not find the table") && m.includes("college_visits"))
@@ -167,6 +178,9 @@ export function isMissingCollegeVisitsTable(msg: string) {
 }
 
 export function nextCollegeVisitSelect(current: string, errorMsg: string): string | null {
+  if (isMissingImportBatchColumn(errorMsg) && current.includes("import_batch_id")) {
+    return current.replace(",import_batch_id", "").replace("import_batch_id,", "");
+  }
   if (isMissingVisitedByColumn(errorMsg)) {
     if (current === COLLEGE_VISIT_SELECT) return COLLEGE_VISIT_SELECT_NO_VISITED_BY;
     if (current === COLLEGE_VISIT_SELECT_LEGACY) return COLLEGE_VISIT_SELECT_LEGACY_NO_VISITED_BY;

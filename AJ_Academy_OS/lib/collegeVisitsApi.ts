@@ -114,6 +114,7 @@ export function mapCollegeVisitRow(row: unknown): CollegeVisitRow {
     proposal_file_type: r.proposal_file_type ?? null,
     proposal_file_size: r.proposal_file_size ?? null,
     proposal_uploaded_at: r.proposal_uploaded_at ?? null,
+    import_batch_id: r.import_batch_id ?? null,
     created_by: r.created_by ?? null,
     created_at: r.created_at ?? "",
     updated_at: r.updated_at ?? "",
