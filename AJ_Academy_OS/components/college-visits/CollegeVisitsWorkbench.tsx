@@ -1199,6 +1199,19 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setPageSize,
   } = usePagination(activeTab === "all-colleges" ? allCollegesTableVisits : filteredVisits, 25);
 
+  const handleFolderSearchChange = useCallback(
+    (value: string) => {
+      setSearchText(value);
+      setPage(1);
+    },
+    [setPage],
+  );
+
+  const clearFolderSearch = useCallback(() => {
+    setSearchText("");
+    setPage(1);
+  }, [setPage]);
+
   const {
     paginatedItems: paginatedImportBatches,
     page: importBatchPage,
@@ -2050,7 +2063,7 @@ return (
         </div>
       ) : null}
 
-      {activeTab !== "settings" ? (
+      {activeTab !== "settings" && !focusedImportBatch ? (
         <TableSearchBar
           value={searchText}
           onChange={setSearchText}
@@ -2059,13 +2072,9 @@ return (
           onClear={clearTableFilters}
           hint={
             activeTab === "all-colleges"
-              ? showImportBatchList && !focusedImportBatch
+              ? showImportBatchList
                 ? `${displayImportBatches.length} upload folder(s) — open one to view colleges`
-                : batchNeedsPreview
-                  ? batchStagingLoading
-                    ? "Loading duplicate preview from file…"
-                    : `Preview: ${allCollegesTableVisits.length} row(s) — ${focusedImportBatch?.new_count ?? 0} new, ${focusedImportBatch?.duplicate_count ?? 0} duplicate(s). Click Import to save.`
-                  : `Showing ${pageRows.length} of ${allCollegesTableVisits.length} college(s) | page ${page}/${totalPages}`
+                : `Showing ${pageRows.length} of ${allCollegesTableVisits.length} college(s) | page ${page}/${totalPages}`
               : `Showing ${filteredVisits.length} of ${visits.length} college(s)${searchText.trim() ? " (filtered)" : ""} · ${CV_TAB_LABELS[activeTab]}`
           }
         />
@@ -2203,6 +2212,7 @@ return (
                   setFocusedImportBatch(batch);
                   setBatchStagingRows([]);
                   setImportPreviewFilter("all");
+                  setSearchText("");
                   setPage(1);
                   visitBulk.clearSelection();
                 }}
@@ -2232,7 +2242,11 @@ return (
                         type="button"
                         variant="outline"
                         className="rounded-full border-[#dbe6f3]"
-                        onClick={() => setFocusedImportBatch(null)}
+                        onClick={() => {
+                          setFocusedImportBatch(null);
+                          setSearchText("");
+                          setPage(1);
+                        }}
                       >
                         ← Back to uploads
                       </Button>
@@ -2301,25 +2315,28 @@ return (
                     <section className="rounded-2xl border border-[#c9a227] bg-[#fffdf8] p-4 shadow-sm sm:p-5">
                       <p className="text-xs font-semibold uppercase tracking-wide text-[#a68b2e]">College visit upload</p>
                       <h2 className="mt-1 text-xl font-semibold text-[#0f172a] sm:text-2xl">{focusedImportBatch.file_name}</h2>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {!focusedImportBatch.isLegacy ? (
-                          <Badge className="border-[#dbe6f3] bg-white">{focusedImportBatch.batch_number}</Badge>
-                        ) : null}
-                        <Badge className="border-[#dbe6f3] bg-white">
-                          {formatDisplayDate(focusedImportBatch.uploaded_at, "—")}
-                        </Badge>
-                        {!focusedImportBatch.isLegacy && batchAwaitingImport ? (
-                          <>
-                            <Badge className="border-emerald-200 bg-emerald-50 text-emerald-800">
-                              {focusedImportBatch.new_count} new
-                            </Badge>
-                            <Badge className="border-amber-200 bg-amber-50 text-amber-800">
-                              {focusedImportBatch.duplicate_count} duplicates
-                            </Badge>
-                          </>
-                        ) : (
-                          <Badge className="border-[#dbe6f3] bg-white">{visitsForFocusedBatch.length} colleges</Badge>
-                        )}
+                      <p className="mt-1 text-sm text-[#64748b]">
+                        {!focusedImportBatch.isLegacy && focusedImportBatch.batch_number
+                          ? `${focusedImportBatch.batch_number} · `
+                          : null}
+                        {formatDisplayDate(focusedImportBatch.uploaded_at, "—")}
+                        {batchAwaitingImport
+                          ? ` · ${focusedImportBatch.new_count} new, ${focusedImportBatch.duplicate_count} duplicate(s)`
+                          : ` · ${visitsForFocusedBatch.length} college(s)`}
+                      </p>
+                      <div className="mt-4">
+                        <TableSearchBar
+                          value={searchText}
+                          onChange={handleFolderSearchChange}
+                          placeholder="Search college name, location, contact…"
+                          showClear={Boolean(searchText.trim())}
+                          onClear={clearFolderSearch}
+                          hint={
+                            searchText.trim()
+                              ? `${totalItems} college(s) matching "${searchText.trim()}"`
+                              : `${totalItems} college(s) in this folder · page ${page}/${totalPages}`
+                          }
+                        />
                       </div>
                     </section>
                     {batchAwaitingImport && focusedImportBatch.error_message ? (
