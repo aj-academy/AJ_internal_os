@@ -145,6 +145,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     skipped,
     failed,
     status: created > 0 ? finalStatus : failed > 0 ? "completed_with_errors" : "completed",
-    error: failed > 0 ? lastInsertError : undefined,
+    error: failed > 0 ? lastInsertError ?? "One or more rows could not be inserted." : undefined,
+    ok: created > 0 || failed === 0,
   });
 }

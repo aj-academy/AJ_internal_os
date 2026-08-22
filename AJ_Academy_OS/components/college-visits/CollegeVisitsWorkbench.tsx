@@ -1013,7 +1013,14 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       return;
     }
     void loadBatchStagingPreview(focusedImportBatch);
-  }, [batchNeedsPreview, focusedImportBatch?.id, loadBatchStagingPreview]);
+  }, [
+    batchNeedsPreview,
+    focusedImportBatch?.id,
+    focusedImportBatch?.status,
+    focusedImportBatch?.created_count,
+    focusedImportBatch?.failed_count,
+    loadBatchStagingPreview,
+  ]);
 
   const showImportBatchList = isDbAdmin && !pickForTask && activeTab === "all-colleges";
 
@@ -1728,21 +1735,48 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         method: "POST",
         credentials: "include",
       });
-      const json = (await res.json()) as { error?: string; created?: number; skipped?: number; failed?: number };
+      const json = (await res.json()) as {
+        error?: string;
+        created?: number;
+        skipped?: number;
+        failed?: number;
+        status?: string;
+      };
       if (!res.ok) throw new Error(json.error || "Import failed.");
+
+      const created = json.created ?? 0;
+      const failed = json.failed ?? 0;
+      const skipped = json.skipped ?? 0;
+
       await silentRefreshVisits();
       const listRes = await fetch("/api/college-visits/import", { credentials: "include" });
       const listJson = (await listRes.json()) as { batches?: CollegeImportBatchRow[] };
+      let updatedBatch = focusedImportBatch;
       if (listRes.ok) {
         setImportBatches(listJson.batches ?? []);
         const updated = (listJson.batches ?? []).find((b) => b.id === focusedImportBatch.id);
-        if (updated) setFocusedImportBatch(updated);
+        if (updated) {
+          updatedBatch = updated;
+          setFocusedImportBatch(updated);
+        }
       } else {
         await loadImportBatches();
       }
+
+      if (created === 0 && failed > 0) {
+        setError(
+          json.error ||
+            `Save failed — ${failed} row(s) could not be inserted. The preview has been restored below; fix the file or run missing SQL patches in Supabase, then try Save again.`,
+        );
+        await loadBatchStagingPreview(updatedBatch);
+        return;
+      }
+
       setBatchStagingRows([]);
       setSuccess(
-        `Import complete: ${json.created ?? 0} added, ${json.skipped ?? 0} duplicate(s) skipped${json.failed ? `, ${json.failed} failed` : ""}. You can now edit, assign, and call from this table.`,
+        failed > 0
+          ? `Saved ${created} college(s), ${skipped} duplicate(s) skipped, ${failed} failed.${json.error ? ` Last error: ${json.error}` : ""}`
+          : `Saved ${created} college(s)${skipped ? `, ${skipped} duplicate(s) skipped` : ""}. You can now edit, assign, and call from this table.`,
       );
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
@@ -2182,6 +2216,16 @@ return (
                         )}
                       </div>
                     </section>
+                    {batchAwaitingImport && focusedImportBatch.error_message ? (
+                      <div className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                        <strong>Last save failed.</strong> {focusedImportBatch.error_message}
+                        <p className="mt-1 text-xs text-rose-800">
+                          Preview restored below — click Save again after deploy refresh. If this repeats, run{" "}
+                          <code className="rounded bg-white px-1">college_visits_contacts_patch.sql</code> and{" "}
+                          <code className="rounded bg-white px-1">college_visit_import_batches.sql</code> in Supabase.
+                        </p>
+                      </div>
+                    ) : null}
                     {batchAwaitingImport && focusedImportBatch.duplicate_count > 0 ? (
                       <div className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-950">
                         <div className="flex flex-wrap items-start justify-between gap-3">
