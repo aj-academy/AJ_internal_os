@@ -1035,15 +1035,38 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const duplicateMatchLabel = useCallback(
     (row: CollegeImportStagingRow) => {
-      if (row.error_message?.trim()) return row.error_message;
+      if (row.error_message?.trim() && /folder|this file|Already/i.test(row.error_message)) {
+        return row.error_message;
+      }
       if (row.duplicate_of) {
         const match = visits.find((v) => v.id === row.duplicate_of);
-        if (match) return `Already in system: ${match.college_name}${match.location ? ` (${match.location})` : ""}`;
-        return "Already exists in College Visits.";
+        if (match) {
+          const folder =
+            (match.import_batch_id
+              ? importBatches.find((b) => b.id === match.import_batch_id)?.file_name
+              : null) || "All Colleges";
+          return `Already in folder “${folder}”: ${match.college_name}${
+            match.location ? ` (${match.location})` : ""
+          }`;
+        }
+        return row.error_message?.trim() || "Already exists in another College Visits folder.";
       }
-      return "Duplicate row in this file.";
+      return row.error_message?.trim() || "Duplicate row in this file.";
     },
-    [visits],
+    [importBatches, visits],
+  );
+
+  const duplicateSourceFolderName = useCallback(
+    (row: CollegeImportStagingRow): string | null => {
+      const fromMsg = row.error_message?.match(/Already in folder [“"](.+?)[”"]/i);
+      if (fromMsg?.[1]) return fromMsg[1];
+      if (!row.duplicate_of) return null;
+      const match = visits.find((v) => v.id === row.duplicate_of);
+      if (!match) return null;
+      if (!match.import_batch_id) return "All Colleges";
+      return importBatches.find((b) => b.id === match.import_batch_id)?.file_name ?? "All Colleges";
+    },
+    [importBatches, visits],
   );
 
   const loadBatchStagingPreview = useCallback(async (batch: CollegeImportBatchRow) => {
@@ -1169,7 +1192,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     const parts: string[] = [];
     if (totalNew) parts.push(`${totalNew} new`);
     if (update) parts.push(`${update} update${update === 1 ? "" : "s"}`);
-    if (skip) parts.push(`skip ${skip}`);
+    if (skip) parts.push(`don't add ${skip}`);
     return parts.length ? `Save — ${parts.join(", ")}` : "Save colleges";
   }, [duplicateResolutionSummary, focusedImportBatch]);
 
@@ -2262,7 +2285,8 @@ return (
                             {batchImportExecuting ? "Saving…" : importSaveLabel}
                           </Button>
                             <p className="max-w-xs text-right text-[11px] leading-snug text-[#64748b]">
-                              Saves new rows, applies your duplicate choices (skip / add / update), then opens the live table.
+                              Saves new colleges into this upload. Duplicate choices: Don&apos;t add / Add anyway (this
+                              folder) / Update existing file (other folder).
                             </p>
                           </div>
                         ) : null}
@@ -2353,10 +2377,13 @@ return (
                       <div className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-950">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <p className="font-semibold text-amber-900">Duplicate preview — choose what to do</p>
+                            <p className="font-semibold text-amber-900">Duplicate preview — matches in other folders</p>
                             <p className="mt-1 text-amber-900/90">
-                              For each duplicate: <strong>Skip</strong> (default), <strong>Add as new</strong>, or{" "}
-                              <strong>Update existing</strong> college from the file row.
+                              Each match shows the existing folder name.{" "}
+                              <strong>Don&apos;t add</strong> (default) skips the row.{" "}
+                              <strong>Add anyway</strong> saves it only into <em>this</em> new upload.{" "}
+                              <strong>Update existing file</strong> changes the college in that other folder (not this
+                              one).
                             </p>
                           </div>
                           <Button
@@ -2382,7 +2409,7 @@ return (
                             disabled={resolutionSaving}
                             onClick={() => void setBulkDuplicateResolution("add")}
                           >
-                            Add all as new
+                            Add anyway (all)
                           </Button>
                           <Button
                             type="button"
@@ -2392,7 +2419,7 @@ return (
                             disabled={resolutionSaving}
                             onClick={() => void setBulkDuplicateResolution("update")}
                           >
-                            Update all from file
+                            Update existing files (all)
                           </Button>
                           <Button
                             type="button"
@@ -2402,7 +2429,7 @@ return (
                             disabled={resolutionSaving}
                             onClick={() => void setBulkDuplicateResolution("skip")}
                           >
-                            Skip all
+                            Don&apos;t add (all)
                           </Button>
                         </div>
                         <ul className="max-h-56 space-y-2 overflow-y-auto">
@@ -2411,10 +2438,17 @@ return (
                               key={row.id}
                               className="rounded-lg border border-amber-200 bg-white px-3 py-2.5 text-sm shadow-sm"
                             >
-                              <p className="font-semibold text-[#0f172a]">
-                                Row {row.row_number}: {row.payload.college_name}
-                                {row.payload.location?.trim() ? ` · ${row.payload.location.trim()}` : ""}
-                              </p>
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <p className="font-semibold text-[#0f172a]">
+                                  Row {row.row_number}: {row.payload.college_name}
+                                  {row.payload.location?.trim() ? ` · ${row.payload.location.trim()}` : ""}
+                                </p>
+                                {duplicateSourceFolderName(row) ? (
+                                  <Badge className="border-amber-300 bg-amber-100 text-[10px] text-amber-950">
+                                    In: {duplicateSourceFolderName(row)}
+                                  </Badge>
+                                ) : null}
+                              </div>
                               <p className="mt-1 text-xs text-amber-800">{duplicateMatchLabel(row)}</p>
                               <CollegeVisitDuplicateResolutionButtons
                                 value={resolutionForRow(duplicateResolutions, row.id)}

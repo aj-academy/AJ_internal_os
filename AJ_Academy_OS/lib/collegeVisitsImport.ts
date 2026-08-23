@@ -14,7 +14,16 @@ export type CollegeImportAnalyzedRow = {
   form: CollegeVisitFormValue;
   status: CollegeImportRowStatus;
   duplicateOf: string | null;
+  /** Human-readable match reason, including existing folder name when known. */
   errorMessage: string | null;
+  /** Existing upload folder / file display name for cross-file duplicates. */
+  duplicateSourceFolder?: string | null;
+};
+
+export type AnalyzeCollegeImportOptions = {
+  headerRowIndex?: number;
+  /** Map of existing college_visits.id → upload folder display name. */
+  sourceFolderByVisitId?: Record<string, string>;
 };
 
 export type CollegeImportDryRunSummary = {
@@ -106,9 +115,13 @@ export function analyzeCollegeImportRows(
   forms: CollegeVisitFormValue[],
   parseErrors: string[],
   existingVisits: CollegeVisitRow[],
-  headerRowIndex?: number,
+  options?: number | AnalyzeCollegeImportOptions,
 ): CollegeImportDryRunSummary {
+  const opts: AnalyzeCollegeImportOptions =
+    typeof options === "number" ? { headerRowIndex: options } : options ?? {};
+  const sourceFolderByVisitId = opts.sourceFolderByVisitId ?? {};
   const existingByKey = new Map<string, string>();
+  const visitById = new Map(existingVisits.map((v) => [v.id, v]));
   for (const visit of existingVisits) {
     const key = collegeVisitDuplicateKey({
       college_name: visit.college_name,
@@ -121,7 +134,7 @@ export function analyzeCollegeImportRows(
 
   const seenInFile = new Map<string, number>();
   const rows: CollegeImportAnalyzedRow[] = [];
-  let rowNumber = (headerRowIndex ?? 0) + 2;
+  let rowNumber = (opts.headerRowIndex ?? 0) + 2;
 
   for (const form of forms) {
     const key = collegeVisitDuplicateKey({
@@ -138,6 +151,7 @@ export function analyzeCollegeImportRows(
         status: "duplicate",
         duplicateOf: existingByKey.get(key) ?? null,
         errorMessage: `Duplicate row in this file (same as row ${seenInFile.get(key)}).`,
+        duplicateSourceFolder: null,
       });
       rowNumber += 1;
       continue;
@@ -146,12 +160,23 @@ export function analyzeCollegeImportRows(
 
     const duplicateOf = existingByKey.get(key) ?? null;
     if (duplicateOf) {
+      const match = visitById.get(duplicateOf);
+      const folder =
+        sourceFolderByVisitId[duplicateOf]?.trim() ||
+        (match?.import_batch_id ? null : "All Colleges");
+      const matchLabel = match
+        ? `${match.college_name}${match.location?.trim() ? ` (${match.location.trim()})` : ""}`
+        : "existing college";
+      const errorMessage = folder
+        ? `Already in folder “${folder}”: ${matchLabel}`
+        : `Already exists in College Visits: ${matchLabel}`;
       rows.push({
         rowNumber,
         form,
         status: "duplicate",
         duplicateOf,
-        errorMessage: "Already exists in College Visits.",
+        errorMessage,
+        duplicateSourceFolder: folder,
       });
     } else {
       rows.push({
@@ -160,6 +185,7 @@ export function analyzeCollegeImportRows(
         status: "pending",
         duplicateOf: null,
         errorMessage: null,
+        duplicateSourceFolder: null,
       });
     }
     rowNumber += 1;

@@ -32,9 +32,15 @@ export function resolutionForRow(
 }
 
 export function resolutionLabel(action: CollegeDuplicateResolution): string {
-  if (action === "add") return "Add as new";
-  if (action === "update") return "Update existing";
-  return "Skip";
+  if (action === "add") return "Add anyway";
+  if (action === "update") return "Update existing file";
+  return "Don't add";
+}
+
+export function resolutionHelp(action: CollegeDuplicateResolution): string {
+  if (action === "add") return "Save into this new upload folder only.";
+  if (action === "update") return "Change the college in the existing folder (not this file).";
+  return "Leave the existing folder unchanged and do not add this row.";
 }
 
 export function stripFileExtension(name: string): string {

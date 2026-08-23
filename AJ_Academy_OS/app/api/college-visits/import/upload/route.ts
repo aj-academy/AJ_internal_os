@@ -65,6 +65,28 @@ export async function POST(request: Request) {
     existingVisits = (existingData ?? []).map((r) => mapCollegeVisitRow(r));
   }
 
+  const batchIds = [
+    ...new Set(existingVisits.map((v) => v.import_batch_id).filter((id): id is string => Boolean(id))),
+  ];
+  const batchNameById = new Map<string, string>();
+  if (batchIds.length) {
+    const { data: batches } = await admin
+      .from("college_visit_import_batches")
+      .select("id,file_name")
+      .in("id", batchIds);
+    for (const b of batches ?? []) {
+      if (b?.id && b.file_name) batchNameById.set(b.id as string, String(b.file_name));
+    }
+  }
+  const sourceFolderByVisitId: Record<string, string> = {};
+  for (const visit of existingVisits) {
+    if (visit.import_batch_id && batchNameById.has(visit.import_batch_id)) {
+      sourceFolderByVisitId[visit.id] = batchNameById.get(visit.import_batch_id)!;
+    } else {
+      sourceFolderByVisitId[visit.id] = "All Colleges";
+    }
+  }
+
   let parsed: ReturnType<typeof parseCollegeVisitImportFile>;
   try {
     parsed = parseCollegeVisitImportFile(buffer, file.name, {
@@ -86,7 +108,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const analysis = analyzeCollegeImportRows(parsed.forms, parsed.errors, existingVisits);
+  const analysis = analyzeCollegeImportRows(parsed.forms, parsed.errors, existingVisits, {
+    sourceFolderByVisitId,
+  });
 
   const appendToBatchId = form.get("appendToBatchId");
   if (typeof appendToBatchId === "string" && appendToBatchId.trim()) {
