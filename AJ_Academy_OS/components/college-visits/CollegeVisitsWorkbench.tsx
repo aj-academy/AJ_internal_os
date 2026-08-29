@@ -894,10 +894,13 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const syntheticLegacyBatches = useMemo((): CollegeImportBatchRow[] => {
     const legacy = visits.filter((v) => !v.import_batch_id);
     if (!legacy.length) return [];
-    const latest = legacy.reduce(
-      (max, row) => ((row.created_at || "") > max ? row.created_at : max),
-      legacy[0]?.created_at ?? "",
-    );
+    // Oldest date: this folder is the pre-import archive, so newly touched rows
+    // must not make it look like a fresh upload.
+    const earliest = legacy.reduce((min, row) => {
+      const created = row.created_at || "";
+      if (!created) return min;
+      return !min || created < min ? created : min;
+    }, "");
     return [
       {
         id: `legacy:${LEGACY_ALL_COLLEGES_BATCH_KEY}`,
@@ -913,15 +916,17 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         skipped_count: 0,
         failed_count: 0,
         status: "completed",
-        uploaded_at: latest,
+        uploaded_at: earliest,
       },
     ];
   }, [visits]);
 
   const displayImportBatches = useMemo(() => {
-    return [...importBatches, ...syntheticLegacyBatches].sort((a, b) =>
+    const uploads = [...importBatches].sort((a, b) =>
       (b.uploaded_at || "").localeCompare(a.uploaded_at || ""),
     );
+    // Real uploads newest-first; the legacy archive always stays pinned last.
+    return [...uploads, ...syntheticLegacyBatches];
   }, [importBatches, syntheticLegacyBatches]);
 
   const visitsForFocusedBatch = useMemo(() => {

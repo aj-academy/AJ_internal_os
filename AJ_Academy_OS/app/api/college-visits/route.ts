@@ -11,6 +11,9 @@ import {
 import { buildPayloadFromApi, mapCollegeVisitRow, parseCollegeVisitBody } from "@/lib/collegeVisitsApi";
 import { appendOutcomeRemarkLog } from "@/lib/outcomeRemarks";
 
+/** PostgREST caps rows per request, so visits are fetched in pages. */
+const VISITS_PAGE_SIZE = 1000;
+
 function stripUnavailableColumns(payload: Record<string, unknown>, errorMsg: string) {
   const next = { ...payload };
   if (isMissingVisitedByColumn(errorMsg)) delete next.visited_by_name;
@@ -34,29 +37,53 @@ export async function GET(request: Request) {
 
   const role = profile?.role?.trim().toLowerCase() ?? "";
   const isAdmin = role === "admin" || role === "super_admin";
-  const limit = isAdmin ? 2000 : 800;
+  // Paged so large imports never push older colleges (e.g. the legacy "All Colleges"
+  // folder) out of a single capped response.
+  const maxRows = isAdmin ? 20000 : 4000;
 
   const supabase = await createClient();
   // Admin: all employees' colleges (tracking). Employee: own assigned_to only (+ CRM pins merged below).
   let select = COLLEGE_VISIT_SELECT;
-  let q = supabase.from("college_visits").select(select).order("updated_at", { ascending: false }).limit(limit);
-  if (!isAdmin) q = q.eq("assigned_to", user.id);
-  let { data, error } = await q;
+  const rows: unknown[] = [];
+  let error: { message: string } | null = null;
 
-  while (error) {
-    const fallback = nextCollegeVisitSelect(select, error.message);
-    if (!fallback) break;
-    select = fallback;
-    let retry = supabase.from("college_visits").select(select).order("updated_at", { ascending: false }).limit(limit);
-    if (!isAdmin) retry = retry.eq("assigned_to", user.id);
-    ({ data, error } = await retry);
+  for (let from = 0; from < maxRows; from += VISITS_PAGE_SIZE) {
+    const to = Math.min(from + VISITS_PAGE_SIZE, maxRows) - 1;
+    let page: unknown[] = [];
+
+    for (;;) {
+      let q = supabase
+        .from("college_visits")
+        .select(select)
+        .order("updated_at", { ascending: false })
+        // Tie-breaker keeps paging deterministic when updated_at repeats.
+        .order("id", { ascending: true })
+        .range(from, to);
+      if (!isAdmin) q = q.eq("assigned_to", user.id);
+      const res = await q;
+      if (!res.error) {
+        page = res.data ?? [];
+        error = null;
+        break;
+      }
+      const fallback = nextCollegeVisitSelect(select, res.error.message);
+      if (!fallback) {
+        error = res.error;
+        break;
+      }
+      select = fallback;
+    }
+
+    if (error) break;
+    rows.push(...page);
+    if (page.length < to - from + 1) break;
   }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  let visits = (data ?? []).map((r) => mapCollegeVisitRow(r));
+  let visits = rows.map((r) => mapCollegeVisitRow(r));
   const pinIds: string[] = [];
 
   if (!isAdmin) {
