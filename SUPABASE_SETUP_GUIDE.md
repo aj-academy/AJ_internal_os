@@ -322,6 +322,8 @@ Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / 
 - **Import / Export CSV** includes primary contact plus **Contact 2 / Contact 3** (name, role, phone, alternate phone, email) and **Alternate Phone 2 / 3** on the primary — same multi-contact model as Add/Edit. Older single-contact CSVs still import.
 - Proposal Tracker / Add·Edit forms upload **PDF, DOC, or DOCX** (max 10 MB) into the private `proposals` bucket; legacy URL/PDF fields remain readable. College Visit proposal upload now supports **multiple files**.
 - College Visits Email action opens provider options (**Zoho Mail** / **Gmail**) with full compose fields (To, CC, Subject, Body, Attachments) and logs sent emails in activity.
+- **WhatsApp compose (admin + employee, students & colleges)** supports **file attachments** (up to 5 files, 25 MB each). WhatsApp deep links carry text only, so files upload to the public **`task-attachments`** bucket under `{user_id}/outreach/…` and are appended to the message as download links; the links are saved in activity history. Requires the bucket from `aj_academy_platform_expansion.sql` (owner-folder upload policy in `storage_rls_tighten.sql`).
+- Assigned **College Visit tasks** use the same WhatsApp compose preview as the CRM (no direct `wa.me` jump) and log `WhatsApp Message` on the college plus a `college_whatsapp` task activity.
 - Pick-for-task flow uses the **All Colleges** tab (same pattern as Student Master → All Students).
 
 **Student Master proposals:** Same file upload (Add + Edit + Proposal Tracker) after `proposals_file_upload_patch.sql`. Paths: `students/{client_id}/…` and `colleges/{college_visit_id}/…`. APIs: `POST /api/proposals/upload`, `/signed-url`, `/remove` (staff session + service role).
