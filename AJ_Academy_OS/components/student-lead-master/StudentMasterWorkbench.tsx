@@ -524,7 +524,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
         .order("updated_at", { ascending: false })
         .limit(isAdmin ? 1200 : 300);
       if (!isAdmin && currentUserId) q = q.eq("assigned_to", currentUserId);
-      return q.returns<CrmClientRow[]>();
+    return q.returns<CrmClientRow[]>();
     },
     [currentUserId, isAdmin, supabase],
   );
@@ -607,7 +607,7 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       else {
         crmRefreshingRef.current = false;
         setCrmRefreshing(false);
-      }
+    }
     }
   }, [currentUserId, loadClientsDataset, supabase]);
 
@@ -684,8 +684,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
     if (!ids.length) {
       // Only clear when the loaded dataset is confirmed empty — never wipe during a background refresh race.
       if (!crmRefreshingRef.current) {
-        setFollowRows([]);
-        setActivityRows([]);
+      setFollowRows([]);
+      setActivityRows([]);
       }
       return;
     }
@@ -1731,8 +1731,8 @@ export function StudentMasterWorkbench({ role, fullAccess = false }: { role: App
       setError("Could not delete this lead (you can only delete your own Student Master rows). Run AJ_Academy_SB/crm_delete_fix.sql in Supabase if deletes keep failing.");
       return;
     }
-    setSuccess("Deleted.");
-    await reload();
+      setSuccess("Deleted.");
+      await reload();
   };
 
   const handleBulkDeleteLeads = async () => {
@@ -3141,9 +3141,9 @@ function FollowUpsTable({
     <ResponsiveDataView
       desktop={
         <div className="responsive-table-wrap rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
-          <table className="w-full min-w-[940px] text-sm">
-            <thead className="bg-[#f1f6fc] text-[#64748b]">
-              <tr>
+      <table className="w-full min-w-[940px] text-sm">
+        <thead className="bg-[#f1f6fc] text-[#64748b]">
+          <tr>
                 <th className="px-3 py-2 text-left text-xs font-semibold uppercase">Lead</th>
                 <th className="px-3 py-2 text-left">Company</th>
                 <th className="px-3 py-2 text-left">Owner</th>
@@ -3153,45 +3153,45 @@ function FollowUpsTable({
                 <th className="px-3 py-2 text-left">Notes</th>
                 <th className="px-3 py-2 text-left">Status</th>
                 <th className="px-3 py-2 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#e8edf5]">
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#e8edf5]">
               {visibleRows.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center text-[#64748b]">
+            <tr>
+              <td colSpan={9} className="px-6 py-12 text-center text-[#64748b]">
                     No follow-ups for the current filters. Add one from All Leads, or adjust search / Owner filter on All Leads.
-                  </td>
-                </tr>
-              ) : null}
+              </td>
+            </tr>
+          ) : null}
               {visibleRows.map((fr) => {
-                const cli = clientMap[fr.client_id];
-                if (!cli) return null;
+            const cli = clientMap[fr.client_id];
+            if (!cli) return null;
                 const canTouch = canEditLead(cli);
-                return (
-                  <tr key={fr.id}>
+            return (
+              <tr key={fr.id}>
                     <td className="px-3 py-2 font-semibold text-slate-900">{displayLeadName(cli)}</td>
                     <td className="max-w-[180px] truncate px-3 py-2">{cli.company_name || "-"}</td>
-                    <td>{cli.assigned_to ? employeeNameMap[cli.assigned_to] ?? "-" : "-"}</td>
+                <td>{cli.assigned_to ? employeeNameMap[cli.assigned_to] ?? "-" : "-"}</td>
                     <td className="whitespace-nowrap px-3 py-2">{formatDisplayDate(fr.follow_up_date)}</td>
                     <td className="whitespace-nowrap">{fr.follow_up_time || "-"}</td>
                     <td>{fr.follow_up_type || "-"}</td>
                     <td className="max-w-[220px] truncate px-3 py-2 text-slate-600">{fr.notes || "-"}</td>
-                    <td>{fr.status || "Pending"}</td>
+                <td>{fr.status || "Pending"}</td>
                     <td className="px-3 py-2 text-right">
-                      {canTouch && fr.status !== "Completed" ? (
-                        <button type="button" className="text-xs font-semibold text-emerald-600 hover:underline" onClick={() => onComplete(fr)}>
-                          Done
-                        </button>
-                      ) : (
+                  {canTouch && fr.status !== "Completed" ? (
+                    <button type="button" className="text-xs font-semibold text-emerald-600 hover:underline" onClick={() => onComplete(fr)}>
+                      Done
+                    </button>
+                  ) : (
                         "-"
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
       }
       mobile={
         visibleRows.length === 0 ? (
@@ -3450,8 +3450,8 @@ function AllLeadsTable({
                 } as CSSProperties
               }
             >
-              <thead className="bg-[#f1f6fc] text-[#64748b]">
-                <tr>
+        <thead className="bg-[#f1f6fc] text-[#64748b]">
+          <tr>
                   {pickMode ? <TableHeaderCell label="Pick" className={TABLE_CHECK_TH} /> : null}
                   {showBulk ? (
                     <th className={TABLE_CHECK_TH}>
@@ -3494,12 +3494,12 @@ function AllLeadsTable({
                   <TableHeaderCell label="Year of Passing" className={thCls} />
                   <TableHeaderCell label="Employment Status" className={thCls} />
                   <TableHeaderCell label="Current Salary" className={thCls} />
-                  <TableHeaderFilter
-                    label="Interested Program"
-                    value={fltProgram}
-                    onChange={setFltProgram}
+            <TableHeaderFilter
+              label="Interested Program"
+              value={fltProgram}
+              onChange={setFltProgram}
                     options={programOptions.map((s) => ({ value: s, label: s }))}
-                    allLabel="All programs"
+              allLabel="All programs"
                     className={thCls}
                   />
                   <TableHeaderCell label="Career Goal" className={thCls} />
@@ -3514,92 +3514,92 @@ function AllLeadsTable({
                   <TableHeaderCell label="Decision Maker" className={thCls} />
                   <TableHeaderCell label="Preferred Batch" className={thCls} />
                   <TableHeaderCell label="Laptop Availability" className={thCls} />
-                  <TableHeaderFilter
-                    label="Lead Source"
-                    value={fltSource}
-                    onChange={setFltSource}
+            <TableHeaderFilter
+              label="Lead Source"
+              value={fltSource}
+              onChange={setFltSource}
                     options={(sourceOptions.length ? sourceOptions : CRM_SOURCES).map((s) => ({ value: s, label: s }))}
-                    allLabel="All sources"
+              allLabel="All sources"
                     className={thCls}
-                  />
-                  <TableHeaderFilter
-                    label="Assigned Counsellor"
-                    value={fltAssigned}
-                    onChange={setFltAssigned}
-                    options={employeeOptions.map((e) => ({ value: e.id, label: e.label }))}
+            />
+            <TableHeaderFilter
+              label="Assigned Counsellor"
+              value={fltAssigned}
+              onChange={setFltAssigned}
+              options={employeeOptions.map((e) => ({ value: e.id, label: e.label }))}
                     allLabel="All employees"
-                    disabled={!isAdmin}
+              disabled={!isAdmin}
                     className={thCls}
-                  />
-                  <TableHeaderFilter
-                    label="Lead Stage"
-                    value={fltStage}
-                    onChange={setFltStage}
-                    options={LEAD_STAGES.map((s) => ({ value: s, label: s }))}
-                    allLabel="All stages"
+            />
+            <TableHeaderFilter
+              label="Lead Stage"
+              value={fltStage}
+              onChange={setFltStage}
+              options={LEAD_STAGES.map((s) => ({ value: s, label: s }))}
+              allLabel="All stages"
                     className={thCls}
-                  />
-                  <TableHeaderFilter
-                    label="Lead Status"
-                    value={fltStatus}
-                    onChange={setFltStatus}
+            />
+            <TableHeaderFilter
+              label="Lead Status"
+              value={fltStatus}
+              onChange={setFltStatus}
                     options={(statusOptions.length ? statusOptions : CRM_LEAD_STATUSES).map((s) => ({ value: s, label: s }))}
-                    allLabel="All statuses"
+              allLabel="All statuses"
                     className={thCls}
-                  />
-                  <TableHeaderFilter
-                    label="Priority"
-                    value={fltPriority}
-                    onChange={setFltPriority}
+            />
+            <TableHeaderFilter
+              label="Priority"
+              value={fltPriority}
+              onChange={setFltPriority}
                     options={(priorityOptions.length ? priorityOptions : CRM_PRIORITIES).map((p) => ({ value: p, label: p }))}
-                    allLabel="All priorities"
+              allLabel="All priorities"
                     className={thCls}
                   />
                   <TableHeaderCell label="Primary Objection" className={thCls} />
                   <TableHeaderCell label="Next Follow-up Date" className={thCls} />
                   <TableHeaderCell label="Fee Quoted" className={thCls} />
                   <TableHeaderCell label="Final Fee" className={thCls} />
-                  <TableHeaderFilter
-                    label="Payment Status"
-                    value={fltPaymentStatus}
-                    onChange={setFltPaymentStatus}
-                    options={PAYMENT_STATUSES.map((s) => ({ value: s, label: s }))}
-                    allLabel="All payment statuses"
+            <TableHeaderFilter
+              label="Payment Status"
+              value={fltPaymentStatus}
+              onChange={setFltPaymentStatus}
+              options={PAYMENT_STATUSES.map((s) => ({ value: s, label: s }))}
+              allLabel="All payment statuses"
                     className={thCls}
-                  />
-                  <TableHeaderFilter
-                    label="Admission Status"
-                    value={fltAdmissionStatus}
-                    onChange={setFltAdmissionStatus}
-                    options={ADMISSION_STATUSES.map((s) => ({ value: s, label: s }))}
-                    allLabel="All admission statuses"
+            />
+            <TableHeaderFilter
+              label="Admission Status"
+              value={fltAdmissionStatus}
+              onChange={setFltAdmissionStatus}
+              options={ADMISSION_STATUSES.map((s) => ({ value: s, label: s }))}
+              allLabel="All admission statuses"
                     className={thCls}
-                  />
+            />
                   <TableHeaderCell label="Actions" className={thCls} />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#e8edf5] text-[#334155]">
-                {loading
-                  ? [...Array.from({ length: 6 }).keys()].map((skeletonIdx) => (
-                      <tr key={skeletonIdx}>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#e8edf5] text-[#334155]">
+          {loading
+            ? [...Array.from({ length: 6 }).keys()].map((skeletonIdx) => (
+                <tr key={skeletonIdx}>
                         <td colSpan={colCount} className="px-4 py-3 text-center align-middle">
-                          <div className="h-5 animate-pulse rounded bg-slate-100" />
-                        </td>
-                      </tr>
-                    ))
-                  : leads.map((lead) => {
-                      const fu = lead.follow_up_date ? String(lead.follow_up_date) : null;
-                      const hot = lead.priority === "Hot";
-                      const program = lead.interested_program || lead.service_interest || "—";
+                    <div className="h-5 animate-pulse rounded bg-slate-100" />
+                  </td>
+                </tr>
+              ))
+            : leads.map((lead) => {
+                const fu = lead.follow_up_date ? String(lead.follow_up_date) : null;
+                const hot = lead.priority === "Hot";
+                const program = lead.interested_program || lead.service_interest || "—";
                       const contactable = canContactLead(lead);
-                      return (
-                        <tr
-                          key={lead.id}
-                          className={[
-                            hot ? "outline outline-2 outline-orange-200/70" : "",
-                            fu === today ? "shadow-[inset_3px_0_0_#c9a227]" : "",
-                          ].join(" ")}
-                        >
+                return (
+                  <tr
+                    key={lead.id}
+                    className={[
+                      hot ? "outline outline-2 outline-orange-200/70" : "",
+                      fu === today ? "shadow-[inset_3px_0_0_#c9a227]" : "",
+                    ].join(" ")}
+                  >
                           {pickMode ? (
                             <td className={TABLE_CHECK_TD}>
                               <div className="flex justify-center">
@@ -3710,9 +3710,9 @@ function AllLeadsTable({
                           <td className={tdCls}>{lead.lead_stage || "—"}</td>
                           <td className="px-4 py-3 text-center align-middle">
                             <div className="flex justify-center">
-                              <LeadStatusBadge status={String(lead.status)} />
+                      <LeadStatusBadge status={String(lead.status)} />
                             </div>
-                          </td>
+                    </td>
                           <td className={`${tdCls} font-medium capitalize`}>{lead.priority || "—"}</td>
                           <td className={tdTrunc}>{lead.primary_objection || "—"}</td>
                           <td className={`${tdCls} text-xs`}>{formatDisplayDate(fu)}</td>
@@ -3722,22 +3722,22 @@ function AllLeadsTable({
                           <td className={tdCls}>{lead.admission_status || "—"}</td>
                           <td className="min-w-[14rem] whitespace-nowrap px-4 py-3 text-center align-middle text-xs">
                             <div className="inline-flex flex-wrap items-center justify-center gap-3">
-                              <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onProfile(lead)}>
-                                View
-                              </button>
+                      <button type="button" className="font-semibold text-blue-700 hover:underline" onClick={() => onProfile(lead)}>
+                        View
+                      </button>
                               {canEditLead(lead) && (
-                                <button type="button" className="font-semibold text-slate-600 hover:underline" onClick={() => onEdit(lead)}>
-                                  Edit
-                                </button>
-                              )}
-                              {isAdmin && (
-                                <button type="button" className="font-semibold text-rose-600 hover:underline" onClick={() => onDelete(lead.id)}>
-                                  Delete
-                                </button>
-                              )}
-                              <button type="button" className="font-semibold text-teal-700 hover:underline" onClick={() => onAddFollow(lead)}>
-                                Follow-up
-                              </button>
+                        <button type="button" className="font-semibold text-slate-600 hover:underline" onClick={() => onEdit(lead)}>
+                          Edit
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <button type="button" className="font-semibold text-rose-600 hover:underline" onClick={() => onDelete(lead.id)}>
+                          Delete
+                        </button>
+                      )}
+                      <button type="button" className="font-semibold text-teal-700 hover:underline" onClick={() => onAddFollow(lead)}>
+                        Follow-up
+                      </button>
                               <button
                                 type="button"
                                 className="font-semibold text-violet-700 hover:underline"
@@ -3745,26 +3745,26 @@ function AllLeadsTable({
                               >
                                 Call History
                               </button>
-                              {isAdmin && !isClosedLeadStatus(String(lead.status)) && (
-                                <button type="button" className="font-semibold text-emerald-700 hover:underline" onClick={() => onConvert(lead)}>
-                                  Admit
-                                </button>
-                              )}
+                      {isAdmin && !isClosedLeadStatus(String(lead.status)) && (
+                        <button type="button" className="font-semibold text-emerald-700 hover:underline" onClick={() => onConvert(lead)}>
+                          Admit
+                        </button>
+                      )}
                             </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                {!loading && leads.length === 0 ? (
-                  <tr>
-                    <td colSpan={colCount} className="px-5 py-10 text-center align-middle text-slate-500">
-                      No students match these filters yet.
                     </td>
                   </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+                );
+              })}
+          {!loading && leads.length === 0 ? (
+            <tr>
+                    <td colSpan={colCount} className="px-5 py-10 text-center align-middle text-slate-500">
+                No students match these filters yet.
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+    </div>
         }
         mobile={
           loading ? (
@@ -3996,9 +3996,9 @@ function ConvertedTable({
         }
         desktop={
           <div className="responsive-table-wrap">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead className="bg-[#f1f6fc] text-[#64748b]">
-                <tr>
+      <table className="w-full min-w-[900px] text-sm">
+        <thead className="bg-[#f1f6fc] text-[#64748b]">
+          <tr>
                   {showBulk ? (
                     <th className="w-10 px-3 py-2">
                       <TableBulkCheckbox
@@ -4020,11 +4020,11 @@ function ConvertedTable({
                   <th className="px-3 py-2 text-left">Converted</th>
                   <th className="px-3 py-2 text-left">Owner</th>
                   <th className="px-3 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+          </tr>
+        </thead>
+        <tbody>
                 {pageRows.map((convertedLead) => (
-                  <tr key={convertedLead.id} className="border-t border-[#eef2ff]">
+            <tr key={convertedLead.id} className="border-t border-[#eef2ff]">
                     {showBulk ? (
                       <td className="px-3 py-2">
                         <TableBulkCheckbox
@@ -4036,10 +4036,10 @@ function ConvertedTable({
                     ) : null}
                     <td className="px-3 py-2 font-mono text-xs">{convertedLead.client_code || "—"}</td>
                     <td className="px-3 py-2 font-semibold">{displayLeadName(convertedLead)}</td>
-                    <td>{convertedLead.company_name || "—"}</td>
-                    <td className="whitespace-nowrap">{convertedLead.phone || "—"}</td>
-                    <td className="truncate max-w-[180px]">{convertedLead.email || "—"}</td>
-                    <td className="max-w-[200px] truncate text-xs">{String(convertedLead.service_interest || "—")}</td>
+              <td>{convertedLead.company_name || "—"}</td>
+              <td className="whitespace-nowrap">{convertedLead.phone || "—"}</td>
+              <td className="truncate max-w-[180px]">{convertedLead.email || "—"}</td>
+              <td className="max-w-[200px] truncate text-xs">{String(convertedLead.service_interest || "—")}</td>
                     <td>
                       {convertedLead.proposal_amount != null
                         ? `₹${Number(convertedLead.proposal_amount).toLocaleString()}`
@@ -4050,30 +4050,30 @@ function ConvertedTable({
                         ? new Date(String(convertedLead.converted_at)).toLocaleDateString()
                         : "—"}
                     </td>
-                    <td>{convertedLead.assigned_to ? employeeNameMap[convertedLead.assigned_to] : "—"}</td>
+              <td>{convertedLead.assigned_to ? employeeNameMap[convertedLead.assigned_to] : "—"}</td>
                     <td className="space-x-2 px-3 py-2 text-right text-xs">
                       <button
                         type="button"
                         className="font-semibold text-blue-700 hover:underline"
                         onClick={() => onProfile(convertedLead)}
                       >
-                        Profile
-                      </button>
-                      {isAdmin ? (
-                        <>
-                          <button type="button" className="text-slate-400" disabled title="Connect Project Master next">
-                            Create project
-                          </button>
-                          <button type="button" className="text-slate-400" disabled title="Coming soon">
-                            Add doc
-                          </button>
-                        </>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  Profile
+                </button>
+                {isAdmin ? (
+                  <>
+                    <button type="button" className="text-slate-400" disabled title="Connect Project Master next">
+                      Create project
+                    </button>
+                    <button type="button" className="text-slate-400" disabled title="Coming soon">
+                      Add doc
+                    </button>
+                  </>
+                ) : null}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
           </div>
         }
         mobile={
@@ -4199,9 +4199,9 @@ function ProposalTrackerTable({
         }
         desktop={
           <div className="responsive-table-wrap">
-            <table className="w-full min-w-[880px] text-sm">
-              <thead className="bg-[#f1f6fc] text-[#64748b]">
-                <tr>
+      <table className="w-full min-w-[880px] text-sm">
+        <thead className="bg-[#f1f6fc] text-[#64748b]">
+          <tr>
                   {showBulk ? (
                     <th className="w-10 px-3 py-2">
                       <TableBulkCheckbox
@@ -4220,18 +4220,18 @@ function ProposalTrackerTable({
                   <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Sent date</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Proposal</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+          </tr>
+        </thead>
+        <tbody>
                 {totalItems === 0 ? (
-                  <tr>
+            <tr>
                     <td colSpan={showBulk ? 8 : 7} className="px-6 py-12 text-center text-[#64748b]">
-                      No leads match the current filters. Adjust filters on the All Leads tab or add a lead.
-                    </td>
-                  </tr>
-                ) : (
+                No leads match the current filters. Adjust filters on the All Leads tab or add a lead.
+              </td>
+            </tr>
+          ) : (
                   pageRows.map((proposalLead) => (
-                    <tr key={proposalLead.id} className="border-t border-[#eef2ff]">
+              <tr key={proposalLead.id} className="border-t border-[#eef2ff]">
                       {showBulk ? (
                         <td className="px-3 py-2">
                           <TableBulkCheckbox
@@ -4239,7 +4239,7 @@ function ProposalTrackerTable({
                             onChange={() => bulkSelection!.onToggle(proposalLead.id)}
                             ariaLabel={`Select ${displayLeadName(proposalLead)}`}
                           />
-                        </td>
+                </td>
                       ) : null}
                       <td className="px-3 py-2 font-semibold text-slate-900">{displayLeadName(proposalLead) || "—"}</td>
                       <td className="max-w-[200px] truncate px-3 py-2">{proposalLead.company_name || "—"}</td>
@@ -4249,8 +4249,8 @@ function ProposalTrackerTable({
                           : "—"}
                       </td>
                       <td className="px-3 py-2">
-                        <ProposalStatusBadge status={String(proposalLead.proposal_status)} />
-                      </td>
+                  <ProposalStatusBadge status={String(proposalLead.proposal_status)} />
+                </td>
                       <td className="whitespace-nowrap px-3 py-2">{proposalLead.proposal_sent_date || "—"}</td>
                       <td className="px-3 py-2">
                         <ProposalFileOpenCell
@@ -4259,25 +4259,25 @@ function ProposalTrackerTable({
                           filePath={proposalLead.proposal_file_path}
                           legacyHref={proposalLead.proposal_link}
                         />
-                      </td>
+                </td>
                       <td className="px-3 py-2 text-right">
-                        {isAdmin ? (
+                  {isAdmin ? (
                           <button
                             type="button"
                             className="text-xs font-semibold text-blue-700 hover:underline"
                             onClick={() => onEdit(proposalLead)}
                           >
-                            Update
-                          </button>
-                        ) : (
+                      Update
+                    </button>
+                  ) : (
                           <span className="text-xs text-slate-400">Read only</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  )}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
           </div>
         }
         mobile={
@@ -4527,57 +4527,57 @@ function ActivityTable({
       <ResponsiveDataView
         desktop={
           <div className="responsive-table-wrap rounded-[20px] border border-[#dbe6f3] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]">
-            <table className="w-full min-w-[920px] text-sm">
-              <thead className="bg-[#f1f6fc] text-[#64748b]">
-                <tr>
+        <table className="w-full min-w-[920px] text-sm">
+          <thead className="bg-[#f1f6fc] text-[#64748b]">
+            <tr>
                   <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Date &amp; time</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Lead / client</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Activity type</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Notes</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Created by</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                      Loading activity…
-                    </td>
-                  </tr>
-                ) : rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-[#64748b]">
-                      No activity found yet. Activities will appear when leads are created, follow-ups are added, proposals are updated, or status
-                      changes.
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((ar) => {
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                  Loading activity…
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-12 text-center text-[#64748b]">
+                  No activity found yet. Activities will appear when leads are created, follow-ups are added, proposals are updated, or status
+                  changes.
+                </td>
+              </tr>
+            ) : (
+              rows.map((ar) => {
                     const detail = [
                       ar.notes,
                       ar.old_value || ar.new_value
                         ? `${formatActivityValue(ar.old_value, employeeNameMap)} → ${formatActivityValue(ar.new_value, employeeNameMap)}`
                         : "",
                     ]
-                      .filter(Boolean)
-                      .join(" · ");
+                  .filter(Boolean)
+                  .join(" · ");
                     const by = resolveActorName(ar.created_by, employeeNameMap);
-                    return (
-                      <tr key={ar.id} className="border-t border-[#f1f5f9]">
+                return (
+                  <tr key={ar.id} className="border-t border-[#f1f5f9]">
                         <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-600">{formatDateTimeIST(String(ar.created_at))}</td>
                         <td className="px-3 py-2 font-semibold text-slate-900">
-                          {clientMap[ar.client_id] ? displayLeadName(clientMap[ar.client_id]) || "—" : "Unknown lead"}
-                        </td>
+                      {clientMap[ar.client_id] ? displayLeadName(clientMap[ar.client_id]) || "—" : "Unknown lead"}
+                    </td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-800">{ar.activity_type || "—"}</td>
                         <td className="max-w-md px-3 py-2 text-xs text-slate-600 whitespace-pre-wrap">{detail || "—"}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-700">{by}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
         }
         mobile={
           loading ? (
@@ -4858,8 +4858,8 @@ function CrmSettingsPanel({
     <div className="space-y-4">
       <div className="flex flex-col gap-3 rounded-[20px] border border-blue-100 bg-[#f8fbff] p-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-base font-semibold text-[#0f172a]">CRM configuration</h3>
-          <p className="mt-2 text-sm text-[#64748b]">
+        <h3 className="text-base font-semibold text-[#0f172a]">CRM configuration</h3>
+        <p className="mt-2 text-sm text-[#64748b]">
             These lists power Student Master dropdowns, filters, and the pipeline. Changes save to{" "}
             <code className="rounded bg-white px-1 text-xs">system_settings</code> (key{" "}
             <code className="rounded bg-white px-1 text-xs">crm</code>) and match Admin → System Settings → CRM.
