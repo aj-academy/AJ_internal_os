@@ -124,7 +124,7 @@ export default function AdminFreelancersPage() {
     setPageSize: setFreelancerPageSize,
   } = usePagination(filtered, 10);
 
-  const freelancerBulk = useRowSelection(filtered, (row) => row.id);
+  const freelancerBulk = useRowSelection(filtered, (row) => row.id, paginatedFreelancers);
 
   const handleBulkOffboard = async () => {
     if (freelancerBulk.selectedCount === 0) return;

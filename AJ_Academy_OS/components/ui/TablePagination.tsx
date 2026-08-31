@@ -1,6 +1,11 @@
 "use client";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
+
+const arrowClass =
+  "h-8 w-8 rounded-lg border-[#dbe6f3] bg-white p-0 text-[#334155] hover:bg-[#f1f5f9] disabled:opacity-40";
 
 type TablePaginationProps = {
   page: number;
@@ -58,11 +63,13 @@ export function TablePagination({
           type="button"
           variant="outline"
           size="sm"
-          className="h-8 rounded-lg border-[#dbe6f3] bg-white px-3 text-xs font-medium text-[#334155] hover:bg-[#f1f5f9]"
+          className={arrowClass}
+          aria-label="Previous page"
+          title="Previous page"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
         >
-          Previous
+          <ChevronLeft className="h-4 w-4" />
         </Button>
         <span className="min-w-[5.5rem] text-center text-xs font-medium text-[#334155]">
           Page {page} of {Math.max(1, totalPages)}
@@ -71,11 +78,13 @@ export function TablePagination({
           type="button"
           variant="outline"
           size="sm"
-          className="h-8 rounded-lg border-[#dbe6f3] bg-white px-3 text-xs font-medium text-[#334155] hover:bg-[#f1f5f9]"
+          className={arrowClass}
+          aria-label="Next page"
+          title="Next page"
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
         >
-          Next
+          <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
     </div>

@@ -185,7 +185,7 @@ export default function EmployeeMasterPage() {
     setPageSize: setDirectoryPageSize,
   } = usePagination(filteredEmployees, 10);
 
-  const userBulk = useRowSelection(filteredEmployees, (employee) => employee.id);
+  const userBulk = useRowSelection(filteredEmployees, (employee) => employee.id, paginatedEmployees);
   const [bulkRemoving, setBulkRemoving] = useState(false);
 
   const handleBulkRemoveUsers = async () => {

@@ -1250,10 +1250,11 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setPageSize: setImportBatchPageSize,
   } = usePagination(displayImportBatches, 25);
 
-  /** Select across the full filtered set (not only the current page). */
+  /** Header checkbox selects only the current page; picks persist across pages. */
   const visitBulk = useRowSelection(
     activeTab === "all-colleges" ? allCollegesTableVisits : filteredVisits,
     (v) => v.id,
+    pageRows,
   );
 
   const batchBulk = useRowSelection(
@@ -2548,7 +2549,7 @@ return (
                     checked: visitBulk.allSelected,
                     indeterminate: visitBulk.someSelected,
                     onChange: visitBulk.toggleAll,
-                    label: "Select all",
+                    label: "Select all on this page",
                     countLabel: `${visitBulk.selectedCount} selected`,
                   }
                 : undefined
