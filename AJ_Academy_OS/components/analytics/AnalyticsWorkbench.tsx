@@ -38,6 +38,7 @@ import {
   exportRowsAsExcel,
   exportRowsAsPdf,
   formatCallActivityExportRows,
+  type ExportMeta,
   type ExportRow,
 } from "@/components/reports/reportsExport";
 
@@ -462,6 +463,27 @@ export function AnalyticsWorkbench({
     };
   }, [filterOpts.admissionStatuses, filterOpts.leadStatuses, filters, section]);
 
+  const generatedByLabel = useMemo(() => {
+    if (!viewer) return null;
+    const self = filterOpts.employees.find((e) => e.id === viewer.id);
+    if (self?.label) return `${self.label} (${viewer.role})`;
+    return `${viewer.role} (${viewer.scope} scope)`;
+  }, [filterOpts.employees, viewer]);
+
+  /** Human-readable list of the filters an export actually reflects. */
+  const activeFilterSummary = useMemo(() => {
+    const labelFor = (id: string) => filterOpts.employees.find((e) => e.id === id)?.label || id;
+    const parts: string[] = [];
+    if (filters.employeeIds.length) parts.push(`Employee: ${filters.employeeIds.map(labelFor).join(", ")}`);
+    if (filters.departments.length) parts.push(`Department: ${filters.departments.join(", ")}`);
+    if (filters.roles.length) parts.push(`Role: ${filters.roles.join(", ")}`);
+    if (filters.leadStatuses.length) parts.push(`Lead status: ${filters.leadStatuses.join(", ")}`);
+    if (filters.admissionStatuses.length) parts.push(`Admission status: ${filters.admissionStatuses.join(", ")}`);
+    if (filters.taskStatuses.length) parts.push(`Task status: ${filters.taskStatuses.join(", ")}`);
+    if (filters.search.trim()) parts.push(`Search: "${filters.search.trim()}"`);
+    return parts.length ? parts.join(" · ") : "None (all records in range)";
+  }, [filterOpts.employees, filters]);
+
   const exportCurrent = async (fmt: "csv" | "xlsx" | "pdf") => {
     setExportBusy(fmt);
     try {
@@ -471,6 +493,16 @@ export function AnalyticsWorkbench({
       const base = `AJ_OS_${slug}_${stamp}`;
       let rows: ExportRow[] = [];
       const title = ANALYTICS_SECTION_LABELS[section];
+
+      // Same provenance on every format, so a file found later can be traced
+      // back to the filters that produced it.
+      const meta: ExportMeta = {
+        report: title,
+        dateRange: filters.from === filters.to ? filters.from : `${filters.from} to ${filters.to}`,
+        filters: activeFilterSummary,
+        generatedBy: generatedByLabel,
+        generatedAt: new Date().toLocaleString("en-IN"),
+      };
 
       if (section === "calls") {
         rows = formatCallActivityExportRows(((data?.allRows || data?.rows || []) as ExportRow[]) ?? []);
@@ -491,12 +523,16 @@ export function AnalyticsWorkbench({
         );
         const taskRows = ((data?.tasks as { rows?: ExportRow[] })?.rows || []) as ExportRow[];
         const eodRows = ((data?.eod as { rows?: ExportRow[] })?.rows || []) as ExportRow[];
-        await exportMultiSheetExcel(`AJ_OS_Analytics_Pack_${stamp}.xlsx`, [
-          { name: "Daily Employees", rows: daily },
-          { name: "Calls", rows: callRows },
-          { name: "Tasks", rows: taskRows },
-          { name: "EOD", rows: eodRows },
-        ]);
+        await exportMultiSheetExcel(
+          `AJ_OS_Analytics_Pack_${stamp}.xlsx`,
+          [
+            { name: "Daily Employees", rows: daily },
+            { name: "Calls", rows: callRows },
+            { name: "Tasks", rows: taskRows },
+            { name: "EOD", rows: eodRows },
+          ],
+          { ...meta, report: "Analytics Pack (Daily, Calls, Tasks, EOD)" },
+        );
         return;
       } else {
         rows = employees as ExportRow[];
@@ -507,17 +543,18 @@ export function AnalyticsWorkbench({
         return;
       }
 
-      const metaPrefix = [
-        { Report: title, From: filters.from, To: filters.to, Generated: new Date().toLocaleString("en-IN") },
-      ];
-
-      if (fmt === "csv") exportRowsAsCsv(`${base}.csv`, rows);
-      else if (fmt === "xlsx") await exportRowsAsExcel(`${base}.xlsx`, [...metaPrefix, ...rows]);
-      else {
+      if (fmt === "csv") exportRowsAsCsv(`${base}.csv`, rows, meta);
+      else if (fmt === "xlsx") {
+        await exportRowsAsExcel(`${base}.xlsx`, [
+          { Report: title, From: filters.from, To: filters.to, Filters: activeFilterSummary, Generated: meta.generatedAt },
+          ...rows,
+        ]);
+      } else {
         await exportRowsAsPdf(`AJ OS — ${title}`, `${base}.pdf`, rows, {
-          generatedAt: new Date().toLocaleString("en-IN"),
-          dateRange: `${filters.from} → ${filters.to}`,
-          summary: `${rows.length} row(s)`,
+          generatedBy: generatedByLabel,
+          generatedAt: meta.generatedAt,
+          dateRange: meta.dateRange,
+          summary: `${rows.length} row(s) · ${activeFilterSummary}`,
         });
       }
     } finally {
@@ -541,7 +578,7 @@ export function AnalyticsWorkbench({
             </p>
           ) : null}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" data-print-hide>
           <Button
             type="button"
             variant="outline"
@@ -580,20 +617,29 @@ export function AnalyticsWorkbench({
         </div>
       </div>
 
-      <AnalyticsFiltersBar
-        section={section}
-        sections={sections}
-        onSectionChange={setSection}
-        filters={filters}
-        onChange={setFilters}
-        searchDraft={searchDraft}
-        onSearchDraftChange={setSearchDraft}
-        employees={filterOpts.employees}
-        departments={filterOpts.departments}
-        roles={filterOpts.roles}
-        lockEmployee={isEmployee}
-        loading={loading}
-      />
+      {/* The filter controls are hidden when printing, so the printout states
+          what was filtered instead. */}
+      <p className="hidden text-xs text-[#334155] print:block">
+        {ANALYTICS_SECTION_LABELS[section]} · {filters.from} to {filters.to} · Filters: {activeFilterSummary}
+        {generatedByLabel ? ` · Generated by ${generatedByLabel}` : ""}
+      </p>
+
+      <div data-print-hide>
+        <AnalyticsFiltersBar
+          section={section}
+          sections={sections}
+          onSectionChange={setSection}
+          filters={filters}
+          onChange={setFilters}
+          searchDraft={searchDraft}
+          onSearchDraftChange={setSearchDraft}
+          employees={filterOpts.employees}
+          departments={filterOpts.departments}
+          roles={filterOpts.roles}
+          lockEmployee={isEmployee}
+          loading={loading}
+        />
+      </div>
 
       {secondaryFilter ? (
         <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-[#e8dcc8] bg-[#fffdf8] px-4 py-3">

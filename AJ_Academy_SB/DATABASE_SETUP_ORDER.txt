@@ -46,7 +46,8 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 5c10) lead_call_workflow_schema.sql (Student Lead call sessions, live calling lock, outcome workflow, follow-up extras — after employee_student_master_rls + crm_owner_isolation; safe re-run)
 5c10b) lead_call_outcome_snapshot_patch.sql (stores full call-outcome form snapshot JSON for previous-call history UI — after lead_call_workflow_schema.sql; safe re-run)
 5c11) analytics_reporting_schema.sql (Reports & Analytics indexes + work_summaries EOD columns + analytics_employee_day_rollups RPC — after attendance + lead_call + tasks + CRM)
-5c12) reports_analytics_schema.sql (Reports views/indexes + reports_schema_status RPC — after lead_call_workflow_schema.sql; followups/admissions views skip gracefully if aux/columns missing)
+5c11b) analytics_reporting_indexes_patch.sql (indexes only for report patterns added later: task_activities completion events, college_visit_activities dialer/feed, clients.converted_at — after analytics_reporting_schema.sql; additive, safe re-run)
+5c12) reports_analytics_schema.sql (OPTIONAL — Reports views/indexes + reports_schema_status RPC. The /api/reports/data endpoint it served was removed; nothing reads these views today. Harmless if already installed. After lead_call_workflow_schema.sql; followups/admissions views skip gracefully if aux/columns missing)
 
 6) task_notifications_columns.sql
 7) in_app_notifications.sql

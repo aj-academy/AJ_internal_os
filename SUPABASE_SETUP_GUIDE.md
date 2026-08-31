@@ -211,6 +211,10 @@ App APIs (staff session): `POST /api/leads/call/start`, `POST /api/leads/call/co
 
 Run **`analytics_reporting_schema.sql`** after attendance, tasks, CRM, and `lead_call_workflow_schema.sql` (safe to re-run). Adds EOD columns on `work_summaries`, query indexes, and optional `analytics_employee_day_rollups` RPC.
 
+Then run **`analytics_reporting_indexes_patch.sql`** (safe to re-run). Indexes only — no table, column, policy or row is touched. Covers report access patterns added after the schema file was written and never indexed: `task_activities` completion events, the College Visits dialer in `college_visit_activities`, and `clients.converted_at`.
+
+Then run **`analytics_reporting_indexes_patch.sql`** (safe to re-run, indexes only — no table, column, policy or row is altered). Covers report access patterns added after the schema file and never indexed: `task_activities` completion events, the College Visits dialer in `college_visit_activities`, and `clients.converted_at`.
+
 - Admin: sidebar **Reports & Analytics** → `/admin/reports` (`AnalyticsWorkbench`)
 - Employee: **My Reports** → `/employee/reports` (own data only)
 - APIs: `POST /api/analytics/query`, `POST|PATCH /api/analytics/eod`
@@ -223,7 +227,9 @@ Run **`analytics_reporting_schema.sql`** after attendance, tasks, CRM, and `lead
 - Dashboard Overview is trimmed to **8 KPI cards**. Pending Revenue moved to the Revenue report and Tasks Pending to Task Completion.
 - Report sources are **paged rather than capped**, so totals no longer silently understate once a table grows. If a source hits the 30,000-row ceiling the report shows an amber partial-data banner naming it.
 - The productivity formula is **unchanged** and still role-blind; the proposed role-aware replacement in `docs/reports/REPORTS_ANALYTICS_REDESIGN_AUDIT.md` needs approval before implementation. Clicking a score now opens a **breakdown** (each component as earned/max) so a low score is traceable to the weights.
-- Reporting APIs bypass RLS by design (service role), so scope is enforced in code: employee is forced to self and **no longer receives the staff roster** in filter options; mentor / freelancer / student get `403` instead of company scope. `/api/analytics/query` is rate limited to 120 req/min per IP, `/api/reports/data` to 60.
+- Reporting APIs bypass RLS by design (service role), so scope is enforced in code: employee is forced to self and **no longer receives the staff roster** in filter options; mentor / freelancer / student get `403` instead of company scope. `/api/analytics/query` is rate limited to 120 req/min per IP.
+- The legacy second Reports implementation is **removed**: `/api/reports/data` and `components/reports/ReportsWorkbench.tsx` (plus `reportsExportRows.ts`, `reportsExportMeta.ts`, `ReportsCrmPanels.tsx`) were dead UI behind a live admin-reachable company-wide endpoint. Shared `reportsExport.ts` / `reportsHelpers.ts` / `lib/reports/types.ts` remain. Do not re-add these routes.
+- Exports (CSV, Excel, Excel pack, PDF) all carry report, date range, active filters, generated-by and generated-at. **Print** hides nav/sidebar and the filter controls and prints a provenance line instead.
 - Reports render distinct **loading / empty / partial / denied (401-403) / throttled (429) / error** states; a permission failure shows an "Access denied" panel rather than a raw error string.
 - Full module docs: `AJ_Academy_OS/docs/REPORTS_ANALYTICS.md`
 
@@ -232,7 +238,8 @@ Also run **`reports_analytics_schema.sql`** after `lead_call_workflow_schema.sql
 - Indexes on attendance / tasks / clients for date and filter queries
 - Views **`v_report_call_sessions`**, **`v_report_followups`**, **`v_report_lead_activities`**, **`v_report_admissions`** (each skipped with a NOTICE if base table/columns are missing)
 - RPC **`reports_schema_status()`** (admin-only) — probes which report tables/columns/views exist
-- API: `GET /api/reports/data` (admin session + service role) with SQL-side date / employee / department / lead-source / course filters. Call duration uses **`approximate_duration_seconds` only** (never invented). Organizational **branch** filter is unavailable (no branch column on profiles/clients).
+- The `GET /api/reports/data` endpoint this SQL was written for has been **removed** (see above); do not re-add it. The views and `reports_schema_status()` are harmless to keep installed, but nothing reads them today — `AnalyticsWorkbench` queries base tables through `/api/analytics/query`. Treat this script as optional.
+- Still true of the live module: call duration uses **`approximate_duration_seconds` only** (never invented), and an organizational **branch** filter is unavailable (no branch column on profiles/clients).
 
 **Attendance camera / location:** Employee layout shows a one-time popup asking for camera + location (saved in browser localStorage per user). `Permissions-Policy` must allow `camera=(self)` and `geolocation=(self)` (see `lib/security/headers.ts`). Restart the Next server after header changes.
 

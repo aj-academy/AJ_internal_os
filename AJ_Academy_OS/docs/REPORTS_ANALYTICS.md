@@ -9,7 +9,7 @@ Enterprise employee performance reporting built on existing CRM, attendance, tas
 | Admin / Super Admin | `/admin/reports` | Company-wide (sidebar: **Reports & Analytics**) |
 | Employee | `/employee/reports` | Own data only |
 
-Legacy `ReportsWorkbench` remains in the codebase under `components/reports/` for reference; the live admin page now uses `AnalyticsWorkbench`.
+`AnalyticsWorkbench` is the only Reports implementation. The legacy `ReportsWorkbench` and its `/api/reports/data` endpoint were removed — see **Authorization**.
 
 ## Sections
 
@@ -84,7 +84,9 @@ Both report routes use `createAdminClient()`, so RLS does not apply and scope is
 - **Admin / Super Admin** get company scope. **Employee** is forced to `forceEmployeeId = session.id`; the employee id is never read from the request body. Every other staff role (mentor, freelancer, student) is denied with `403` rather than being widened to company scope, and the denial is logged as `analytics_query_role_denied`.
 - A self-scoped viewer no longer receives the staff roster. `filterOptions.employees`, `departments` and `roles` are narrowed to the viewer's own profile, so the employee report cannot be used to enumerate colleagues.
 
-`/api/analytics/query` is rate limited to 120 requests/minute per IP and `/api/reports/data` to 60, since both read broadly and are the cheapest path to bulk extraction. Generating the Download Centre pack logs `analytics_export_pack` with the actor and date range.
+`/api/analytics/query` is rate limited to 120 requests/minute per IP, since it reads broadly and is the cheapest path to bulk extraction. Generating the Download Centre pack logs `analytics_export_pack` with the actor and date range.
+
+`/api/reports/data` and `components/reports/ReportsWorkbench.tsx` have been **removed**. That was a second, older Reports implementation: the UI was mounted by no page, but the endpoint was still live and admin-reachable, so it was an unaudited full-company read with no owner. `reportsExportRows.ts`, `reportsExportMeta.ts` and `ReportsCrmPanels.tsx` went with it as they had no other consumers. `reportsExport.ts`, `reportsHelpers.ts` and `lib/reports/types.ts` are still shared and remain. Recover from git history if any of it is ever needed.
 
 ## Error, empty and denied states
 
@@ -111,6 +113,16 @@ Adds:
 - Unique `(employee_id, summary_date)` on work summaries  
 - Performance indexes on calls, activities, follow-ups, clients, tasks, attendance  
 - Optional RPC `analytics_employee_day_rollups(date, date, uuid)`
+
+Then run:
+
+```text
+AJ_Academy_SB/analytics_reporting_indexes_patch.sql
+```
+
+Indexes only — additive, safe to re-run, and it touches no table, column, policy or row. It covers the access patterns the reports grew *after* the schema file was written and which were never indexed: `task_activities` completion events (Task Completion and Daily → Tasks Done), the College Visits dialer in `college_visit_activities` (Call Activity and Timeline), and `clients.converted_at` (Admission and Revenue). These were the remaining sequential scans in the module.
+
+Each index mirrors the predicate order in `lib/analytics/runAnalyticsQuery.ts`; if a query there changes, re-check the index.
 
 ## Productivity bands
 
@@ -140,9 +152,26 @@ Employee Student Master saves require:
 9a. Click a productivity score → breakdown lists all six components as earned/max and the total matches the score.  
 9b. Sign in as a mentor and POST to `/api/analytics/query` → `403`, and the UI shows "Access denied", not a red error banner.  
 10. Export CSV / Excel / PDF from Download Centre. Filenames use the report label and a single date for single-day ranges, e.g. `AJ_OS_Daily_Employee_Report_2026-08-31.xlsx`.  
+10a. Every format carries provenance: CSV has a Field/Value preamble above a blank line, the Excel pack has a **Report Info** sheet, single-sheet Excel has a meta first row, PDF has it in the header. Apply an employee + search filter and confirm the export names both.  
+10b. Print with filters applied → no sidebar or buttons, and a line stating report, date range, filters and who generated it.  
 11. Checkout EOD requires achievement, pending, tomorrow plan.  
 12. Employee lead edit blocked without status / remarks / follow-up.  
 13. Run SQL script; EOD columns + unique upsert succeed.  
+
+## Exports and print
+
+Exports build from the already-fetched `data`, so they inherently reflect Report Type, date range and every active filter — there is no second query that could disagree with the screen.
+
+All four formats carry the same provenance (`ExportMeta` in `components/reports/reportsExport.ts`): report, date range, the active filters spelled out in words, who generated it, and when. Previously only PDF and single-sheet Excel had any, so a CSV found on someone's disk could not be traced to the filters that produced it.
+
+| Format | Where provenance goes |
+|--------|----------------------|
+| CSV | Field/Value preamble, then a blank line before the header row so spreadsheets still parse the table |
+| Excel (single) | Meta row prepended to the sheet |
+| Excel (pack) | Separate **Report Info** sheet |
+| PDF | Header block via `PdfExportOptions` |
+
+Print uses `window.print()` against a print stylesheet in `app/globals.css`. `nav`, `aside` and anything marked `data-print-hide` (the export buttons and the filter panel) are dropped; a print-only line states report, date range, filters and generator, since the hidden filter panel can no longer show them.
 
 ## Productivity formula
 
@@ -158,7 +187,7 @@ Clicking a productivity score in Daily Employee Report or Productivity opens a b
 
 - Aggregation is server-side (`createAdminClient` + role gates).  
 - Sources are paged to exhaustion (see **Partial data warning**), with a ceiling that is reported rather than hidden. Id lookups are chunked at 400 per request so a large `.in()` cannot exceed the request URL length.
-- Date-scoped queries; indexes in `analytics_reporting_schema.sql`.  
+- Date-scoped queries; indexes in `analytics_reporting_schema.sql` plus `analytics_reporting_indexes_patch.sql`.  
 - Pagination on call lists (`page` / `pageSize`).  
 - Employee Timeline keeps small per-source caps (200–500) because it is a display feed, not an aggregate.
 - Per-employee rollups are still aggregated in TypeScript; the existing `analytics_employee_day_rollups` RPC is the intended replacement.

@@ -335,3 +335,52 @@ html.dark {
   color: #e2e8f0;
 }
 
+
+/* Printing a report should produce the report, not a screenshot of the app.
+   Chrome and controls are dropped; `data-print-hide` opts anything else out. */
+@media print {
+  nav,
+  aside,
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  html,
+  body,
+  main {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Borders survive; heavy shadows and rounding waste toner and add nothing. */
+  * {
+    box-shadow: none !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr,
+  img {
+    break-inside: avoid;
+  }
+
+  a[href]::after {
+    content: "";
+  }
+
+  @page {
+    margin: 12mm;
+  }
+}
