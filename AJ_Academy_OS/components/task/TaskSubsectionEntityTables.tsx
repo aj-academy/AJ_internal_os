@@ -39,7 +39,12 @@ import {
   mapClientRowToTaskLinkedLead,
   type TaskLinkedLead,
 } from "@/lib/taskLeadOutreach";
-import { formatEmailActivityNotes, MAX_EMAIL_MESSAGE_LENGTH } from "@/lib/whatsappOutreach";
+import {
+  formatEmailActivityNotes,
+  formatWhatsAppActivityNotes,
+  MAX_EMAIL_MESSAGE_LENGTH,
+  MAX_WHATSAPP_MESSAGE_LENGTH,
+} from "@/lib/whatsappOutreach";
 import { logTaskActivity } from "@/lib/taskActivities";
 import { formatDisplayDate } from "@/lib/datetime";
 import { isGenericRoleLabel } from "@/lib/profileDisplayName";
@@ -52,6 +57,12 @@ export type TaskLeadFlatRow = {
   task: TaskRecord;
   lead: CrmClientRow;
   leadLoaded: boolean;
+};
+
+type CollegeOutreachFlags = {
+  phoneCalled?: boolean;
+  whatsappSent?: boolean;
+  emailSent?: boolean;
 };
 
 export type TaskCollegeFlatRow = {
@@ -740,10 +751,21 @@ export function TaskSubsectionCollegesTable({
     email: string;
   } | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
+  const [waTarget, setWaTarget] = useState<{
+    taskId: string;
+    college: CollegeVisitRow;
+    phone: string;
+  } | null>(null);
+  const [waBusy, setWaBusy] = useState(false);
+  const [outreachFlags, setOutreachFlags] = useState<Record<string, CollegeOutreachFlags>>({});
   const th = TABLE_DATA_TH;
   const td = TABLE_DATA_TD;
   const colSpan = 26 + (selection ? 1 : 0);
   const canEmail = Boolean(currentUserId);
+
+  const markOutreach = (collegeId: string, patch: CollegeOutreachFlags) => {
+    setOutreachFlags((prev) => ({ ...prev, [collegeId]: { ...prev[collegeId], ...patch } }));
+  };
 
   return (
     <div className="overflow-hidden rounded-[20px] border border-[#dbe6f3] bg-white shadow-sm">
@@ -829,6 +851,7 @@ export function TaskSubsectionCollegesTable({
                 const selectedContact = selectedCollegeContact(college, selectedId);
                 const phone = anyCollegeOutreachPhone(college);
                 const email = anyCollegeOutreachEmail(college);
+                const flags = outreachFlags[college.id] ?? {};
                 const person = selectedContact?.name?.trim() || college.connected_person_name || "-";
                 const personRole = selectedContact?.role?.trim() || college.connected_person_role || "";
                 return (
@@ -868,9 +891,10 @@ export function TaskSubsectionCollegesTable({
                       <StudentOutreachButtons
                         mode="phone"
                         phone={phone}
-                        phoneCalled={false}
+                        phoneCalled={flags.phoneCalled}
                         onPhoneClick={() => {
                           if (!phone) return;
+                          markOutreach(college.id, { phoneCalled: true });
                           window.location.href = `tel:${phone}`;
                         }}
                       />
@@ -880,10 +904,13 @@ export function TaskSubsectionCollegesTable({
                         mode="whatsapp"
                         phone={phone}
                         whatsapp={phone}
-                        whatsappSent={false}
+                        whatsappSent={flags.whatsappSent}
                         onWhatsAppClick={() => {
-                          const wa = whatsAppHref(phone, "");
-                          if (wa) navigateWithoutAppPopup(wa);
+                          if (!whatsAppHref(phone)) {
+                            onOutreachError?.("No WhatsApp number on this college.");
+                            return;
+                          }
+                          setWaTarget({ taskId: task.id, college, phone });
                         }}
                       />
                     </td>
@@ -891,7 +918,7 @@ export function TaskSubsectionCollegesTable({
                       <StudentOutreachButtons
                         mode="email"
                         email={email}
-                        emailSent={false}
+                        emailSent={flags.emailSent}
                         onEmailClick={() => {
                           if (!email || !canEmail) {
                             if (!email) onOutreachError?.("No email address on this college.");
@@ -1011,6 +1038,75 @@ export function TaskSubsectionCollegesTable({
         onPageSizeChange={setPageSize}
       />
 
+      {waTarget ? (
+        <WhatsAppComposeModal
+          open={Boolean(waTarget)}
+          leadName={waTarget.college.college_name}
+          phone={waTarget.phone}
+          templates={[]}
+          submitting={waBusy}
+          onClose={() => {
+            if (!waBusy) setWaTarget(null);
+          }}
+          onSend={(message) => {
+            void (async () => {
+              if (!waTarget) return;
+              const trimmed = message.trim();
+              if (!trimmed) {
+                onOutreachError?.("Enter a message before opening WhatsApp.");
+                return;
+              }
+              if (trimmed.length > MAX_WHATSAPP_MESSAGE_LENGTH) {
+                onOutreachError?.(`Message is too long (max ${MAX_WHATSAPP_MESSAGE_LENGTH} characters).`);
+                return;
+              }
+              const wa = whatsAppHref(waTarget.phone, trimmed);
+              if (!wa) {
+                onOutreachError?.("No WhatsApp number on this college.");
+                return;
+              }
+
+              setWaBusy(true);
+              markOutreach(waTarget.college.id, { whatsappSent: true });
+              navigateWithoutAppPopup(wa);
+
+              try {
+                const actRes = await fetch(`/api/college-visits/${waTarget.college.id}/activities`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    activity_type: "WhatsApp Message",
+                    notes: formatWhatsAppActivityNotes(trimmed),
+                  }),
+                });
+                if (!actRes.ok) {
+                  const actJson = (await actRes.json().catch(() => ({}))) as { error?: string };
+                  throw new Error(actJson.error || "WhatsApp opened but could not log college activity.");
+                }
+
+                if (supabase && currentUserId) {
+                  await logTaskActivity(supabase, {
+                    taskId: waTarget.taskId,
+                    actorId: currentUserId,
+                    activityType: "college_whatsapp",
+                    notes: `WhatsApp to ${waTarget.college.college_name}`,
+                    metadata: { college_visit_id: waTarget.college.id },
+                  });
+                }
+
+                onOutreachSuccess?.("WhatsApp opened and logged for admin & employee tracking.");
+                onOutreachUpdated?.();
+                setWaTarget(null);
+              } catch (e) {
+                onOutreachError?.(e instanceof Error ? e.message : "Could not log WhatsApp.");
+              } finally {
+                setWaBusy(false);
+              }
+            })();
+          }}
+        />
+      ) : null}
+
       {emailTarget ? (
         <EmailComposeModal
           open={Boolean(emailTarget)}
@@ -1093,6 +1189,7 @@ export function TaskSubsectionCollegesTable({
                   });
                 }
 
+                markOutreach(emailTarget.college.id, { emailSent: true });
                 onOutreachSuccess?.(
                   `Email sent via ${payload.provider === "zoho" ? "Zoho" : "Gmail"} and logged for admin & employee tracking.`,
                 );
