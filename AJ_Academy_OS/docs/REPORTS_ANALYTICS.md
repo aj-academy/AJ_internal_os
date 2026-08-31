@@ -77,6 +77,26 @@ Body for query: `{ section, from, to, employeeIds, departments, roles, leadStatu
 
 `from` / `to` are authoritative. `preset` is still accepted for older callers, but when a range is supplied without a preset the range is used as-is — it is no longer overridden by a default of "today".
 
+### Authorization
+
+Both report routes use `createAdminClient()`, so RLS does not apply and scope is enforced in TypeScript. Two rules follow from that:
+
+- **Admin / Super Admin** get company scope. **Employee** is forced to `forceEmployeeId = session.id`; the employee id is never read from the request body. Every other staff role (mentor, freelancer, student) is denied with `403` rather than being widened to company scope, and the denial is logged as `analytics_query_role_denied`.
+- A self-scoped viewer no longer receives the staff roster. `filterOptions.employees`, `departments` and `roles` are narrowed to the viewer's own profile, so the employee report cannot be used to enumerate colleagues.
+
+`/api/analytics/query` is rate limited to 120 requests/minute per IP and `/api/reports/data` to 60, since both read broadly and are the cheapest path to bulk extraction. Generating the Download Centre pack logs `analytics_export_pack` with the actor and date range.
+
+## Error, empty and denied states
+
+| State | Behaviour |
+|-------|-----------|
+| Loading | Filter bar shows a spinner; KPI cards show skeletons. Existing data stays on screen instead of blanking. |
+| Empty | Per-table empty state; KPI cards show zeroes, not dashes. |
+| Partial | Amber banner naming the truncated sources (see above). |
+| Denied (`401` / `403`) | Report content is replaced by an "Access denied" panel with a role-specific message. |
+| Throttled (`429`) | Explains the request rate rather than surfacing a raw error. |
+| Error | Red banner with the server message; the previous result is retained. |
+
 ## Database
 
 Run in Supabase (after attendance + CRM + call workflow + tasks):
@@ -116,7 +136,9 @@ Employee Student Master saves require:
 6. Call Activity shows Student Master call sessions and College Visits Phone Call logs (IST day bounds).
 7. Task Completion shows completion notes and IST completed-at. Student assignees are named, not Unknown.  
 8. Employee Timeline with All employees shows a team feed; picking one person still works.  
-9. Employee My Reports only shows self, and the Report Type list hides Team Performance.  
+9. Employee My Reports only shows self, the Report Type list hides Team Performance, and the Employee / Department / Role filters offer only the viewer — no colleague names.  
+9a. Click a productivity score → breakdown lists all six components as earned/max and the total matches the score.  
+9b. Sign in as a mentor and POST to `/api/analytics/query` → `403`, and the UI shows "Access denied", not a red error banner.  
 10. Export CSV / Excel / PDF from Download Centre. Filenames use the report label and a single date for single-day ranges, e.g. `AJ_OS_Daily_Employee_Report_2026-08-31.xlsx`.  
 11. Checkout EOD requires achievement, pending, tomorrow plan.  
 12. Employee lead edit blocked without status / remarks / follow-up.  
@@ -124,7 +146,13 @@ Employee Student Master saves require:
 
 ## Productivity formula
 
-Unchanged in this pass. The current weights (calls 25, CRM 15, tasks 20, follow-ups 15, admissions 15, attendance 10) are sales-shaped and role-blind, so non-sales roles cannot earn 40 of the 100 points. A role-aware replacement is proposed in `docs/reports/REPORTS_ANALYTICS_REDESIGN_AUDIT.md` §13 and **requires approval before implementation** — do not change the weights silently.
+Unchanged. The current weights (calls 25, CRM 15, tasks 20, follow-ups 15, admissions 15, attendance 10) are sales-shaped and role-blind, so non-sales roles cannot earn 40 of the 100 points. A role-aware replacement is proposed in `docs/reports/REPORTS_ANALYTICS_REDESIGN_AUDIT.md` §13 and **requires approval before implementation** — do not change the weights silently.
+
+The weights now live in `PRODUCTIVITY_PART_MAX` in `lib/analytics/productivity.ts` and are the single source for both the score and the breakdown shown in the UI, so the two cannot drift apart.
+
+### Score breakdown
+
+Clicking a productivity score in Daily Employee Report or Productivity opens a breakdown showing each component as earned/maximum (for example `Tasks 16/20`, `Attendance 10/10`) with the total. The panel states that the weights favour sales activity, so a low score for a non-sales role is visibly a formula limitation rather than a judgement about the person. The values come from `productivityParts`, which the API already returned.
 
 ## Performance notes
 

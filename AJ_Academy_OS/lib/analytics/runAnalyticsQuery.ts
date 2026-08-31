@@ -247,10 +247,16 @@ export async function runAnalyticsQuery(
 
   const scopeIds = filters.employeeIds.length ? filters.employeeIds : profiles.map((p) => p.id);
 
+  // A self-scoped viewer cannot filter by anyone else, so they must not receive
+  // the staff roster as filter options.
+  const optionProfiles = body.forceEmployeeId
+    ? allProfiles.filter((p) => p.id === body.forceEmployeeId)
+    : allProfiles;
+
   const filterOptions = {
-    departments: [...new Set(allProfiles.map((p) => p.department).filter(Boolean))] as string[],
-    roles: [...new Set(allProfiles.map((p) => p.role).filter(Boolean))] as string[],
-    employees: allProfiles
+    departments: [...new Set(optionProfiles.map((p) => p.department).filter(Boolean))] as string[],
+    roles: [...new Set(optionProfiles.map((p) => p.role).filter(Boolean))] as string[],
+    employees: optionProfiles
       .filter((p) => STAFF_ROLES.has(p.role || ""))
       .map((p) => ({ id: p.id, label: nameOf(p), department: p.department, role: p.role })),
     courses: crmLists.interestedPrograms,

@@ -29,6 +29,7 @@ import {
   type AnalyticsSectionId,
 } from "@/lib/analytics/types";
 import { toDateKeyIst } from "@/lib/analytics/dateRanges";
+import { PRODUCTIVITY_PART_LABELS, PRODUCTIVITY_PART_MAX } from "@/lib/analytics/productivity";
 import { formatInr } from "@/components/reports/reportsHelpers";
 import { usePagination } from "@/lib/usePagination";
 import {
@@ -97,12 +98,19 @@ function formatIstTime(iso: string | null | undefined): string {
   });
 }
 
+type DataColumn = {
+  key: string;
+  label: string;
+  wrap?: boolean;
+  render?: (row: Record<string, unknown>) => React.ReactNode;
+};
+
 function DataTable({
   columns,
   rows,
   initialPageSize = 25,
 }: {
-  columns: { key: string; label: string; wrap?: boolean }[];
+  columns: DataColumn[];
   rows: Record<string, unknown>[];
   initialPageSize?: number;
 }) {
@@ -146,7 +154,11 @@ function DataTable({
                         : "whitespace-nowrap px-3 py-2 text-[#334155]"
                     }
                   >
-                    {row[c.key] == null || row[c.key] === "" ? "-" : String(row[c.key])}
+                    {c.render
+                      ? c.render(row)
+                      : row[c.key] == null || row[c.key] === ""
+                        ? "-"
+                        : String(row[c.key])}
                   </td>
                 ))}
               </tr>
@@ -164,6 +176,77 @@ function DataTable({
         pageSizeOptions={[10, 25, 50, 100]}
         alwaysShow
       />
+    </div>
+  );
+}
+
+type ProductivityBreakdown = {
+  employeeName: string;
+  score: number;
+  band: string;
+  parts: Record<string, number>;
+};
+
+/** Part 14: a score is never shown without the components that produced it. */
+function ProductivityBreakdownModal({
+  detail,
+  onClose,
+}: {
+  detail: ProductivityBreakdown;
+  onClose: () => void;
+}) {
+  const keys = Object.keys(PRODUCTIVITY_PART_MAX) as (keyof typeof PRODUCTIVITY_PART_MAX)[];
+  const earned = keys.reduce((s, k) => s + Number(detail.parts?.[k] ?? 0), 0);
+  const total = keys.reduce((s, k) => s + PRODUCTIVITY_PART_MAX[k], 0);
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+        <div className="flex items-start justify-between gap-3 border-b border-[#eef2f7] px-5 py-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#94a3b8]">Productivity breakdown</p>
+            <h3 className="mt-0.5 text-lg font-semibold text-[#0f172a]">{detail.employeeName}</h3>
+          </div>
+          <BandBadge band={detail.band} score={detail.score} />
+        </div>
+
+        <ul className="divide-y divide-[#f1f5f9] px-5">
+          {keys.map((k) => {
+            const got = Number(detail.parts?.[k] ?? 0);
+            const max = PRODUCTIVITY_PART_MAX[k];
+            return (
+              <li key={k} className="py-2.5">
+                <div className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="text-[#334155]">{PRODUCTIVITY_PART_LABELS[k]}</span>
+                  <span className="font-semibold text-[#0f172a]">
+                    {got}/{max}
+                  </span>
+                </div>
+                <div className="mt-1.5 h-1.5 rounded-full bg-[#f1f5f9]">
+                  <div
+                    className="h-1.5 rounded-full bg-[#c9a227]"
+                    style={{ width: `${Math.min(100, Math.round((got / max) * 100))}%` }}
+                  />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="flex items-center justify-between gap-3 border-t border-[#eef2f7] px-5 py-3">
+          <p className="text-sm font-semibold text-[#0f172a]">
+            Total: {earned}/{total}
+          </p>
+          <Button type="button" variant="outline" className="h-8 rounded-full px-4 text-xs" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+
+        <p className="border-t border-[#eef2f7] bg-[#f8fbff] px-5 py-3 text-[11px] leading-relaxed text-[#64748b]">
+          Components are weighted for sales activity, so roles that do not make calls or admissions cannot reach the
+          full 100. A role-aware formula is proposed but not yet applied.
+        </p>
+      </div>
     </div>
   );
 }
@@ -210,6 +293,8 @@ export function AnalyticsWorkbench({
   const [exportBusy, setExportBusy] = useState<string | null>(null);
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const [scoreDetail, setScoreDetail] = useState<ProductivityBreakdown | null>(null);
+  const [denied, setDenied] = useState<string | null>(null);
   const [filterOpts, setFilterOpts] = useState<{
     employees: { id: string; label: string; department?: string | null; role?: string | null }[];
     departments: string[];
@@ -265,7 +350,21 @@ export function AnalyticsWorkbench({
         }),
       });
       const json = (await res.json()) as Record<string, unknown> & { error?: string; viewer?: Viewer; filterOptions?: typeof filterOpts };
+      if (res.status === 401 || res.status === 403) {
+        setDenied(
+          json.error === "Forbidden"
+            ? "Your role does not have access to Reports & Analytics."
+            : json.error || "Your session is no longer valid. Sign in again to view reports.",
+        );
+        setData(null);
+        return;
+      }
+      if (res.status === 429) {
+        setError("Too many report requests in a short time. Wait a moment and try again.");
+        return;
+      }
       if (!res.ok) throw new Error(json.error || "Failed to load report.");
+      setDenied(null);
       setData(json);
       if (json.viewer) setViewer(json.viewer);
       if (json.filterOptions) {
@@ -523,7 +622,14 @@ export function AnalyticsWorkbench({
         </div>
       ) : null}
 
-      {section === "overview" ? (
+      {denied ? (
+        <div className="rounded-2xl border border-[#dbe6f3] bg-[#fafcff] px-4 py-10 text-center">
+          <p className="text-sm font-semibold text-[#0f172a]">Access denied</p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-[#64748b]">{denied}</p>
+        </div>
+      ) : null}
+
+      {!denied && section === "overview" ? (
         <div className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
@@ -621,14 +727,15 @@ export function AnalyticsWorkbench({
         </div>
       ) : null}
 
-      {section === "daily" || section === "productivity" ? (
+      {!denied && section === "daily" || section === "productivity" ? (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-[#0f172a]">
             {section === "daily" ? "Daily employee scorecard" : "Productivity ranking"}
           </h3>
           <p className="text-xs text-[#64748b]">
             Tasks Done is work finished in the selected dates (IST), not every task that happens to be due.
-            Completed work shows the task titles. Check-in times are India time.
+            Completed work shows the task titles. Check-in times are India time. Click a productivity score to see how
+            it was calculated.
           </p>
           <DataTable
             columns={[
@@ -649,7 +756,27 @@ export function AnalyticsWorkbench({
               { key: "overdueTasks", label: "Overdue" },
               { key: "crmUpdates", label: "CRM Updates" },
               { key: "followupsPending", label: "FU Pending" },
-              { key: "scoreLabel", label: "Productivity" },
+              {
+                key: "scoreLabel",
+                label: "Productivity",
+                render: (row) => (
+                  <button
+                    type="button"
+                    className="rounded-full underline decoration-dotted underline-offset-2 hover:text-[#0f172a]"
+                    title="Show score breakdown"
+                    onClick={() =>
+                      setScoreDetail({
+                        employeeName: String(row.employeeName || "Employee"),
+                        score: Number(row.productivityScore || 0),
+                        band: String(row.productivityBand || "yellow"),
+                        parts: (row.productivityParts as Record<string, number>) || {},
+                      })
+                    }
+                  >
+                    {String(row.scoreLabel ?? "-")}
+                  </button>
+                ),
+              },
             ]}
             rows={employees.map((e) => ({
               ...e,
@@ -662,7 +789,7 @@ export function AnalyticsWorkbench({
         </div>
       ) : null}
 
-      {section === "team" ? (
+      {!denied && section === "team" ? (
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard title="Employees" value={Number(team.totalEmployees || 0)} loading={loading} />
@@ -684,7 +811,7 @@ export function AnalyticsWorkbench({
         </div>
       ) : null}
 
-      {section === "calls" ? (
+      {!denied && section === "calls" ? (
         <div className="space-y-3">
           <p className="text-xs text-[#64748b]">
             Includes Student Lead call sessions and College Visits dialer Phone Call logs. Widen Start / End Date for
@@ -710,7 +837,7 @@ export function AnalyticsWorkbench({
         </div>
       ) : null}
 
-      {section === "followups" ? (
+      {!denied && section === "followups" ? (
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-7">
             {Object.entries((data?.summary as Record<string, number>) || {}).map(([k, v]) => (
@@ -734,7 +861,7 @@ export function AnalyticsWorkbench({
         </div>
       ) : null}
 
-      {section === "tasks" ? (
+      {!denied && section === "tasks" ? (
         <div className="space-y-4">
           <p className="text-xs text-[#64748b]">
             Completed rows are tasks actually finished in this date range (India time), with the completion note the
@@ -774,7 +901,7 @@ export function AnalyticsWorkbench({
         </div>
       ) : null}
 
-      {section === "conversion" ? (
+      {!denied && section === "conversion" ? (
         <DataTable
           columns={[
             { key: "source", label: "Source" },
@@ -792,7 +919,7 @@ export function AnalyticsWorkbench({
         />
       ) : null}
 
-      {section === "admissions" ? (
+      {!denied && section === "admissions" ? (
         <div className="space-y-4">
           <DataTable
             columns={[
@@ -813,7 +940,7 @@ export function AnalyticsWorkbench({
         </div>
       ) : null}
 
-      {section === "revenue" ? (
+      {!denied && section === "revenue" ? (
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard title="Revenue" value={formatInr(revenueTotals.revenue)} loading={loading} />
@@ -847,7 +974,7 @@ export function AnalyticsWorkbench({
         </div>
       ) : null}
 
-      {section === "timeline" ? (
+      {!denied && section === "timeline" ? (
         <div className="space-y-3">
           <p className="text-xs text-[#64748b]">
             {filters.employeeIds.length === 1
@@ -877,7 +1004,7 @@ export function AnalyticsWorkbench({
         </div>
       ) : null}
 
-      {section === "eod" ? (
+      {!denied && section === "eod" ? (
         <div className="space-y-4">
           {(data?.warning as string) ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -923,7 +1050,7 @@ export function AnalyticsWorkbench({
         </div>
       ) : null}
 
-      {section === "download" ? (
+      {!denied && section === "download" ? (
         <div className="space-y-4">
           <p className="text-sm text-[#64748b]">
             Export current filters as multi-sheet Excel (Daily scorecards, Calls, Tasks, EOD) or use CSV / PDF / Print
@@ -960,6 +1087,10 @@ export function AnalyticsWorkbench({
             {filters.employeeIds.length ? ` · Employee scoped` : " · Company / team"}
           </p>
         </div>
+      ) : null}
+
+      {scoreDetail ? (
+        <ProductivityBreakdownModal detail={scoreDetail} onClose={() => setScoreDetail(null)} />
       ) : null}
     </section>
   );

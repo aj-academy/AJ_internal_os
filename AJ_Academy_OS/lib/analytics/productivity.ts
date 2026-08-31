@@ -17,6 +17,28 @@ export type ProductivityInputs = {
 
 export type ProductivityBand = "red" | "yellow" | "green";
 
+/**
+ * Maximum points per component, so the score breakdown shown in the UI is read
+ * from the formula rather than restated next to it.
+ */
+export const PRODUCTIVITY_PART_MAX = {
+  calls: 25,
+  crm: 15,
+  tasks: 20,
+  followups: 15,
+  admissions: 15,
+  attendance: 10,
+} as const;
+
+export const PRODUCTIVITY_PART_LABELS: Record<keyof typeof PRODUCTIVITY_PART_MAX, string> = {
+  calls: "Calls",
+  crm: "CRM updates",
+  tasks: "Tasks",
+  followups: "Follow-ups",
+  admissions: "Admissions",
+  attendance: "Attendance",
+};
+
 export function computeProductivityScore(input: ProductivityInputs): {
   score: number;
   band: ProductivityBand;
@@ -25,13 +47,13 @@ export function computeProductivityScore(input: ProductivityInputs): {
   const callRate =
     input.callsAttempted > 0 ? input.callsConnected / input.callsAttempted : input.callsConnected > 0 ? 1 : 0;
   const callVolume = Math.min(1, input.callsAttempted / 20);
-  const calls = (callRate * 0.6 + callVolume * 0.4) * 25;
+  const calls = (callRate * 0.6 + callVolume * 0.4) * PRODUCTIVITY_PART_MAX.calls;
 
-  const crm = Math.min(1, input.crmUpdates / 15) * 15;
+  const crm = Math.min(1, input.crmUpdates / 15) * PRODUCTIVITY_PART_MAX.crm;
 
   const taskRate =
     input.tasksAssigned > 0 ? input.tasksCompleted / input.tasksAssigned : input.tasksCompleted > 0 ? 1 : 0;
-  const tasks = taskRate * 20;
+  const tasks = taskRate * PRODUCTIVITY_PART_MAX.tasks;
 
   const fuRate =
     input.followupsDue > 0
@@ -39,15 +61,15 @@ export function computeProductivityScore(input: ProductivityInputs): {
       : input.followupsCompleted > 0
         ? 1
         : 0;
-  const followups = fuRate * 15;
+  const followups = fuRate * PRODUCTIVITY_PART_MAX.followups;
 
-  const admissions = Math.min(1, input.admissions / 3) * 15;
+  const admissions = Math.min(1, input.admissions / 3) * PRODUCTIVITY_PART_MAX.admissions;
 
   const attendance =
     input.expectedWorkDays > 0
-      ? Math.min(1, input.presentDays / input.expectedWorkDays) * 10
+      ? Math.min(1, input.presentDays / input.expectedWorkDays) * PRODUCTIVITY_PART_MAX.attendance
       : input.presentDays > 0
-        ? 10
+        ? PRODUCTIVITY_PART_MAX.attendance
         : 0;
 
   const score = Math.round(

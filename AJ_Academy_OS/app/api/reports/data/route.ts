@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminApiSession } from "@/lib/security";
+import { enforceRateLimit, requireAdminApiSession } from "@/lib/security";
 import { resolveReportDateRange, startOfDayIso, endOfDayIso, type ReportDatePreset } from "@/lib/reports/dateRange";
 import type {
   ReportActivity,
@@ -27,6 +27,11 @@ function isMissingRelation(msg: string, hint: string) {
     (m.includes("pgrst205") && m.includes(h)) ||
     (m.includes("schema cache") && m.includes(h))
   );
+}
+
+/** Values interpolated into a PostgREST `or(...)` must not contain its separators. */
+function isSafeOrValue(value: string): boolean {
+  return value.length <= 120 && !/[,()"\\]/.test(value);
 }
 
 function isMissingColumn(msg: string) {
@@ -80,6 +85,9 @@ async function safeSelect<T>(
 }
 
 export async function GET(request: Request) {
+  const limited = enforceRateLimit(request, "reports:data", { limit: 60, windowMs: 60_000 });
+  if (limited) return limited;
+
   const { response, user, profile } = await requireAdminApiSession();
   if (response || !user) return response!;
 
@@ -179,7 +187,11 @@ export async function GET(request: Request) {
         let q = admin.from("clients").select(CLIENT_SELECT_FULL).order("updated_at", { ascending: false }).limit(5000);
         if (leadSource) q = q.eq("source", leadSource);
         if (status) q = q.eq("status", status);
-        if (course) q = q.or(`interested_program.eq.${course},service_interest.eq.${course}`);
+        // Interpolated into a PostgREST `or` expression, so commas / parens
+        // that would change the filter structure are rejected.
+        if (course && isSafeOrValue(course)) {
+          q = q.or(`interested_program.eq.${course},service_interest.eq.${course}`);
+        }
         if (employeeId) q = q.eq("assigned_to", employeeId);
         return await q;
       },
