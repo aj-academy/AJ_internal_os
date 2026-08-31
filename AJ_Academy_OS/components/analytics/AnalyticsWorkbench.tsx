@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Bar,
   BarChart,
@@ -16,14 +17,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { AnalyticsFiltersBar } from "@/components/analytics/AnalyticsFiltersBar";
+import { MultiSelectFilter } from "@/components/ui/MultiSelectFilter";
 import {
   ANALYTICS_SECTION_LABELS,
   ANALYTICS_SECTION_ORDER,
+  ANALYTICS_SECTION_SLUGS,
   EMPTY_ANALYTICS_FILTERS,
+  parseSectionParam,
+  REPORT_SECONDARY_FILTERS,
   type AnalyticsFilters,
   type AnalyticsSectionId,
 } from "@/lib/analytics/types";
-import { resolveDateRange } from "@/lib/analytics/dateRanges";
+import { toDateKeyIst } from "@/lib/analytics/dateRanges";
 import { formatInr } from "@/components/reports/reportsHelpers";
 import { usePagination } from "@/lib/usePagination";
 import {
@@ -171,16 +176,40 @@ export function AnalyticsWorkbench({
   mode?: "admin" | "employee";
 }) {
   const isEmployee = mode === "employee";
-  const [section, setSection] = useState<AnalyticsSectionId>("overview");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const sections = useMemo(
+    () => ANALYTICS_SECTION_ORDER.filter((id) => !isEmployee || id !== "team"),
+    [isEmployee],
+  );
+
+  // The URL is the source of truth for the selected report, so reports stay
+  // linkable and browser back/forward works without mirroring state.
+  const urlSection = parseSectionParam(searchParams.get("report"));
+  const section = urlSection && sections.includes(urlSection) ? urlSection : "overview";
+
+  const setSection = useCallback(
+    (next: AnalyticsSectionId) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("report", ANALYTICS_SECTION_SLUGS[next]);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
   const [filters, setFilters] = useState<AnalyticsFilters>(() => {
-    const range = resolveDateRange("today");
-    return { ...EMPTY_ANALYTICS_FILTERS, ...range };
+    const today = toDateKeyIst();
+    return { ...EMPTY_ANALYTICS_FILTERS, from: today, to: today };
   });
+  const [searchDraft, setSearchDraft] = useState("");
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exportBusy, setExportBusy] = useState<string | null>(null);
   const [viewer, setViewer] = useState<Viewer | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const [filterOpts, setFilterOpts] = useState<{
     employees: { id: string; label: string; department?: string | null; role?: string | null }[];
     departments: string[];
@@ -200,26 +229,36 @@ export function AnalyticsWorkbench({
   });
 
   const load = useCallback(async () => {
+    // A newer filter change supersedes any request still in flight.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     setError(null);
     try {
+      // Only the active report's secondary filter is sent, so a selection left
+      // behind in another report cannot silently narrow this one.
+      const secondaryKey = REPORT_SECONDARY_FILTERS[section];
+      const secondary: Record<string, string[]> = {};
+      if (secondaryKey) {
+        const values = filters[secondaryKey];
+        if (Array.isArray(values) && values.length) secondary[secondaryKey] = values;
+      }
+
       const res = await fetch("/api/analytics/query", {
         method: "POST",
         credentials: "include",
+        signal: controller.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           section,
-          preset: filters.preset,
           from: filters.from,
           to: filters.to,
           employeeIds: filters.employeeIds.length ? filters.employeeIds : undefined,
           departments: filters.departments.length ? filters.departments : undefined,
           roles: filters.roles.length ? filters.roles : undefined,
-          courses: filters.courses.length ? filters.courses : undefined,
-          leadSources: filters.leadSources.length ? filters.leadSources : undefined,
-          leadStatuses: filters.leadStatuses.length ? filters.leadStatuses : undefined,
-          taskStatuses: filters.taskStatuses.length ? filters.taskStatuses : undefined,
-          admissionStatuses: filters.admissionStatuses.length ? filters.admissionStatuses : undefined,
+          ...secondary,
           search: filters.search || undefined,
           page: filters.page,
           pageSize: filters.pageSize,
@@ -249,10 +288,12 @@ export function AnalyticsWorkbench({
         );
       }
     } catch (e) {
+      // The superseding request owns the loading state and the next result.
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setError(e instanceof Error ? e.message : "Failed to load analytics.");
       setData(null);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [filters, isEmployee, section]);
 
@@ -260,18 +301,77 @@ export function AnalyticsWorkbench({
     void load();
   }, [load]);
 
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  // Search is debounced so typing does not fire a query per keystroke.
+  useEffect(() => {
+    if (searchDraft === filters.search) return;
+    const timer = setTimeout(() => {
+      setFilters((prev) => (prev.search === searchDraft ? prev : { ...prev, search: searchDraft, page: 1 }));
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchDraft, filters.search]);
+
   const kpis = (data?.kpis || {}) as Record<string, number>;
   const charts = (data?.charts || {}) as Record<string, unknown>;
   const employees = (data?.employees || []) as Record<string, unknown>[];
   const team = (data?.team || {}) as Record<string, unknown>;
   const accountability = (data?.accountability || []) as { employeeName: string; issues: string[]; productivityScore: number }[];
 
+  const partialWarning = useMemo(() => {
+    const partial = data?.partial as { tables?: string[] } | undefined;
+    if (!partial?.tables?.length) return null;
+    return `Showing partial data — ${partial.tables.join(", ")} reached the row limit for this date range, so totals may be understated. Narrow the date range, employee, or department for exact figures.`;
+  }, [data]);
+
+  const revenueTotals = useMemo(() => {
+    const rows = ((data?.byEmployee || []) as Record<string, unknown>[]) ?? [];
+    const totals = { revenue: 0, pendingFees: 0, admissions: 0 };
+    for (const r of rows) {
+      totals.revenue += Number(r.revenue || 0);
+      totals.pendingFees += Number(r.pendingFees || 0);
+      totals.admissions += Number(r.admissions || 0);
+    }
+    return totals;
+  }, [data]);
+
+  const secondaryFilter = useMemo(() => {
+    const key = REPORT_SECONDARY_FILTERS[section];
+    if (!key) return null;
+    const values = (filters[key] as string[]) ?? [];
+    const onChange = (next: string[]) => setFilters((prev) => ({ ...prev, [key]: next, page: 1 }));
+    const toOpts = (items: string[]) => items.filter(Boolean).map((v) => ({ value: v, label: v }));
+
+    if (key === "leadStatuses") {
+      return { label: "Lead status", values, onChange, options: toOpts(filterOpts.leadStatuses), allLabel: "All lead statuses" };
+    }
+    if (key === "admissionStatuses") {
+      return {
+        label: "Admission status",
+        values,
+        onChange,
+        options: toOpts(filterOpts.admissionStatuses),
+        allLabel: "All admission statuses",
+      };
+    }
+    return {
+      label: "Task status",
+      values,
+      onChange,
+      options: toOpts(["Pending", "In Progress", "Completed"]),
+      allLabel: "All task statuses",
+    };
+  }, [filterOpts.admissionStatuses, filterOpts.leadStatuses, filters, section]);
+
   const exportCurrent = async (fmt: "csv" | "xlsx" | "pdf") => {
     setExportBusy(fmt);
     try {
-      const stamp = `${filters.from}_to_${filters.to}`;
+      // Single day exports read as one date, ranges as from_to_to.
+      const stamp = filters.from === filters.to ? filters.from : `${filters.from}_to_${filters.to}`;
+      const slug = ANALYTICS_SECTION_LABELS[section].replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "");
+      const base = `AJ_OS_${slug}_${stamp}`;
       let rows: ExportRow[] = [];
-      let title = ANALYTICS_SECTION_LABELS[section];
+      const title = ANALYTICS_SECTION_LABELS[section];
 
       if (section === "calls") {
         rows = formatCallActivityExportRows(((data?.allRows || data?.rows || []) as ExportRow[]) ?? []);
@@ -292,7 +392,7 @@ export function AnalyticsWorkbench({
         );
         const taskRows = ((data?.tasks as { rows?: ExportRow[] })?.rows || []) as ExportRow[];
         const eodRows = ((data?.eod as { rows?: ExportRow[] })?.rows || []) as ExportRow[];
-        await exportMultiSheetExcel(`AJ_OS_Analytics_${stamp}.xlsx`, [
+        await exportMultiSheetExcel(`AJ_OS_Analytics_Pack_${stamp}.xlsx`, [
           { name: "Daily Employees", rows: daily },
           { name: "Calls", rows: callRows },
           { name: "Tasks", rows: taskRows },
@@ -312,10 +412,10 @@ export function AnalyticsWorkbench({
         { Report: title, From: filters.from, To: filters.to, Generated: new Date().toLocaleString("en-IN") },
       ];
 
-      if (fmt === "csv") exportRowsAsCsv(`AJ_OS_${section}_${stamp}.csv`, rows);
-      else if (fmt === "xlsx") await exportRowsAsExcel(`AJ_OS_${section}_${stamp}.xlsx`, [...metaPrefix, ...rows]);
+      if (fmt === "csv") exportRowsAsCsv(`${base}.csv`, rows);
+      else if (fmt === "xlsx") await exportRowsAsExcel(`${base}.xlsx`, [...metaPrefix, ...rows]);
       else {
-        await exportRowsAsPdf(`AJ OS — ${title}`, `AJ_OS_${section}_${stamp}.pdf`, rows, {
+        await exportRowsAsPdf(`AJ OS — ${title}`, `${base}.pdf`, rows, {
           generatedAt: new Date().toLocaleString("en-IN"),
           dateRange: `${filters.from} → ${filters.to}`,
           summary: `${rows.length} row(s)`,
@@ -325,15 +425,6 @@ export function AnalyticsWorkbench({
       setExportBusy(null);
     }
   };
-
-  const sections = useMemo(
-    () =>
-      ANALYTICS_SECTION_ORDER.filter((id) => {
-        if (!isEmployee) return true;
-        return !["team", "download"].includes(id) || id === "download";
-      }),
-    [isEmployee],
-  );
 
   return (
     <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 shadow-[0_20px_40px_rgba(30,64,175,0.08)] sm:p-6 lg:p-8">
@@ -390,58 +481,80 @@ export function AnalyticsWorkbench({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {sections.map((id) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setSection(id)}
-            className={
-              section === id
-                ? "rounded-full bg-[#c9a227] px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
-                : "rounded-full border border-[#e8dcc8] bg-white px-3 py-1.5 text-xs font-semibold text-[#64748b] hover:bg-[#f8fbff]"
-            }
-          >
-            {ANALYTICS_SECTION_LABELS[id]}
-          </button>
-        ))}
-      </div>
-
       <AnalyticsFiltersBar
+        section={section}
+        sections={sections}
+        onSectionChange={setSection}
         filters={filters}
         onChange={setFilters}
+        searchDraft={searchDraft}
+        onSearchDraftChange={setSearchDraft}
         employees={filterOpts.employees}
         departments={filterOpts.departments}
         roles={filterOpts.roles}
-        courses={filterOpts.courses}
-        leadSources={filterOpts.leadSources}
-        leadStatuses={filterOpts.leadStatuses}
-        admissionStatuses={filterOpts.admissionStatuses}
         lockEmployee={isEmployee}
-        onRefresh={() => void load()}
         loading={loading}
       />
+
+      {secondaryFilter ? (
+        <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-[#e8dcc8] bg-[#fffdf8] px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#a68b2e]">
+            {ANALYTICS_SECTION_LABELS[section]} filter
+          </p>
+          <div className="min-w-[220px]">
+            <MultiSelectFilter
+              label={secondaryFilter.label}
+              values={secondaryFilter.values}
+              onChange={secondaryFilter.onChange}
+              options={secondaryFilter.options}
+              allLabel={secondaryFilter.allLabel}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</div>
       ) : null}
 
+      {partialWarning ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {partialWarning}
+        </div>
+      ) : null}
+
       {section === "overview" ? (
         <div className="space-y-5">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
-            <StatCard title="Total Employees" value={kpis.totalEmployees ?? 0} loading={loading} />
-            <StatCard title="Present" value={kpis.employeesPresent ?? 0} loading={loading} subtitle="Check-ins in this date range" />
-            <StatCard title="Working Now" value={kpis.employeesWorking ?? 0} loading={loading} subtitle="Checked in, not yet out" />
-            <StatCard title="Checked Out" value={kpis.employeesCheckedOut ?? 0} loading={loading} />
-            <StatCard title="Leads Assigned" value={kpis.totalLeadsAssigned ?? 0} loading={loading} subtitle="Currently assigned, not only today" />
-            <StatCard title="Total Calls" value={kpis.totalCalls ?? 0} loading={loading} subtitle="Calls logged in this date range" />
-            <StatCard title="Connected Calls" value={kpis.connectedCalls ?? 0} loading={loading} />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              title="Present"
+              value={kpis.employeesPresent ?? 0}
+              loading={loading}
+              subtitle={`of ${kpis.totalEmployees ?? 0} staff, checked in this range`}
+            />
+            <StatCard
+              title="Total Calls"
+              value={kpis.totalCalls ?? 0}
+              loading={loading}
+              subtitle={`${kpis.connectedCalls ?? 0} connected${
+                kpis.totalCalls ? ` · ${Math.round(((kpis.connectedCalls ?? 0) / kpis.totalCalls) * 100)}%` : ""
+              }`}
+            />
             <StatCard title="Pending Follow-ups" value={kpis.pendingFollowups ?? 0} loading={loading} />
-            <StatCard title="Admissions" value={kpis.admissions ?? 0} loading={loading} subtitle="Admitted / updated in this date range" />
+            <StatCard
+              title="Tasks Completed"
+              value={kpis.tasksCompleted ?? 0}
+              loading={loading}
+              subtitle="Finished in this date range"
+            />
+            <StatCard title="Tasks Overdue" value={kpis.tasksOverdue ?? 0} loading={loading} subtitle="Past due, still open" />
+            <StatCard
+              title="Admissions"
+              value={kpis.admissions ?? 0}
+              loading={loading}
+              subtitle="Admitted / updated in this date range"
+            />
             <StatCard title="Revenue" value={formatInr(kpis.revenueGenerated ?? 0)} loading={loading} />
-            <StatCard title="Pending Revenue" value={formatInr(kpis.pendingRevenue ?? 0)} loading={loading} />
-            <StatCard title="Tasks Completed" value={kpis.tasksCompleted ?? 0} loading={loading} subtitle="Finished in this date range" />
-            <StatCard title="Tasks Pending" value={kpis.tasksPending ?? 0} loading={loading} subtitle="Still open on assigned staff" />
             <StatCard title="Avg Productivity" value={`${kpis.averageProductivity ?? 0}%`} loading={loading} />
           </div>
 
@@ -574,8 +687,8 @@ export function AnalyticsWorkbench({
       {section === "calls" ? (
         <div className="space-y-3">
           <p className="text-xs text-[#64748b]">
-            Includes Student Lead call sessions and College Visits dialer Phone Call logs. Use date range
-            (This week / This month / Custom) for older activity, then page through the table below.
+            Includes Student Lead call sessions and College Visits dialer Phone Call logs. Widen Start / End Date for
+            older activity, then page through the table below.
           </p>
           <DataTable
             key={`calls-${filters.from}-${filters.to}-${filters.employeeIds.join(",")}-${filters.search}`}
@@ -625,14 +738,23 @@ export function AnalyticsWorkbench({
         <div className="space-y-4">
           <p className="text-xs text-[#64748b]">
             Completed rows are tasks actually finished in this date range (India time), with the completion note the
-            person typed. Open / overdue tasks are listed below the same table with status Pending or In Progress.
-            Use Task status = Completed if you only want finished work.
+            person typed. Open / overdue tasks appear in the same table with status Pending or In Progress. Use the
+            Task status filter above if you only want finished work.
           </p>
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <StatCard title="Total" value={Number(data?.total || 0)} loading={loading} />
             <StatCard title="Completed" value={Number(data?.completed || 0)} loading={loading} subtitle="Finished in this date range" />
             <StatCard title="Pending" value={Number(data?.pending || 0)} loading={loading} subtitle="Still open, due in range" />
             <StatCard title="Overdue" value={Number(data?.overdue || 0)} loading={loading} />
+            <StatCard
+              title="Completion %"
+              value={
+                Number(data?.total || 0) > 0
+                  ? `${Math.round((Number(data?.completed || 0) / Number(data?.total)) * 100)}%`
+                  : "-"
+              }
+              loading={loading}
+            />
           </div>
           <DataTable
             columns={[
@@ -692,21 +814,37 @@ export function AnalyticsWorkbench({
       ) : null}
 
       {section === "revenue" ? (
-        <DataTable
-          columns={[
-            { key: "employee", label: "Employee" },
-            { key: "admissions", label: "Admissions" },
-            { key: "revenue", label: "Revenue" },
-            { key: "pendingFees", label: "Pending Fees" },
-            { key: "avgRevenuePerAdmission", label: "Avg / Admission" },
-          ]}
-          rows={(((data?.byEmployee || []) as Record<string, unknown>[]) ?? []).map((r) => ({
-            ...r,
-            revenue: formatInr(Number(r.revenue || 0)),
-            pendingFees: formatInr(Number(r.pendingFees || 0)),
-            avgRevenuePerAdmission: formatInr(Number(r.avgRevenuePerAdmission || 0)),
-          }))}
-        />
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard title="Revenue" value={formatInr(revenueTotals.revenue)} loading={loading} />
+            <StatCard title="Pending Fees" value={formatInr(revenueTotals.pendingFees)} loading={loading} />
+            <StatCard title="Admissions" value={revenueTotals.admissions} loading={loading} />
+            <StatCard
+              title="Avg / Admission"
+              value={
+                revenueTotals.admissions > 0
+                  ? formatInr(Math.round(revenueTotals.revenue / revenueTotals.admissions))
+                  : "-"
+              }
+              loading={loading}
+            />
+          </div>
+          <DataTable
+            columns={[
+              { key: "employee", label: "Employee" },
+              { key: "admissions", label: "Admissions" },
+              { key: "revenue", label: "Revenue" },
+              { key: "pendingFees", label: "Pending Fees" },
+              { key: "avgRevenuePerAdmission", label: "Avg / Admission" },
+            ]}
+            rows={(((data?.byEmployee || []) as Record<string, unknown>[]) ?? []).map((r) => ({
+              ...r,
+              revenue: formatInr(Number(r.revenue || 0)),
+              pendingFees: formatInr(Number(r.pendingFees || 0)),
+              avgRevenuePerAdmission: formatInr(Number(r.avgRevenuePerAdmission || 0)),
+            }))}
+          />
+        </div>
       ) : null}
 
       {section === "timeline" ? (

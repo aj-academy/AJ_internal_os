@@ -1,4 +1,11 @@
-import { eachDateKey, isoEndOfDay, isoStartOfDay, resolveDateRange, toDateKeyIst } from "@/lib/analytics/dateRanges";
+import {
+  eachDateKey,
+  isoEndOfDay,
+  isoStartOfDay,
+  isWeekendKeyIst,
+  resolveDateRange,
+  toDateKeyIst,
+} from "@/lib/analytics/dateRanges";
 import {
   computeProductivityScore,
   isAdmissionLead,
@@ -80,6 +87,73 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+const FETCH_PAGE_SIZE = 1000;
+/**
+ * Upper bound per source. Reaching it means the report is showing partial data,
+ * which is reported to the client instead of being silently truncated.
+ */
+const FETCH_CEILING = 30000;
+
+type PagedQuery<T> = PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
+
+/**
+ * Pages through a source until it is exhausted, rather than taking the first N
+ * rows. A fixed `.limit()` silently drops rows once a table outgrows it, which
+ * makes totals wrong rather than merely incomplete.
+ */
+async function fetchAllRows<T>(
+  label: string,
+  truncated: Set<string>,
+  build: (from: number, to: number) => PagedQuery<T>,
+  ceiling: number = FETCH_CEILING,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; from < ceiling; from += FETCH_PAGE_SIZE) {
+    const to = Math.min(from + FETCH_PAGE_SIZE, ceiling) - 1;
+    const { data, error } = await build(from, to);
+    if (error) {
+      truncated.add(label);
+      break;
+    }
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < to - from + 1) return rows;
+  }
+  if (rows.length >= ceiling) truncated.add(label);
+  return rows;
+}
+
+/**
+ * Id lookups are chunked because a single `.in()` with thousands of UUIDs
+ * exceeds the request URL length.
+ */
+const IN_CHUNK_SIZE = 400;
+
+async function fetchByIds<T>(
+  ids: string[],
+  build: (chunk: string[]) => PagedQuery<T>,
+): Promise<T[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return [];
+  const out: T[] = [];
+  for (let i = 0; i < unique.length; i += IN_CHUNK_SIZE) {
+    const { data } = await build(unique.slice(i, i + IN_CHUNK_SIZE));
+    out.push(...(data ?? []));
+  }
+  return out;
+}
+
+/** Empty scope must not match every row. */
+const NO_MATCH_ID = "00000000-0000-0000-0000-000000000000";
+
+function scopeOr(scopeIds: string[]): string[] {
+  return scopeIds.length ? scopeIds : [NO_MATCH_ID];
+}
+
+function partialPayload(truncated: Set<string>): { partial?: { tables: string[] } } {
+  return truncated.size ? { partial: { tables: [...truncated].sort() } } : {};
+}
+
 export type AnalyticsQueryBody = {
   section: AnalyticsSectionId;
   preset?: DatePreset;
@@ -112,11 +186,10 @@ export async function runAnalyticsQuery(
   supabase: SupabaseClient,
   body: AnalyticsQueryBody,
 ): Promise<Record<string, unknown>> {
-  const { from, to } = resolveDateRange(
-    body.preset || "today",
-    body.from,
-    body.to,
-  );
+  // Explicit Start/End dates are authoritative. `preset` is only honoured for
+  // older callers that send it instead of a range.
+  const preset: DatePreset = body.preset || (body.from || body.to ? "custom" : "today");
+  const { from, to } = resolveDateRange(preset, body.from, body.to);
 
   const employeeIds = body.forceEmployeeId
     ? [body.forceEmployeeId]
@@ -130,7 +203,6 @@ export async function runAnalyticsQuery(
   const admissionStatuses = asFilterList(body.admissionStatuses ?? body.admissionStatus);
 
   const filters: AnalyticsFilters = {
-    preset: body.preset || "today",
     from,
     to,
     employeeIds,
@@ -190,7 +262,7 @@ export async function runAnalyticsQuery(
   const meta = {
     from,
     to,
-    preset: filters.preset,
+    preset,
     generatedAt: new Date().toISOString(),
     employeeCount: scopeIds.length,
   };
@@ -237,91 +309,121 @@ async function buildAggregates(
   const days = eachDateKey(filters.from, filters.to);
   const expectedWorkDays = Math.max(
     1,
-    days.filter((d) => {
-      const dt = new Date(d);
-      const day = dt.getDay();
-      return day !== 0 && day !== 6;
-    }).length || days.length,
+    days.filter((d) => !isWeekendKeyIst(d)).length || days.length,
   );
 
-  const [
-    attendanceRes,
-    callsRes,
-    collegeCallsRes,
-    tasksRes,
-    activitiesRes,
-    collegeActsRes,
-    followupsRes,
-    clientsRes,
-    completionActsRes,
-  ] = await Promise.all([
-    supabase
-      .from("attendance_records")
-      .select("id,employee_id,attendance_date,check_in_time,check_out_time,status,total_working_minutes")
-      .gte("attendance_date", filters.from)
-      .lte("attendance_date", filters.to)
-      .in("employee_id", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
-      .limit(5000),
-    supabase
-      .from("lead_call_sessions")
-      .select("id,employee_id,lead_id,phone_number,started_at,ended_at,approximate_duration_seconds,call_outcome,notes,session_status")
-      .gte("started_at", fromTs)
-      .lte("started_at", toTs)
-      .in("employee_id", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
-      .limit(8000),
-    supabase
-      .from("college_visit_activities")
-      .select("id,created_by,created_at,activity_type,notes,college_visit_id")
-      .eq("activity_type", "Phone Call")
-      .gte("created_at", fromTs)
-      .lte("created_at", toTs)
-      .in("created_by", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
-      .limit(8000),
-    supabase
-      .from("tasks")
-      .select("id,title,assigned_to,assigned_by,status,priority,progress,due_date,created_at,updated_at,completion_summary")
-      .in("assigned_to", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
-      .limit(5000),
-    supabase
-      .from("lead_activities")
-      .select("id,client_id,activity_type,notes,created_at,created_by")
-      .gte("created_at", fromTs)
-      .lte("created_at", toTs)
-      .in("created_by", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
-      .limit(8000),
-    supabase
-      .from("college_visit_activities")
-      .select("id,college_visit_id,activity_type,notes,created_at,created_by")
-      .gte("created_at", fromTs)
-      .lte("created_at", toTs)
-      .in("created_by", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
-      .limit(8000),
-    supabase
-      .from("lead_followups")
-      .select("id,client_id,follow_up_date,follow_up_time,status,outcome,assigned_employee_id,completed_at")
-      .gte("follow_up_date", filters.from)
-      .lte("follow_up_date", filters.to)
-      .limit(5000),
-    supabase
-      .from("clients")
-      .select(
-        "id,lead_name,name,phone,assigned_to,status,source,interested_program,service_interest,admission_status,fee_quoted,final_fee,payment_status,follow_up_date,updated_at,created_at,last_call_outcome,total_call_attempts",
-      )
-      .in("assigned_to", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
-      .limit(8000),
-    supabase
-      .from("task_activities")
-      .select("id,task_id,actor_id,notes,created_at")
-      .eq("activity_type", "task_completed")
-      .gte("created_at", fromTs)
-      .lte("created_at", toTs)
-      .order("created_at", { ascending: false })
-      .limit(4000),
-  ]);
+  const truncated = new Set<string>();
+  const scope = scopeOr(scopeIds);
 
-  const attendance = attendanceRes.data ?? [];
-  const leadCalls = callsRes.data ?? [];
-  const collegePhoneCalls = collegeCallsRes.data ?? [];
+  const [
+    attendance,
+    leadCalls,
+    collegePhoneCalls,
+    allTasksRows,
+    leadActivityRows,
+    collegeActivityRows,
+    followupRows,
+    clientRows,
+    completionActs,
+  ] = await Promise.all([
+    fetchAllRows("attendance", truncated, (f, t) =>
+      supabase
+        .from("attendance_records")
+        .select("id,employee_id,attendance_date,check_in_time,check_out_time,status,total_working_minutes")
+        .gte("attendance_date", filters.from)
+        .lte("attendance_date", filters.to)
+        .in("employee_id", scope)
+        .order("attendance_date", { ascending: true })
+        .order("id", { ascending: true })
+        .range(f, t),
+    ),
+    fetchAllRows("calls", truncated, (f, t) =>
+      supabase
+        .from("lead_call_sessions")
+        .select("id,employee_id,lead_id,phone_number,started_at,ended_at,approximate_duration_seconds,call_outcome,notes,session_status")
+        .gte("started_at", fromTs)
+        .lte("started_at", toTs)
+        .in("employee_id", scope)
+        .order("started_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(f, t),
+    ),
+    fetchAllRows("college calls", truncated, (f, t) =>
+      supabase
+        .from("college_visit_activities")
+        .select("id,created_by,created_at,activity_type,notes,college_visit_id")
+        .eq("activity_type", "Phone Call")
+        .gte("created_at", fromTs)
+        .lte("created_at", toTs)
+        .in("created_by", scope)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(f, t),
+    ),
+    fetchAllRows("tasks", truncated, (f, t) =>
+      supabase
+        .from("tasks")
+        .select("id,title,assigned_to,assigned_by,status,priority,progress,due_date,created_at,updated_at,completion_summary")
+        .in("assigned_to", scope)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(f, t),
+    ),
+    fetchAllRows("CRM activity", truncated, (f, t) =>
+      supabase
+        .from("lead_activities")
+        .select("id,client_id,activity_type,notes,created_at,created_by")
+        .gte("created_at", fromTs)
+        .lte("created_at", toTs)
+        .in("created_by", scope)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(f, t),
+    ),
+    fetchAllRows("college activity", truncated, (f, t) =>
+      supabase
+        .from("college_visit_activities")
+        .select("id,college_visit_id,activity_type,notes,created_at,created_by")
+        .gte("created_at", fromTs)
+        .lte("created_at", toTs)
+        .in("created_by", scope)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(f, t),
+    ),
+    fetchAllRows("follow-ups", truncated, (f, t) =>
+      supabase
+        .from("lead_followups")
+        .select("id,client_id,follow_up_date,follow_up_time,status,outcome,assigned_employee_id,completed_at")
+        .gte("follow_up_date", filters.from)
+        .lte("follow_up_date", filters.to)
+        .order("follow_up_date", { ascending: true })
+        .order("id", { ascending: true })
+        .range(f, t),
+    ),
+    fetchAllRows("leads", truncated, (f, t) =>
+      supabase
+        .from("clients")
+        .select(
+          "id,lead_name,name,phone,assigned_to,status,source,interested_program,service_interest,admission_status,fee_quoted,final_fee,payment_status,follow_up_date,updated_at,created_at,last_call_outcome,total_call_attempts",
+        )
+        .in("assigned_to", scope)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(f, t),
+    ),
+    fetchAllRows("task completions", truncated, (f, t) =>
+      supabase
+        .from("task_activities")
+        .select("id,task_id,actor_id,notes,created_at")
+        .eq("activity_type", "task_completed")
+        .gte("created_at", fromTs)
+        .lte("created_at", toTs)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(f, t),
+    ),
+  ]);
   // Normalize college dialer logs into the same shape used for call KPIs.
   const calls = [
     ...leadCalls.map((c) => ({
@@ -337,11 +439,10 @@ async function buildAggregates(
       call_outcome: "Phone Call",
     })),
   ];
-  const allTasks = tasksRes.data ?? [];
-  const completionActs = completionActsRes.data ?? [];
+  const allTasks = allTasksRows;
   const activities = [
-    ...(activitiesRes.data ?? []),
-    ...(collegeActsRes.data ?? []).map((a) => ({
+    ...leadActivityRows,
+    ...collegeActivityRows.map((a) => ({
       id: `cvact:${a.id}`,
       client_id: a.college_visit_id,
       activity_type: a.activity_type,
@@ -350,11 +451,11 @@ async function buildAggregates(
       created_by: a.created_by,
     })),
   ];
-  const followups = (followupsRes.data ?? []).filter((f) => {
+  const followups = followupRows.filter((f) => {
     const eid = f.assigned_employee_id;
     return !eid || scopeIds.includes(eid);
   });
-  let clients = clientsRes.data ?? [];
+  let clients = clientRows;
   if (filters.leadSources.length) clients = clients.filter((c) => inList(c.source, filters.leadSources));
   if (filters.leadStatuses.length) clients = clients.filter((c) => inList(c.status, filters.leadStatuses));
   if (filters.admissionStatuses.length) {
@@ -593,6 +694,7 @@ async function buildAggregates(
     pendingRevenue,
     tasksCompleted,
     tasksPending,
+    tasksOverdue: perEmployee.reduce((s, e) => s + num(e.overdueTasks), 0),
     averageProductivity: avgProductivity,
   };
 
@@ -628,6 +730,7 @@ async function buildAggregates(
   return {
     meta,
     section,
+    ...partialPayload(truncated),
     kpis,
     charts: {
       callsByDay,
@@ -701,73 +804,58 @@ async function buildCalls(
 ) {
   const fromTs = isoStartOfDay(filters.from);
   const toTs = isoEndOfDay(filters.to);
-  const emptyScope = scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"];
+  const emptyScope = scopeOr(scopeIds);
+  const truncated = new Set<string>();
 
-  const [sessionsRes, collegeCallRes] = await Promise.all([
-    supabase
-      .from("lead_call_sessions")
-      .select(
-        "id,employee_id,lead_id,phone_number,started_at,ended_at,approximate_duration_seconds,call_outcome,notes,session_status,employee_name",
-      )
-      .gte("started_at", fromTs)
-      .lte("started_at", toTs)
-      .in("employee_id", emptyScope)
-      .order("started_at", { ascending: false })
-      .limit(5000),
+  const [data, collegeCalls] = await Promise.all([
+    fetchAllRows("calls", truncated, (f, t) =>
+      supabase
+        .from("lead_call_sessions")
+        .select(
+          "id,employee_id,lead_id,phone_number,started_at,ended_at,approximate_duration_seconds,call_outcome,notes,session_status,employee_name",
+        )
+        .gte("started_at", fromTs)
+        .lte("started_at", toTs)
+        .in("employee_id", emptyScope)
+        .order("started_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(f, t),
+    ),
     // College Visits dialer logs Phone Call into college_visit_activities (not lead_call_sessions).
-    supabase
-      .from("college_visit_activities")
-      .select("id,college_visit_id,activity_type,notes,created_by,created_at")
-      .eq("activity_type", "Phone Call")
-      .gte("created_at", fromTs)
-      .lte("created_at", toTs)
-      .in("created_by", emptyScope)
-      .order("created_at", { ascending: false })
-      .limit(5000),
+    fetchAllRows("college calls", truncated, (f, t) =>
+      supabase
+        .from("college_visit_activities")
+        .select("id,college_visit_id,activity_type,notes,created_by,created_at")
+        .eq("activity_type", "Phone Call")
+        .gte("created_at", fromTs)
+        .lte("created_at", toTs)
+        .in("created_by", emptyScope)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(f, t),
+    ),
   ]);
-
-  const data = sessionsRes.data ?? [];
-  const collegeCalls = collegeCallRes.data ?? [];
 
   const leadIds = [...new Set(data.map((r) => r.lead_id).filter(Boolean))];
   const visitIds = [...new Set(collegeCalls.map((r) => r.college_visit_id).filter(Boolean))];
 
-  const [{ data: leads }, { data: visits }] = await Promise.all([
-    leadIds.length
-      ? supabase
-          .from("clients")
-          .select("id,lead_name,name,phone,interested_program,follow_up_date,status,source")
-          .in("id", leadIds)
-      : Promise.resolve({
-          data: [] as {
-            id: string;
-            lead_name?: string | null;
-            name?: string | null;
-            phone?: string | null;
-            interested_program?: string | null;
-            follow_up_date?: string | null;
-            status?: string | null;
-            source?: string | null;
-          }[],
-        }),
-    visitIds.length
-      ? supabase
-          .from("college_visits")
-          .select("id,college_name,next_follow_up_date,visit_status,contact_number")
-          .in("id", visitIds)
-      : Promise.resolve({
-          data: [] as {
-            id: string;
-            college_name?: string | null;
-            next_follow_up_date?: string | null;
-            visit_status?: string | null;
-            contact_number?: string | null;
-          }[],
-        }),
+  const [leads, visits] = await Promise.all([
+    fetchByIds(leadIds, (chunk) =>
+      supabase
+        .from("clients")
+        .select("id,lead_name,name,phone,interested_program,follow_up_date,status,source")
+        .in("id", chunk),
+    ),
+    fetchByIds(visitIds, (chunk) =>
+      supabase
+        .from("college_visits")
+        .select("id,college_name,next_follow_up_date,visit_status,contact_number")
+        .in("id", chunk),
+    ),
   ]);
 
-  const leadMap = Object.fromEntries((leads ?? []).map((l) => [l.id, l]));
-  const visitMap = Object.fromEntries((visits ?? []).map((v) => [v.id, v]));
+  const leadMap = Object.fromEntries(leads.map((l) => [l.id, l]));
+  const visitMap = Object.fromEntries(visits.map((v) => [v.id, v]));
 
   const sessionRows: CallActivityRow[] = data.map((r) => {
     const lead = leadMap[r.lead_id];
@@ -844,6 +932,7 @@ async function buildCalls(
       ...meta,
       note: "Includes Student Lead call sessions and College Visits dialer Phone Call logs.",
     },
+    ...partialPayload(truncated),
     total: publicRows.length,
     page,
     pageSize,
@@ -860,32 +949,38 @@ async function buildFollowups(
   meta: Record<string, unknown>,
 ) {
   const today = filters.to;
-  const { data: fus } = await supabase
-    .from("lead_followups")
-    .select("id,client_id,follow_up_date,follow_up_time,follow_up_type,status,outcome,assigned_employee_id,completed_at,notes")
-    .gte("follow_up_date", filters.from)
-    .lte("follow_up_date", filters.to.length >= 10 ? filters.to : today)
-    .limit(3000);
+  const truncated = new Set<string>();
 
-  const { data: clientFu } = await supabase
-    .from("clients")
-    .select("id,lead_name,name,phone,assigned_to,follow_up_date,status,interested_program")
-    .in("assigned_to", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
-    .not("follow_up_date", "is", null)
-    .gte("follow_up_date", filters.from)
-    .lte("follow_up_date", filters.to)
-    .limit(3000);
+  const [fus, clientFu] = await Promise.all([
+    fetchAllRows("follow-ups", truncated, (f, t) =>
+      supabase
+        .from("lead_followups")
+        .select("id,client_id,follow_up_date,follow_up_time,follow_up_type,status,outcome,assigned_employee_id,completed_at,notes")
+        .gte("follow_up_date", filters.from)
+        .lte("follow_up_date", filters.to.length >= 10 ? filters.to : today)
+        .order("follow_up_date", { ascending: true })
+        .order("id", { ascending: true })
+        .range(f, t),
+    ),
+    fetchAllRows("lead follow-up dates", truncated, (f, t) =>
+      supabase
+        .from("clients")
+        .select("id,lead_name,name,phone,assigned_to,follow_up_date,status,interested_program")
+        .in("assigned_to", scopeOr(scopeIds))
+        .not("follow_up_date", "is", null)
+        .gte("follow_up_date", filters.from)
+        .lte("follow_up_date", filters.to)
+        .order("follow_up_date", { ascending: true })
+        .order("id", { ascending: true })
+        .range(f, t),
+    ),
+  ]);
 
-  const clientIds = [
-    ...new Set([
-      ...(fus ?? []).map((f) => f.client_id),
-      ...(clientFu ?? []).map((c) => c.id),
-    ]),
-  ];
-  const { data: clients } = clientIds.length
-    ? await supabase.from("clients").select("id,lead_name,name,phone,assigned_to").in("id", clientIds)
-    : { data: [] as { id: string; lead_name?: string | null; name?: string | null; phone?: string | null; assigned_to?: string | null }[] };
-  const cMap = Object.fromEntries((clients ?? []).map((c) => [c.id, c]));
+  const clientIds = [...new Set([...fus.map((f) => f.client_id), ...clientFu.map((c) => c.id)])];
+  const clients = await fetchByIds(clientIds, (chunk) =>
+    supabase.from("clients").select("id,lead_name,name,phone,assigned_to").in("id", chunk),
+  );
+  const cMap = Object.fromEntries(clients.map((c) => [c.id, c]));
 
   type FuRow = {
     id: string;
@@ -902,7 +997,7 @@ async function buildFollowups(
   };
 
   const rows: FuRow[] = [];
-  for (const f of fus ?? []) {
+  for (const f of fus) {
     const c = cMap[f.client_id];
     const eid = f.assigned_employee_id || c?.assigned_to || "";
     if (scopeIds.length && eid && !scopeIds.includes(eid)) continue;
@@ -930,7 +1025,7 @@ async function buildFollowups(
     });
   }
 
-  for (const c of clientFu ?? []) {
+  for (const c of clientFu) {
     if (!c.follow_up_date) continue;
     const already = rows.some((r) => r.date === c.follow_up_date && r.leadName === (c.lead_name || c.name));
     if (already) continue;
@@ -968,7 +1063,7 @@ async function buildFollowups(
     overdueByEmployee[r.employee] = (overdueByEmployee[r.employee] || 0) + 1;
   }
 
-  return { meta, summary, overdueByEmployee, rows, total: rows.length };
+  return { meta, ...partialPayload(truncated), summary, overdueByEmployee, rows, total: rows.length };
 }
 
 async function buildTasks(
@@ -998,22 +1093,28 @@ async function buildTasks(
     return true;
   };
 
-  const [actsRes, openRes] = await Promise.all([
-    supabase
-      .from("task_activities")
-      .select("id,task_id,actor_id,notes,created_at")
-      .eq("activity_type", "task_completed")
-      .gte("created_at", fromTs)
-      .lte("created_at", toTs)
-      .order("created_at", { ascending: false })
-      .limit(3000),
-    (() => {
+  const truncated = new Set<string>();
+
+  const [acts, openTaskRows] = await Promise.all([
+    fetchAllRows("task completions", truncated, (f, t) =>
+      supabase
+        .from("task_activities")
+        .select("id,task_id,actor_id,notes,created_at")
+        .eq("activity_type", "task_completed")
+        .gte("created_at", fromTs)
+        .lte("created_at", toTs)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(f, t),
+    ),
+    fetchAllRows("open tasks", truncated, (f, t) => {
       let q = supabase
         .from("tasks")
         .select(taskSelect)
         .neq("status", "Completed")
         .order("due_date", { ascending: true })
-        .limit(2000);
+        .order("id", { ascending: true })
+        .range(f, t);
       if (filters.employeeIds.length === 1) {
         q = q.or(`assigned_to.eq.${filters.employeeIds[0]},assigned_by.eq.${filters.employeeIds[0]}`);
       } else if (filters.employeeIds.length > 1) {
@@ -1022,24 +1123,27 @@ async function buildTasks(
         q = q.in("assigned_to", scopeIds);
       }
       return q;
-    })(),
+    }),
   ]);
 
-  const acts = actsRes.data ?? [];
   const completedIds = [...new Set(acts.map((a) => a.task_id).filter(Boolean))];
-  const completedTasksRes = completedIds.length
-    ? await supabase.from("tasks").select(taskSelect).in("id", completedIds.slice(0, 1000))
-    : { data: [] as Record<string, unknown>[] };
-  const completedById = Object.fromEntries((completedTasksRes.data ?? []).map((t) => [t.id, t]));
+  const completedTasks = await fetchByIds(completedIds, (chunk) =>
+    supabase.from("tasks").select(taskSelect).in("id", chunk),
+  );
+  const completedById = Object.fromEntries(completedTasks.map((t) => [t.id, t]));
 
-  const fallbackCompletedRes = await supabase
-    .from("tasks")
-    .select(taskSelect)
-    .eq("status", "Completed")
-    .gte("updated_at", fromTs)
-    .lte("updated_at", toTs)
-    .limit(1000);
-  const fallbackCompleted = (fallbackCompletedRes.data ?? []).filter((t) => !completedById[t.id]);
+  const fallbackRows = await fetchAllRows("completed tasks", truncated, (f, t) =>
+    supabase
+      .from("tasks")
+      .select(taskSelect)
+      .eq("status", "Completed")
+      .gte("updated_at", fromTs)
+      .lte("updated_at", toTs)
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(f, t),
+  );
+  const fallbackCompleted = fallbackRows.filter((t) => !completedById[t.id]);
 
   type TaskRow = {
     id: string;
@@ -1100,7 +1204,7 @@ async function buildTasks(
     });
   }
 
-  let openRows: TaskRow[] = (openRes.data ?? [])
+  const openRows: TaskRow[] = openTaskRows
     .filter(
       (t) =>
         inRange(t.due_date, filters.from, filters.to) ||
@@ -1146,6 +1250,7 @@ async function buildTasks(
 
   return {
     meta,
+    ...partialPayload(truncated),
     total: rows.length,
     completed: completedRows.length,
     pending: openRows.filter((r) => !r.overdue).length,
@@ -1162,13 +1267,18 @@ async function buildConversion(
   scopeIds: string[],
   meta: Record<string, unknown>,
 ) {
-  const { data } = await supabase
-    .from("clients")
-    .select("id,source,status,admission_status,final_fee,fee_quoted,assigned_to,created_at,updated_at,interested_program")
-    .in("assigned_to", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
-    .limit(8000);
+  const truncated = new Set<string>();
+  const data = await fetchAllRows("leads", truncated, (f, t) =>
+    supabase
+      .from("clients")
+      .select("id,source,status,admission_status,final_fee,fee_quoted,assigned_to,created_at,updated_at,interested_program")
+      .in("assigned_to", scopeOr(scopeIds))
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(f, t),
+  );
 
-  let clients = data ?? [];
+  let clients = data;
   if (filters.leadSources.length) clients = clients.filter((c) => inList(c.source, filters.leadSources));
   if (filters.courses.length) {
     clients = clients.filter((c) => courseInList(c.interested_program, null, filters.courses));
@@ -1206,7 +1316,7 @@ async function buildConversion(
     }))
     .sort((a, b) => b.generated - a.generated);
 
-  return { meta, rows, totalLeads: clients.length };
+  return { meta, ...partialPayload(truncated), rows, totalLeads: clients.length };
 }
 
 async function buildAdmissionsRevenue(
@@ -1217,15 +1327,20 @@ async function buildAdmissionsRevenue(
   meta: Record<string, unknown>,
   section: AnalyticsSectionId,
 ) {
-  const { data } = await supabase
-    .from("clients")
-    .select(
-      "id,lead_name,name,assigned_to,interested_program,service_interest,admission_status,status,final_fee,fee_quoted,payment_status,updated_at,created_at",
-    )
-    .in("assigned_to", scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"])
-    .limit(8000);
+  const truncated = new Set<string>();
+  const data = await fetchAllRows("leads", truncated, (f, t) =>
+    supabase
+      .from("clients")
+      .select(
+        "id,lead_name,name,assigned_to,interested_program,service_interest,admission_status,status,final_fee,fee_quoted,payment_status,updated_at,created_at",
+      )
+      .in("assigned_to", scopeOr(scopeIds))
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(f, t),
+  );
 
-  let clients = (data ?? []).filter(
+  let clients = data.filter(
     (c) =>
       isAdmissionLead(c) ||
       ["Partial", "Paid", "Refunded"].includes(c.payment_status || "") ||
@@ -1285,6 +1400,7 @@ async function buildAdmissionsRevenue(
   return {
     meta,
     section,
+    ...partialPayload(truncated),
     byCourse: Object.values(byCourse).sort((a, b) => b.admissions - a.admissions),
     byEmployee: employeeRows,
     detailRows: clients.map((c) => ({
@@ -1482,7 +1598,7 @@ async function buildTeamTimeline(
 ) {
   const fromTs = isoStartOfDay(filters.from);
   const toTs = isoEndOfDay(filters.to);
-  const emptyScope = scopeIds.length ? scopeIds : ["00000000-0000-0000-0000-000000000000"];
+  const emptyScope = scopeOr(scopeIds);
 
   const [calls, acts, collegeActs, taskActs, eod] = await Promise.all([
     supabase
@@ -1617,59 +1733,52 @@ async function buildEod(
   scopeIds: string[],
   meta: Record<string, unknown>,
 ) {
-  let q = supabase
-    .from("work_summaries")
-    .select(
-      "id,employee_id,summary_date,completed_work,pending_work,challenges,tomorrow_plan,support_required,additional_remarks,manager_remarks,status,reviewed_by,reviewed_at,created_at",
-    )
-    .gte("summary_date", filters.from)
-    .lte("summary_date", filters.to)
-    .order("summary_date", { ascending: false })
-    .limit(1000);
-  if (scopeIds.length) q = q.in("employee_id", scopeIds);
+  const truncated = new Set<string>();
+  type WorkSummaryRow = {
+    id: string;
+    employee_id: string | null;
+    summary_date: string;
+    [key: string]: unknown;
+  };
+  const FULL_SELECT =
+    "id,employee_id,summary_date,completed_work,pending_work,challenges,tomorrow_plan,support_required,additional_remarks,manager_remarks,status,reviewed_by,reviewed_at,created_at";
+  const LEGACY_SELECT =
+    "id,employee_id,summary_date,completed_work,pending_work,challenges,tomorrow_plan,manager_remarks,status,created_at";
 
-  const { data, error } = await q;
-  if (error && /support_required|additional_remarks|reviewed_by|column/i.test(error.message)) {
-    const fb = await supabase
+  // Probe once so the extended-column fallback is decided before paging.
+  const probe = await supabase.from("work_summaries").select(FULL_SELECT).limit(1);
+  const useLegacy = Boolean(
+    probe.error && /support_required|additional_remarks|reviewed_by|column/i.test(probe.error.message),
+  );
+
+  const eodSelect = useLegacy ? LEGACY_SELECT : FULL_SELECT;
+  const eodRows = await fetchAllRows<WorkSummaryRow>("EOD summaries", truncated, (f, t) => {
+    let q = supabase
       .from("work_summaries")
-      .select(
-        "id,employee_id,summary_date,completed_work,pending_work,challenges,tomorrow_plan,manager_remarks,status,created_at",
-      )
+      .select(eodSelect)
       .gte("summary_date", filters.from)
       .lte("summary_date", filters.to)
       .order("summary_date", { ascending: false })
-      .limit(1000);
-    const rows = ((scopeIds.length
-      ? (fb.data ?? []).filter((r) => scopeIds.includes(r.employee_id || ""))
-      : fb.data) ?? []
-    ).map((r) => ({
-      ...r,
-      employeeName: nameOf(profileMap[r.employee_id || ""]),
-      support_required: null,
-      additional_remarks: null,
-      reviewed_by: null,
-      reviewed_at: null,
-    }));
-    return {
-      meta,
-      warning:
-        "Run AJ_Academy_SB/analytics_reporting_schema.sql to enable support_required / review columns on work_summaries.",
-      rows,
-      missingEmployees: [],
-    };
-  }
+      .order("id", { ascending: true })
+      .range(f, t);
+    if (scopeIds.length) q = q.in("employee_id", scopeIds);
+    // The select list is chosen at runtime, so the row shape cannot be inferred.
+    return q as unknown as PagedQuery<WorkSummaryRow>;
+  });
 
-  const rows = (data ?? []).map((r) => ({
+  const rows = eodRows.map((r) => ({
     ...r,
     employeeName: nameOf(profileMap[r.employee_id || ""]),
+    ...(useLegacy
+      ? { support_required: null, additional_remarks: null, reviewed_by: null, reviewed_at: null }
+      : {}),
   }));
 
   const submittedIds = new Set(rows.map((r) => `${r.employee_id}:${r.summary_date}`));
   const missingEmployees: { employeeId: string; employeeName: string; date: string }[] = [];
   for (const id of scopeIds) {
     for (const d of eachDateKey(filters.from, filters.to)) {
-      const dt = new Date(d);
-      if (dt.getDay() === 0 || dt.getDay() === 6) continue;
+      if (isWeekendKeyIst(d)) continue;
       if (!submittedIds.has(`${id}:${d}`)) {
         missingEmployees.push({
           employeeId: id,
@@ -1680,5 +1789,16 @@ async function buildEod(
     }
   }
 
-  return { meta, rows, missingEmployees: missingEmployees.slice(0, 200) };
+  return {
+    meta,
+    ...partialPayload(truncated),
+    ...(useLegacy
+      ? {
+          warning:
+            "Run AJ_Academy_SB/analytics_reporting_schema.sql to enable support_required / review columns on work_summaries.",
+        }
+      : {}),
+    rows,
+    missingEmployees: missingEmployees.slice(0, 200),
+  };
 }

@@ -1,5 +1,12 @@
+import { Suspense } from "react";
+
 import { AnalyticsWorkbench } from "@/components/analytics/AnalyticsWorkbench";
 
 export default function EmployeeReportsPage() {
-  return <AnalyticsWorkbench mode="employee" />;
+  // The workbench reads ?report= to pick the selected report.
+  return (
+    <Suspense fallback={null}>
+      <AnalyticsWorkbench mode="employee" />
+    </Suspense>
+  );
 }

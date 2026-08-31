@@ -58,15 +58,29 @@ export function resolveDateRange(
   return { from: today, to: today };
 }
 
+/**
+ * IST calendar days between two IST date keys, inclusive.
+ * Anchored at IST midday so a UTC host cannot shift the day boundary.
+ */
 export function eachDateKey(from: string, to: string): string[] {
   const out: string[] = [];
-  const cur = parseDateKey(from);
-  const end = parseDateKey(to);
-  while (cur <= end) {
-    out.push(toDateKey(cur));
-    cur.setDate(cur.getDate() + 1);
+  const cur = new Date(`${from.slice(0, 10)}T12:00:00+05:30`);
+  const endKey = to.slice(0, 10);
+  if (Number.isNaN(cur.getTime())) return out;
+  // Guard against a reversed or malformed range running away.
+  for (let i = 0; i < 3660; i += 1) {
+    const key = toDateKeyIst(cur);
+    if (key > endKey) break;
+    out.push(key);
+    cur.setUTCDate(cur.getUTCDate() + 1);
   }
   return out;
+}
+
+/** Weekday (Mon–Fri) IST date keys in a range. */
+export function isWeekendKeyIst(dateKey: string): boolean {
+  const day = new Date(`${dateKey.slice(0, 10)}T12:00:00+05:30`).getUTCDay();
+  return day === 0 || day === 6;
 }
 
 /** Start of IST calendar day as UTC ISO (for timestamptz filters). */

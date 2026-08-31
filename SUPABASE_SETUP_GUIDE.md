@@ -217,7 +217,12 @@ Run **`analytics_reporting_schema.sql`** after attendance, tasks, CRM, and `lead
 - Call Activity includes sessions by all staff roles (`admin`, `super_admin`, `employee`, `mentor`, `freelancer`) unless Employee filter is applied.
 - Call Activity also includes **College Visits dialer Phone Call** logs from `college_visit_activities` (not only Student Master `lead_call_sessions`). Report day bounds use Asia/Kolkata.
 - **Task Completion** lists work **finished in the selected IST dates** from `task_activities` (`task_completed`) plus the completion note. It is not “tasks due today.” Open/overdue tasks are separate rows. Assignee names include students. **Daily Employee Report → Tasks Done** uses the same completion events. **Employee Timeline** shows the team feed when no employee is selected.
-- Report filters for Employee, Department, Role, Course, Lead source, Lead status, Task status, and Admission status are **multiselect** dropdowns (CRM lists for course/source/status). Search stays free text.
+- The report is chosen from the **Report Type** dropdown inside the filter panel (no pill row) and is kept in the URL, e.g. `/admin/reports?report=daily-employee`. Old raw ids (`?report=daily`) still resolve.
+- Global filters are only **Report Type, Start Date, End Date, Employee, Department, Role, Search**. Start / End are date pickers defaulting to today in Asia/Kolkata; the Today / Yesterday / This Week / This Month presets and the **Apply / Refresh button are gone** — selects and dates reload immediately and Search is debounced 400 ms, with in-flight requests aborted.
+- Course, Lead source, Lead status, Task status and Admission status were removed from the global bar. **No database fields were dropped** and the API still accepts them; Lead status, Admission status and Task status now appear only inside Lead Conversion, Admission Report and Task Completion respectively.
+- Dashboard Overview is trimmed to **8 KPI cards**. Pending Revenue moved to the Revenue report and Tasks Pending to Task Completion.
+- Report sources are **paged rather than capped**, so totals no longer silently understate once a table grows. If a source hits the 30,000-row ceiling the report shows an amber partial-data banner naming it.
+- The productivity formula is **unchanged** and still role-blind; the proposed role-aware replacement in `docs/reports/REPORTS_ANALYTICS_REDESIGN_AUDIT.md` needs approval before implementation.
 - Full module docs: `AJ_Academy_OS/docs/REPORTS_ANALYTICS.md`
 
 Also run **`reports_analytics_schema.sql`** after `lead_call_workflow_schema.sql` (and ideally after `student_lead_master_aux_schema.sql` + `student_master_columns_patch.sql` for follow-ups / admissions). Safe to re-run. Adds:
