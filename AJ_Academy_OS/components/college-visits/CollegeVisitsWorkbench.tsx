@@ -127,11 +127,13 @@ import { parseOutcomeRemarkEntries } from "@/lib/outcomeRemarks";
 import { ProposalFileUpload, uploadProposalFile } from "@/components/shared/ProposalFileUpload";
 import type { ProposalFileMeta, ProposalStoredFile } from "@/lib/proposalFiles";
 
-type CollegeOutreachFlags = {
-  phoneCalled?: boolean;
-  whatsappSent?: boolean;
-  emailSent?: boolean;
-};
+import {
+  mergeOutreachFlags,
+  type CollegeOutreachFlags,
+} from "@/lib/college-visits/outreachActivity";
+
+/** Employee a college is assigned to via a task, keyed by college id. */
+type CollegeAssignedEmployee = { id: string; name: string | null };
 
 type OutreachPickerState =
   | { mode: "phone"; row: CollegeVisitRow; targets: CollegeOutreachTarget[] }
@@ -241,7 +243,10 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [resolutionSaving, setResolutionSaving] = useState(false);
   const [importUploadDialogFile, setImportUploadDialogFile] = useState<File | null>(null);
   const [importDisplayName, setImportDisplayName] = useState("");
+  /** Optimistic flags for the click just made; server flags live in `outreachSaved`. */
   const [outreachDone, setOutreachDone] = useState<Record<string, CollegeOutreachFlags>>({});
+  const [outreachSaved, setOutreachSaved] = useState<Record<string, CollegeOutreachFlags>>({});
+  const [assignedByCollege, setAssignedByCollege] = useState<Record<string, CollegeAssignedEmployee>>({});
   const [whatsAppTemplates, setWhatsAppTemplates] = useState<string[]>([]);
   const [cvLists, setCvLists] = useState<CollegeVisitSettingsLists>(() => defaultCollegeVisitSettingsLists());
   const [addingPipeline, setAddingPipeline] = useState(false);
@@ -461,6 +466,69 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const markOutreach = useCallback((visitId: string, patch: CollegeOutreachFlags) => {
     setOutreachDone((prev) => ({ ...prev, [visitId]: { ...prev[visitId], ...patch } }));
   }, []);
+
+  /**
+   * Hydrates the Call / WhatsApp / Email icon state and the real assignee from
+   * the server. Without this the icons only reflect clicks made in this tab and
+   * revert to red on reload, and Owner shows the importing admin forever.
+   */
+  const loadRowStatus = useCallback(async (ids: string[]) => {
+    if (!ids.length) {
+      setOutreachSaved({});
+      setAssignedByCollege({});
+      return;
+    }
+    try {
+      const res = await fetch("/api/college-visits/row-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        outreach?: Record<string, CollegeOutreachFlags>;
+        assigned?: Record<string, CollegeAssignedEmployee>;
+      };
+      setOutreachSaved(json.outreach ?? {});
+      setAssignedByCollege(json.assigned ?? {});
+    } catch {
+      // Non-fatal: icons fall back to optimistic state only.
+    }
+  }, []);
+
+  /** Server flags OR the optimistic click, so a fresh click never flickers red. */
+  const outreachFlagsFor = useCallback(
+    (visitId: string) => mergeOutreachFlags(outreachSaved[visitId], outreachDone[visitId]),
+    [outreachDone, outreachSaved],
+  );
+
+  /**
+   * Owner shows who the work sits with. A task assignment does not transfer CRM
+   * ownership (`college_visits.assigned_to` stays the admin who imported the
+   * row), so the task assignee takes precedence when one exists.
+   */
+  const ownerLabelFor = useCallback(
+    (row: CollegeVisitRow) => {
+      const viaTask = assignedByCollege[row.id];
+      if (viaTask) return ownerNameMap[viaTask.id] || viaTask.name || "-";
+      return row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-";
+    },
+    [assignedByCollege, ownerNameMap],
+  );
+
+  const visitIdsKey = useMemo(
+    () =>
+      visits
+        .map((v) => v.id)
+        .sort()
+        .join(","),
+    [visits],
+  );
+
+  useEffect(() => {
+    void loadRowStatus(visitIdsKey ? visitIdsKey.split(",") : []);
+  }, [visitIdsKey, loadRowStatus]);
 
   const handleCollegePhoneClick = useCallback(
     async (row: CollegeVisitRow, phoneOverride?: string, targetLabel?: string) => {
@@ -2651,7 +2719,7 @@ return (
                     const selectedContact = selectedCollegeContact(row, outreachContactIdFor(row));
                     const phone = anyCollegeOutreachPhone(row);
                     const email = anyCollegeOutreachEmail(row);
-                    const flags = outreachDone[row.id] ?? {};
+                    const flags = outreachFlagsFor(row.id);
                     const person = selectedContact?.name?.trim() || row.connected_person_name || "-";
                     const personRole = selectedContact?.role?.trim() || row.connected_person_role || "";
                     const stagingRow = stagingRowByVisitId.get(row.id);
@@ -2753,7 +2821,7 @@ return (
                         <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.last_follow_up_date)}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.next_follow_up_date)}</td>
                         <td className={tdClass}>{row.priority}</td>
-                        <td className={`${tdClass} min-w-[11rem]`}>{row.assigned_to ? ownerNameMap[row.assigned_to] || "-" : "-"}</td>
+                        <td className={`${tdClass} min-w-[11rem]`}>{ownerLabelFor(row)}</td>
                         <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate`} title={row.description ?? ""}>
                           {row.description || "-"}
                         </td>
@@ -2842,7 +2910,7 @@ return (
                     collegeOutreachTargetsForContact(row, outreachContactId, "phone")[0]?.phone || "";
                   const email =
                     collegeOutreachTargetsForContact(row, outreachContactId, "email")[0]?.email || "";
-                  const flags = outreachDone[row.id] ?? {};
+                  const flags = outreachFlagsFor(row.id);
                   const person = selectedContact?.name?.trim() || row.connected_person_name || "—";
                   const personRole = selectedContact?.role?.trim() || row.connected_person_role || "";
                   return (
@@ -2886,7 +2954,7 @@ return (
                         { label: "Last Follow-up Date", value: formatDisplayDate(row.last_follow_up_date) || "—" },
                         { label: "Next Follow-up Date", value: formatDisplayDate(row.next_follow_up_date) || "—" },
                         { label: "Priority", value: dash(row.priority) },
-                        { label: "Owner", value: row.assigned_to ? ownerNameMap[row.assigned_to] || "—" : "—" },
+                        { label: "Owner", value: ownerLabelFor(row) },
                         { label: "Description", value: dash(row.description), clamp: true },
                         { label: "Last Outcome / Remarks", value: dash(row.last_outcome_remarks), clamp: true },
                         { label: "Days Since Last Follow-up", value: days != null ? String(days) : "—" },
@@ -3057,7 +3125,7 @@ return (
               <div>
                 <h3 className="font-semibold text-[#0f172a]">{viewVisit.college_name}</h3>
                 <p className="text-xs text-[#64748b]">
-                  {viewVisit.location || "No location"} | Owner: {viewVisit.assigned_to ? ownerNameMap[viewVisit.assigned_to] : "Unassigned"}
+                  {viewVisit.location || "No location"} | Owner: {ownerLabelFor(viewVisit)}
                 </p>
               </div>
               <button type="button" className="rounded-full border px-2 py-1 text-sm" onClick={() => setViewVisit(null)}>
