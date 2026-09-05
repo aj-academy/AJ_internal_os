@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requirePortalMemberApiSession } from "@/lib/auth/requirePortalMemberApi";
 import { policyCategoryForRole } from "@/lib/security/policies";
-import { isValidUuid } from "@/lib/security/validate";
 import type { UserRole } from "@/types/profile";
 
 export async function GET() {

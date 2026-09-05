@@ -329,7 +329,7 @@ export function CollegePipelineBoard({
         </div>
       ) : null}
 
-      <div className="overflow-x-auto pb-2">
+      <div className="w-full overflow-x-auto pb-2">
         <div className="flex h-[min(70vh,720px)] min-h-[360px] min-w-[980px] gap-3">
           {statuses.map((statusCol) => {
             const col = visits.filter((v) => v.visit_status === statusCol);
