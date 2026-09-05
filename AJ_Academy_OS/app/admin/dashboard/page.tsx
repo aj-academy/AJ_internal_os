@@ -145,7 +145,6 @@ export default function AdminDashboardPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [studentLeads, setStudentLeads] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [transactions, setTransactions] = useState<Tx[]>([]);
@@ -164,7 +163,7 @@ export default function AdminDashboardPage() {
     try {
       const queryErrors: SupabaseQueryError[] = [];
 
-      const [pr, at, cl, sl, pj, tk, tx, tm, ec] = await Promise.all([
+      const [pr, at, cl, pj, tk, tx, tm, ec] = await Promise.all([
         fetchOrEmpty(
           "profiles",
           supabase.from("profiles").select("id,full_name,email,department,role,status,created_at").limit(3000).returns<Profile[]>(),
@@ -184,13 +183,7 @@ export default function AdminDashboardPage() {
         ),
         fetchOrEmpty(
           "clients",
-          supabase.from("clients").select("id,name,company_name,status,follow_up_date,created_at,updated_at").limit(10000).returns<Client[]>(),
-          queryErrors,
-          [],
-        ),
-        fetchOrEmpty(
-          "student_leads",
-          supabase.from("student_leads").select("id,name,lead_name,company_name,status,admission_status,follow_up_date,created_at,updated_at").limit(10000).returns<Client[]>(),
+          supabase.from("clients").select("id,name,lead_name,company_name,status,admission_status,follow_up_date,created_at,updated_at").limit(10000).returns<Client[]>(),
           queryErrors,
           [],
         ),
@@ -273,7 +266,6 @@ export default function AdminDashboardPage() {
       apply("profiles", pr, setProfiles);
       apply("attendance_records", at, setAttendance);
       apply("clients", cl, setClients);
-      apply("student_leads", sl, setStudentLeads);
       apply("projects", pj, setProjects);
       apply("tasks", tk, setTasks);
       apply("finance_transactions", tx, setTransactions);
@@ -310,17 +302,17 @@ export default function AdminDashboardPage() {
     setRefreshing(true);
     setRefreshWarning(null);
     try {
-      const [{ data: clData, error: clErr }, { data: slData, error: slErr }] = await Promise.all([
-        supabase.from("clients").select("id,name,company_name,status,follow_up_date,created_at,updated_at").limit(10000).returns<Client[]>(),
-        supabase.from("student_leads").select("id,name,lead_name,company_name,status,admission_status,follow_up_date,created_at,updated_at").limit(10000).returns<Client[]>(),
-      ]);
+      const { data, error: clientsError } = await supabase
+        .from("clients")
+        .select("id,name,lead_name,company_name,status,admission_status,follow_up_date,created_at,updated_at")
+        .limit(10000)
+        .returns<Client[]>();
       if (seq !== clientsSeqRef.current) return;
-      if (clErr && slErr) {
+      if (clientsError) {
         setRefreshWarning("Unable to refresh. Showing the latest available data.");
         return;
       }
-      if (!clErr) setClients(clData ?? []);
-      if (!slErr) setStudentLeads(slData ?? []);
+      setClients(data ?? []);
     } catch {
       if (seq !== clientsSeqRef.current) return;
       setRefreshWarning("Unable to refresh. Showing the latest available data.");
@@ -347,7 +339,6 @@ export default function AdminDashboardPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleLoad)
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records" }, scheduleLoad)
       .on("postgres_changes", { event: "*", schema: "public", table: "clients" }, scheduleClientsRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "student_leads" }, scheduleClientsRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, scheduleLoad)
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, scheduleLoad)
       .on("postgres_changes", { event: "*", schema: "public", table: "finance_transactions" }, scheduleLoad)
@@ -393,11 +384,12 @@ export default function AdminDashboardPage() {
   const completedProjects = projects.filter((p) => projectStatus(p.status).toLowerCase() === "completed").length;
   const pendingTasks = tasks.filter((t) => t.status !== "Completed").length;
   const completedTasks = tasks.filter((t) => t.status === "Completed").length;
-  const allLeads = studentLeads.length > 0 ? studentLeads : clients;
-  const totalLeads = allLeads.length;
-  const convertedClients = studentLeads.length > 0
-    ? studentLeads.filter((c) => (c.admission_status || "").toLowerCase() === "admitted" || (c.status || "").toLowerCase() === "admitted").length
-    : clients.filter((c) => leadStage(c.status) === "Converted").length;
+  const allLeads = clients;
+  const totalLeads = clients.length;
+  const convertedClients = clients.filter((c) => {
+    const s = (c.status || "").toLowerCase();
+    return s === "converted" || s === "admitted";
+  }).length;
 
   const revenue = transactions.filter((t) => t.transaction_type === "Income" && inRange(t.transaction_date, range)).reduce((a, t) => a + Number(t.amount), 0);
   const expenses = transactions.filter((t) => t.transaction_type === "Expense" && inRange(t.transaction_date, range)).reduce((a, t) => a + Number(t.amount), 0);
@@ -530,8 +522,8 @@ export default function AdminDashboardPage() {
     { title: "Completed Projects", value: `${completedProjects}`, trendVal: trend(completedProjects, projects.filter((p) => projectStatus(p.status).toLowerCase() === "completed" && inRange(p.updated_at, prev)).length), icon: CheckCircle2, description: "Projects completed overall." },
     { title: "Pending Tasks", value: `${pendingTasks}`, trendVal: trend(pendingTasks, tasks.filter((t) => t.status !== "Completed" && inRange(t.updated_at, prev)).length), icon: ClipboardList, description: "Open tasks awaiting completion." },
     { title: "Completed Tasks", value: `${completedTasks}`, trendVal: trend(completedTasks, tasks.filter((t) => t.status === "Completed" && inRange(t.updated_at, prev)).length), icon: ListChecks, description: "Completed tasks overall." },
-    { title: "Total Leads", value: `${totalLeads}`, trendVal: trend(totalLeads, allLeads.filter((c) => inRange(c.created_at, prev)).length), icon: UsersRound, description: "Lead/client records." },
-    { title: "Converted Clients", value: `${convertedClients}`, trendVal: trend(convertedClients, (studentLeads.length > 0 ? studentLeads : clients).filter((c) => (studentLeads.length > 0 ? (c.admission_status || c.status || "").toLowerCase() === "admitted" : leadStage(c.status) === "Converted") && inRange(c.updated_at, prev)).length), icon: UsersRound, description: "Admitted/converted leads." },
+    { title: "Total Leads", value: `${totalLeads}`, trendVal: trend(totalLeads, clients.filter((c) => inRange(c.created_at, prev)).length), icon: UsersRound, description: "Lead/client records." },
+    { title: "Converted Clients", value: `${convertedClients}`, trendVal: trend(convertedClients, clients.filter((c) => { const s = (c.status || "").toLowerCase(); return (s === "converted" || s === "admitted") && inRange(c.updated_at, prev); }).length), icon: UsersRound, description: "Converted pipeline records." },
     { title: "Monthly Revenue", value: formatInr(revenue), trendVal: trend(revenue, prevRevenue), icon: CircleDollarSign, description: "Income transactions in range." },
     { title: "Monthly Expenses", value: formatInr(expenses), trendVal: trend(expenses, prevExpenses), icon: CircleDollarSign, description: "Expense transactions in range." },
     { title: "Net Profit", value: formatInr(netProfit), trendVal: trend(netProfit, prevRevenue - prevExpenses), icon: TrendingUp, description: "Revenue - expenses." },
