@@ -868,6 +868,8 @@ function getClientLabel(p: ProjectRowLoose, clientMap: Record<string, ClientOpti
   const m = String(p.notes || "").match(/^\[client\](.+?)\n/);
   return m?.[1]?.trim() || "—";
 }
+
+function ProjectsDataTable({
   rows,
   loading,
   clientMap,
@@ -1102,7 +1104,8 @@ function getClientLabel(p: ProjectRowLoose, clientMap: Record<string, ClientOpti
               const delayed = isDelayedProject(p, today);
               const tc = teamMembers.filter((t) => t.project_id === p.id).length;
               const dl = p.deadline ? String(p.deadline).slice(0, 10) : "";
-              const clientName = getClientLabel(p, clientMap); = p.project_manager ? employeeNameMap[String(p.project_manager)] : "—";
+              const clientName = getClientLabel(p, clientMap);
+              const managerName = p.project_manager ? employeeNameMap[String(p.project_manager)] : "—";
               const primaryActions = [{ label: "View", onClick: () => onView(p) }];
               if (canEdit) primaryActions.push({ label: "Edit", onClick: () => onEdit(p) });
               const moreActions = isAdmin
