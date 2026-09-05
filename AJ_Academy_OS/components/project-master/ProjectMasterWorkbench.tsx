@@ -67,6 +67,7 @@ function emptyForm(lists?: Pick<ProjectSettingsLists, "statuses" | "priorities">
     project_name: "",
     project_code: "",
     client_id: "",
+    client_name: "",
     project_type: "",
     description: "",
     start_date: "",
@@ -325,6 +326,7 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
       project_name: String(p.project_name || ""),
       project_code: String(p.project_code || ""),
       client_id: String(p.client_id || ""),
+      client_name: p.client_id ? displayClientName(clientMap[p.client_id] || {}) : String(p.notes?.match(/^\[client\](.+?)\n/)?.[1] ?? ""),
       project_type: String(p.project_type || ""),
       description: String(p.description || ""),
       start_date: p.start_date ? String(p.start_date).slice(0, 10) : "",
@@ -336,14 +338,14 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
       team_ids: teamIds,
       status: normalizeProjectStatus(String(p.status)) as string,
       priority: (p.priority as string) || "Medium",
-      notes: String(p.notes || ""),
+      notes: String(p.notes || "").replace(/^\[client\].+?\n/, "").trim(),
     });
     setPanelOpen(true);
   };
 
   const saveProject = async () => {
     if (!userId || !canEditProjectFields || schemaMissing) return;
-    if (!form.project_name.trim() || !form.client_id) return;
+    if (!form.project_name.trim()) return;
     setSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -354,7 +356,7 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
     const payload: Record<string, unknown> = {
       project_name: form.project_name.trim(),
       project_code: form.project_code.trim() || null,
-      client_id: form.client_id,
+      client_id: form.client_id || null,
       project_type: form.project_type || null,
       description: form.description || null,
       start_date: form.start_date || null,
@@ -367,7 +369,9 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
       assigned_team: teamJson,
       status: form.status,
       priority: form.priority,
-      notes: form.notes || null,
+      notes: form.client_name.trim()
+        ? `[client]${form.client_name.trim()}\n${form.notes || ""}`.trim()
+        : form.notes || null,
     };
     try {
       if (editId) {
@@ -746,7 +750,7 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
                       return (
                         <tr key={p.id} className="border-t border-[#eef2ff]">
                           <td className="px-4 py-3 font-medium">{p.project_name}</td>
-                          <td className="px-4 py-3">{p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—"}</td>
+                          <td className="px-4 py-3">{getClientLabel(p, clientMap)}</td>
                           <td className="px-4 py-3">₹{bud.toLocaleString()}</td>
                           <td className="px-4 py-3">₹{adv.toLocaleString()}</td>
                           <td className="px-4 py-3">₹{pend.toLocaleString()}</td>
@@ -774,7 +778,7 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
                   else if (adv >= bud) paySt = "Paid";
                   else if (adv > 0) paySt = "Partially Paid";
                   if (pend > 0 && p.deadline && String(p.deadline).slice(0, 10) < today && normalizeProjectStatus(String(p.status)) !== "Completed") paySt = "Overdue";
-                  const clientName = p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—";
+                  const clientName = getClientLabel(p, clientMap);
                   return (
                     <MobileRecordCard
                       key={p.id}
@@ -829,7 +833,6 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
           open={panelOpen}
           title={editId ? "Edit project" : "New project"}
           value={form}
-          clients={clients}
           employees={employeeOpts}
           submitting={submitting}
           canEdit={canEditProjectFields}
@@ -860,7 +863,11 @@ export function ProjectMasterWorkbench({ variant }: { variant: ProjectMasterVari
   );
 }
 
-function ProjectsDataTable({
+function getClientLabel(p: ProjectRowLoose, clientMap: Record<string, ClientOption>) {
+  if (p.client_id) return displayClientName(clientMap[p.client_id] || {});
+  const m = String(p.notes || "").match(/^\[client\](.+?)\n/);
+  return m?.[1]?.trim() || "—";
+}
   rows,
   loading,
   clientMap,
@@ -1046,7 +1053,7 @@ function ProjectsDataTable({
                           ) : null}
                           <td className="px-4 py-3 font-mono text-xs">{p.project_code || "—"}</td>
                           <td className="px-4 py-3 font-semibold text-[#0f172a]">{p.project_name}</td>
-                          <td className="max-w-[180px] truncate px-4 py-3">{p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—"}</td>
+                          <td className="max-w-[180px] truncate px-4 py-3">{getClientLabel(p, clientMap)}</td>
                           <td className="px-4 py-3">{p.project_manager ? employeeNameMap[String(p.project_manager)] : "—"}</td>
                           <td className="px-4 py-3">{tc}</td>
                           <td className="px-4 py-3">{p.budget != null ? `₹${Number(p.budget).toLocaleString()}` : "—"}</td>
@@ -1095,8 +1102,7 @@ function ProjectsDataTable({
               const delayed = isDelayedProject(p, today);
               const tc = teamMembers.filter((t) => t.project_id === p.id).length;
               const dl = p.deadline ? String(p.deadline).slice(0, 10) : "";
-              const clientName = p.client_id ? displayClientName(clientMap[p.client_id] || {}) : "—";
-              const managerName = p.project_manager ? employeeNameMap[String(p.project_manager)] : "—";
+              const clientName = getClientLabel(p, clientMap); = p.project_manager ? employeeNameMap[String(p.project_manager)] : "—";
               const primaryActions = [{ label: "View", onClick: () => onView(p) }];
               if (canEdit) primaryActions.push({ label: "Edit", onClick: () => onEdit(p) });
               const moreActions = isAdmin
@@ -1190,7 +1196,7 @@ function ProjectViewDrawer({
             <h4 className="text-xs font-semibold uppercase text-[#94a3b8]">Overview</h4>
             <dl className="mt-2 grid grid-cols-2 gap-2 text-[#475569]">
               <dt className="text-xs text-[#94a3b8]">Client</dt>
-              <dd className="font-medium">{client ? displayClientName(client) : "—"}</dd>
+          <dd className="font-medium">{project.client_id ? displayClientName(client ?? {}) : (String(project.notes || "").match(/^\[client\](.+?)\n/)?.[1]?.trim() || "—")}</dd>
               <dt className="text-xs text-[#94a3b8]">Manager</dt>
               <dd>{managerName}</dd>
               <dt className="text-xs text-[#94a3b8]">Budget / Pending</dt>
@@ -1227,7 +1233,7 @@ function ProjectViewDrawer({
           </section>
           <section>
             <h4 className="text-xs font-semibold uppercase text-[#94a3b8]">Notes</h4>
-            <p className="mt-1 whitespace-pre-wrap text-[#475569]">{project.notes || "—"}</p>
+            <p className="mt-1 whitespace-pre-wrap text-[#475569]">{(project.notes || "").replace(/^\[client\].+?\n/, "").trim() || "—"}</p>
           </section>
           <section>
             <h4 className="text-xs font-semibold uppercase text-[#94a3b8]">Documents</h4>

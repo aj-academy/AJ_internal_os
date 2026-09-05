@@ -3,12 +3,12 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PROJECT_PRIORITIES, PROJECT_STATUSES, PROJECT_TYPES } from "@/components/project-master/projectConfig";
-import type { ClientOption } from "@/types/project";
 
 export interface ProjectFormValue {
   project_name: string;
   project_code: string;
   client_id: string;
+  client_name: string;
   project_type: string;
   description: string;
   start_date: string;
@@ -32,7 +32,6 @@ interface ProjectFormPanelProps {
   open: boolean;
   title: string;
   value: ProjectFormValue;
-  clients: ClientOption[];
   employees: EmployeeOpt[];
   submitting: boolean;
   canEdit: boolean;
@@ -48,7 +47,6 @@ export function ProjectFormPanel({
   open,
   title,
   value,
-  clients,
   employees,
   submitting,
   canEdit,
@@ -104,19 +102,13 @@ export function ProjectFormPanel({
               </label>
               <label className="grid gap-1">
                 <span className="font-medium text-[#334155]">Client</span>
-                <select
+                <Input
                   disabled={!canEdit}
-                  className="h-9 w-full rounded-lg border border-[#e8dcc8] bg-white px-3"
-                  value={value.client_id}
-                  onChange={(e) => onChange({ ...value, client_id: e.target.value })}
-                >
-                  <option value="">Select client</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {(c.lead_name || c.name || "Lead").trim()} {c.company_name ? `· ${c.company_name}` : ""}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Enter client name"
+                  value={value.client_name}
+                  onChange={(e) => onChange({ ...value, client_name: e.target.value })}
+                  className="border-[#e8dcc8]"
+                />
               </label>
               <label className="grid gap-1">
                 <span className="font-medium text-[#334155]">Project type</span>
@@ -231,27 +223,7 @@ export function ProjectFormPanel({
                   ))}
                 </select>
               </label>
-              <div>
-                <p className="mb-2 font-medium text-[#334155]">Assigned team</p>
-                <div className="max-h-40 space-y-2 overflow-y-auto rounded-lg border border-[#e8dcc8] p-2">
-                  {employees.map((em) => (
-                    <label key={em.id} className="flex items-center gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        disabled={!canEdit}
-                        checked={value.team_ids.has(em.id)}
-                        onChange={() => {
-                          const next = new Set(value.team_ids);
-                          if (next.has(em.id)) next.delete(em.id);
-                          else next.add(em.id);
-                          onChange({ ...value, team_ids: next });
-                        }}
-                      />
-                      {em.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
+
             </section>
 
             <section className="grid gap-2 sm:grid-cols-2">
@@ -304,7 +276,7 @@ export function ProjectFormPanel({
               type="button"
               data-requires-online
               className="mt-6 h-10 w-full rounded-full bg-[#c9a227] text-white"
-              disabled={submitting || !value.project_name.trim() || !value.client_id}
+              disabled={submitting || !value.project_name.trim()}
               onClick={onSubmit}
             >
               {submitting ? "Saving…" : "Save project"}
