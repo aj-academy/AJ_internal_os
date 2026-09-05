@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     const { data: itemRows } = await admin
       .from("payroll_items")
       .select(
-        "id, employee_id, status, payable_days, present_days, paid_leave_days, unpaid_leave_days, absent_days, gross_earnings, total_deductions, net_salary, error_message, salary_structure_id",
+        "id, employee_id, status, payable_days, present_days, paid_leave_days, unpaid_leave_days, absent_days, half_days, working_days, calendar_days, weekly_offs, holidays, missing_attendance_days, overtime_hours, earned_basic, earned_hra, earned_allowances, incentives, bonus, overtime_amount, reimbursements, arrears, other_earnings, gross_earnings, loss_of_pay, absence_deduction, late_deduction, fixed_deductions, advance_recovery, loan_recovery, penalty, statutory_deductions, other_deductions, total_deductions, net_salary, error_message, salary_structure_id, component_breakdown, calculation_errors",
       )
       .eq("payroll_period_id", period.id)
       .order("employee_id");

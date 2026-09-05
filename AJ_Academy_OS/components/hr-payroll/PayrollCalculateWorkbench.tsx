@@ -11,19 +11,44 @@ type Item = {
   id: string;
   employee_id: string;
   status: string;
-  payable_days: number;
+  calendar_days: number;
+  working_days: number;
+  weekly_offs: number;
+  holidays: number;
   present_days: number;
   paid_leave_days: number;
   unpaid_leave_days: number;
+  half_days: number;
   absent_days: number;
-  loss_of_pay: number;
+  missing_attendance_days: number;
+  payable_days: number;
+  overtime_hours: number;
+  earned_basic: number;
+  earned_hra: number;
+  earned_allowances: number;
+  incentives: number;
+  bonus: number;
+  overtime_amount: number;
+  reimbursements: number;
+  arrears: number;
+  other_earnings: number;
   gross_earnings: number;
+  loss_of_pay: number;
+  absence_deduction: number;
+  late_deduction: number;
+  fixed_deductions: number;
+  advance_recovery: number;
+  loan_recovery: number;
+  penalty: number;
+  statutory_deductions: number;
+  other_deductions: number;
   total_deductions: number;
   net_salary: number;
   error_message: string | null;
+  component_breakdown: Record<string, unknown> | null;
   bank_ready?: boolean;
   ready_for_payout?: boolean;
-  employee: { full_name: string | null; department: string | null; role?: string | null } | null;
+  employee: { full_name: string | null; department: string | null; designation?: string | null; role?: string | null } | null;
 };
 
 type Period = {
@@ -97,6 +122,8 @@ export function PayrollCalculateWorkbench() {
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("");
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [drawerItem, setDrawerItem] = useState<Item | null>(null);
+  const [prevItems, setPrevItems] = useState<Item[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,6 +136,16 @@ export function PayrollCalculateWorkbench() {
       setItems(json.items ?? []);
       setBounds(json.bounds);
       setMigrationRequired(json.migrationRequired ?? null);
+      // Fetch previous month for comparison
+      const prevMonth = month === 1 ? 12 : month - 1;
+      const prevYear = month === 1 ? year - 1 : year;
+      const prevRes = await fetch(`/api/hr/payroll/calculate?year=${prevYear}&month=${prevMonth}`, { cache: "no-store" });
+      if (prevRes.ok) {
+        const prevJson = await prevRes.json();
+        setPrevItems(prevJson.items ?? []);
+      } else {
+        setPrevItems([]);
+      }
       // Derive summary from loaded items if not already set
       if (json.items?.length) {
         const its: Item[] = json.items;
@@ -536,9 +573,14 @@ export function PayrollCalculateWorkbench() {
                     <td className="py-2 pr-3">{inr(Number(i.total_deductions))}</td>
                     <td className="py-2 pr-3 font-semibold text-emerald-700">{inr(Number(i.net_salary))}</td>
                     <td className="py-2 pr-3">
-                      <Button size="xs" variant="outline" onClick={() => setViewProfileId(i.employee_id)}>
-                        View
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button size="xs" variant="outline" onClick={() => setDrawerItem(i)}>
+                          Breakdown
+                        </Button>
+                        <Button size="xs" variant="outline" onClick={() => setViewProfileId(i.employee_id)}>
+                          Profile
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -560,6 +602,17 @@ export function PayrollCalculateWorkbench() {
       {viewProfileId ? (
         <AdminEmployeeProfileView profileId={viewProfileId} onClose={() => setViewProfileId(null)} />
       ) : null}
+
+      {/* ── Salary Breakdown Drawer ── */}
+      {drawerItem ? (
+        <SalaryBreakdownDrawer
+          item={drawerItem}
+          periodLabel={periodLabel}
+          prevItem={prevItems.find((p) => p.employee_id === drawerItem.employee_id) ?? null}
+          onClose={() => setDrawerItem(null)}
+        />
+      ) : null}
     </div>
   );
 }
+
