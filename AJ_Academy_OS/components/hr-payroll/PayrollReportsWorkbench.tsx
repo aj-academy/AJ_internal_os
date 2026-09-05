@@ -38,6 +38,9 @@ const REPORT_OPTIONS: { value: ReportKind; label: string }[] = [
   { value: "audit", label: "Audit trail" },
 ];
 
+const MONTH_NAMES = ["","January","February","March","April","May","June",
+  "July","August","September","October","November","December"];
+
 const inputClass = "h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm text-[#3d3428]";
 
 function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
@@ -178,10 +181,8 @@ export function PayrollReportsWorkbench() {
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Month
             <select className={inputClass} value={month} onChange={(e) => setMonth(Number(e.target.value))}>
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
+              {MONTH_NAMES.slice(1).map((name, i) => (
+                <option key={i + 1} value={i + 1}>{name}</option>
               ))}
             </select>
           </label>
@@ -222,7 +223,7 @@ export function PayrollReportsWorkbench() {
           >
             PDF
           </Button>
-          <p className="text-xs text-muted-foreground">{rows.length} row(s)</p>
+          <p className="text-xs text-muted-foreground">{MONTH_NAMES[month]} {year} · {rows.length} row(s)</p>
         </CardContent>
       </Card>
 
@@ -236,7 +237,7 @@ export function PayrollReportsWorkbench() {
               <tr className="border-b border-[#e8dcc8] text-xs text-muted-foreground">
                 {columns.map((c) => (
                   <th key={c} className="py-2 pr-3 font-medium whitespace-nowrap">
-                    {c.replace(/_/g, " ")}
+                    {c.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
                   </th>
                 ))}
               </tr>

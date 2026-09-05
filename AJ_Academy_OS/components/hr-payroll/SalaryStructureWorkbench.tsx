@@ -42,6 +42,10 @@ type ProfileBank = {
   missing: string[];
 };
 
+function inr(amount: number): string {
+  return "₹" + amount.toLocaleString("en-IN");
+}
+
 const inputClass = "h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm text-[#3d3428]";
 
 const emptyForm = {
@@ -380,8 +384,8 @@ export function SalaryStructureWorkbench() {
                       )}
                     </td>
                     <td className="py-2 pr-3">{h.salary_type}</td>
-                    <td className="py-2 pr-3">{Number(h.monthly_gross).toLocaleString()}</td>
-                    <td className="py-2 pr-3">{Number(h.basic_salary).toLocaleString()}</td>
+                    <td className="py-2 pr-3">{inr(Number(h.monthly_gross))}</td>
+                    <td className="py-2 pr-3">{inr(Number(h.basic_salary))}</td>
                     <td className="py-2 pr-3">{h.payroll_status}</td>
                     <td className="py-2 pr-3 text-xs text-muted-foreground">{h.change_reason ?? "—"}</td>
                   </tr>

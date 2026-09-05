@@ -21,6 +21,20 @@ type Payslip = {
   payroll_period_id: string;
 };
 
+const MONTH_NAMES = ["","January","February","March","April","May","June",
+  "July","August","September","October","November","December"];
+
+function fmtDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+}
+
+function slipStatusColor(s: string) {
+  if (s === "released" || s === "regenerated") return "bg-emerald-100 text-emerald-800";
+  if (s === "failed") return "bg-rose-100 text-rose-800";
+  return "bg-sky-100 text-sky-800";
+}
+
 const inputClass = "h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm text-[#3d3428]";
 
 export function PayslipsWorkbench() {
@@ -169,10 +183,8 @@ export function PayslipsWorkbench() {
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Month
             <select className={inputClass} value={month} onChange={(e) => setMonth(Number(e.target.value))}>
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
+              {MONTH_NAMES.slice(1).map((name, i) => (
+                <option key={i + 1} value={i + 1}>{name}</option>
               ))}
             </select>
           </label>
@@ -194,7 +206,7 @@ export function PayslipsWorkbench() {
             Release all
           </Button>
           <p className="text-xs text-muted-foreground">
-            {payslips.length} slips · {generated} generated · {released} released · {failed} failed
+            {MONTH_NAMES[month]} {year} · {payslips.length} slips · {generated} generated · {released} released · {failed} failed
           </p>
         </CardContent>
       </Card>
@@ -220,9 +232,13 @@ export function PayslipsWorkbench() {
                 <tr key={p.id} className="border-b border-[#f0e6d6]">
                   <td className="py-2 pr-3">{p.employee_name || p.employee_id.slice(0, 8)}</td>
                   <td className="py-2 pr-3 font-mono text-xs">{p.payslip_number}</td>
-                  <td className="py-2 pr-3 capitalize">{p.status}</td>
+                  <td className="py-2 pr-3">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${slipStatusColor(p.status)}`}>
+                      {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                    </span>
+                  </td>
                   <td className="py-2 pr-3 text-xs text-muted-foreground">
-                    {p.generated_at ? new Date(p.generated_at).toLocaleString() : "—"}
+                    {p.generated_at ? fmtDate(p.generated_at) : "—"}
                   </td>
                   <td className="py-2 pr-3">{p.download_count}</td>
                   <td className="py-2">
