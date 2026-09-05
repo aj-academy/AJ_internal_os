@@ -329,7 +329,7 @@ export function CollegePipelineBoard({
         </div>
       ) : null}
 
-      <div className="w-full overflow-x-auto pb-2">
+      <div className="w-full overflow-x-scroll pb-3" style={{ WebkitOverflowScrolling: "touch" }}>
         <div className="flex h-[min(70vh,720px)] min-h-[360px] min-w-[980px] gap-3">
           {statuses.map((statusCol) => {
             const col = visits.filter((v) => v.visit_status === statusCol);
@@ -341,7 +341,7 @@ export function CollegePipelineBoard({
                 <p className="mb-3 shrink-0 text-xs font-semibold uppercase tracking-wide text-[#475569]">
                   {statusCol} | {col.length}
                 </p>
-                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1">
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain pr-1">
                   {col.length === 0 ? (
                     <p className="px-1 text-xs text-[#94a3b8]">No colleges in this stage.</p>
                   ) : null}
