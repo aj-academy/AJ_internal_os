@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { requireStaffApiSession } from "@/lib/security";
+import { assertCanAccessProposalEntity, EntityAccessError } from "@/lib/college-visits/access";
+import { proposalVisibilityForUpload } from "@/lib/college-visits/fileVisibility";
 import {
   PROPOSALS_BUCKET,
   buildProposalObjectPath,
@@ -16,33 +19,8 @@ function parseKind(raw: FormDataEntryValue | null): ProposalEntityKind | null {
   return null;
 }
 
-async function assertCanAccessEntity(kind: ProposalEntityKind, entityId: string, userId: string) {
-  const admin = createAdminClient();
-  if (kind === "student") {
-    const { data, error } = await admin
-      .from("clients")
-      .select("id,assigned_to")
-      .eq("id", entityId)
-      .maybeSingle();
-    if (error || !data) throw new Error("Student lead not found.");
-    // Staff API already required; ownership enforced by client RLS for direct writes.
-    // Service role updates metadata after staff auth — allow assigned owner or any staff via route.
-    void userId;
-    void data.assigned_to;
-    return;
-  }
-  const { data, error } = await admin
-    .from("college_visits")
-    .select("id,assigned_to")
-    .eq("id", entityId)
-    .maybeSingle();
-  if (error || !data) throw new Error("College visit not found.");
-  void userId;
-  void data.assigned_to;
-}
-
 export async function POST(request: Request) {
-  const { response, user } = await requireStaffApiSession();
+  const { response, user, profile } = await requireStaffApiSession();
   if (response || !user) return response!;
 
   let form: FormData;
@@ -69,14 +47,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    await assertCanAccessEntity(kind, entityId, user.id);
+    const callerClient = await createClient();
+    await assertCanAccessProposalEntity(callerClient, kind, entityId);
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Not found." }, { status: 404 });
+    const status = e instanceof EntityAccessError ? e.status : 404;
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Not found." }, { status });
   }
 
   const mime = guessProposalMime(file.name, file.type);
   const path = buildProposalObjectPath(kind, entityId, file.name);
   const admin = createAdminClient();
+  const visibilityScope = proposalVisibilityForUpload(kind, profile?.role);
 
   // Keep latest file in legacy single-file columns for backward compatibility.
   const table = kind === "student" ? "clients" : "college_visits";
@@ -98,14 +79,7 @@ export async function POST(request: Request) {
     proposal_uploaded_at: new Date().toISOString(),
   };
 
-  const { error: updateError } = await admin.from(table).update(meta).eq("id", entityId);
-  if (updateError) {
-    await admin.storage.from(PROPOSALS_BUCKET).remove([path]);
-    return NextResponse.json({ error: updateError.message }, { status: 400 });
-  }
-
-  // Multi-file table (safe if patch not applied yet).
-  const { data: inserted } = await admin
+  const { data: inserted, error: insertError } = await admin
     .from("proposal_files")
     .insert({
       entity_type: kind,
@@ -115,9 +89,51 @@ export async function POST(request: Request) {
       file_type: mime || null,
       file_size: file.size,
       uploaded_by: user.id,
+      visibility_scope: visibilityScope,
     })
-    .select("id,entity_type,entity_id,file_name,file_path,file_type,file_size,uploaded_at,uploaded_by")
-    .maybeSingle();
+    .select(
+      "id,entity_type,entity_id,file_name,file_path,file_type,file_size,uploaded_at,uploaded_by,visibility_scope",
+    )
+    .single();
+  if (insertError || !inserted) {
+    await admin.storage.from(PROPOSALS_BUCKET).remove([path]);
+    return NextResponse.json(
+      {
+        error:
+          insertError?.message ||
+          "Could not store secure file metadata. Run college_visit_file_visibility_patch.sql.",
+      },
+      { status: 400 },
+    );
+  }
 
-  return NextResponse.json({ ok: true, ...meta, file: inserted ?? null });
+  if (kind === "student") {
+    const { error: updateError } = await admin.from(table).update(meta).eq("id", entityId);
+    if (updateError) {
+      await admin.from("proposal_files").delete().eq("id", inserted.id);
+      await admin.storage.from(PROPOSALS_BUCKET).remove([path]);
+      return NextResponse.json({ error: updateError.message }, { status: 400 });
+    }
+  }
+
+  if (kind === "college") {
+    await admin.from("college_visit_activities").insert({
+      college_visit_id: entityId,
+      activity_type: "File Uploaded",
+      notes: file.name,
+      created_by: user.id,
+      visibility_scope: visibilityScope,
+    });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    ...meta,
+    file: {
+      ...inserted,
+      uploader_name: profile?.full_name || profile?.email || null,
+      uploader_role: profile?.role || null,
+      can_remove: true,
+    },
+  });
 }

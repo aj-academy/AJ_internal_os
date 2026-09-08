@@ -2,16 +2,18 @@ import { expect, type Page } from "@playwright/test";
 import { optionalCreds } from "./env";
 import { waitForRoutedUrl } from "./navigation";
 
-export type E2eLoginRole = "admin" | "mentor" | "student";
+export type E2eLoginRole = "admin" | "employee" | "mentor" | "student";
 
 const ROLE_HOME: Record<E2eLoginRole, RegExp> = {
   admin: /\/admin\//,
+  employee: /\/employee\//,
   mentor: /\/mentor\//,
   student: /\/student\//,
 };
 
 const ROLE_LABEL: Record<E2eLoginRole, string> = {
   admin: "Admin",
+  employee: "Employee",
   mentor: "Mentor",
   student: "Student",
 };
@@ -86,6 +88,6 @@ export async function loginAs(
   await waitForRoutedUrl(page, ROLE_HOME[role]);
 }
 
-export function credsFor(role: "ADMIN" | "MENTOR" | "STUDENT") {
+export function credsFor(role: "ADMIN" | "EMPLOYEE" | "MENTOR" | "STUDENT") {
   return optionalCreds(role);
 }

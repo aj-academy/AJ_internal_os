@@ -1,14 +1,21 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { requireStaffApiSession } from "@/lib/security";
+import {
+  assertCanAccessProposalEntity,
+  assertProposalPathMatchesEntity,
+  canActorReadFile,
+  EntityAccessError,
+} from "@/lib/college-visits/access";
+import { isAdminRole } from "@/lib/college-visits/fileVisibility";
 import { PROPOSALS_BUCKET, type ProposalEntityKind } from "@/lib/proposalFiles";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const { response, user } = await requireStaffApiSession();
+  const { response, user, profile } = await requireStaffApiSession();
   if (response || !user) return response!;
-  void user;
 
   let body: unknown;
   try {
@@ -27,17 +34,56 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "entityType and entityId are required." }, { status: 400 });
   }
 
+  try {
+    const callerClient = await createClient();
+    await assertCanAccessProposalEntity(callerClient, kind, entityId);
+    if (filePath) assertProposalPathMatchesEntity(kind, entityId, filePath);
+  } catch (e) {
+    const status = e instanceof EntityAccessError ? e.status : 404;
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Not found." }, { status });
+  }
+
   const admin = createAdminClient();
   const table = kind === "student" ? "clients" : "college_visits";
   if (filePath || fileId) {
-    const targetPath = filePath;
-    if (fileId) {
-      await admin.from("proposal_files").delete().eq("id", fileId).eq("entity_type", kind).eq("entity_id", entityId);
-    } else {
-      await admin.from("proposal_files").delete().eq("entity_type", kind).eq("entity_id", entityId).eq("file_path", targetPath);
+    let targetQuery = admin
+      .from("proposal_files")
+      .select("id,file_name,file_path,uploaded_by,visibility_scope")
+      .eq("entity_type", kind)
+      .eq("entity_id", entityId);
+    targetQuery = fileId ? targetQuery.eq("id", fileId) : targetQuery.eq("file_path", filePath);
+    const { data: target, error: targetError } = await targetQuery.maybeSingle();
+    if (targetError || !target) {
+      return NextResponse.json({ error: "File not found." }, { status: 404 });
     }
-    if (targetPath) await admin.storage.from(PROPOSALS_BUCKET).remove([targetPath]).catch(() => undefined);
+    if (!canActorReadFile(profile?.role, target.visibility_scope)) {
+      return NextResponse.json({ error: "File not found." }, { status: 404 });
+    }
+    if (!isAdminRole(profile?.role) && target.uploaded_by !== user.id) {
+      return NextResponse.json({ error: "You can remove only files you uploaded." }, { status: 403 });
+    }
+    assertProposalPathMatchesEntity(kind, entityId, target.file_path);
+
+    const { error: deleteError } = await admin.from("proposal_files").delete().eq("id", target.id);
+    if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 400 });
+    await admin.storage.from(PROPOSALS_BUCKET).remove([target.file_path]).catch(() => undefined);
+    if (kind === "college") {
+      await admin.from("college_visit_activities").insert({
+        college_visit_id: entityId,
+        activity_type: "File Removed",
+        notes: target.file_name,
+        created_by: user.id,
+        visibility_scope: target.visibility_scope,
+      });
+    }
     return NextResponse.json({ ok: true });
+  }
+
+  if (kind === "college" && !isAdminRole(profile?.role)) {
+    return NextResponse.json(
+      { error: "Select one of your visible files to remove." },
+      { status: 403 },
+    );
   }
 
   const { data, error } = await admin.from(table).select("proposal_file_path").eq("id", entityId).maybeSingle();
@@ -54,5 +100,14 @@ export async function POST(request: Request) {
     .eq("entity_type", kind)
     .eq("entity_id", entityId);
   void cleanupError;
+  if (kind === "college") {
+    await admin.from("college_visit_activities").insert({
+      college_visit_id: entityId,
+      activity_type: "File Removed",
+      notes: "All proposal files removed",
+      created_by: user.id,
+      visibility_scope: "admin_only",
+    });
+  }
   return NextResponse.json({ ok: true });
 }

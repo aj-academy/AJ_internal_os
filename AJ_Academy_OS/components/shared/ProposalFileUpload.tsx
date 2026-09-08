@@ -29,6 +29,8 @@ type ProposalFileUploadProps = {
   files?: ProposalStoredFile[];
   onFilesChange?: (files: ProposalStoredFile[]) => void;
   onMetaChange: (meta: ProposalFileMeta) => void;
+  allowRemovePrimary?: boolean;
+  showUploaderFilter?: boolean;
   disabled?: boolean;
   onError?: (message: string) => void;
   onSuccess?: (message: string) => void;
@@ -46,6 +48,8 @@ export function ProposalFileUpload({
   files = [],
   onFilesChange,
   onMetaChange,
+  allowRemovePrimary = true,
+  showUploaderFilter = false,
   disabled = false,
   onError,
   onSuccess,
@@ -53,6 +57,7 @@ export function ProposalFileUpload({
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [pickError, setPickError] = useState<string | null>(null);
+  const [uploaderFilter, setUploaderFilter] = useState("");
 
   const uploaded = hasUploadedProposal(meta);
   const legacy = hasLegacyProposalLink(meta);
@@ -60,6 +65,16 @@ export function ProposalFileUpload({
   const legacyLabel = meta.proposal_pdf_name?.trim() || "Open link";
 
   const pendingList = multiple ? (pendingFiles ?? []) : pendingFile ? [pendingFile] : [];
+  const uploaderOptions = Array.from(
+    new Map(
+      files
+        .filter((file) => file.uploaded_by)
+        .map((file) => [file.uploaded_by!, file.uploader_name || "Unknown user"]),
+    ),
+  );
+  const displayedFiles = uploaderFilter
+    ? files.filter((file) => file.uploaded_by === uploaderFilter)
+    : files;
 
   const openPicker = () => {
     if (disabled || busy) return;
@@ -182,7 +197,13 @@ export function ProposalFileUpload({
       const res = await fetch("/api/proposals/signed-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entityType, entityId, filePath: file.file_path, fileName: file.file_name, download }),
+        body: JSON.stringify({
+          entityType,
+          entityId,
+          fileId: file.id,
+          filePath: file.file_path,
+          download,
+        }),
       });
       const json = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !json.url) throw new Error(json.error || "Could not open file.");
@@ -200,7 +221,7 @@ export function ProposalFileUpload({
         {multiple ? "Upload Proposal (multiple files)" : "Upload Proposal"}
       </span>
 
-      {uploaded ? (
+      {uploaded && !multiple ? (
         <div className="rounded-xl border border-[#e8dcc8] bg-[#fffdf8] p-3">
           <div className="flex items-start gap-3">
             <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#faf3e3] text-[#c9a227]">
@@ -251,17 +272,19 @@ export function ProposalFileUpload({
                     Replace
                   </Button>
                 ) : null}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 rounded-lg border-rose-200 text-rose-700"
-                  disabled={disabled || busy}
-                  onClick={() => void removeUploaded()}
-                >
-                  <Trash2 className="mr-1 h-3.5 w-3.5" />
-                  Remove
-                </Button>
+                {allowRemovePrimary && !multiple ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 rounded-lg border-rose-200 text-rose-700"
+                    disabled={disabled || busy}
+                    onClick={() => void removeUploaded()}
+                  >
+                    <Trash2 className="mr-1 h-3.5 w-3.5" />
+                    Remove
+                  </Button>
+                ) : null}
               </div>
             </div>
           </div>
@@ -270,12 +293,52 @@ export function ProposalFileUpload({
 
       {multiple && files.length ? (
         <div className="space-y-2 rounded-xl border border-[#e8dcc8] bg-white p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#94a3b8]">Uploaded files ({files.length})</p>
-          {files.map((file) => (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#94a3b8]">
+              Uploaded files ({displayedFiles.length})
+            </p>
+            {showUploaderFilter && uploaderOptions.length > 1 ? (
+              <select
+                className="h-8 rounded-lg border border-[#dbe6f3] bg-white px-2 text-xs text-[#475569]"
+                value={uploaderFilter}
+                onChange={(event) => setUploaderFilter(event.target.value)}
+                aria-label="Filter files by uploader"
+              >
+                <option value="">All uploaders</option>
+                {uploaderOptions.map(([id, label]) => (
+                  <option key={id} value={id}>{label}</option>
+                ))}
+              </select>
+            ) : null}
+          </div>
+          {displayedFiles.map((file) => (
             <div key={file.id} className="flex items-center justify-between gap-2 rounded-lg border border-[#eee7d8] px-2 py-1.5">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-[#3d3428]">{file.file_name}</p>
-                <p className="text-[11px] text-[#6b5d4d]">{formatProposalBytes(file.file_size)}</p>
+                <p className="text-[11px] text-[#6b5d4d]">
+                  {entityType === "college"
+                    ? `${file.file_type || "Document"} · ${formatProposalBytes(file.file_size)}`
+                    : formatProposalBytes(file.file_size)}
+                </p>
+                {entityType === "college" ? (
+                  <>
+                    <p className="mt-0.5 text-[11px] text-[#64748b]">
+                      Uploaded by {file.uploader_name || "Unknown user"}
+                      {file.uploader_role ? (
+                        <span className="ml-1 rounded-full bg-[#eef3f8] px-1.5 py-0.5 font-semibold capitalize text-[#475569]">
+                          {file.uploader_role.replace(/_/g, " ")}
+                        </span>
+                      ) : null}
+                      {" · "}
+                      {new Date(file.uploaded_at).toLocaleDateString()}
+                    </p>
+                    {file.visibility_scope === "admin_only" ? (
+                      <p className="mt-1 text-[11px] font-semibold text-amber-700">Visibility: Admin only</p>
+                    ) : (
+                      <p className="mt-1 text-[11px] font-semibold text-emerald-700">Visibility: Employee + Admin</p>
+                    )}
+                  </>
+                ) : null}
               </div>
               <div className="flex gap-1">
                 <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={() => void openStored(file, false)} disabled={busy || disabled}>
@@ -284,9 +347,11 @@ export function ProposalFileUpload({
                 <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={() => void openStored(file, true)} disabled={busy || disabled}>
                   <Download className="h-3.5 w-3.5" />
                 </Button>
-                <Button type="button" size="sm" variant="outline" className="h-7 border-rose-200 px-2 text-rose-700" onClick={() => void removeStoredFile(file)} disabled={busy || disabled}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                {file.can_remove !== false ? (
+                  <Button type="button" size="sm" variant="outline" className="h-7 border-rose-200 px-2 text-rose-700" onClick={() => void removeStoredFile(file)} disabled={busy || disabled}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                ) : null}
               </div>
             </div>
           ))}

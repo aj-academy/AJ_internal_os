@@ -11,6 +11,10 @@ import {
 } from "@/components/college-visits/collegeVisitsHelpers";
 import { buildPayloadFromApi, mapCollegeVisitRow, parseCollegeVisitBody } from "@/lib/collegeVisitsApi";
 import { appendOutcomeRemarkLog } from "@/lib/outcomeRemarks";
+import {
+  attachCollegeCreatorAttribution,
+  overlayCollegeFileMetadataForActor,
+} from "@/lib/college-visits/access";
 
 /** PostgREST caps rows per request, so visits are fetched in pages. */
 const VISITS_PAGE_SIZE = 1000;
@@ -43,7 +47,8 @@ export async function GET(request: Request) {
   const maxRows = isAdmin ? 20000 : 4000;
 
   const supabase = await createClient();
-  // Admin: all employees' colleges (tracking). Employee: own assigned_to only (+ CRM pins merged below).
+  // Admin: all employees' colleges. Employee: let RLS return owned, created,
+  // and task-linked rows; CRM pins are merged below for the existing pin flow.
   let select = COLLEGE_VISIT_SELECT;
   const rows: unknown[] = [];
   let error: { message: string } | null = null;
@@ -53,14 +58,13 @@ export async function GET(request: Request) {
     let page: unknown[] = [];
 
     for (;;) {
-      let q = supabase
+      const q = supabase
         .from("college_visits")
         .select(select)
         .order("updated_at", { ascending: false })
         // Tie-breaker keeps paging deterministic when updated_at repeats.
         .order("id", { ascending: true })
         .range(from, to);
-      if (!isAdmin) q = q.eq("assigned_to", user.id);
       const res = await q;
       if (!res.error) {
         page = res.data ?? [];
@@ -134,6 +138,9 @@ export async function GET(request: Request) {
       }
     }
   }
+  const adminForPresentation = createAdminClient();
+  visits = await overlayCollegeFileMetadataForActor(adminForPresentation, visits, role);
+  visits = await attachCollegeCreatorAttribution(adminForPresentation, visits);
 
   return NextResponse.json({ visits, pinIds: [...new Set(pinIds)] });
 }

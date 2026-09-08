@@ -26,6 +26,15 @@ setup("authenticate as admin", async ({ page }) => {
   await page.context().storageState({ path: path.join(authDir, "admin.json") });
 });
 
+setup("authenticate as employee", async ({ page }) => {
+  const creds = credsFor("EMPLOYEE");
+  setup.skip(!creds, "Set E2E_EMPLOYEE_EMAIL and E2E_EMPLOYEE_PASSWORD");
+  await page.waitForTimeout(2_000);
+  await loginAs(page, "employee", creds!);
+  await expect(page).toHaveURL(/\/employee\//);
+  await page.context().storageState({ path: path.join(authDir, "employee.json") });
+});
+
 setup("authenticate as mentor", async ({ page }) => {
   const creds = credsFor("MENTOR");
   setup.skip(!creds, "Set E2E_MENTOR_EMAIL and E2E_MENTOR_PASSWORD");

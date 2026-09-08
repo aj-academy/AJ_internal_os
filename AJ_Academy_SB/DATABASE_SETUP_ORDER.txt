@@ -81,6 +81,7 @@ Run in Supabase SQL Editor (same project as NEXT_PUBLIC_SUPABASE_URL).
 10k1d) proposals_multi_file_patch.sql (multiple proposal files per student/college entity — after proposals_file_upload_patch.sql)
 10k1e) college_visit_import_batches.sql (College Visits file/manual folders + duplicate preview + import_batch_id on college_visits — after college_visits_schema.sql; also supports Add College → create/select folder, no extra SQL)
 10k2) crm_owner_isolation.sql (employee own-only SM + CV; admin tracking SELECT/ALL — re-run after security_rls_access_fix.sql)
+10k2b) college_visit_file_visibility_patch.sql (REQUIRED before deploying role-aware College file APIs — Admin uploads private, Employee uploads shared, scoped proposal metadata/activity RLS; after crm_owner_isolation.sql + proposals_multi_file_patch.sql)
 10k3) crm_delete_fix.sql (delete_owned_clients / delete_owned_college_visits RPCs; admin bypass + strip_task_client_ids — after crm_owner_isolation.sql)
 10k3b) (No SQL) College Visits outcome remarks history is append-only in app/API (timestamped entries saved in existing `last_outcome_remarks`).
 10k3c) (No SQL) Student + College outreach email tracking is app/API based: sends are logged in `lead_activities` and `college_visit_activities` (including provider/from metadata) for admin/employee visibility.

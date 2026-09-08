@@ -890,11 +890,13 @@ export function CollegeActivityTimeline({
   activities,
   visitMap,
   ownerNameMap,
+  ownerRoleMap,
   loading,
 }: {
   activities: CollegeVisitActivityRow[];
   visitMap: Record<string, CollegeVisitRow>;
   ownerNameMap: Record<string, string>;
+  ownerRoleMap?: Record<string, string>;
   loading: boolean;
 }) {
   if (loading) {
@@ -919,6 +921,11 @@ export function CollegeActivityTimeline({
             </div>
             <p className="mt-1 text-xs text-[#64748b]">
               {visit?.college_name || "College"} | by {resolveActorName(a.created_by, ownerNameMap)}
+              {a.created_by && ownerRoleMap?.[a.created_by] ? (
+                <span className="ml-1 rounded-full bg-[#e8eef5] px-1.5 py-0.5 font-semibold capitalize">
+                  {ownerRoleMap[a.created_by].replace(/_/g, " ")}
+                </span>
+              ) : null}
             </p>
             {a.notes ? <p className="mt-2 text-[#334155]">{a.notes}</p> : null}
             {a.old_value || a.new_value ? (

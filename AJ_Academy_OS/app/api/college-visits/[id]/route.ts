@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApiSession } from "@/lib/security";
 import {
   COLLEGE_VISIT_SELECT,
@@ -11,6 +12,11 @@ import {
 import { buildPayloadFromApi, mapCollegeVisitRow, parseCollegeVisitBody } from "@/lib/collegeVisitsApi";
 import { deleteOwnedCollegeVisits } from "@/lib/crmOwnedDelete";
 import { appendOutcomeRemarkLog } from "@/lib/outcomeRemarks";
+import {
+  attachCollegeCreatorAttribution,
+  overlayCollegeFileMetadataForActor,
+} from "@/lib/college-visits/access";
+import { isAdminRole } from "@/lib/college-visits/fileVisibility";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -148,8 +154,14 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const role = profile?.role?.trim().toLowerCase() ?? "";
-  void role;
   const payload = buildPayloadFromApi(parsed.form, user.id, false);
+  if (!isAdminRole(role)) {
+    // Employees never receive hidden legacy Admin file links, so a normal edit
+    // must not erase or replace those fields with browser-supplied values.
+    delete payload.proposal_link;
+    delete payload.proposal_pdf_url;
+    delete payload.proposal_pdf_name;
+  }
 
   const supabase = await createClient();
   let prevSelect = COLLEGE_VISIT_SELECT;
@@ -236,7 +248,14 @@ export async function PATCH(request: Request, context: RouteContext) {
     });
   }
 
-  return NextResponse.json({ visit: mapCollegeVisitRow(data) });
+  let updatedVisit = mapCollegeVisitRow(data);
+  [updatedVisit] = await overlayCollegeFileMetadataForActor(
+    createAdminClient(),
+    [updatedVisit],
+    role,
+  );
+  [updatedVisit] = await attachCollegeCreatorAttribution(createAdminClient(), [updatedVisit]);
+  return NextResponse.json({ visit: updatedVisit });
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {

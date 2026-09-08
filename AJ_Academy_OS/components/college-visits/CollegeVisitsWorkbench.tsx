@@ -155,6 +155,7 @@ interface ProfileMini {
   id: string;
   full_name: string | null;
   email: string | null;
+  role: string | null;
 }
 
 function ownerPeopleFromProfiles(employees: ProfileMini[]) {
@@ -195,6 +196,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [fltVisitStatus, setFltVisitStatus] = useState("");
   const [fltPriority, setFltPriority] = useState("");
   const [fltOwner, setFltOwner] = useState("");
+  const [fltCreator, setFltCreator] = useState("");
   const [fltFinalStatus, setFltFinalStatus] = useState("");
   const [fltFollowUpDue, setFltFollowUpDue] = useState("");
   const [listScope] = useState<"mine">("mine");
@@ -316,6 +318,45 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     return m;
   }, [employees]);
 
+  const profileById = useMemo(() => {
+    const map = new Map<string, ProfileMini>();
+    employees.forEach((employee) => map.set(employee.id, employee));
+    return map;
+  }, [employees]);
+
+  const profileRoleMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    employees.forEach((employee) => {
+      if (employee.role) map[employee.id] = employee.role;
+    });
+    return map;
+  }, [employees]);
+
+  const creatorLabelFor = useCallback(
+    (row: CollegeVisitRow) => {
+      if (!row.created_by) return "Unknown";
+      const creator = profileById.get(row.created_by);
+      return row.created_by_name || creator?.full_name || creator?.email || row.created_by.slice(0, 8);
+    },
+    [profileById],
+  );
+
+  const creatorRoleFor = useCallback(
+    (row: CollegeVisitRow) =>
+      row.created_by_role || profileById.get(row.created_by || "")?.role || null,
+    [profileById],
+  );
+
+  const creatorOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    visits.forEach((visit) => {
+      if (visit.created_by) byId.set(visit.created_by, creatorLabelFor(visit));
+    });
+    return [...byId.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [creatorLabelFor, visits]);
+
   const loadVisits = useCallback(async () => {
     const res = await fetch("/api/college-visits");
     const json = (await res.json()) as { visits?: CollegeVisitRow[]; pinIds?: string[]; error?: string };
@@ -436,7 +477,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id,full_name,email")
+        .select("id,full_name,email,role")
         .in("role", ["employee", "admin", "super_admin"])
         .or("status.is.null,status.eq.active")
         .order("full_name", { ascending: true });
@@ -943,7 +984,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     const q = searchText.trim().toLowerCase();
     if (q) {
       list = list.filter((v) =>
-        `${v.college_name} ${v.location ?? ""} ${v.contact_number ?? ""} ${v.email ?? ""} ${v.connected_person_name ?? ""} ${v.source_reference ?? ""} ${v.visit_status ?? ""} ${v.mou_signed_status ?? ""} ${v.final_status ?? ""} ${v.priority ?? ""} ${v.follow_up_stage ?? ""} ${v.proposal_status ?? ""} ${v.visited_by_name ?? ""}`
+        `${v.college_name} ${v.location ?? ""} ${v.contact_number ?? ""} ${v.email ?? ""} ${v.connected_person_name ?? ""} ${v.source_reference ?? ""} ${v.visit_status ?? ""} ${v.mou_signed_status ?? ""} ${v.final_status ?? ""} ${v.priority ?? ""} ${v.follow_up_stage ?? ""} ${v.proposal_status ?? ""} ${v.visited_by_name ?? ""} ${creatorLabelFor(v)}`
           .toLowerCase()
           .includes(q),
       );
@@ -951,17 +992,44 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     if (fltVisitStatus) list = list.filter((v) => v.visit_status === fltVisitStatus);
     if (fltPriority) list = list.filter((v) => v.priority === fltPriority);
     if (fltOwner) list = list.filter((v) => (v.assigned_to ?? "") === fltOwner);
+    if (fltCreator === "role:admin") {
+      list = list.filter((v) => {
+        const role = creatorRoleFor(v)?.toLowerCase();
+        return role === "admin" || role === "super_admin";
+      });
+    } else if (fltCreator === "role:employee") {
+      list = list.filter((v) => creatorRoleFor(v)?.toLowerCase() === "employee");
+    } else if (fltCreator) {
+      list = list.filter((v) => v.created_by === fltCreator);
+    }
     if (fltFinalStatus) list = list.filter((v) => v.final_status === fltFinalStatus);
     if (fltFollowUpDue === "yes") list = list.filter((v) => isFollowUpDue(v));
     if (fltFollowUpDue === "no") list = list.filter((v) => !isFollowUpDue(v));
     return list;
-  }, [visits, searchText, fltVisitStatus, fltPriority, fltOwner, fltFinalStatus, fltFollowUpDue]);
+  }, [
+    visits,
+    searchText,
+    fltVisitStatus,
+    fltPriority,
+    fltOwner,
+    fltCreator,
+    fltFinalStatus,
+    fltFollowUpDue,
+    creatorLabelFor,
+    creatorRoleFor,
+  ]);
 
   /** Overview uses the same search + filters as other subsections. */
   const trackerVisits = useMemo(() => filteredVisits, [filteredVisits]);
 
   const filtersActive = Boolean(
-    searchText.trim() || fltVisitStatus || fltPriority || fltOwner || fltFinalStatus || fltFollowUpDue,
+    searchText.trim() ||
+      fltVisitStatus ||
+      fltPriority ||
+      fltOwner ||
+      fltCreator ||
+      fltFinalStatus ||
+      fltFollowUpDue,
   );
 
   const syntheticLegacyBatches = useMemo((): CollegeImportBatchRow[] => {
@@ -1286,6 +1354,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setFltVisitStatus("");
     setFltPriority("");
     setFltOwner("");
+    setFltCreator("");
     setFltFinalStatus("");
     setFltFollowUpDue("");
   };
@@ -1650,6 +1719,12 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     if (!currentUserId || !form.college_name.trim()) return;
     if (editId) {
       void handleSave();
+      return;
+    }
+    if (!isDbAdmin) {
+      // Import folders remain Admin-owned. Employee-created colleges are saved
+      // to All Colleges under the authenticated Employee's ownership.
+      void handleSave({ mode: "existing", batchId: null });
       return;
     }
     setSaveLocationOpen(true);
@@ -2264,7 +2339,13 @@ return (
       ) : null}
 
       {activeTab === "timeline" ? (
-        <CollegeActivityTimeline activities={timelineRows} visitMap={visitMap} ownerNameMap={ownerNameMap} loading={timelineLoading} />
+        <CollegeActivityTimeline
+          activities={timelineRows}
+          visitMap={visitMap}
+          ownerNameMap={ownerNameMap}
+          ownerRoleMap={profileRoleMap}
+          loading={timelineLoading}
+        />
       ) : null}
 
       {activeTab === "reports" && isDbAdmin ? <CollegeReportsPanel visits={filteredVisits} ownerNameMap={ownerNameMap} /> : null}
@@ -2675,7 +2756,7 @@ return (
             desktop={
           <div className="responsive-table-wrap rounded-2xl border border-[#dbe6f3]">
             <table
-              className="table-freeze-cols w-full min-w-[3000px]"
+              className="table-freeze-cols w-full min-w-[3300px]"
               style={
                 {
                   /* --sticky-col-2 = S.No width (middle sticky); College Name uses after-check-2 */
@@ -2727,6 +2808,23 @@ return (
                     disabled={!isDbAdmin}
                     className={thClass}
                   />
+                  {isDbAdmin ? (
+                    <TableHeaderFilter
+                      label="Created By"
+                      value={fltCreator}
+                      options={[
+                        { value: "role:admin", label: "All Admins" },
+                        { value: "role:employee", label: "All Employees" },
+                        ...creatorOptions.map((option) => ({ value: option.id, label: option.label })),
+                      ]}
+                      onChange={setFltCreator}
+                      allLabel="All creators"
+                      className={thClass}
+                    />
+                  ) : (
+                    <TableHeaderCell label="Created By" className={thClass} />
+                  )}
+                  <TableHeaderCell label="Created At" className={thClass} />
                   <TableHeaderCell label="Description" className={thClass} />
                   <TableHeaderCell label="Last Outcome / Remarks" className={thClass} />
                   <TableHeaderCell label="Days Since Last Follow-up" className={thClass} />
@@ -2749,13 +2847,13 @@ return (
               <tbody>
                 {loading || (batchNeedsPreview && batchStagingLoading) ? (
                   <tr>
-                    <td colSpan={26} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                    <td colSpan={28} className="px-4 py-8 text-center text-sm text-[#64748b]">
                       {batchNeedsPreview && batchStagingLoading ? "Loading duplicate preview…" : "Loading..."}
                     </td>
                   </tr>
                 ) : pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={26} className="px-4 py-8 text-center text-sm text-[#64748b]">
+                    <td colSpan={28} className="px-4 py-8 text-center text-sm text-[#64748b]">
                       {batchAwaitingImport
                         ? "No rows in this file. Upload a different spreadsheet or go back to uploads."
                         : "No college visits found."}
@@ -2872,6 +2970,17 @@ return (
                         <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.next_follow_up_date)}</td>
                         <td className={tdClass}>{row.priority}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{ownerLabelFor(row)}</td>
+                        <td className={`${tdClass} min-w-[13rem]`}>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span>{creatorLabelFor(row)}</span>
+                            {creatorRoleFor(row) ? (
+                              <Badge className="border-[#dbe6f3] bg-[#f1f6fc] text-[10px] capitalize text-[#475569]">
+                                {creatorRoleFor(row)!.replace(/_/g, " ")}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.created_at)}</td>
                         <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate`} title={row.description ?? ""}>
                           {row.description || "-"}
                         </td>
@@ -2988,6 +3097,10 @@ return (
                         { label: "Priority", value: dash(row.priority) },
                         { label: "Lead score", value: dash(row.lead_score) },
                         { label: "Proposal status", value: dash(row.proposal_status) },
+                        {
+                          label: "Created by",
+                          value: `${creatorLabelFor(row)}${creatorRoleFor(row) ? ` (${creatorRoleFor(row)!.replace(/_/g, " ")})` : ""}`,
+                        },
                       ]}
                       detailFields={[
                         { label: "College Name", value: row.college_name },
@@ -3005,6 +3118,11 @@ return (
                         { label: "Next Follow-up Date", value: formatDisplayDate(row.next_follow_up_date) || "—" },
                         { label: "Priority", value: dash(row.priority) },
                         { label: "Owner", value: ownerLabelFor(row) },
+                        {
+                          label: "Created By",
+                          value: `${creatorLabelFor(row)}${creatorRoleFor(row) ? ` (${creatorRoleFor(row)!.replace(/_/g, " ")})` : ""}`,
+                        },
+                        { label: "Created At", value: formatDisplayDate(row.created_at) || "—" },
                         { label: "Description", value: dash(row.description), clamp: true },
                         { label: "Last Outcome / Remarks", value: dash(row.last_outcome_remarks), clamp: true },
                         { label: "Days Since Last Follow-up", value: days != null ? String(days) : "—" },
@@ -3123,6 +3241,8 @@ return (
             files={proposalFiles}
             onFilesChange={setProposalFiles}
             onMetaChange={setProposalFileMeta}
+            allowRemovePrimary={isDbAdmin}
+            showUploaderFilter={isDbAdmin}
             disabled={submitting}
             onError={setError}
             onSuccess={setSuccess}
@@ -3171,6 +3291,8 @@ return (
               files={proposalFiles}
               onFilesChange={setProposalFiles}
               onMetaChange={setProposalFileMeta}
+              allowRemovePrimary={isDbAdmin}
+              showUploaderFilter={isDbAdmin}
               disabled={proposalSubmitting}
               onError={setError}
               onSuccess={setSuccess}
@@ -3250,6 +3372,16 @@ return (
                 <p>
                   <span className="font-semibold text-[#3d3428]">Whom visited to the college:</span> {viewVisit.visited_by || "-"}
                 </p>
+                <p className="flex flex-wrap items-center gap-1">
+                  <span className="font-semibold text-[#3d3428]">Created by:</span>
+                  <span>{creatorLabelFor(viewVisit)}</span>
+                  {creatorRoleFor(viewVisit) ? (
+                    <Badge className="border-[#dbe6f3] bg-[#f1f6fc] text-[10px] capitalize text-[#475569]">
+                      {creatorRoleFor(viewVisit)!.replace(/_/g, " ")}
+                    </Badge>
+                  ) : null}
+                  <span>· {formatDisplayDate(viewVisit.created_at)}</span>
+                </p>
               </div>
               <div className="mb-4 space-y-2 rounded-xl border border-[#e8dcc8] bg-[#fefcf8] p-3">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6b5d4d]">Outcome / remarks history</p>
@@ -3285,6 +3417,7 @@ return (
         loading={activityModalLoading}
         activities={activityModalRows}
         employeeNameMap={ownerNameMap}
+        employeeRoleMap={profileRoleMap}
         elevatedStack={stackElevated}
         onClose={() => setActivityVisit(null)}
       />

@@ -22,7 +22,7 @@ export function requireE2eEnv() {
   return { baseURL: base };
 }
 
-export function optionalCreds(prefix: "ADMIN" | "MENTOR" | "STUDENT") {
+export function optionalCreds(prefix: "ADMIN" | "EMPLOYEE" | "MENTOR" | "STUDENT") {
   const email = (process.env[`E2E_${prefix}_EMAIL`] || "").trim();
   const password = (process.env[`E2E_${prefix}_PASSWORD`] || "").trim();
   if (!email || !password) return null;

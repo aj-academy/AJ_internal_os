@@ -21,6 +21,7 @@ type LeadActivityModalProps = {
   loading: boolean;
   activities: LeadActivityItem[];
   employeeNameMap?: Record<string, string>;
+  employeeRoleMap?: Record<string, string>;
   onClose: () => void;
   /** Raise above the college import batch full-screen overlay (z-70). */
   elevatedStack?: boolean;
@@ -33,6 +34,7 @@ export function LeadActivityModal({
   loading,
   activities,
   employeeNameMap = {},
+  employeeRoleMap = {},
   onClose,
   elevatedStack = false,
 }: LeadActivityModalProps) {
@@ -61,6 +63,7 @@ export function LeadActivityModal({
             <ul className="space-y-3">
               {activities.map((a) => {
                 const by = resolveActorName(a.created_by, employeeNameMap);
+                const actorRole = a.created_by ? employeeRoleMap[a.created_by] : null;
                 return (
                   <li key={a.id} className="rounded-xl border border-[#eef2f7] bg-[#f8fbff] px-3 py-2">
                     <p className="text-sm font-medium text-[#0f172a]">{a.activity_type || "Activity"}</p>
@@ -73,6 +76,11 @@ export function LeadActivityModal({
                     <p className="mt-1 text-[11px] text-[#94a3b8]">
                       {formatDateTimeIST(a.created_at)}
                       {a.created_by ? ` · ${by}` : ""}
+                      {actorRole ? (
+                        <span className="ml-1 rounded-full bg-[#e8eef5] px-1.5 py-0.5 font-semibold capitalize text-[#64748b]">
+                          {actorRole.replace(/_/g, " ")}
+                        </span>
+                      ) : null}
                     </p>
                   </li>
                 );

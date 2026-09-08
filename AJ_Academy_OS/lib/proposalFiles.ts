@@ -23,6 +23,10 @@ export type ProposalStoredFile = {
   file_size: number | null;
   uploaded_at: string;
   uploaded_by: string | null;
+  visibility_scope: "admin_only" | "admin_employee";
+  uploader_name?: string | null;
+  uploader_role?: string | null;
+  can_remove?: boolean;
 };
 
 export type ProposalFileMeta = {

@@ -12,6 +12,10 @@ import {
   COLLEGE_VISIT_SELECT,
   nextCollegeVisitSelect,
 } from "@/components/college-visits/collegeVisitsHelpers";
+import {
+  attachCollegeCreatorAttribution,
+  overlayCollegeFileMetadataForActor,
+} from "@/lib/college-visits/access";
 
 function normalizeIdList(raw: unknown): string[] {
   if (Array.isArray(raw)) {
@@ -38,7 +42,7 @@ function normalizeIdList(raw: unknown): string[] {
  * Uses service role for the CRM read after verifying task membership via the user session.
  */
 export async function POST(request: Request) {
-  const { response, user } = await requireStaffApiSession();
+  const { response, user, profile } = await requireStaffApiSession();
   if (response || !user) return response!;
 
   let body: { clientIds?: unknown; collegeIds?: unknown };
@@ -130,6 +134,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message, clients, colleges: [] }, { status: 400 });
     }
     colleges = data ?? [];
+    colleges = await overlayCollegeFileMetadataForActor(
+      admin,
+      colleges as Array<{ id: string }>,
+      profile?.role,
+    );
+    colleges = await attachCollegeCreatorAttribution(
+      admin,
+      colleges as Array<{ created_by?: string | null }>,
+    );
   }
 
   return NextResponse.json({ clients, colleges });

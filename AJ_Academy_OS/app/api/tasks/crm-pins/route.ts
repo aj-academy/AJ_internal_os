@@ -13,6 +13,10 @@ import {
   nextCollegeVisitSelect,
 } from "@/components/college-visits/collegeVisitsHelpers";
 import { mapCollegeVisitRow } from "@/lib/collegeVisitsApi";
+import {
+  attachCollegeCreatorAttribution,
+  overlayCollegeFileMetadataForActor,
+} from "@/lib/college-visits/access";
 
 type EntityType = "lead" | "college";
 
@@ -159,7 +163,7 @@ export async function POST(request: Request) {
 
 /** GET ?type=lead|college&full=1 — pinned entity ids (and full CRM rows when full=1) */
 export async function GET(request: Request) {
-  const { response, user } = await requireStaffApiSession();
+  const { response, user, profile } = await requireStaffApiSession();
   if (response || !user) return response!;
 
   const url = new URL(request.url);
@@ -244,7 +248,9 @@ export async function GET(request: Request) {
   if (vErr) {
     return NextResponse.json({ ids: [], clients: [], colleges: [], error: vErr.message }, { status: 400 });
   }
-  const liveColleges = (colleges ?? []).map((r) => mapCollegeVisitRow(r));
+  let liveColleges = (colleges ?? []).map((r) => mapCollegeVisitRow(r));
+  liveColleges = await overlayCollegeFileMetadataForActor(admin, liveColleges, profile?.role);
+  liveColleges = await attachCollegeCreatorAttribution(admin, liveColleges);
   const liveIds = liveColleges.map((row) => row.id);
   return NextResponse.json({ ids: liveIds, clients: [], colleges: liveColleges });
 }

@@ -104,6 +104,26 @@ export default defineConfig({
       },
     },
     {
+      name: "college-visits-admin",
+      dependencies: ["setup"],
+      testMatch: /college-visits\/admin-file-access\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: path.join(authDir, "admin.json"),
+        launchOptions: { args: ["--disable-dev-shm-usage"] },
+      },
+    },
+    {
+      name: "college-visits-employee",
+      dependencies: ["setup"],
+      testMatch: /college-visits\/employee-file-access\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: path.join(authDir, "employee.json"),
+        launchOptions: { args: ["--disable-dev-shm-usage"] },
+      },
+    },
+    {
       name: "smoke-mentor",
       dependencies: ["setup"],
       testMatch: /smoke\/mentor\.smoke\.spec\.ts/,
