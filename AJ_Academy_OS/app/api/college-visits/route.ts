@@ -13,6 +13,7 @@ import { buildPayloadFromApi, mapCollegeVisitRow, parseCollegeVisitBody } from "
 import { appendOutcomeRemarkLog } from "@/lib/outcomeRemarks";
 import {
   attachCollegeCreatorAttribution,
+  attachImportBatchNames,
   overlayCollegeFileMetadataForActor,
 } from "@/lib/college-visits/access";
 
@@ -141,6 +142,7 @@ export async function GET(request: Request) {
   const adminForPresentation = createAdminClient();
   visits = await overlayCollegeFileMetadataForActor(adminForPresentation, visits, role);
   visits = await attachCollegeCreatorAttribution(adminForPresentation, visits);
+  visits = await attachImportBatchNames(adminForPresentation, visits);
 
   return NextResponse.json({ visits, pinIds: [...new Set(pinIds)] });
 }

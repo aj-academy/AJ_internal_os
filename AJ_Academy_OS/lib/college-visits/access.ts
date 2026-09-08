@@ -97,6 +97,42 @@ export async function attachCollegeCreatorAttribution<
   });
 }
 
+export async function attachImportBatchNames<
+  T extends { import_batch_id?: string | null },
+>(admin: SupabaseClient, rows: T[]): Promise<T[]> {
+  const batchIds = [
+    ...new Set(rows.map((row) => row.import_batch_id).filter((id): id is string => Boolean(id))),
+  ];
+  if (!batchIds.length) return rows;
+
+  const { data } = await admin
+    .from("college_visit_import_batches")
+    .select("id,file_name,uploaded_at,batch_number,status")
+    .in("id", batchIds);
+  const folders = new Map(
+    (data ?? []).map((batch) => [
+      batch.id,
+      {
+        name: batch.file_name as string,
+        uploaded_at: (batch.uploaded_at as string) || "",
+        batch_number: (batch.batch_number as string) || "",
+        status: (batch.status as string) || "completed",
+      },
+    ]),
+  );
+
+  return rows.map((row) => {
+    const folder = row.import_batch_id ? folders.get(row.import_batch_id) : null;
+    return {
+      ...row,
+      import_batch_name: folder?.name ?? null,
+      import_batch_uploaded_at: folder?.uploaded_at ?? null,
+      import_batch_number: folder?.batch_number ?? null,
+      import_batch_status: folder?.status ?? null,
+    };
+  });
+}
+
 export async function overlayCollegeFileMetadataForActor<T extends { id: string }>(
   admin: SupabaseClient,
   rows: T[],

@@ -39,6 +39,7 @@ type CollegeVisitImportBatchRowListProps = {
     onToggle: (id: string) => void;
   };
   onOpenBatch: (batch: CollegeImportBatchRow) => void;
+  emptyMessage?: string;
 };
 
 const statusClass: Record<string, string> = {
@@ -65,6 +66,7 @@ export function CollegeVisitImportBatchRowList({
   loading,
   selection,
   onOpenBatch,
+  emptyMessage,
 }: CollegeVisitImportBatchRowListProps) {
   const showSelection = Boolean(selection);
 
@@ -79,7 +81,8 @@ export function CollegeVisitImportBatchRowList({
   if (!batches.length) {
     return (
       <div className="rounded-[20px] border border-[#dbe6f3] bg-white px-4 py-10 text-center text-sm text-[#64748b]">
-        No file uploads yet. Use Import to upload a spreadsheet — each file appears here with duplicate preview before saving.
+        {emptyMessage ||
+          "No file uploads yet. Use Import to upload a spreadsheet — each file appears here with duplicate preview before saving."}
       </div>
     );
   }

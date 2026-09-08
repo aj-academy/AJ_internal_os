@@ -166,6 +166,19 @@ function ownerPeopleFromProfiles(employees: ProfileMini[]) {
   }));
 }
 
+function CreatorCell({ name, role }: { name: string; role: string | null }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="truncate">{name}</span>
+      {role ? (
+        <Badge className="border-[#dbe6f3] bg-[#f1f6fc] text-[10px] capitalize text-[#475569]">
+          {role.replace(/_/g, " ")}
+        </Badge>
+      ) : null}
+    </div>
+  );
+}
+
 export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: AppRole; fullAccess?: boolean }) {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
@@ -1063,12 +1076,43 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   }, [visits]);
 
   const displayImportBatches = useMemo(() => {
-    const uploads = [...importBatches].sort((a, b) =>
+    if (isDbAdmin) {
+      const uploads = [...importBatches].sort((a, b) =>
+        (b.uploaded_at || "").localeCompare(a.uploaded_at || ""),
+      );
+      return [...uploads, ...syntheticLegacyBatches];
+    }
+
+    const byId = new Map<string, CollegeImportBatchRow>();
+    for (const visit of visits) {
+      if (!visit.import_batch_id) continue;
+      const existing = byId.get(visit.import_batch_id);
+      if (existing) {
+        existing.row_count += 1;
+        existing.created_count += 1;
+        existing.new_count += 1;
+        continue;
+      }
+      byId.set(visit.import_batch_id, {
+        id: visit.import_batch_id,
+        batch_number: visit.import_batch_number || "",
+        file_name: visit.import_batch_name || "Folder",
+        row_count: 1,
+        new_count: 1,
+        duplicate_count: 0,
+        invalid_count: 0,
+        created_count: 1,
+        skipped_count: 0,
+        failed_count: 0,
+        status: visit.import_batch_status || "completed",
+        uploaded_at: visit.import_batch_uploaded_at || visit.created_at || "",
+      });
+    }
+    const uploads = [...byId.values()].sort((a, b) =>
       (b.uploaded_at || "").localeCompare(a.uploaded_at || ""),
     );
-    // Real uploads newest-first; the legacy archive always stays pinned last.
     return [...uploads, ...syntheticLegacyBatches];
-  }, [importBatches, syntheticLegacyBatches]);
+  }, [isDbAdmin, importBatches, syntheticLegacyBatches, visits]);
 
   const visitsForFocusedBatch = useMemo(() => {
     if (!focusedImportBatch) return [];
@@ -1275,7 +1319,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     loadBatchStagingPreview,
   ]);
 
-  const showImportBatchList = isDbAdmin && !pickForTask && activeTab === "all-colleges";
+  const showImportBatchList = !pickForTask && activeTab === "all-colleges";
 
   const allCollegesTableVisits = useMemo(() => {
     if (activeTab !== "all-colleges") return filteredVisits;
@@ -2140,7 +2184,7 @@ return (
           <p className="mt-1 text-sm text-[#64748b]">
             {isDbAdmin
               ? "Track every employee's college outreach. Filter by Owner to review one person. Employees only see their own rows."
-              : "Your college outreach only - Overview, All Colleges, Follow-ups, Pipeline, Proposal Tracker, and more."}
+              : "Same College Visits workspace as Admin — your authorized colleges, follow-ups, pipeline, and proposals."}
           </p>
           {cvRefreshing ? (
             <p className="mt-1 text-xs font-medium text-[#64748b]" aria-live="polite">
@@ -2362,34 +2406,34 @@ return (
 
       {activeTab === "all-colleges" ? (
         <div className="space-y-3">
-          {!pickForTask && !focusedImportBatch ? (
+          {isDbAdmin ? (
+            <input
+              ref={importFileRef}
+              type="file"
+              accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) queueImportFile(f);
+              }}
+            />
+          ) : null}
+          {!pickForTask && !focusedImportBatch && isDbAdmin ? (
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
               <Button type="button" variant="outline" className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm" onClick={handleDownloadTemplate}>
                 <FileText className="mr-1 h-4 w-4 shrink-0" />
                 Import template
               </Button>
-              <input
-                ref={importFileRef}
-                type="file"
-                accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) queueImportFile(f);
-                }}
-              />
-              {isDbAdmin ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm"
-                  disabled={importing || schemaMissing}
-                  onClick={() => importFileRef.current?.click()}
-                >
-                  <Upload className="mr-1 h-4 w-4 shrink-0" />
-                  {importing ? "Uploading..." : "Import"}
-                </Button>
-              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm"
+                disabled={importing || schemaMissing}
+                onClick={() => importFileRef.current?.click()}
+              >
+                <Upload className="mr-1 h-4 w-4 shrink-0" />
+                {importing ? "Uploading..." : "Import"}
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -2410,10 +2454,11 @@ return (
           {showImportBatchList && !focusedImportBatch ? (
             <div className="space-y-3">
               <p className="text-xs font-medium text-[#64748b]">
-                Each uploaded file appears separately with its upload date. Click a row to open the full college table
-                — edit, assign to employees, call, WhatsApp, and email work exactly as before.
+                {isDbAdmin
+                  ? "Each uploaded file appears separately with its upload date. Click a row to open the full college table — edit, assign to employees, call, WhatsApp, and email work exactly as before."
+                  : "Each folder appears separately, the same as Admin. Click a row to open the college table — add colleges, follow up, call, WhatsApp, and email. Admin-only files stay hidden."}
               </p>
-              {batchBulk.selectedCount > 0 ? (
+              {isDbAdmin && batchBulk.selectedCount > 0 ? (
                 <BulkSelectionBar selectedCount={batchBulk.selectedCount} onClear={batchBulk.clearSelection}>
                   <Button
                     size="sm"
@@ -2428,14 +2473,23 @@ return (
               ) : null}
               <CollegeVisitImportBatchRowList
                 batches={paginatedImportBatches}
-                loading={importBatchesLoading || loading}
-                selection={{
-                  allSelected: batchBulk.allSelected,
-                  someSelected: batchBulk.someSelected,
-                  isSelected: batchBulk.isSelected,
-                  onToggleAll: batchBulk.toggleAll,
-                  onToggle: batchBulk.toggleOne,
-                }}
+                loading={isDbAdmin ? importBatchesLoading || loading : loading}
+                selection={
+                  isDbAdmin
+                    ? {
+                        allSelected: batchBulk.allSelected,
+                        someSelected: batchBulk.someSelected,
+                        isSelected: batchBulk.isSelected,
+                        onToggleAll: batchBulk.toggleAll,
+                        onToggle: batchBulk.toggleOne,
+                      }
+                    : undefined
+                }
+                emptyMessage={
+                  isDbAdmin
+                    ? undefined
+                    : "No college folders yet. Use + Add College to create your first visit — it will appear in All Colleges."
+                }
                 onOpenBatch={(batch) => {
                   setFocusedImportBatch(batch);
                   setBatchStagingRows([]);
@@ -2495,8 +2549,10 @@ return (
                             </p>
                           </div>
                         ) : null}
-                        {!pickForTask && isDbAdmin && !batchAwaitingImport ? (
+                        {!pickForTask && !batchAwaitingImport ? (
                           <>
+                            {isDbAdmin ? (
+                              <>
                             <Button
                               type="button"
                               variant="outline"
@@ -2516,6 +2572,8 @@ return (
                               <Upload className="mr-1 h-4 w-4 shrink-0" />
                               {importing ? "Uploading…" : "Bulk upload"}
                             </Button>
+                              </>
+                            ) : null}
                             <Button
                               type="button"
                               variant="outline"
@@ -2786,6 +2844,23 @@ return (
                     className={`${thClass} sticky-col sticky-col-after-check-2 min-w-[14rem]`}
                   />
                   <TableHeaderCell label="Location" className={thClass} />
+                  {isDbAdmin ? (
+                    <TableHeaderFilter
+                      label="Created By"
+                      value={fltCreator}
+                      options={[
+                        { value: "role:admin", label: "All Admins" },
+                        { value: "role:employee", label: "All Employees" },
+                        ...creatorOptions.map((option) => ({ value: option.id, label: option.label })),
+                      ]}
+                      onChange={setFltCreator}
+                      allLabel="All creators"
+                      className={`${thClass} min-w-[13rem]`}
+                    />
+                  ) : (
+                    <TableHeaderCell label="Created By" className={`${thClass} min-w-[13rem]`} />
+                  )}
+                  <TableHeaderCell label="Created At" className={`${thClass} min-w-[11rem]`} />
                   <TableHeaderCell label="Call" className={`${thClass} min-w-[5.5rem]`} />
                   <TableHeaderCell label="WhatsApp" className={`${thClass} min-w-[5.5rem]`} />
                   <TableHeaderCell label="Email" className={`${thClass} min-w-[5.5rem]`} />
@@ -2808,23 +2883,6 @@ return (
                     disabled={!isDbAdmin}
                     className={thClass}
                   />
-                  {isDbAdmin ? (
-                    <TableHeaderFilter
-                      label="Created By"
-                      value={fltCreator}
-                      options={[
-                        { value: "role:admin", label: "All Admins" },
-                        { value: "role:employee", label: "All Employees" },
-                        ...creatorOptions.map((option) => ({ value: option.id, label: option.label })),
-                      ]}
-                      onChange={setFltCreator}
-                      allLabel="All creators"
-                      className={thClass}
-                    />
-                  ) : (
-                    <TableHeaderCell label="Created By" className={thClass} />
-                  )}
-                  <TableHeaderCell label="Created At" className={thClass} />
                   <TableHeaderCell label="Description" className={thClass} />
                   <TableHeaderCell label="Last Outcome / Remarks" className={thClass} />
                   <TableHeaderCell label="Days Since Last Follow-up" className={thClass} />
@@ -2916,6 +2974,10 @@ return (
                           </div>
                         </td>
                         <td className={tdClass}>{row.location || "-"}</td>
+                        <td className={`${tdClass} min-w-[13rem]`}>
+                          <CreatorCell name={creatorLabelFor(row)} role={creatorRoleFor(row)} />
+                        </td>
+                        <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.created_at)}</td>
                         <td className={`${tdClass} min-w-[5.5rem]`}>
                           <StudentOutreachButtons
                             mode="phone"
@@ -2970,17 +3032,6 @@ return (
                         <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.next_follow_up_date)}</td>
                         <td className={tdClass}>{row.priority}</td>
                         <td className={`${tdClass} min-w-[11rem]`}>{ownerLabelFor(row)}</td>
-                        <td className={`${tdClass} min-w-[13rem]`}>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span>{creatorLabelFor(row)}</span>
-                            {creatorRoleFor(row) ? (
-                              <Badge className="border-[#dbe6f3] bg-[#f1f6fc] text-[10px] capitalize text-[#475569]">
-                                {creatorRoleFor(row)!.replace(/_/g, " ")}
-                              </Badge>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className={`${tdClass} min-w-[11rem]`}>{formatDisplayDate(row.created_at)}</td>
                         <td className={`${tdClass} min-w-[14rem] max-w-[18rem] truncate`} title={row.description ?? ""}>
                           {row.description || "-"}
                         </td>
@@ -3083,6 +3134,11 @@ return (
                       selectAriaLabel={`${pickForTask ? "Pick" : "Select"} ${row.college_name}`}
                       previewFields={[
                         { label: "Location", value: dash(row.location) },
+                        {
+                          label: "Created by",
+                          value: `${creatorLabelFor(row)}${creatorRoleFor(row) ? ` (${creatorRoleFor(row)!.replace(/_/g, " ")})` : ""}`,
+                        },
+                        { label: "Created at", value: formatDisplayDate(row.created_at) || "—" },
                         { label: "Contact person", value: person },
                         {
                           label: "Role",
@@ -3097,14 +3153,15 @@ return (
                         { label: "Priority", value: dash(row.priority) },
                         { label: "Lead score", value: dash(row.lead_score) },
                         { label: "Proposal status", value: dash(row.proposal_status) },
-                        {
-                          label: "Created by",
-                          value: `${creatorLabelFor(row)}${creatorRoleFor(row) ? ` (${creatorRoleFor(row)!.replace(/_/g, " ")})` : ""}`,
-                        },
                       ]}
                       detailFields={[
                         { label: "College Name", value: row.college_name },
                         { label: "Location", value: dash(row.location) },
+                        {
+                          label: "Created By",
+                          value: `${creatorLabelFor(row)}${creatorRoleFor(row) ? ` (${creatorRoleFor(row)!.replace(/_/g, " ")})` : ""}`,
+                        },
+                        { label: "Created At", value: formatDisplayDate(row.created_at) || "—" },
                         { label: "Contact Number", value: dash(row.contact_number) },
                         { label: "Email", value: dash(row.email) },
                         { label: "Contact Person", value: person },
@@ -3118,11 +3175,6 @@ return (
                         { label: "Next Follow-up Date", value: formatDisplayDate(row.next_follow_up_date) || "—" },
                         { label: "Priority", value: dash(row.priority) },
                         { label: "Owner", value: ownerLabelFor(row) },
-                        {
-                          label: "Created By",
-                          value: `${creatorLabelFor(row)}${creatorRoleFor(row) ? ` (${creatorRoleFor(row)!.replace(/_/g, " ")})` : ""}`,
-                        },
-                        { label: "Created At", value: formatDisplayDate(row.created_at) || "—" },
                         { label: "Description", value: dash(row.description), clamp: true },
                         { label: "Last Outcome / Remarks", value: dash(row.last_outcome_remarks), clamp: true },
                         { label: "Days Since Last Follow-up", value: days != null ? String(days) : "—" },

@@ -8,8 +8,16 @@ test.beforeAll(() => {
 test("Admin College Visits shows creator attribution", async ({ page }) => {
   await page.goto("/admin/college-visits", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "College Visits" })).toBeVisible();
-  await expect(page.getByText("Created By", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Created At", { exact: true }).first()).toBeVisible();
+
+  await page.getByRole("button", { name: "All Colleges" }).click();
+  await expect(page.getByText(/each uploaded file appears separately/i).first()).toBeVisible();
+
+  const openFolder = page.getByRole("button", { name: /open →/i }).first();
+  if ((await openFolder.count()) > 0) {
+    await openFolder.click();
+    await expect(page.getByText("Created By", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Created At", { exact: true }).first()).toBeVisible();
+  }
 });
 
 test("Admin receives uploader attribution and all visibility scopes", async ({ request }) => {

@@ -52,6 +52,10 @@ export type CollegeVisitRow = {
   proposal_file_size: number | null;
   proposal_uploaded_at: string | null;
   import_batch_id?: string | null;
+  import_batch_name?: string | null;
+  import_batch_uploaded_at?: string | null;
+  import_batch_number?: string | null;
+  import_batch_status?: string | null;
   created_by: string | null;
   created_by_name?: string | null;
   created_by_role?: string | null;

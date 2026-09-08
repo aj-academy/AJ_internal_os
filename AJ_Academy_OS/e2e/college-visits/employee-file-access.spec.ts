@@ -8,8 +8,20 @@ test.beforeAll(() => {
 test("Employee uses shared College Visits UI", async ({ page }) => {
   await page.goto("/employee/college-visits", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "College Visits" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /add college/i })).toBeVisible();
-  await expect(page.getByText("Created By", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /add college/i }).first()).toBeVisible();
+
+  await page.getByRole("button", { name: "All Colleges" }).click();
+  await expect(page.getByRole("button", { name: /import template/i })).toHaveCount(0);
+  await expect(
+    page.getByText(/each folder appears separately|no college folders yet/i).first(),
+  ).toBeVisible();
+
+  const openFolder = page.getByRole("button", { name: /open →/i }).first();
+  if ((await openFolder.count()) > 0) {
+    await openFolder.click();
+    await expect(page.getByText("Created By", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Created At", { exact: true }).first()).toBeVisible();
+  }
 });
 
 test("Employee cannot enumerate or sign files for an inaccessible College Visit", async ({ request }) => {
