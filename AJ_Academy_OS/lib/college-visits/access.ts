@@ -32,6 +32,31 @@ export async function assertCanAccessProposalEntity(
   if (error || !data) throw new EntityAccessError();
 }
 
+export function collectCollegeIdsFromTaskRows(
+  rows: Array<{ college_visit_ids?: unknown }>,
+): string[] {
+  const ids = new Set<string>();
+  for (const row of rows) {
+    const raw = row.college_visit_ids;
+    const list = Array.isArray(raw)
+      ? raw
+      : typeof raw === "string"
+        ? (() => {
+            try {
+              const parsed = JSON.parse(raw) as unknown;
+              return Array.isArray(parsed) ? parsed : [];
+            } catch {
+              return [];
+            }
+          })()
+        : [];
+    for (const value of list) {
+      if (typeof value === "string" && value.trim()) ids.add(value.trim());
+    }
+  }
+  return [...ids];
+}
+
 export function canActorReadFile(
   actorRole: string | null | undefined,
   visibility: CollegeFileVisibility | string | null | undefined,
@@ -140,19 +165,21 @@ export async function overlayCollegeFileMetadataForActor<T extends { id: string 
 ): Promise<T[]> {
   if (!rows.length) return rows;
   const ids = rows.map((row) => row.id).filter(Boolean);
-  let query = admin
-    .from("proposal_files")
-    .select("entity_id,file_name,file_path,file_type,file_size,uploaded_at")
-    .eq("entity_type", "college")
-    .in("entity_id", ids)
-    .order("uploaded_at", { ascending: false });
-  if (!isAdminRole(actorRole)) {
-    query = query.eq("visibility_scope", COLLEGE_FILE_VISIBILITY.ADMIN_EMPLOYEE);
-  }
-  const { data, error } = await query;
-
   const newestByEntity = new Map<string, CollegeFileRow>();
-  if (!error) {
+  const chunkSize = 200;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    let query = admin
+      .from("proposal_files")
+      .select("entity_id,file_name,file_path,file_type,file_size,uploaded_at")
+      .eq("entity_type", "college")
+      .in("entity_id", chunk)
+      .order("uploaded_at", { ascending: false });
+    if (!isAdminRole(actorRole)) {
+      query = query.eq("visibility_scope", COLLEGE_FILE_VISIBILITY.ADMIN_EMPLOYEE);
+    }
+    const { data, error } = await query;
+    if (error) continue;
     for (const raw of data ?? []) {
       const file = raw as CollegeFileRow;
       if (!newestByEntity.has(file.entity_id)) newestByEntity.set(file.entity_id, file);
@@ -177,6 +204,25 @@ export async function overlayCollegeFileMetadataForActor<T extends { id: string 
       proposal_uploaded_at: file?.uploaded_at ?? null,
     } as T;
   });
+}
+
+/** List payloads should not query every proposal file. Hide Admin-only URLs instead. */
+export function redactCollegeListFileFieldsForActor<T extends { id: string }>(
+  rows: T[],
+  actorRole: string | null | undefined,
+): T[] {
+  if (isAdminRole(actorRole)) return rows;
+  return rows.map((row) => ({
+    ...row,
+    proposal_link: null,
+    proposal_pdf_url: null,
+    proposal_pdf_name: null,
+    proposal_file_name: null,
+    proposal_file_path: null,
+    proposal_file_type: null,
+    proposal_file_size: null,
+    proposal_uploaded_at: null,
+  }));
 }
 
 /**

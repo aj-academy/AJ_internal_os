@@ -430,10 +430,12 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     if (isInitial) setLoading(true);
     else setCvRefreshing(true);
     try {
-      const lists = await fetchCollegeVisitSettingsLists(supabase);
-      setCvLists(lists);
-      await loadVisits();
-      await loadImportBatches();
+      const lists = await Promise.all([
+        fetchCollegeVisitSettingsLists(supabase),
+        loadVisits(),
+        loadImportBatches(),
+      ]);
+      setCvLists(lists[0]);
       hasLoadedOnceRef.current = true;
       setHasLoadedOnce(true);
     } catch (e) {
@@ -478,7 +480,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const scheduleSilentRefreshVisits = useDebouncedCallback(() => {
     void silentRefreshVisits();
-  }, 400);
+  }, 1500);
 
   useEffect(() => {
     async function bootstrap() {
@@ -494,12 +496,6 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         .or("status.is.null,status.eq.active")
         .order("full_name", { ascending: true });
       setEmployees((profiles as ProfileMini[] | null) ?? []);
-
-      try {
-        setWhatsAppTemplates(await fetchWhatsAppTemplates(supabase));
-      } catch {
-        setWhatsAppTemplates([]);
-      }
     }
     void bootstrap();
   }, [supabase]);
@@ -548,8 +544,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         outreach?: Record<string, CollegeOutreachFlags>;
         assigned?: Record<string, CollegeAssignedEmployee>;
       };
-      setOutreachSaved(json.outreach ?? {});
-      setAssignedByCollege(json.assigned ?? {});
+      setOutreachSaved((prev) => ({ ...prev, ...(json.outreach ?? {}) }));
+      setAssignedByCollege((prev) => ({ ...prev, ...(json.assigned ?? {}) }));
     } catch {
       // Non-fatal: icons fall back to optimistic state only.
     }
@@ -574,19 +570,6 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     },
     [assignedByCollege, ownerNameMap],
   );
-
-  const visitIdsKey = useMemo(
-    () =>
-      visits
-        .map((v) => v.id)
-        .sort()
-        .join(","),
-    [visits],
-  );
-
-  useEffect(() => {
-    void loadRowStatus(visitIdsKey ? visitIdsKey.split(",") : []);
-  }, [visitIdsKey, loadRowStatus]);
 
   const handleCollegePhoneClick = useCallback(
     async (row: CollegeVisitRow, phoneOverride?: string, targetLabel?: string) => {
@@ -719,7 +702,12 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setOutreachPicker(null);
     setWhatsAppTargetPhone(phone);
     setWhatsAppComposeVisit(row);
-  }, []);
+    if (!whatsAppTemplates.length) {
+      void fetchWhatsAppTemplates(supabase)
+        .then(setWhatsAppTemplates)
+        .catch(() => setWhatsAppTemplates([]));
+    }
+  }, [supabase, whatsAppTemplates.length]);
 
   const requestCollegeWhatsApp = useCallback(
     (row: CollegeVisitRow) => {
@@ -917,9 +905,6 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     const ch = supabase
       .channel("college-visits-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "college_visits" }, () => scheduleSilentRefreshVisits())
-      .on("postgres_changes", { event: "*", schema: "public", table: "college_visit_activities" }, () =>
-        scheduleSilentRefreshVisits(),
-      )
       .subscribe();
     return () => {
       void supabase.removeChannel(ch);
@@ -1426,6 +1411,12 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     pageSize,
     setPageSize,
   } = usePagination(activeTab === "all-colleges" ? allCollegesTableVisits : filteredVisits, 25);
+
+  const pageRowIdsKey = useMemo(() => pageRows.map((row) => row.id).join(","), [pageRows]);
+  useEffect(() => {
+    if (!pageRowIdsKey) return;
+    void loadRowStatus(pageRowIdsKey.split(","));
+  }, [loadRowStatus, pageRowIdsKey]);
 
   const handleFolderSearchChange = useCallback(
     (value: string) => {
@@ -2505,7 +2496,7 @@ return (
               ) : null}
               <CollegeVisitImportBatchRowList
                 batches={paginatedImportBatches}
-                loading={importBatchesLoading || loading}
+                loading={isDbAdmin ? importBatchesLoading : importBatchesLoading || loading}
                 selection={
                   isDbAdmin
                     ? {

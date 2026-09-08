@@ -14,7 +14,8 @@ import { appendOutcomeRemarkLog } from "@/lib/outcomeRemarks";
 import {
   attachCollegeCreatorAttribution,
   attachImportBatchNames,
-  overlayCollegeFileMetadataForActor,
+  collectCollegeIdsFromTaskRows,
+  redactCollegeListFileFieldsForActor,
 } from "@/lib/college-visits/access";
 
 /** PostgREST caps rows per request, so visits are fetched in pages. */
@@ -35,21 +36,11 @@ function stripUnavailableColumns(payload: Record<string, unknown>, errorMsg: str
   return next;
 }
 
-export async function GET(request: Request) {
-  const { response, user, profile } = await requireStaffApiSession();
-  if (response || !user) return response!;
-
-  void request;
-
-  const role = profile?.role?.trim().toLowerCase() ?? "";
-  const isAdmin = role === "admin" || role === "super_admin";
-  // Paged so large imports never push older colleges (e.g. the legacy "All Colleges"
-  // folder) out of a single capped response.
-  const maxRows = isAdmin ? 20000 : 4000;
-
-  const supabase = await createClient();
-  // Admin: all employees' colleges. Employee: let RLS return owned, created,
-  // and task-linked rows; CRM pins are merged below for the existing pin flow.
+async function pageCollegeVisits(
+  client: ReturnType<typeof createAdminClient>,
+  maxRows: number,
+  ownerUserId?: string,
+) {
   let select = COLLEGE_VISIT_SELECT;
   const rows: unknown[] = [];
   let error: { message: string } | null = null;
@@ -59,13 +50,15 @@ export async function GET(request: Request) {
     let page: unknown[] = [];
 
     for (;;) {
-      const q = supabase
+      let q = client
         .from("college_visits")
         .select(select)
         .order("updated_at", { ascending: false })
-        // Tie-breaker keeps paging deterministic when updated_at repeats.
         .order("id", { ascending: true })
         .range(from, to);
+      if (ownerUserId) {
+        q = q.or(`assigned_to.eq.${ownerUserId},created_by.eq.${ownerUserId}`);
+      }
       const res = await q;
       if (!res.error) {
         page = res.data ?? [];
@@ -85,14 +78,65 @@ export async function GET(request: Request) {
     if (page.length < to - from + 1) break;
   }
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  return { rows, error, select };
+}
+
+export async function GET(request: Request) {
+  const { response, user, profile } = await requireStaffApiSession();
+  if (response || !user) return response!;
+
+  void request;
+
+  const role = profile?.role?.trim().toLowerCase() ?? "";
+  const isAdmin = role === "admin" || role === "super_admin";
+  const maxRows = isAdmin ? 20000 : 4000;
+  const admin = createAdminClient();
+
+  // Service role avoids per-row RLS (`is_admin()` / `task_links_college()`), which
+  // was the main reason College Visits felt frozen for both Admin and Employee.
+  const paged = await pageCollegeVisits(admin, maxRows, isAdmin ? undefined : user.id);
+  if (paged.error) {
+    return NextResponse.json({ error: paged.error.message }, { status: 400 });
   }
 
-  let visits = rows.map((r) => mapCollegeVisitRow(r));
+  let visits = paged.rows.map((r) => mapCollegeVisitRow(r));
   const pinIds: string[] = [];
 
   if (!isAdmin) {
+    const seen = new Set(visits.map((v) => v.id));
+    const { data: taskRows } = await admin
+      .from("tasks")
+      .select("college_visit_ids")
+      .or(`assigned_to.eq.${user.id},assigned_by.eq.${user.id}`);
+    const linkedIds = collectCollegeIdsFromTaskRows(taskRows ?? []).filter((id) => !seen.has(id));
+
+    for (let i = 0; i < linkedIds.length; i += 200) {
+      const chunk = linkedIds.slice(i, i + 200);
+      let linkedSelect = paged.select;
+      let { data: linkedData, error: linkedErr } = await admin
+        .from("college_visits")
+        .select(linkedSelect)
+        .in("id", chunk);
+      while (linkedErr) {
+        const fallback = nextCollegeVisitSelect(linkedSelect, linkedErr.message);
+        if (!fallback) break;
+        linkedSelect = fallback;
+        ({ data: linkedData, error: linkedErr } = await admin
+          .from("college_visits")
+          .select(linkedSelect)
+          .in("id", chunk));
+      }
+      if (!linkedErr && linkedData?.length) {
+        for (const row of linkedData) {
+          const mapped = mapCollegeVisitRow(row);
+          if (seen.has(mapped.id)) continue;
+          seen.add(mapped.id);
+          visits.push(mapped);
+        }
+      }
+    }
+
+    const supabase = await createClient();
     try {
       const { data: rpcIds, error: pinRpcErr } = await supabase.rpc("get_my_crm_pin_ids", {
         p_entity_type: "college",
@@ -113,36 +157,40 @@ export async function GET(request: Request) {
       /* pins optional until SQL deployed */
     }
 
-    const ownedIds = new Set(visits.map((v) => v.id));
-    const missing = [...new Set(pinIds)].filter((id) => !ownedIds.has(id));
+    const missing = [...new Set(pinIds)].filter((id) => !seen.has(id));
     if (missing.length) {
-      try {
-        const { createAdminClient } = await import("@/lib/supabase/admin");
-        const admin = createAdminClient();
-        let pinSelect = COLLEGE_VISIT_SELECT;
-        let { data: pinData, error: pinErr } = await admin
-          .from("college_visits")
-          .select(pinSelect)
-          .in("id", missing);
-        while (pinErr) {
-          const fallback = nextCollegeVisitSelect(pinSelect, pinErr.message);
-          if (!fallback) break;
-          pinSelect = fallback;
-          ({ data: pinData, error: pinErr } = await admin.from("college_visits").select(pinSelect).in("id", missing));
+      let pinSelect = paged.select;
+      let { data: pinData, error: pinErr } = await admin.from("college_visits").select(pinSelect).in("id", missing);
+      while (pinErr) {
+        const fallback = nextCollegeVisitSelect(pinSelect, pinErr.message);
+        if (!fallback) break;
+        pinSelect = fallback;
+        ({ data: pinData, error: pinErr } = await admin.from("college_visits").select(pinSelect).in("id", missing));
+      }
+      if (!pinErr && pinData?.length) {
+        for (const row of pinData) {
+          const mapped = mapCollegeVisitRow(row);
+          if (seen.has(mapped.id)) continue;
+          seen.add(mapped.id);
+          visits.push(mapped);
         }
-        if (!pinErr && pinData?.length) {
-          visits = [...visits, ...pinData.map((r) => mapCollegeVisitRow(r))];
-          visits.sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")));
-        }
-      } catch {
-        /* service role missing — owned rows still returned */
       }
     }
+    visits.sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")));
   }
-  const adminForPresentation = createAdminClient();
-  visits = await overlayCollegeFileMetadataForActor(adminForPresentation, visits, role);
-  visits = await attachCollegeCreatorAttribution(adminForPresentation, visits);
-  visits = await attachImportBatchNames(adminForPresentation, visits);
+
+  visits = redactCollegeListFileFieldsForActor(visits, role);
+  const [withCreators, withFolders] = await Promise.all([
+    attachCollegeCreatorAttribution(admin, visits),
+    attachImportBatchNames(admin, visits),
+  ]);
+  visits = withCreators.map((row, index) => ({
+    ...row,
+    import_batch_name: withFolders[index]?.import_batch_name ?? null,
+    import_batch_uploaded_at: withFolders[index]?.import_batch_uploaded_at ?? null,
+    import_batch_number: withFolders[index]?.import_batch_number ?? null,
+    import_batch_status: withFolders[index]?.import_batch_status ?? null,
+  }));
 
   return NextResponse.json({ visits, pinIds: [...new Set(pinIds)] });
 }

@@ -346,7 +346,7 @@ Run **`college_visits_schema.sql`** after `schema.sql` (requires `is_admin()` / 
 
 **Student Master proposals:** Same file upload (Add + Edit + Proposal Tracker) after `proposals_file_upload_patch.sql`. Paths: `students/{client_id}/…` and `colleges/{college_visit_id}/…`. APIs: `POST /api/proposals/upload`, `/signed-url`, `/remove` (staff session + service role).
 
-API (staff session): `GET/POST /api/college-visits`, `PATCH/DELETE /api/college-visits/[id]`, `GET/POST /api/college-visits/[id]/activities`. GET returns **all rows for admin**, else the signed-in employee’s own rows.
+API (staff session): `GET/POST /api/college-visits`, `PATCH/DELETE /api/college-visits/[id]`, `GET/POST /api/college-visits/[id]/activities`. GET returns **all rows for admin**, else the signed-in employee’s owned/created/task-linked/pinned rows. List GET uses the service role after session checks (avoids per-row `task_links_college` RLS), redacts Employee file URL fields, and does not overlay every proposal file on the list.
 
 **Task assignment:** In Assign Task, choose **Colleges** → open College Visits table to pick rows (same flow as Student Master leads). Run `tasks_college_link_patch.sql` after `college_visits_schema.sql`.
 
