@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApiSession } from "@/lib/security";
 import {
   COLLEGE_VISIT_SELECT,
@@ -151,7 +152,6 @@ export async function POST(request: Request) {
   const parsed = parseCollegeVisitBody(body);
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
-  void profile;
   const payload = buildPayloadFromApi(parsed.form, user.id, false);
   payload.assigned_to = user.id;
   if (parsed.form.last_outcome_remarks.trim()) {
@@ -163,6 +163,28 @@ export async function POST(request: Request) {
     typeof record.import_batch_id === "string" && record.import_batch_id.trim()
       ? record.import_batch_id.trim()
       : null;
+
+  if (importBatchId) {
+    const role = profile?.role?.trim().toLowerCase() ?? "";
+    if (role !== "admin" && role !== "super_admin") {
+      return NextResponse.json(
+        { error: "Only admins can save a college into an upload folder." },
+        { status: 403 },
+      );
+    }
+    const admin = createAdminClient();
+    const { data: folder, error: folderError } = await admin
+      .from("college_visit_import_batches")
+      .select("id")
+      .eq("id", importBatchId)
+      .maybeSingle();
+    if (folderError || !folder) {
+      return NextResponse.json(
+        { error: folderError?.message || "Selected folder no longer exists." },
+        { status: 400 },
+      );
+    }
+  }
 
   const supabase = await createClient();
   let insertPayload: Record<string, unknown> = { ...payload, created_by: user.id, assigned_to: user.id };
@@ -185,6 +207,25 @@ export async function POST(request: Request) {
   }
 
   const created = mapCollegeVisitRow(data);
+  if (importBatchId) {
+    // Manual additions share the folder batch, so keep its displayed row and
+    // created counts aligned with the college that was just saved.
+    const admin = createAdminClient();
+    const { data: batch } = await admin
+      .from("college_visit_import_batches")
+      .select("row_count,created_count")
+      .eq("id", importBatchId)
+      .maybeSingle();
+    if (batch) {
+      await admin
+        .from("college_visit_import_batches")
+        .update({
+          row_count: Number(batch.row_count || 0) + 1,
+          created_count: Number(batch.created_count || 0) + 1,
+        })
+        .eq("id", importBatchId);
+    }
+  }
   await supabase.from("college_visit_activities").insert({
     college_visit_id: created.id,
     activity_type: "College Created",

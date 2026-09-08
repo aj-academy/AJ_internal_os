@@ -18,7 +18,11 @@ export type CollegeImportBatchRow = {
   status: string;
   uploaded_at: string;
   error_message?: string | null;
-  meta?: { duplicate_resolutions?: Record<string, string>; original_file_name?: string } | null;
+  meta?: {
+    duplicate_resolutions?: Record<string, string>;
+    original_file_name?: string;
+    source?: "manual_folder" | string;
+  } | null;
   isLegacy?: boolean;
   /** For visits imported before batch tracking — groups rows from the same file/upload. */
   legacyGroupKey?: string;
@@ -46,6 +50,7 @@ const statusClass: Record<string, string> = {
 };
 
 function statusLabel(batch: CollegeImportBatchRow): string {
+  if (batch.meta?.source === "manual_folder") return "Folder";
   if (batch.status === "ready_for_review") return "Review duplicates";
   if (batch.status === "completed_with_errors") {
     if ((batch.created_count ?? 0) === 0) return "Import failed — open to retry";
@@ -125,7 +130,9 @@ export function CollegeVisitImportBatchRowList({
                         <span className="font-medium text-emerald-700">{batch.new_count} new</span>
                       ) : null}
                       {!batch.isLegacy && batch.status === "completed" && batch.created_count > 0 ? (
-                        <span className="font-medium text-emerald-700">{batch.created_count} imported</span>
+                        <span className="font-medium text-emerald-700">
+                          {batch.created_count} {batch.meta?.source === "manual_folder" ? "college" : "imported"}
+                        </span>
                       ) : null}
                       <span>{formatDisplayDate(batch.uploaded_at, "—")}</span>
                       {!batch.isLegacy ? <span>{batch.batch_number}</span> : null}

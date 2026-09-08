@@ -45,6 +45,10 @@ import { usePagination } from "@/lib/usePagination";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { CollegeVisitFormPanel } from "@/components/college-visits/CollegeVisitFormPanel";
 import {
+  CollegeVisitSaveLocationDialog,
+  type CollegeVisitSaveLocation,
+} from "@/components/college-visits/CollegeVisitSaveLocationDialog";
+import {
   CollegeVisitImportBatchRowList,
   type CollegeImportBatchRow,
 } from "@/components/college-visits/CollegeVisitImportBatchRowList";
@@ -201,6 +205,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [panelOpen, setPanelOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<CollegeVisitFormValue>(() => emptyCollegeVisitForm());
+  const [saveLocationOpen, setSaveLocationOpen] = useState(false);
   const [viewVisit, setViewVisit] = useState<CollegeVisitRow | null>(null);
   const [activityVisit, setActivityVisit] = useState<CollegeVisitRow | null>(null);
   const [activityModalRows, setActivityModalRows] = useState<LeadActivityItem[]>([]);
@@ -1532,7 +1537,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (saveLocation?: CollegeVisitSaveLocation) => {
     if (!currentUserId || !form.college_name.trim()) return;
     setSubmitting(true);
     setError(null);
@@ -1566,15 +1571,45 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         }
         setSuccess(filesToUpload.length ? `College visit updated and ${filesToUpload.length} file(s) uploaded.` : "College visit updated.");
       } else {
+        let targetBatchId =
+          saveLocation?.mode === "existing" ? saveLocation.batchId : null;
+        let targetFolderName =
+          targetBatchId
+            ? importBatches.find((batch) => batch.id === targetBatchId)?.file_name ?? "selected folder"
+            : "All Colleges";
+
+        if (saveLocation?.mode === "new") {
+          const folderRes = await fetch("/api/college-visits/import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ folderName: saveLocation.folderName }),
+          });
+          const folderJson = (await folderRes.json()) as {
+            folder?: CollegeImportBatchRow;
+            folderId?: string;
+            error?: string;
+          };
+          // If another admin created the same folder moments earlier, reuse it
+          // instead of making the user close the form and start again.
+          if (folderRes.status === 409 && folderJson.folderId) {
+            targetBatchId = folderJson.folderId;
+            targetFolderName = saveLocation.folderName;
+          } else if (!folderRes.ok || !folderJson.folder) {
+            throw new Error(folderJson.error ?? "Could not create folder.");
+          } else {
+            targetBatchId = folderJson.folder.id;
+            targetFolderName = folderJson.folder.file_name;
+          }
+        }
+
         const res = await fetch("/api/college-visits", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...form,
             assigned_to: payload.assigned_to ?? "",
-            ...(focusedImportBatch && !focusedImportBatch.isLegacy && !editingId
-              ? { import_batch_id: focusedImportBatch.id }
-              : {}),
+            ...(targetBatchId ? { import_batch_id: targetBatchId } : {}),
           }),
         });
         const json = (await res.json()) as { visit?: { id?: string }; error?: string };
@@ -1592,17 +1627,32 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
           setPendingProposalFiles([]);
           await loadProposalFiles("college", nid);
         }
-        setSuccess(nid && filesToUpload.length ? `College visit created and ${filesToUpload.length} proposal file(s) uploaded.` : "College visit created.");
+        setSuccess(
+          nid && filesToUpload.length
+            ? `College visit saved in “${targetFolderName}” and ${filesToUpload.length} proposal file(s) uploaded.`
+            : `College visit saved in “${targetFolderName}”.`,
+        );
       }
+      setSaveLocationOpen(false);
       setPanelOpen(false);
       setEditId(null);
       setPendingProposalFiles([]);
       await silentRefreshVisits();
+      if (!editingId && isDbAdmin) await loadImportBatches();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const requestSave = () => {
+    if (!currentUserId || !form.college_name.trim()) return;
+    if (editId) {
+      void handleSave();
+      return;
+    }
+    setSaveLocationOpen(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -3050,8 +3100,11 @@ return (
         canAssign={false}
         elevatedStack={stackElevated}
         onChange={setForm}
-        onClose={() => setPanelOpen(false)}
-        onSubmit={() => void handleSave()}
+        onClose={() => {
+          setSaveLocationOpen(false);
+          setPanelOpen(false);
+        }}
+        onSubmit={requestSave}
         existingOutcomeHistory={editingOutcomeHistory}
         visitStatusOptions={cvLists.visitStatuses}
         mouStatusOptions={cvLists.mouStatuses}
@@ -3076,6 +3129,22 @@ return (
           />
         }
       />
+
+      {saveLocationOpen && !editId ? (
+        <CollegeVisitSaveLocationDialog
+          open
+          collegeName={form.college_name.trim()}
+          folders={importBatches}
+          defaultBatchId={
+            focusedImportBatch && !focusedImportBatch.isLegacy
+              ? focusedImportBatch.id
+              : null
+          }
+          saving={submitting}
+          onClose={() => setSaveLocationOpen(false)}
+          onConfirm={(location) => void handleSave(location)}
+        />
+      ) : null}
 
       {proposalRow ? (
         <CollegeProposalEditModal

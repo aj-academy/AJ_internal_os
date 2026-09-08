@@ -12,7 +12,7 @@ export async function GET() {
   const { data, error } = await admin
     .from("college_visit_import_batches")
     .select(
-      "id,batch_number,file_name,file_hash,row_count,new_count,duplicate_count,invalid_count,created_count,skipped_count,failed_count,status,uploaded_at,error_message",
+      "id,batch_number,file_name,file_hash,row_count,new_count,duplicate_count,invalid_count,created_count,skipped_count,failed_count,status,uploaded_at,error_message,meta",
     )
     .order("uploaded_at", { ascending: false })
     .limit(200);
@@ -30,4 +30,102 @@ export async function GET() {
   }
 
   return NextResponse.json({ batches: data ?? [] });
+}
+
+/**
+ * Create an empty manual folder. Spreadsheet imports and manual folders share
+ * the same batch table so every college has one stable folder identifier.
+ */
+export async function POST(request: Request) {
+  const auth = await requireAdminApiSession();
+  if (auth.response || !auth.user) return auth.response!;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  const folderName =
+    typeof (body as { folderName?: unknown })?.folderName === "string"
+      ? (body as { folderName: string }).folderName.trim()
+      : "";
+  if (!folderName) {
+    return NextResponse.json({ error: "Folder name is required." }, { status: 400 });
+  }
+  if (folderName.length > 120) {
+    return NextResponse.json({ error: "Folder name must be 120 characters or fewer." }, { status: 400 });
+  }
+  if (/[\u0000-\u001f<>:"/\\|?*]/.test(folderName)) {
+    return NextResponse.json(
+      { error: "Folder name contains unsupported characters." },
+      { status: 400 },
+    );
+  }
+
+  const admin = createAdminClient();
+  const { data: existing, error: existingError } = await admin
+    .from("college_visit_import_batches")
+    .select("id,file_name")
+    .order("uploaded_at", { ascending: false })
+    .limit(1000);
+  if (existingError) {
+    return NextResponse.json({ error: existingError.message }, { status: 400 });
+  }
+  const duplicate = (existing ?? []).find(
+    (row) => String(row.file_name || "").trim().toLocaleLowerCase() === folderName.toLocaleLowerCase(),
+  );
+  if (duplicate) {
+    return NextResponse.json(
+      {
+        error: "A folder with this name already exists. Select it under Existing folder.",
+        folderId: duplicate.id,
+      },
+      { status: 409 },
+    );
+  }
+
+  const { data: batchNumber, error: numberError } = await admin.rpc(
+    "college_visit_import_next_batch_number",
+  );
+  if (numberError || !batchNumber) {
+    return NextResponse.json(
+      {
+        error: numberError?.message || "Could not allocate a folder number.",
+        hint: "Run AJ_Academy_SB/college_visit_import_batches.sql in Supabase.",
+      },
+      { status: 400 },
+    );
+  }
+
+  const { data: folder, error } = await admin
+    .from("college_visit_import_batches")
+    .insert({
+      batch_number: batchNumber,
+      file_name: folderName,
+      row_count: 0,
+      new_count: 0,
+      duplicate_count: 0,
+      invalid_count: 0,
+      created_count: 0,
+      skipped_count: 0,
+      failed_count: 0,
+      status: "completed",
+      uploaded_by: auth.user.id,
+      meta: { source: "manual_folder" },
+    })
+    .select(
+      "id,batch_number,file_name,file_hash,row_count,new_count,duplicate_count,invalid_count,created_count,skipped_count,failed_count,status,uploaded_at,error_message,meta",
+    )
+    .single();
+
+  if (error || !folder) {
+    return NextResponse.json(
+      { error: error?.message || "Could not create folder." },
+      { status: 400 },
+    );
+  }
+
+  return NextResponse.json({ folder }, { status: 201 });
 }
