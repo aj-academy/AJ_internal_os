@@ -105,6 +105,127 @@ const STATUS_STEPS = [
 
 const inputClass = "h-9 rounded-lg border border-[#e8dcc8] bg-white px-2 text-sm text-[#3d3428]";
 
+function SalaryBreakdownDrawer({
+  item,
+  periodLabel,
+  prevItem,
+  onClose,
+}: {
+  item: Item;
+  periodLabel: string;
+  prevItem: Item | null;
+  onClose: () => void;
+}) {
+  const earnings = [
+    ["Basic", item.earned_basic],
+    ["HRA", item.earned_hra],
+    ["Allowances", item.earned_allowances],
+    ["Incentives", item.incentives],
+    ["Bonus", item.bonus],
+    ["Overtime", item.overtime_amount],
+    ["Reimbursements", item.reimbursements],
+    ["Arrears", item.arrears],
+    ["Other earnings", item.other_earnings],
+  ] as const;
+  const deductions = [
+    ["Loss of pay", item.loss_of_pay],
+    ["Absence", item.absence_deduction],
+    ["Late", item.late_deduction],
+    ["Fixed deductions", item.fixed_deductions],
+    ["Advance recovery", item.advance_recovery],
+    ["Loan recovery", item.loan_recovery],
+    ["Penalty", item.penalty],
+    ["Statutory deductions", item.statutory_deductions],
+    ["Other deductions", item.other_deductions],
+  ] as const;
+  const previousNet = prevItem ? Number(prevItem.net_salary) : null;
+  const netDelta = previousNet == null ? null : Number(item.net_salary) - previousNet;
+
+  const moneyRows = (rows: ReadonlyArray<readonly [string, number]>) =>
+    rows.map(([label, value]) => (
+      <div key={label} className="flex items-center justify-between gap-4 py-1.5 text-sm">
+        <span className="text-[#64748b]">{label}</span>
+        <span className="font-medium text-[#0f172a]">{inr(Number(value || 0))}</span>
+      </div>
+    ));
+
+  return (
+    <div className="fixed inset-0 z-[80] flex justify-end bg-black/35" role="dialog" aria-modal="true" aria-label="Salary breakdown">
+      <button type="button" className="min-w-0 flex-1 cursor-default" onClick={onClose} aria-label="Close salary breakdown" />
+      <aside className="h-full w-full max-w-xl overflow-y-auto bg-white p-5 shadow-xl sm:p-6">
+        <div className="flex items-start justify-between gap-4 border-b border-[#e8dcc8] pb-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#a68b2e]">Salary breakdown</p>
+            <h2 className="mt-1 text-xl font-semibold text-[#0f172a]">
+              {item.employee?.full_name || "Employee"}
+            </h2>
+            <p className="mt-1 text-sm text-[#64748b]">
+              {periodLabel}
+              {item.employee?.designation ? ` · ${item.employee.designation}` : ""}
+            </p>
+          </div>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            ["Working days", item.working_days],
+            ["Present", item.present_days],
+            ["Paid leave", item.paid_leave_days],
+            ["Payable days", item.payable_days],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-xl border border-[#e8dcc8] bg-[#fffdf8] p-3">
+              <p className="text-[11px] uppercase tracking-wide text-[#64748b]">{label}</p>
+              <p className="mt-1 text-lg font-semibold text-[#0f172a]">{value}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          <section>
+            <h3 className="border-b border-[#e8dcc8] pb-2 text-sm font-semibold text-[#0f172a]">Earnings</h3>
+            <div className="divide-y divide-[#f1f5f9]">{moneyRows(earnings)}</div>
+            <div className="mt-2 flex items-center justify-between border-t border-[#e8dcc8] pt-3 text-sm font-semibold">
+              <span>Gross earnings</span>
+              <span className="text-emerald-700">{inr(Number(item.gross_earnings || 0))}</span>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="border-b border-[#e8dcc8] pb-2 text-sm font-semibold text-[#0f172a]">Deductions</h3>
+            <div className="divide-y divide-[#f1f5f9]">{moneyRows(deductions)}</div>
+            <div className="mt-2 flex items-center justify-between border-t border-[#e8dcc8] pt-3 text-sm font-semibold">
+              <span>Total deductions</span>
+              <span className="text-rose-700">{inr(Number(item.total_deductions || 0))}</span>
+            </div>
+          </section>
+        </div>
+
+        <section className="mt-6 rounded-xl border border-[#d7eadf] bg-emerald-50 p-4">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Net salary</p>
+              <p className="mt-1 text-2xl font-semibold text-emerald-900">{inr(Number(item.net_salary || 0))}</p>
+            </div>
+            {netDelta != null ? (
+              <p className={`text-sm font-medium ${netDelta >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                {netDelta >= 0 ? "+" : ""}
+                {inr(netDelta)} vs previous month
+              </p>
+            ) : null}
+          </div>
+        </section>
+
+        {item.error_message ? (
+          <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{item.error_message}</p>
+        ) : null}
+      </aside>
+    </div>
+  );
+}
+
 export function PayrollCalculateWorkbench() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
