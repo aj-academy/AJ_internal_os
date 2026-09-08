@@ -17,6 +17,7 @@ export type CollegeImportBatchRow = {
   failed_count: number;
   status: string;
   uploaded_at: string;
+  uploaded_by?: string | null;
   error_message?: string | null;
   meta?: {
     duplicate_resolutions?: Record<string, string>;

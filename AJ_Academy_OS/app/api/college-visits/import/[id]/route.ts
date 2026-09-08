@@ -1,32 +1,23 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminApiSession } from "@/lib/security/auth/requireAdminApi";
+import { loadImportBatchForActor, requireCollegeVisitImportActor } from "@/lib/college-visits/importAccess";
 
 export const runtime = "nodejs";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, { params }: RouteParams) {
-  const auth = await requireAdminApiSession();
+  const auth = await requireCollegeVisitImportActor();
   if (auth.response || !auth.user) return auth.response!;
 
   const { id } = await params;
   const admin = createAdminClient();
+  const loaded = await loadImportBatchForActor(admin, id, auth.user.id, auth.isAdmin);
 
-  const { data: batch, error: batchError } = await admin
-    .from("college_visit_import_batches")
-    .select(
-      "id,batch_number,file_name,file_hash,row_count,new_count,duplicate_count,invalid_count,created_count,skipped_count,failed_count,status,uploaded_at,error_message,meta",
-    )
-    .eq("id", id)
-    .maybeSingle();
-
-  if (batchError) {
-    return NextResponse.json({ error: batchError.message }, { status: 400 });
+  if (!loaded.batch) {
+    return NextResponse.json({ error: loaded.error }, { status: loaded.status });
   }
-  if (!batch) {
-    return NextResponse.json({ error: "Import batch not found." }, { status: 404 });
-  }
+  const batch = loaded.batch;
 
   const { data: rows, error: rowsError } = await admin
     .from("college_visit_import_rows")

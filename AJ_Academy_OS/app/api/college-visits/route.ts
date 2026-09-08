@@ -175,22 +175,23 @@ export async function POST(request: Request) {
 
   if (importBatchId) {
     const role = profile?.role?.trim().toLowerCase() ?? "";
-    if (role !== "admin" && role !== "super_admin") {
-      return NextResponse.json(
-        { error: "Only admins can save a college into an upload folder." },
-        { status: 403 },
-      );
-    }
+    const isAdmin = role === "admin" || role === "super_admin";
     const admin = createAdminClient();
     const { data: folder, error: folderError } = await admin
       .from("college_visit_import_batches")
-      .select("id")
+      .select("id,uploaded_by")
       .eq("id", importBatchId)
       .maybeSingle();
     if (folderError || !folder) {
       return NextResponse.json(
         { error: folderError?.message || "Selected folder no longer exists." },
         { status: 400 },
+      );
+    }
+    if (!isAdmin && folder.uploaded_by !== user.id) {
+      return NextResponse.json(
+        { error: "You can only save a college into your own upload folder." },
+        { status: 403 },
       );
     }
   }

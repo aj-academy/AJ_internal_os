@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminApiSession } from "@/lib/security/auth/requireAdminApi";
+import { createClient } from "@/lib/supabase/server";
+import { loadImportBatchForActor, requireCollegeVisitImportActor } from "@/lib/college-visits/importAccess";
 import { buildCollegeVisitPayload } from "@/components/college-visits/collegeVisitsHelpers";
 import type { CollegeVisitFormValue } from "@/components/college-visits/collegeVisitsHelpers";
 import { COLLEGE_IMPORT_EXECUTE_CHUNK } from "@/lib/collegeVisitsImport";
@@ -15,20 +16,22 @@ export const runtime = "nodejs";
 type RouteParams = { params: Promise<{ id: string }> };
 
 export async function POST(_request: Request, { params }: RouteParams) {
-  const auth = await requireAdminApiSession();
+  const auth = await requireCollegeVisitImportActor();
   if (auth.response || !auth.user) return auth.response!;
 
   const { id } = await params;
   const admin = createAdminClient();
-
-  const { data: batch, error: batchError } = await admin
-    .from("college_visit_import_batches")
-    .select("id,status,file_name,created_count,meta")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (batchError) return NextResponse.json({ error: batchError.message }, { status: 400 });
-  if (!batch) return NextResponse.json({ error: "Import batch not found." }, { status: 404 });
+  const loaded = await loadImportBatchForActor(
+    admin,
+    id,
+    auth.user.id,
+    auth.isAdmin,
+    "id,status,file_name,created_count,meta,uploaded_by",
+  );
+  if (!loaded.batch) {
+    return NextResponse.json({ error: loaded.error }, { status: loaded.status });
+  }
+  const batch = loaded.batch;
   if (batch.status === "completed" || batch.status === "completed_with_errors") {
     if ((batch.created_count ?? 0) > 0) {
       return NextResponse.json({ error: "This import was already executed." }, { status: 400 });
@@ -65,7 +68,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
   const activityRows: { college_visit_id: string; activity_type: string; notes: string; created_by: string }[] = [];
 
   const buildInsert = (form: CollegeVisitFormValue) => {
-    const payload = buildCollegeVisitPayload(form, { userId: auth.user!.id, isDbAdmin: true });
+    const payload = buildCollegeVisitPayload(form, { userId: auth.user!.id, isDbAdmin: auth.isAdmin });
     return {
       ...payload,
       assigned_to: auth.user!.id,
@@ -168,6 +171,26 @@ export async function POST(_request: Request, { params }: RouteParams) {
           .update({ status: "skipped", error_message: "No existing college to update." })
           .eq("id", importRowId);
         continue;
+      }
+
+      if (!auth.isAdmin) {
+        const userClient = await createClient();
+        const { data: allowed } = await userClient
+          .from("college_visits")
+          .select("id")
+          .eq("id", targetId)
+          .maybeSingle();
+        if (!allowed) {
+          skipped += 1;
+          await admin
+            .from("college_visit_import_rows")
+            .update({
+              status: "skipped",
+              error_message: "Existing college is not in your College Visits list.",
+            })
+            .eq("id", importRowId);
+          continue;
+        }
       }
 
       const fullPayload = buildInsert(form);

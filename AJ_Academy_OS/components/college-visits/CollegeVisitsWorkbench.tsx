@@ -388,7 +388,6 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   }, []);
 
   const loadImportBatches = useCallback(async () => {
-    if (!isDbAdmin) return;
     setImportBatchesLoading(true);
     try {
       const res = await fetch("/api/college-visits/import", { credentials: "include" });
@@ -397,7 +396,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     } finally {
       setImportBatchesLoading(false);
     }
-  }, [isDbAdmin]);
+  }, []);
 
   const togglePickCollege = (id: string) => {
     setPickedCollegeIds((prev) => {
@@ -434,7 +433,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       const lists = await fetchCollegeVisitSettingsLists(supabase);
       setCvLists(lists);
       await loadVisits();
-      if (isDbAdmin) await loadImportBatches();
+      await loadImportBatches();
       hasLoadedOnceRef.current = true;
       setHasLoadedOnce(true);
     } catch (e) {
@@ -444,7 +443,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       if (isInitial) setLoading(false);
       else setCvRefreshing(false);
     }
-  }, [currentUserId, isDbAdmin, loadImportBatches, loadVisits, supabase]);
+  }, [currentUserId, loadImportBatches, loadVisits, supabase]);
 
   /** Background refetch — keep current visits visible until a valid response arrives. */
   const silentRefreshVisits = useCallback(async () => {
@@ -1076,42 +1075,42 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   }, [visits]);
 
   const displayImportBatches = useMemo(() => {
-    if (isDbAdmin) {
-      const uploads = [...importBatches].sort((a, b) =>
-        (b.uploaded_at || "").localeCompare(a.uploaded_at || ""),
-      );
-      return [...uploads, ...syntheticLegacyBatches];
-    }
-
-    const byId = new Map<string, CollegeImportBatchRow>();
-    for (const visit of visits) {
-      if (!visit.import_batch_id) continue;
-      const existing = byId.get(visit.import_batch_id);
-      if (existing) {
-        existing.row_count += 1;
-        existing.created_count += 1;
-        existing.new_count += 1;
-        continue;
-      }
-      byId.set(visit.import_batch_id, {
-        id: visit.import_batch_id,
-        batch_number: visit.import_batch_number || "",
-        file_name: visit.import_batch_name || "Folder",
-        row_count: 1,
-        new_count: 1,
-        duplicate_count: 0,
-        invalid_count: 0,
-        created_count: 1,
-        skipped_count: 0,
-        failed_count: 0,
-        status: visit.import_batch_status || "completed",
-        uploaded_at: visit.import_batch_uploaded_at || visit.created_at || "",
-      });
-    }
-    const uploads = [...byId.values()].sort((a, b) =>
+    const uploads = [...importBatches].sort((a, b) =>
       (b.uploaded_at || "").localeCompare(a.uploaded_at || ""),
     );
-    return [...uploads, ...syntheticLegacyBatches];
+    const known = new Set(uploads.map((batch) => batch.id));
+    const extras: CollegeImportBatchRow[] = [];
+    if (!isDbAdmin) {
+      const byId = new Map<string, CollegeImportBatchRow>();
+      for (const visit of visits) {
+        if (!visit.import_batch_id || known.has(visit.import_batch_id)) continue;
+        const existing = byId.get(visit.import_batch_id);
+        if (existing) {
+          existing.row_count += 1;
+          existing.created_count += 1;
+          existing.new_count += 1;
+          continue;
+        }
+        byId.set(visit.import_batch_id, {
+          id: visit.import_batch_id,
+          batch_number: visit.import_batch_number || "",
+          file_name: visit.import_batch_name || "Folder",
+          row_count: 1,
+          new_count: 1,
+          duplicate_count: 0,
+          invalid_count: 0,
+          created_count: 1,
+          skipped_count: 0,
+          failed_count: 0,
+          status: visit.import_batch_status || "completed",
+          uploaded_at: visit.import_batch_uploaded_at || visit.created_at || "",
+        });
+      }
+      extras.push(
+        ...[...byId.values()].sort((a, b) => (b.uploaded_at || "").localeCompare(a.uploaded_at || "")),
+      );
+    }
+    return [...uploads, ...extras, ...syntheticLegacyBatches];
   }, [isDbAdmin, importBatches, syntheticLegacyBatches, visits]);
 
   const visitsForFocusedBatch = useMemo(() => {
@@ -1320,6 +1319,14 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   ]);
 
   const showImportBatchList = !pickForTask && activeTab === "all-colleges";
+  const canManageFocusedImportBatch = Boolean(
+    focusedImportBatch &&
+      !focusedImportBatch.isLegacy &&
+      (isDbAdmin || focusedImportBatch.uploaded_by === currentUserId),
+  );
+  const canBulkUploadHere =
+    isAdmin &&
+    (!focusedImportBatch || focusedImportBatch.isLegacy || canManageFocusedImportBatch);
 
   const allCollegesTableVisits = useMemo(() => {
     if (activeTab !== "all-colleges") return filteredVisits;
@@ -1486,12 +1493,25 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   }, [activeTab, filteredVisits, supabase]);
 
   const rowsForExport = useMemo(() => {
-    const scope = activeTab === "all-colleges" ? allCollegesTableVisits : filteredVisits;
+    const scope =
+      activeTab === "all-colleges"
+        ? showImportBatchList && !focusedImportBatch
+          ? filteredVisits
+          : allCollegesTableVisits
+        : filteredVisits;
     if (visitBulk.selectedCount > 0) {
       return scope.filter((v) => visitBulk.selected.has(v.id));
     }
     return scope;
-  }, [activeTab, allCollegesTableVisits, filteredVisits, visitBulk.selected, visitBulk.selectedCount]);
+  }, [
+    activeTab,
+    allCollegesTableVisits,
+    filteredVisits,
+    focusedImportBatch,
+    showImportBatchList,
+    visitBulk.selected,
+    visitBulk.selectedCount,
+  ]);
 
   const changePipelineStatus = async (row: CollegeVisitRow, visit_status: string) => {
     if (!currentUserId || row.visit_status === visit_status) return;
@@ -1751,7 +1771,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       setEditId(null);
       setPendingProposalFiles([]);
       await silentRefreshVisits();
-      if (!editingId && isDbAdmin) await loadImportBatches();
+      if (!editingId) await loadImportBatches();
     } catch (e) {
       setError(friendlyCollegeVisitError(e));
     } finally {
@@ -1766,8 +1786,12 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       return;
     }
     if (!isDbAdmin) {
-      // Import folders remain Admin-owned. Employee-created colleges are saved
-      // to All Colleges under the authenticated Employee's ownership.
+      if (canManageFocusedImportBatch && focusedImportBatch) {
+        void handleSave({ mode: "existing", batchId: focusedImportBatch.id });
+        return;
+      }
+      // Import folders remain owned by the uploader. Employee-created colleges
+      // outside their own upload go to All Colleges.
       void handleSave({ mode: "existing", batchId: null });
       return;
     }
@@ -2027,7 +2051,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   };
 
   const handleImportFile = async (file: File, displayName?: string) => {
-    if (!currentUserId || !isDbAdmin) return;
+    if (!currentUserId || !isAdmin) return;
     setImporting(true);
     setError(null);
     setSuccess(null);
@@ -2041,7 +2065,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
           : focusedImportBatch &&
               !focusedImportBatch.isLegacy &&
               (focusedImportBatch.status === "completed" ||
-                focusedImportBatch.status === "completed_with_errors")
+                focusedImportBatch.status === "completed_with_errors") &&
+              (isDbAdmin || focusedImportBatch.uploaded_by === currentUserId)
             ? focusedImportBatch.id
             : null;
       if (appendToBatchId) body.append("appendToBatchId", appendToBatchId);
@@ -2406,7 +2431,7 @@ return (
 
       {activeTab === "all-colleges" ? (
         <div className="space-y-3">
-          {isDbAdmin ? (
+          {isAdmin ? (
             <input
               ref={importFileRef}
               type="file"
@@ -2418,7 +2443,7 @@ return (
               }}
             />
           ) : null}
-          {!pickForTask && !focusedImportBatch && isDbAdmin ? (
+          {!pickForTask && !focusedImportBatch && isAdmin ? (
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
               <Button type="button" variant="outline" className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm" onClick={handleDownloadTemplate}>
                 <FileText className="mr-1 h-4 w-4 shrink-0" />
@@ -2456,7 +2481,7 @@ return (
               <p className="text-xs font-medium text-[#64748b]">
                 {isDbAdmin
                   ? "Each uploaded file appears separately with its upload date. Click a row to open the full college table — edit, assign to employees, call, WhatsApp, and email work exactly as before."
-                  : "Each folder appears separately, the same as Admin. Click a row to open the college table — add colleges, follow up, call, WhatsApp, and email. Admin-only files stay hidden."}
+                  : "Each uploaded file appears separately, the same as Admin. Use Import template, Import, and Export here. Admin-only uploads stay hidden."}
               </p>
               {isDbAdmin && batchBulk.selectedCount > 0 ? (
                 <BulkSelectionBar selectedCount={batchBulk.selectedCount} onClear={batchBulk.clearSelection}>
@@ -2473,7 +2498,7 @@ return (
               ) : null}
               <CollegeVisitImportBatchRowList
                 batches={paginatedImportBatches}
-                loading={isDbAdmin ? importBatchesLoading || loading : loading}
+                loading={importBatchesLoading || loading}
                 selection={
                   isDbAdmin
                     ? {
@@ -2488,7 +2513,7 @@ return (
                 emptyMessage={
                   isDbAdmin
                     ? undefined
-                    : "No college folders yet. Use + Add College to create your first visit — it will appear in All Colleges."
+                    : "No college folders yet. Use Import to upload a spreadsheet, or + Add College to create a visit — it will appear in All Colleges."
                 }
                 onOpenBatch={(batch) => {
                   setFocusedImportBatch(batch);
@@ -2551,28 +2576,28 @@ return (
                         ) : null}
                         {!pickForTask && !batchAwaitingImport ? (
                           <>
-                            {isDbAdmin ? (
-                              <>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm"
-                              onClick={handleDownloadTemplate}
-                            >
-                              <FileText className="mr-1 h-4 w-4 shrink-0" />
-                              Import template
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm"
-                              disabled={importing || schemaMissing}
-                              onClick={() => importFileRef.current?.click()}
-                            >
-                              <Upload className="mr-1 h-4 w-4 shrink-0" />
-                              {importing ? "Uploading…" : "Bulk upload"}
-                            </Button>
-                              </>
+                            {isAdmin ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm"
+                                onClick={handleDownloadTemplate}
+                              >
+                                <FileText className="mr-1 h-4 w-4 shrink-0" />
+                                Import template
+                              </Button>
+                            ) : null}
+                            {canBulkUploadHere ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-9 rounded-full border-[#e8dcc8] px-3 text-xs sm:text-sm"
+                                disabled={importing || schemaMissing}
+                                onClick={() => importFileRef.current?.click()}
+                              >
+                                <Upload className="mr-1 h-4 w-4 shrink-0" />
+                                {importing ? "Uploading…" : "Bulk upload"}
+                              </Button>
                             ) : null}
                             <Button
                               type="button"

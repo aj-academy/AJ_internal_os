@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminApiSession } from "@/lib/security/auth/requireAdminApi";
+import { loadImportBatchForActor, requireCollegeVisitImportActor } from "@/lib/college-visits/importAccess";
 import {
   mergeDuplicateResolutions,
   parseDuplicateResolutions,
@@ -16,7 +16,7 @@ function isResolution(value: unknown): value is CollegeDuplicateResolution {
 }
 
 export async function PATCH(request: Request, { params }: RouteParams) {
-  const auth = await requireAdminApiSession();
+  const auth = await requireCollegeVisitImportActor();
   if (auth.response || !auth.user) return auth.response!;
 
   const { id } = await params;
@@ -30,14 +30,11 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   const record = body as { resolutions?: unknown; bulk?: CollegeDuplicateResolution; rowIds?: string[] };
   const admin = createAdminClient();
 
-  const { data: batch, error: batchError } = await admin
-    .from("college_visit_import_batches")
-    .select("id,meta,status")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (batchError) return NextResponse.json({ error: batchError.message }, { status: 400 });
-  if (!batch) return NextResponse.json({ error: "Import batch not found." }, { status: 404 });
+  const loaded = await loadImportBatchForActor(admin, id, auth.user.id, auth.isAdmin, "id,meta,status,uploaded_by");
+  if (!loaded.batch) {
+    return NextResponse.json({ error: loaded.error }, { status: loaded.status });
+  }
+  const batch = loaded.batch;
   if (batch.status !== "ready_for_review") {
     return NextResponse.json({ error: "Duplicate actions can only be changed before save." }, { status: 400 });
   }

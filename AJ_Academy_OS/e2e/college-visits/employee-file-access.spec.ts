@@ -11,9 +11,11 @@ test("Employee uses shared College Visits UI", async ({ page }) => {
   await expect(page.getByRole("button", { name: /add college/i }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "All Colleges" }).click();
-  await expect(page.getByRole("button", { name: /import template/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /import template/i }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /^import$/i }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /export/i }).first()).toBeVisible();
   await expect(
-    page.getByText(/each folder appears separately|no college folders yet/i).first(),
+    page.getByText(/each uploaded file appears separately|no college folders yet/i).first(),
   ).toBeVisible();
 
   const openFolder = page.getByRole("button", { name: /open →/i }).first();
@@ -63,4 +65,19 @@ test("Employee never receives Admin-only file metadata or a signed URL", async (
   expect([403, 404]).toContain(signed.status());
   const signedPayload = (await signed.json()) as { url?: string };
   expect(signedPayload.url).toBeUndefined();
+});
+
+test("Employee can list own import folders but not an inaccessible Admin batch", async ({ request }) => {
+  const list = await request.get("/api/college-visits/import");
+  expect(list.ok()).toBeTruthy();
+  const payload = (await list.json()) as { batches?: Array<{ uploaded_by?: string | null }> };
+  expect(Array.isArray(payload.batches)).toBeTruthy();
+
+  const hidden = await request.get("/api/college-visits/import/00000000-0000-4000-8000-000000000001");
+  expect([403, 404]).toContain(hidden.status());
+
+  const execute = await request.post(
+    "/api/college-visits/import/00000000-0000-4000-8000-000000000001/execute",
+  );
+  expect([403, 404]).toContain(execute.status());
 });

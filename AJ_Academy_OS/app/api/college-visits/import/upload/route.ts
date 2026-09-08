@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminApiSession } from "@/lib/security/auth/requireAdminApi";
+import { createClient } from "@/lib/supabase/server";
 import {
-  COLLEGE_VISIT_SELECT,
-  nextCollegeVisitSelect,
-} from "@/components/college-visits/collegeVisitsHelpers";
-import { mapCollegeVisitRow } from "@/lib/collegeVisitsApi";
+  loadCollegeVisitsForDuplicateMatch,
+  loadImportBatchForActor,
+  requireCollegeVisitImportActor,
+} from "@/lib/college-visits/importAccess";
 import {
   analyzeCollegeImportRows,
   hashCollegeImportBuffer,
@@ -19,7 +19,7 @@ export const runtime = "nodejs";
 const MAX_BYTES = 12 * 1024 * 1024;
 
 export async function POST(request: Request) {
-  const auth = await requireAdminApiSession();
+  const auth = await requireCollegeVisitImportActor();
   if (auth.response || !auth.user) return auth.response!;
 
   let form: FormData;
@@ -43,27 +43,8 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
   const fileHash = hashCollegeImportBuffer(buffer);
   const admin = createAdminClient();
-
-  let existingVisits: ReturnType<typeof mapCollegeVisitRow>[] = [];
-  let select = COLLEGE_VISIT_SELECT;
-  let { data: existingData, error: existingErr } = await admin
-    .from("college_visits")
-    .select(select)
-    .order("updated_at", { ascending: false })
-    .limit(5000);
-  while (existingErr) {
-    const fallback = nextCollegeVisitSelect(select, existingErr.message);
-    if (!fallback) break;
-    select = fallback;
-    ({ data: existingData, error: existingErr } = await admin
-      .from("college_visits")
-      .select(select)
-      .order("updated_at", { ascending: false })
-      .limit(5000));
-  }
-  if (!existingErr) {
-    existingVisits = (existingData ?? []).map((r) => mapCollegeVisitRow(r));
-  }
+  const visitClient = auth.isAdmin ? admin : await createClient();
+  const existingVisits = await loadCollegeVisitsForDuplicateMatch(visitClient, auth.isAdmin ? 5000 : 4000);
 
   const batchIds = [
     ...new Set(existingVisits.map((v) => v.import_batch_id).filter((id): id is string => Boolean(id))),
@@ -92,7 +73,7 @@ export async function POST(request: Request) {
     parsed = parseCollegeVisitImportFile(buffer, file.name, {
       owners: [],
       defaultOwnerId: auth.user.id,
-      isDbAdmin: true,
+      isDbAdmin: auth.isAdmin,
     });
   } catch (e) {
     return NextResponse.json(
@@ -133,7 +114,10 @@ export async function POST(request: Request) {
         const slice = pendingRows.slice(i, i + 75);
         const inserts = slice.map((row) => {
           const formValue = row.form;
-          const payload = buildCollegeVisitPayload(formValue, { userId: auth.user!.id, isDbAdmin: true });
+          const payload = buildCollegeVisitPayload(formValue, {
+            userId: auth.user!.id,
+            isDbAdmin: auth.isAdmin,
+          });
           return {
             ...payload,
             assigned_to: auth.user!.id,
@@ -160,18 +144,20 @@ export async function POST(request: Request) {
         }
       }
     } else {
-      const { data: targetBatch, error: targetError } = await admin
-        .from("college_visit_import_batches")
-        .select("id,status,file_name,row_count,created_count,skipped_count,failed_count")
-        .eq("id", target)
-        .maybeSingle();
-
-      if (targetError) {
-        return NextResponse.json({ error: targetError.message }, { status: 400 });
+      const loaded = await loadImportBatchForActor(
+        admin,
+        target,
+        auth.user.id,
+        auth.isAdmin,
+        "id,status,file_name,row_count,created_count,skipped_count,failed_count,uploaded_by",
+      );
+      if (!loaded.batch) {
+        return NextResponse.json(
+          { error: loaded.status === 404 ? "Target upload folder not found." : loaded.error },
+          { status: loaded.status },
+        );
       }
-      if (!targetBatch) {
-        return NextResponse.json({ error: "Target upload folder not found." }, { status: 404 });
-      }
+      const targetBatch = loaded.batch;
       if (targetBatch.status === "ready_for_review" || targetBatch.status === "importing") {
         return NextResponse.json(
           { error: "Complete the pending import first, or use Back to uploads for a new file." },
@@ -183,7 +169,10 @@ export async function POST(request: Request) {
         const slice = pendingRows.slice(i, i + 75);
         const inserts = slice.map((row) => {
           const formValue = row.form;
-          const payload = buildCollegeVisitPayload(formValue, { userId: auth.user!.id, isDbAdmin: true });
+          const payload = buildCollegeVisitPayload(formValue, {
+            userId: auth.user!.id,
+            isDbAdmin: auth.isAdmin,
+          });
           return {
             ...payload,
             assigned_to: auth.user!.id,
@@ -266,7 +255,7 @@ export async function POST(request: Request) {
       },
     })
     .select(
-      "id,batch_number,file_name,file_hash,row_count,new_count,duplicate_count,invalid_count,created_count,skipped_count,failed_count,status,uploaded_at,error_message",
+      "id,batch_number,file_name,file_hash,row_count,new_count,duplicate_count,invalid_count,created_count,skipped_count,failed_count,status,uploaded_at,uploaded_by,error_message",
     )
     .single();
 

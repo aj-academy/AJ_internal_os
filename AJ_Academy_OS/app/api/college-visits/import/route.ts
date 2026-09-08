@@ -1,21 +1,25 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminApiSession } from "@/lib/security/auth/requireAdminApi";
+import {
+  COLLEGE_IMPORT_BATCH_SELECT,
+  requireCollegeVisitImportActor,
+} from "@/lib/college-visits/importAccess";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const auth = await requireAdminApiSession();
+  const auth = await requireCollegeVisitImportActor();
   if (auth.response || !auth.user) return auth.response!;
 
   const admin = createAdminClient();
-  const { data, error } = await admin
+  let query = admin
     .from("college_visit_import_batches")
-    .select(
-      "id,batch_number,file_name,file_hash,row_count,new_count,duplicate_count,invalid_count,created_count,skipped_count,failed_count,status,uploaded_at,error_message,meta",
-    )
+    .select(COLLEGE_IMPORT_BATCH_SELECT)
     .order("uploaded_at", { ascending: false })
     .limit(200);
+  if (!auth.isAdmin) query = query.eq("uploaded_by", auth.user.id);
+  const { data, error } = await query;
 
   if (error) {
     const missing = error.message.toLowerCase().includes("college_visit_import_batches");

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminApiSession } from "@/lib/security/auth/requireAdminApi";
+import { loadImportBatchForActor, requireCollegeVisitImportActor } from "@/lib/college-visits/importAccess";
 
 export const runtime = "nodejs";
 
@@ -8,20 +8,22 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 /** Reset a failed import batch so duplicate preview + Import can run again. */
 export async function POST(_request: Request, { params }: RouteParams) {
-  const auth = await requireAdminApiSession();
+  const auth = await requireCollegeVisitImportActor();
   if (auth.response || !auth.user) return auth.response!;
 
   const { id } = await params;
   const admin = createAdminClient();
-
-  const { data: batch, error: batchError } = await admin
-    .from("college_visit_import_batches")
-    .select("id,status,created_count,new_count")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (batchError) return NextResponse.json({ error: batchError.message }, { status: 400 });
-  if (!batch) return NextResponse.json({ error: "Import batch not found." }, { status: 404 });
+  const loaded = await loadImportBatchForActor(
+    admin,
+    id,
+    auth.user.id,
+    auth.isAdmin,
+    "id,status,created_count,new_count,uploaded_by",
+  );
+  if (!loaded.batch) {
+    return NextResponse.json({ error: loaded.error }, { status: loaded.status });
+  }
+  const batch = loaded.batch;
 
   const created = batch.created_count ?? 0;
   const canReset =
@@ -53,7 +55,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
   const { data: updated, error: reloadError } = await admin
     .from("college_visit_import_batches")
     .select(
-      "id,batch_number,file_name,file_hash,row_count,new_count,duplicate_count,invalid_count,created_count,skipped_count,failed_count,status,uploaded_at,error_message",
+      "id,batch_number,file_name,file_hash,row_count,new_count,duplicate_count,invalid_count,created_count,skipped_count,failed_count,status,uploaded_at,uploaded_by,error_message",
     )
     .eq("id", id)
     .single();
