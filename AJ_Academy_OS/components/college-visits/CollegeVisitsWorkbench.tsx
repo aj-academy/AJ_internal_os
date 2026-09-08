@@ -112,6 +112,11 @@ import {
   isMissingCollegeVisitsTable,
   legacyCollegeVisitGroupKey,
   LEGACY_ALL_COLLEGES_BATCH_KEY,
+  employeeAddedLegacyGroupKey,
+  employeeManualFolderName,
+  isEmployeeAddedLegacyGroupKey,
+  isUnbatchedNonAdminCreatedVisit,
+  createdByFromEmployeeAddedLegacyGroupKey,
   primaryOutreachPhone,
   collegeOutreachTargets,
   collegeOutreachTargetsForContact,
@@ -371,7 +376,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   }, [creatorLabelFor, visits]);
 
   const loadVisits = useCallback(async () => {
-    const res = await fetch("/api/college-visits");
+    const res = await fetch("/api/college-visits", { cache: "no-store", credentials: "include" });
     const json = (await res.json()) as { visits?: CollegeVisitRow[]; pinIds?: string[]; error?: string };
     if (!res.ok) {
       const msg = json.error ?? "Could not load college visits.";
@@ -387,14 +392,14 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setVisits(json.visits ?? []);
   }, []);
 
-  const loadImportBatches = useCallback(async () => {
-    setImportBatchesLoading(true);
+  const loadImportBatches = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setImportBatchesLoading(true);
     try {
-      const res = await fetch("/api/college-visits/import", { credentials: "include" });
+      const res = await fetch("/api/college-visits/import", { cache: "no-store", credentials: "include" });
       const json = (await res.json()) as { batches?: CollegeImportBatchRow[]; hint?: string };
       if (res.ok) setImportBatches(json.batches ?? []);
     } finally {
-      setImportBatchesLoading(false);
+      if (!opts?.silent) setImportBatchesLoading(false);
     }
   }, []);
 
@@ -454,7 +459,10 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setCvRefreshing(true);
     setRefreshError(null);
     try {
-      const res = await fetch("/api/college-visits");
+      const [res] = await Promise.all([
+        fetch("/api/college-visits", { cache: "no-store", credentials: "include" }),
+        loadImportBatches({ silent: true }),
+      ]);
       const json = (await res.json()) as { visits?: CollegeVisitRow[]; error?: string };
       if (seq !== cvRefreshSeqRef.current) return;
       if (!res.ok) {
@@ -476,7 +484,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     } finally {
       if (seq === cvRefreshSeqRef.current) setCvRefreshing(false);
     }
-  }, [currentUserId]);
+  }, [currentUserId, loadImportBatches]);
 
   const scheduleSilentRefreshVisits = useDebouncedCallback(() => {
     void silentRefreshVisits();
@@ -1029,8 +1037,48 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       fltFollowUpDue,
   );
 
+  const employeeAddedLegacyBatches = useMemo((): CollegeImportBatchRow[] => {
+    const byCreator = new Map<string, CollegeVisitRow[]>();
+    for (const visit of visits) {
+      if (!isUnbatchedNonAdminCreatedVisit(visit, profileRoleMap) || !visit.created_by) continue;
+      const list = byCreator.get(visit.created_by) ?? [];
+      list.push(visit);
+      byCreator.set(visit.created_by, list);
+    }
+    return [...byCreator.entries()]
+      .map(([createdBy, rows]) => {
+        const latest = rows.reduce((max, row) => {
+          const stamp = row.updated_at || row.created_at || "";
+          return stamp > max ? stamp : max;
+        }, "");
+        const name = rows[0]?.created_by_name || ownerNameMap[createdBy] || "Employee colleges";
+        const role = rows[0]?.created_by_role || profileRoleMap[createdBy] || "employee";
+        return {
+          id: `legacy:${employeeAddedLegacyGroupKey(createdBy)}`,
+          isLegacy: true,
+          legacyGroupKey: employeeAddedLegacyGroupKey(createdBy),
+          batch_number: "EMP",
+          file_name: `Added by ${name}`,
+          row_count: rows.length,
+          new_count: rows.length,
+          duplicate_count: 0,
+          invalid_count: 0,
+          created_count: rows.length,
+          skipped_count: 0,
+          failed_count: 0,
+          status: "completed",
+          uploaded_at: latest,
+          uploaded_by: createdBy,
+          uploaded_by_name: name,
+          uploaded_by_role: role,
+          meta: { source: "manual_folder" as const },
+        };
+      })
+      .sort((a, b) => (b.uploaded_at || "").localeCompare(a.uploaded_at || ""));
+  }, [ownerNameMap, profileRoleMap, visits]);
+
   const syntheticLegacyBatches = useMemo((): CollegeImportBatchRow[] => {
-    const legacy = visits.filter((v) => !v.import_batch_id);
+    const legacy = visits.filter((v) => !v.import_batch_id && !isUnbatchedNonAdminCreatedVisit(v, profileRoleMap));
     if (!legacy.length) return [];
     // Oldest date: this folder is the pre-import archive, so newly touched rows
     // must not make it look like a fresh upload.
@@ -1057,45 +1105,42 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         uploaded_at: earliest,
       },
     ];
-  }, [visits]);
+  }, [profileRoleMap, visits]);
 
   const displayImportBatches = useMemo(() => {
-    const uploads = [...importBatches].sort((a, b) =>
-      (b.uploaded_at || "").localeCompare(a.uploaded_at || ""),
-    );
+    const uploads = [...importBatches];
     const known = new Set(uploads.map((batch) => batch.id));
     const extras: CollegeImportBatchRow[] = [];
-    if (!isDbAdmin) {
-      const byId = new Map<string, CollegeImportBatchRow>();
-      for (const visit of visits) {
-        if (!visit.import_batch_id || known.has(visit.import_batch_id)) continue;
-        const existing = byId.get(visit.import_batch_id);
-        if (existing) {
-          existing.row_count += 1;
-          existing.created_count += 1;
-          existing.new_count += 1;
-          continue;
-        }
-        byId.set(visit.import_batch_id, {
-          id: visit.import_batch_id,
-          batch_number: visit.import_batch_number || "",
-          file_name: visit.import_batch_name || "Folder",
-          row_count: 1,
-          new_count: 1,
-          duplicate_count: 0,
-          invalid_count: 0,
-          created_count: 1,
-          skipped_count: 0,
-          failed_count: 0,
-          status: visit.import_batch_status || "completed",
-          uploaded_at: visit.import_batch_uploaded_at || visit.created_at || "",
-        });
+    const byId = new Map<string, CollegeImportBatchRow>();
+    for (const visit of visits) {
+      if (!visit.import_batch_id || known.has(visit.import_batch_id)) continue;
+      const existing = byId.get(visit.import_batch_id);
+      if (existing) {
+        existing.row_count += 1;
+        existing.created_count += 1;
+        existing.new_count += 1;
+        continue;
       }
-      extras.push(
-        ...[...byId.values()].sort((a, b) => (b.uploaded_at || "").localeCompare(a.uploaded_at || "")),
-      );
+      byId.set(visit.import_batch_id, {
+        id: visit.import_batch_id,
+        batch_number: visit.import_batch_number || "",
+        file_name: visit.import_batch_name || "Folder",
+        row_count: 1,
+        new_count: 1,
+        duplicate_count: 0,
+        invalid_count: 0,
+        created_count: 1,
+        skipped_count: 0,
+        failed_count: 0,
+        status: visit.import_batch_status || "completed",
+        uploaded_at: visit.import_batch_uploaded_at || visit.created_at || "",
+      });
     }
-    return [...uploads, ...extras, ...syntheticLegacyBatches].map((batch) => {
+    extras.push(...byId.values());
+    const recent = [...uploads, ...extras, ...employeeAddedLegacyBatches].sort((a, b) =>
+      (b.uploaded_at || "").localeCompare(a.uploaded_at || ""),
+    );
+    return [...recent, ...syntheticLegacyBatches].map((batch) => {
       if (batch.uploaded_by_name || !batch.uploaded_by) return batch;
       return {
         ...batch,
@@ -1103,20 +1148,26 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         uploaded_by_role: batch.uploaded_by_role || profileRoleMap[batch.uploaded_by] || null,
       };
     });
-  }, [isDbAdmin, importBatches, ownerNameMap, profileRoleMap, syntheticLegacyBatches, visits]);
+  }, [employeeAddedLegacyBatches, importBatches, ownerNameMap, profileRoleMap, syntheticLegacyBatches, visits]);
 
   const visitsForFocusedBatch = useMemo(() => {
     if (!focusedImportBatch) return [];
     if (focusedImportBatch.legacyGroupKey) {
       if (focusedImportBatch.legacyGroupKey === LEGACY_ALL_COLLEGES_BATCH_KEY) {
-        return visits.filter((v) => !v.import_batch_id);
+        return visits.filter(
+          (v) => !v.import_batch_id && !isUnbatchedNonAdminCreatedVisit(v, profileRoleMap),
+        );
+      }
+      if (isEmployeeAddedLegacyGroupKey(focusedImportBatch.legacyGroupKey)) {
+        const creatorId = createdByFromEmployeeAddedLegacyGroupKey(focusedImportBatch.legacyGroupKey);
+        return visits.filter((v) => !v.import_batch_id && v.created_by === creatorId);
       }
       return visits.filter(
         (v) => !v.import_batch_id && legacyCollegeVisitGroupKey(v) === focusedImportBatch.legacyGroupKey,
       );
     }
     return visits.filter((v) => v.import_batch_id === focusedImportBatch.id);
-  }, [focusedImportBatch, visits]);
+  }, [focusedImportBatch, profileRoleMap, visits]);
 
   const batchNeedsPreview = useMemo(() => {
     if (!focusedImportBatch || focusedImportBatch.isLegacy) return false;
@@ -1788,9 +1839,15 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         void handleSave({ mode: "existing", batchId: focusedImportBatch.id });
         return;
       }
-      // Import folders remain owned by the uploader. Employee-created colleges
-      // outside their own upload go to All Colleges.
-      void handleSave({ mode: "existing", batchId: null });
+      const ownManual = importBatches.find(
+        (batch) => batch.uploaded_by === currentUserId && batch.meta?.source === "manual_folder",
+      );
+      if (ownManual) {
+        void handleSave({ mode: "existing", batchId: ownManual.id });
+        return;
+      }
+      const folderName = employeeManualFolderName(ownerNameMap[currentUserId] || "My colleges");
+      void handleSave({ mode: "new", folderName });
       return;
     }
     setSaveLocationOpen(true);
@@ -1920,7 +1977,14 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       if (batch.isLegacy && batch.legacyGroupKey) {
         if (batch.legacyGroupKey === LEGACY_ALL_COLLEGES_BATCH_KEY) {
           for (const v of visits) {
-            if (!v.import_batch_id) collegeIds.add(v.id);
+            if (!v.import_batch_id && !isUnbatchedNonAdminCreatedVisit(v, profileRoleMap)) {
+              collegeIds.add(v.id);
+            }
+          }
+        } else if (isEmployeeAddedLegacyGroupKey(batch.legacyGroupKey)) {
+          const creatorId = createdByFromEmployeeAddedLegacyGroupKey(batch.legacyGroupKey);
+          for (const v of visits) {
+            if (!v.import_batch_id && v.created_by === creatorId) collegeIds.add(v.id);
           }
         } else {
           for (const v of visits) {
@@ -2478,8 +2542,8 @@ return (
             <div className="space-y-3">
               <p className="text-xs font-medium text-[#64748b]">
                 {isDbAdmin
-                  ? "Each uploaded file appears separately with its upload date. Click a row to open the full college table — edit, assign to employees, call, WhatsApp, and email work exactly as before."
-                  : "Each uploaded file appears separately, the same as Admin. Use Import template, Import, and Export here. Admin-only uploads stay hidden."}
+                  ? "Each uploaded file appears separately with its upload date. Colleges an employee adds from their dashboard appear as that employee's folder, with their name. Click a row to open the full college table — edit, assign to employees, call, WhatsApp, and email work exactly as before."
+                  : "Each uploaded file appears separately, the same as Admin. Colleges you add are saved in your folder so Admin can see them. Use Import template, Import, and Export here. Admin-only uploads stay hidden."}
               </p>
               {isDbAdmin && batchBulk.selectedCount > 0 ? (
                 <BulkSelectionBar selectedCount={batchBulk.selectedCount} onClear={batchBulk.clearSelection}>
@@ -2496,7 +2560,7 @@ return (
               ) : null}
               <CollegeVisitImportBatchRowList
                 batches={paginatedImportBatches}
-                loading={isDbAdmin ? importBatchesLoading : importBatchesLoading || loading}
+                loading={importBatchesLoading || loading}
                 selection={
                   isDbAdmin
                     ? {
@@ -2511,7 +2575,7 @@ return (
                 emptyMessage={
                   isDbAdmin
                     ? undefined
-                    : "No college folders yet. Use Import to upload a spreadsheet, or + Add College to create a visit — it will appear in All Colleges."
+                    : "No college folders yet. Use Import to upload a spreadsheet, or + Add College to create a visit — it will appear as your folder here and on Admin."
                 }
                 onOpenBatch={(batch) => {
                   setFocusedImportBatch(batch);

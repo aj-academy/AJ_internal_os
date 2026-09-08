@@ -66,6 +66,49 @@ export type CollegeVisitRow = {
 /** Single legacy folder for all colleges without an import_batch_id. */
 export const LEGACY_ALL_COLLEGES_BATCH_KEY = "all";
 
+/** Synthetic Admin folder for unbatched colleges an employee added by hand. */
+export const EMPLOYEE_ADDED_BATCH_PREFIX = "employee-added:";
+
+export function employeeAddedLegacyGroupKey(createdBy: string): string {
+  return `${EMPLOYEE_ADDED_BATCH_PREFIX}${createdBy}`;
+}
+
+export function isEmployeeAddedLegacyGroupKey(key: string | null | undefined): boolean {
+  return Boolean(key?.startsWith(EMPLOYEE_ADDED_BATCH_PREFIX));
+}
+
+export function createdByFromEmployeeAddedLegacyGroupKey(key: string): string {
+  return key.slice(EMPLOYEE_ADDED_BATCH_PREFIX.length);
+}
+
+export function collegeVisitCreatorRole(
+  visit: Pick<CollegeVisitRow, "created_by" | "created_by_role">,
+  profileRoleMap: Record<string, string>,
+): string {
+  return (
+    visit.created_by_role ||
+    (visit.created_by ? profileRoleMap[visit.created_by] : "") ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+}
+
+/** Unbatched row created by someone who is not Admin — show it as that person's folder. */
+export function isUnbatchedNonAdminCreatedVisit(
+  visit: Pick<CollegeVisitRow, "import_batch_id" | "created_by" | "created_by_role">,
+  profileRoleMap: Record<string, string>,
+): boolean {
+  if (visit.import_batch_id || !visit.created_by) return false;
+  const role = collegeVisitCreatorRole(visit, profileRoleMap);
+  return role !== "admin" && role !== "super_admin";
+}
+
+export function employeeManualFolderName(raw: string): string {
+  const cleaned = raw.replace(/[\u0000-\u001f<>:"/\\|?*]/g, " ").replace(/\s+/g, " ").trim();
+  return (cleaned || "My colleges").slice(0, 120);
+}
+
 /** Groups pre-batch imports so each upload burst appears as its own file row. */
 export function legacyCollegeVisitGroupKey(v: Pick<CollegeVisitRow, "source_reference" | "created_at">): string {
   const ref = (v.source_reference || "").trim().toLowerCase();

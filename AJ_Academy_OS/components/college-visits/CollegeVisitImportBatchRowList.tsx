@@ -157,7 +157,11 @@ export function CollegeVisitImportBatchRowList({
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                     <Badge className={statusClass[batch.status] ?? statusClass.ready_for_review}>
-                      {batch.isLegacy ? "Imported" : statusLabel(batch)}
+                      {batch.isLegacy
+                        ? batch.meta?.source === "manual_folder"
+                          ? "Folder"
+                          : "Imported"
+                        : statusLabel(batch)}
                     </Badge>
                     <span className="text-xs font-semibold text-[#c9a227]">Open →</span>
                   </div>

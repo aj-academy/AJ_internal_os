@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminApiSession } from "@/lib/security/auth/requireAdminApi";
 import {
   COLLEGE_IMPORT_BATCH_SELECT,
   attachImportBatchUploaderAttribution,
@@ -8,6 +7,7 @@ import {
 } from "@/lib/college-visits/importAccess";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   const auth = await requireCollegeVisitImportActor();
@@ -34,9 +34,10 @@ export async function GET() {
     );
   }
 
-  return NextResponse.json({
-    batches: await attachImportBatchUploaderAttribution(admin, data ?? []),
-  });
+  return NextResponse.json(
+    { batches: await attachImportBatchUploaderAttribution(admin, data ?? []) },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 /**
@@ -44,7 +45,7 @@ export async function GET() {
  * the same batch table so every college has one stable folder identifier.
  */
 export async function POST(request: Request) {
-  const auth = await requireAdminApiSession();
+  const auth = await requireCollegeVisitImportActor();
   if (auth.response || !auth.user) return auth.response!;
 
   let body: unknown;
@@ -74,19 +75,25 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   const { data: existing, error: existingError } = await admin
     .from("college_visit_import_batches")
-    .select("id,file_name")
+    .select("id,file_name,uploaded_by")
     .order("uploaded_at", { ascending: false })
     .limit(1000);
   if (existingError) {
     return NextResponse.json({ error: existingError.message }, { status: 400 });
   }
-  const duplicate = (existing ?? []).find(
-    (row) => String(row.file_name || "").trim().toLocaleLowerCase() === folderName.toLocaleLowerCase(),
+  const nameKey = folderName.toLocaleLowerCase();
+  const duplicatePool = auth.isAdmin
+    ? existing ?? []
+    : (existing ?? []).filter((row) => row.uploaded_by === auth.user!.id);
+  const duplicate = duplicatePool.find(
+    (row) => String(row.file_name || "").trim().toLocaleLowerCase() === nameKey,
   );
   if (duplicate) {
     return NextResponse.json(
       {
-        error: "A folder with this name already exists. Select it under Existing folder.",
+        error: auth.isAdmin
+          ? "A folder with this name already exists. Select it under Existing folder."
+          : "You already have a folder with this name.",
         folderId: duplicate.id,
       },
       { status: 409 },

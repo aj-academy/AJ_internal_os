@@ -17,6 +17,9 @@ import {
   collectCollegeIdsFromTaskRows,
   redactCollegeListFileFieldsForActor,
 } from "@/lib/college-visits/access";
+import { isAdminRole } from "@/lib/college-visits/fileVisibility";
+
+export const dynamic = "force-dynamic";
 
 /** PostgREST caps rows per request, so visits are fetched in pages. */
 const VISITS_PAGE_SIZE = 1000;
@@ -88,7 +91,7 @@ export async function GET(request: Request) {
   void request;
 
   const role = profile?.role?.trim().toLowerCase() ?? "";
-  const isAdmin = role === "admin" || role === "super_admin";
+  const isAdmin = isAdminRole(role);
   const maxRows = isAdmin ? 20000 : 4000;
   const admin = createAdminClient();
 
@@ -192,7 +195,10 @@ export async function GET(request: Request) {
     import_batch_status: withFolders[index]?.import_batch_status ?? null,
   }));
 
-  return NextResponse.json({ visits, pinIds: [...new Set(pinIds)] });
+  return NextResponse.json(
+    { visits, pinIds: [...new Set(pinIds)] },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 export async function POST(request: Request) {
@@ -222,8 +228,7 @@ export async function POST(request: Request) {
       : null;
 
   if (importBatchId) {
-    const role = profile?.role?.trim().toLowerCase() ?? "";
-    const isAdmin = role === "admin" || role === "super_admin";
+    const isAdmin = isAdminRole(profile?.role);
     const admin = createAdminClient();
     const { data: folder, error: folderError } = await admin
       .from("college_visit_import_batches")
@@ -280,6 +285,7 @@ export async function POST(request: Request) {
         .update({
           row_count: Number(batch.row_count || 0) + 1,
           created_count: Number(batch.created_count || 0) + 1,
+          uploaded_at: new Date().toISOString(),
         })
         .eq("id", importBatchId);
     }
