@@ -109,3 +109,35 @@ export async function loadCollegeVisitsForDuplicateMatch(
 
   return rows.map((row) => mapCollegeVisitRow(row));
 }
+
+export async function attachImportBatchUploaderAttribution<
+  T extends { uploaded_by?: string | null },
+>(admin: SupabaseClient, rows: T[]): Promise<T[]> {
+  const uploaderIds = [
+    ...new Set(rows.map((row) => row.uploaded_by).filter((id): id is string => Boolean(id))),
+  ];
+  if (!uploaderIds.length) return rows;
+
+  const { data } = await admin
+    .from("profiles")
+    .select("id,full_name,email,role")
+    .in("id", uploaderIds);
+  const uploaders = new Map(
+    (data ?? []).map((profile) => [
+      profile.id,
+      {
+        name: profile.full_name || profile.email || null,
+        role: profile.role || null,
+      },
+    ]),
+  );
+
+  return rows.map((row) => {
+    const uploader = row.uploaded_by ? uploaders.get(row.uploaded_by) : null;
+    return {
+      ...row,
+      uploaded_by_name: uploader?.name ?? null,
+      uploaded_by_role: uploader?.role ?? null,
+    };
+  });
+}

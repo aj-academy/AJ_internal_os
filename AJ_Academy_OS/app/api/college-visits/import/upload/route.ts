@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
+  attachImportBatchUploaderAttribution,
   loadCollegeVisitsForDuplicateMatch,
   loadImportBatchForActor,
   requireCollegeVisitImportActor,
@@ -288,8 +289,9 @@ export async function POST(request: Request) {
     }
   }
 
+  const [attributed] = await attachImportBatchUploaderAttribution(admin, [batch]);
   return NextResponse.json({
-    batch,
+    batch: attributed ?? batch,
     summary: {
       newCount: analysis.newCount,
       duplicateCount: analysis.duplicateCount,

@@ -18,6 +18,8 @@ export type CollegeImportBatchRow = {
   status: string;
   uploaded_at: string;
   uploaded_by?: string | null;
+  uploaded_by_name?: string | null;
+  uploaded_by_role?: string | null;
   error_message?: string | null;
   meta?: {
     duplicate_resolutions?: Record<string, string>;
@@ -139,6 +141,17 @@ export function CollegeVisitImportBatchRowList({
                         </span>
                       ) : null}
                       <span>{formatDisplayDate(batch.uploaded_at, "—")}</span>
+                      {batch.uploaded_by_name ? (
+                        <span className="inline-flex items-center gap-1">
+                          Uploaded by{" "}
+                          <span className="font-semibold text-[#0f172a]">{batch.uploaded_by_name}</span>
+                          {batch.uploaded_by_role ? (
+                            <Badge className="border-[#dbe6f3] bg-[#f1f6fc] text-[10px] capitalize text-[#475569]">
+                              {batch.uploaded_by_role.replace(/_/g, " ")}
+                            </Badge>
+                          ) : null}
+                        </span>
+                      ) : null}
                       {!batch.isLegacy ? <span>{batch.batch_number}</span> : null}
                     </div>
                   </div>

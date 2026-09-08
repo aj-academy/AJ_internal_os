@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminApiSession } from "@/lib/security/auth/requireAdminApi";
 import {
   COLLEGE_IMPORT_BATCH_SELECT,
+  attachImportBatchUploaderAttribution,
   requireCollegeVisitImportActor,
 } from "@/lib/college-visits/importAccess";
 
@@ -33,7 +34,9 @@ export async function GET() {
     );
   }
 
-  return NextResponse.json({ batches: data ?? [] });
+  return NextResponse.json({
+    batches: await attachImportBatchUploaderAttribution(admin, data ?? []),
+  });
 }
 
 /**
@@ -120,7 +123,7 @@ export async function POST(request: Request) {
       meta: { source: "manual_folder" },
     })
     .select(
-      "id,batch_number,file_name,file_hash,row_count,new_count,duplicate_count,invalid_count,created_count,skipped_count,failed_count,status,uploaded_at,error_message,meta",
+      "id,batch_number,file_name,file_hash,row_count,new_count,duplicate_count,invalid_count,created_count,skipped_count,failed_count,status,uploaded_at,uploaded_by,error_message,meta",
     )
     .single();
 
@@ -131,5 +134,6 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ folder }, { status: 201 });
+  const [attributed] = await attachImportBatchUploaderAttribution(admin, [folder]);
+  return NextResponse.json({ folder: attributed ?? folder }, { status: 201 });
 }

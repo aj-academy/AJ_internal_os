@@ -1110,8 +1110,15 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         ...[...byId.values()].sort((a, b) => (b.uploaded_at || "").localeCompare(a.uploaded_at || "")),
       );
     }
-    return [...uploads, ...extras, ...syntheticLegacyBatches];
-  }, [isDbAdmin, importBatches, syntheticLegacyBatches, visits]);
+    return [...uploads, ...extras, ...syntheticLegacyBatches].map((batch) => {
+      if (batch.uploaded_by_name || !batch.uploaded_by) return batch;
+      return {
+        ...batch,
+        uploaded_by_name: ownerNameMap[batch.uploaded_by] || null,
+        uploaded_by_role: batch.uploaded_by_role || profileRoleMap[batch.uploaded_by] || null,
+      };
+    });
+  }, [isDbAdmin, importBatches, ownerNameMap, profileRoleMap, syntheticLegacyBatches, visits]);
 
   const visitsForFocusedBatch = useMemo(() => {
     if (!focusedImportBatch) return [];
@@ -2632,6 +2639,9 @@ return (
                           ? `${focusedImportBatch.batch_number} · `
                           : null}
                         {formatDisplayDate(focusedImportBatch.uploaded_at, "—")}
+                        {focusedImportBatch.uploaded_by_name
+                          ? ` · Uploaded by ${focusedImportBatch.uploaded_by_name}`
+                          : null}
                         {batchAwaitingImport
                           ? ` · ${focusedImportBatch.new_count} new, ${focusedImportBatch.duplicate_count} duplicate(s)`
                           : ` · ${visitsForFocusedBatch.length} college(s)`}

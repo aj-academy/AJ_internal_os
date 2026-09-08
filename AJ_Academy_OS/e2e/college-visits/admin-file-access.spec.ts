@@ -50,3 +50,18 @@ test("Admin receives uploader attribution and all visibility scopes", async ({ r
   const signedPayload = (await signed.json()) as { url?: string };
   expect(signedPayload.url).toBeTruthy();
 });
+
+test("Admin import folders include uploader name", async ({ request }) => {
+  const list = await request.get("/api/college-visits/import");
+  expect(list.ok()).toBeTruthy();
+  const payload = (await list.json()) as {
+    batches?: Array<{
+      uploaded_by?: string | null;
+      uploaded_by_name?: string | null;
+      uploaded_by_role?: string | null;
+    }>;
+  };
+  const owned = (payload.batches ?? []).filter((batch) => batch.uploaded_by);
+  test.skip(!owned.length, "No import folders with uploaded_by yet");
+  expect(owned.every((batch) => Boolean(batch.uploaded_by_name))).toBeTruthy();
+});
