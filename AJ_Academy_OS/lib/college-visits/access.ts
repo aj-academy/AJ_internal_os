@@ -32,6 +32,23 @@ export async function assertCanAccessProposalEntity(
   if (error || !data) throw new EntityAccessError();
 }
 
+/** College folder owners can access every row in files they uploaded, not only own/created/task rows. */
+export async function assertStaffCanAccessProposalEntity(
+  admin: SupabaseClient,
+  userClient: SupabaseClient,
+  userId: string,
+  isAdmin: boolean,
+  entityType: ProposalEntityKind,
+  entityId: string,
+): Promise<void> {
+  if (entityType === "college") {
+    const ok = await actorCanAccessCollegeVisit(admin, userId, isAdmin, entityId);
+    if (!ok) throw new EntityAccessError();
+    return;
+  }
+  await assertCanAccessProposalEntity(userClient, entityType, entityId);
+}
+
 export function collectCollegeIdsFromTaskRows(
   rows: Array<{ college_visit_ids?: unknown }>,
 ): string[] {
@@ -55,6 +72,48 @@ export function collectCollegeIdsFromTaskRows(
     }
   }
   return [...ids];
+}
+
+export async function employeeUploadedBatchIds(
+  admin: SupabaseClient,
+  userId: string,
+): Promise<string[]> {
+  const { data } = await admin
+    .from("college_visit_import_batches")
+    .select("id")
+    .eq("uploaded_by", userId)
+    .limit(500);
+  return [...new Set((data ?? []).map((row) => String(row.id)).filter(Boolean))];
+}
+
+/** Same visibility as College Visits GET: own/created, folder owner, or task-linked. */
+export async function actorCanAccessCollegeVisit(
+  admin: SupabaseClient,
+  userId: string,
+  isAdmin: boolean,
+  collegeId: string,
+): Promise<boolean> {
+  if (isAdmin) return true;
+  const { data: row } = await admin
+    .from("college_visits")
+    .select("id,assigned_to,created_by,import_batch_id")
+    .eq("id", collegeId)
+    .maybeSingle();
+  if (!row?.id) return false;
+  if (row.assigned_to === userId || row.created_by === userId) return true;
+  if (row.import_batch_id) {
+    const { data: batch } = await admin
+      .from("college_visit_import_batches")
+      .select("uploaded_by")
+      .eq("id", row.import_batch_id)
+      .maybeSingle();
+    if (batch?.uploaded_by === userId) return true;
+  }
+  const { data: taskRows } = await admin
+    .from("tasks")
+    .select("college_visit_ids")
+    .or(`assigned_to.eq.${userId},assigned_by.eq.${userId}`);
+  return collectCollegeIdsFromTaskRows(taskRows ?? []).includes(collegeId);
 }
 
 export function canActorReadFile(

@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireStaffApiSession } from "@/lib/security";
-import { assertCanAccessProposalEntity, EntityAccessError } from "@/lib/college-visits/access";
-import { proposalVisibilityForUpload } from "@/lib/college-visits/fileVisibility";
+import { assertStaffCanAccessProposalEntity, EntityAccessError } from "@/lib/college-visits/access";
+import { proposalVisibilityForUpload, isAdminRole } from "@/lib/college-visits/fileVisibility";
 import {
   PROPOSALS_BUCKET,
   buildProposalObjectPath,
@@ -47,8 +47,16 @@ export async function POST(request: Request) {
   }
 
   try {
+    const admin = createAdminClient();
     const callerClient = await createClient();
-    await assertCanAccessProposalEntity(callerClient, kind, entityId);
+    await assertStaffCanAccessProposalEntity(
+      admin,
+      callerClient,
+      user.id,
+      isAdminRole(profile?.role),
+      kind,
+      entityId,
+    );
   } catch (e) {
     const status = e instanceof EntityAccessError ? e.status : 404;
     return NextResponse.json({ error: e instanceof Error ? e.message : "Not found." }, { status });

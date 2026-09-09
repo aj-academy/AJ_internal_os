@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireStaffApiSession } from "@/lib/security";
 import {
-  assertCanAccessProposalEntity,
+  assertStaffCanAccessProposalEntity,
   assertProposalPathMatchesEntity,
   canActorReadFile,
   EntityAccessError,
@@ -36,7 +36,14 @@ export async function POST(request: Request) {
 
   try {
     const callerClient = await createClient();
-    await assertCanAccessProposalEntity(callerClient, kind, entityId);
+    await assertStaffCanAccessProposalEntity(
+      createAdminClient(),
+      callerClient,
+      user.id,
+      isAdminRole(profile?.role),
+      kind,
+      entityId,
+    );
     if (filePath) assertProposalPathMatchesEntity(kind, entityId, filePath);
   } catch (e) {
     const status = e instanceof EntityAccessError ? e.status : 404;

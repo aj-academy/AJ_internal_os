@@ -656,6 +656,13 @@ export function friendlyCollegeVisitError(raw: unknown) {
   ) {
     return "Save blocked by database permissions. Run `college_visits_schema.sql` and ensure `employee_student_master_rls.sql` (is_employee) is applied.";
   }
+  if (
+    msg.toLowerCase().includes("cannot coerce the result to a single json object") ||
+    msg.toLowerCase().includes("json object requested, multiple (or no) rows returned") ||
+    msg.includes("PGRST116")
+  ) {
+    return "Could not save this college visit. Refresh the folder and try again.";
+  }
   return msg;
 }
 

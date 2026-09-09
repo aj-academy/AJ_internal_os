@@ -13,6 +13,7 @@ import { buildPayloadFromApi, mapCollegeVisitRow, parseCollegeVisitBody } from "
 import { deleteOwnedCollegeVisits } from "@/lib/crmOwnedDelete";
 import { appendOutcomeRemarkLog } from "@/lib/outcomeRemarks";
 import {
+  actorCanAccessCollegeVisit,
   attachCollegeCreatorAttribution,
   overlayCollegeFileMetadataForActor,
 } from "@/lib/college-visits/access";
@@ -100,7 +101,7 @@ function formatContacts(value: unknown): string {
 }
 
 async function loadProfileNameMap(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createAdminClient>,
   ids: string[],
 ): Promise<Record<string, string>> {
   const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
@@ -163,14 +164,20 @@ export async function PATCH(request: Request, context: RouteContext) {
     delete payload.proposal_pdf_name;
   }
 
-  const supabase = await createClient();
+  const admin = createAdminClient();
+  const isAdmin = isAdminRole(role);
+  const allowed = await actorCanAccessCollegeVisit(admin, user.id, isAdmin, id);
+  if (!allowed) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
+
   let prevSelect = COLLEGE_VISIT_SELECT;
-  let { data: prev, error: prevError } = await supabase.from("college_visits").select(prevSelect).eq("id", id).maybeSingle();
+  let { data: prev, error: prevError } = await admin.from("college_visits").select(prevSelect).eq("id", id).maybeSingle();
   while (prevError) {
     const fallback = nextCollegeVisitSelect(prevSelect, prevError.message);
     if (!fallback) break;
     prevSelect = fallback;
-    ({ data: prev, error: prevError } = await supabase.from("college_visits").select(prevSelect).eq("id", id).maybeSingle());
+    ({ data: prev, error: prevError } = await admin.from("college_visits").select(prevSelect).eq("id", id).maybeSingle());
   }
 
   // Never transfer ownership via edit — share via College Visit tasks only.
@@ -190,7 +197,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   let select = COLLEGE_VISIT_SELECT;
-  let { data, error } = await supabase.from("college_visits").update(updatePayload).eq("id", id).select(select).single();
+  let { data, error } = await admin.from("college_visits").update(updatePayload).eq("id", id).select(select).maybeSingle();
 
   while (error) {
     const stripped = stripUnavailableColumns(updatePayload, error.message);
@@ -199,7 +206,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!fallbackSelect && !payloadChanged) break;
     updatePayload = stripped;
     if (fallbackSelect) select = fallbackSelect;
-    ({ data, error } = await supabase.from("college_visits").update(updatePayload).eq("id", id).select(select).single());
+    ({ data, error } = await admin.from("college_visits").update(updatePayload).eq("id", id).select(select).maybeSingle());
   }
 
   if (error || !data) {
@@ -218,7 +225,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         if (newVal) nameCandidateIds.push(String(newVal));
       }
     }
-    const profileNameMap = await loadProfileNameMap(supabase, nameCandidateIds);
+    const profileNameMap = await loadProfileNameMap(admin, nameCandidateIds);
     for (const field of TRACKED_FIELDS) {
       if (!Object.prototype.hasOwnProperty.call(updatePayload, field.key)) continue;
       const oldVal = prevRow[field.key];
@@ -238,9 +245,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
   }
   if (activities.length) {
-    await supabase.from("college_visit_activities").insert(activities);
+    await admin.from("college_visit_activities").insert(activities);
   } else {
-    await supabase.from("college_visit_activities").insert({
+    await admin.from("college_visit_activities").insert({
       college_visit_id: id,
       activity_type: "College Updated",
       notes: String(payload.last_outcome_remarks ?? "") || null,
@@ -249,12 +256,8 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   let updatedVisit = mapCollegeVisitRow(data);
-  [updatedVisit] = await overlayCollegeFileMetadataForActor(
-    createAdminClient(),
-    [updatedVisit],
-    role,
-  );
-  [updatedVisit] = await attachCollegeCreatorAttribution(createAdminClient(), [updatedVisit]);
+  [updatedVisit] = await overlayCollegeFileMetadataForActor(admin, [updatedVisit], role);
+  [updatedVisit] = await attachCollegeCreatorAttribution(admin, [updatedVisit]);
   return NextResponse.json({ visit: updatedVisit });
 }
 

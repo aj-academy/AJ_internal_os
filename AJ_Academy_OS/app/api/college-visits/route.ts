@@ -15,6 +15,7 @@ import {
   attachCollegeCreatorAttribution,
   attachImportBatchNames,
   collectCollegeIdsFromTaskRows,
+  employeeUploadedBatchIds,
   redactCollegeListFileFieldsForActor,
 } from "@/lib/college-visits/access";
 import { isAdminRole } from "@/lib/college-visits/fileVisibility";
@@ -85,6 +86,66 @@ async function pageCollegeVisits(
   return { rows, error, select };
 }
 
+async function loadCollegeVisitsByIds(
+  client: ReturnType<typeof createAdminClient>,
+  select: string,
+  ids: string[],
+) {
+  const rows: unknown[] = [];
+  let currentSelect = select;
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200);
+    let { data, error } = await client.from("college_visits").select(currentSelect).in("id", chunk);
+    while (error) {
+      const fallback = nextCollegeVisitSelect(currentSelect, error.message);
+      if (!fallback) break;
+      currentSelect = fallback;
+      ({ data, error } = await client.from("college_visits").select(currentSelect).in("id", chunk));
+    }
+    if (!error && data?.length) rows.push(...data);
+  }
+  return { rows, select: currentSelect };
+}
+
+async function loadCollegeVisitsByBatchIds(
+  client: ReturnType<typeof createAdminClient>,
+  select: string,
+  batchIds: string[],
+) {
+  const rows: unknown[] = [];
+  let currentSelect = select;
+  for (const batchId of batchIds) {
+    for (let from = 0; from < 20000; from += VISITS_PAGE_SIZE) {
+      const to = from + VISITS_PAGE_SIZE - 1;
+      let page: unknown[] = [];
+      let error: { message: string } | null = null;
+      for (;;) {
+        const res = await client
+          .from("college_visits")
+          .select(currentSelect)
+          .eq("import_batch_id", batchId)
+          .order("id", { ascending: true })
+          .range(from, to);
+        if (!res.error) {
+          page = res.data ?? [];
+          error = null;
+          break;
+        }
+        const fallback = nextCollegeVisitSelect(currentSelect, res.error.message);
+        if (!fallback) {
+          error = res.error;
+          break;
+        }
+        currentSelect = fallback;
+      }
+      if (error) break;
+      if (page.length) rows.push(...page);
+      if (page.length < VISITS_PAGE_SIZE) break;
+    }
+  }
+  return { rows, select: currentSelect };
+}
+
 export async function GET(request: Request) {
   const { response, user, profile } = await requireStaffApiSession();
   if (response || !user) return response!;
@@ -108,36 +169,29 @@ export async function GET(request: Request) {
 
   if (!isAdmin) {
     const seen = new Set(visits.map((v) => v.id));
+    const mergeRows = (rawRows: unknown[]) => {
+      for (const row of rawRows) {
+        const mapped = mapCollegeVisitRow(row);
+        if (seen.has(mapped.id)) continue;
+        seen.add(mapped.id);
+        visits.push(mapped);
+      }
+    };
+
+    const folderIds = await employeeUploadedBatchIds(admin, user.id);
+    if (folderIds.length) {
+      const fromFolders = await loadCollegeVisitsByBatchIds(admin, paged.select, folderIds);
+      mergeRows(fromFolders.rows);
+    }
+
     const { data: taskRows } = await admin
       .from("tasks")
       .select("college_visit_ids")
       .or(`assigned_to.eq.${user.id},assigned_by.eq.${user.id}`);
     const linkedIds = collectCollegeIdsFromTaskRows(taskRows ?? []).filter((id) => !seen.has(id));
-
-    for (let i = 0; i < linkedIds.length; i += 200) {
-      const chunk = linkedIds.slice(i, i + 200);
-      let linkedSelect = paged.select;
-      let { data: linkedData, error: linkedErr } = await admin
-        .from("college_visits")
-        .select(linkedSelect)
-        .in("id", chunk);
-      while (linkedErr) {
-        const fallback = nextCollegeVisitSelect(linkedSelect, linkedErr.message);
-        if (!fallback) break;
-        linkedSelect = fallback;
-        ({ data: linkedData, error: linkedErr } = await admin
-          .from("college_visits")
-          .select(linkedSelect)
-          .in("id", chunk));
-      }
-      if (!linkedErr && linkedData?.length) {
-        for (const row of linkedData) {
-          const mapped = mapCollegeVisitRow(row);
-          if (seen.has(mapped.id)) continue;
-          seen.add(mapped.id);
-          visits.push(mapped);
-        }
-      }
+    if (linkedIds.length) {
+      const linked = await loadCollegeVisitsByIds(admin, paged.select, linkedIds);
+      mergeRows(linked.rows);
     }
 
     const supabase = await createClient();
@@ -163,22 +217,8 @@ export async function GET(request: Request) {
 
     const missing = [...new Set(pinIds)].filter((id) => !seen.has(id));
     if (missing.length) {
-      let pinSelect = paged.select;
-      let { data: pinData, error: pinErr } = await admin.from("college_visits").select(pinSelect).in("id", missing);
-      while (pinErr) {
-        const fallback = nextCollegeVisitSelect(pinSelect, pinErr.message);
-        if (!fallback) break;
-        pinSelect = fallback;
-        ({ data: pinData, error: pinErr } = await admin.from("college_visits").select(pinSelect).in("id", missing));
-      }
-      if (!pinErr && pinData?.length) {
-        for (const row of pinData) {
-          const mapped = mapCollegeVisitRow(row);
-          if (seen.has(mapped.id)) continue;
-          seen.add(mapped.id);
-          visits.push(mapped);
-        }
-      }
+      const pinned = await loadCollegeVisitsByIds(admin, paged.select, missing);
+      mergeRows(pinned.rows);
     }
     visits.sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")));
   }

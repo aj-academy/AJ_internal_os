@@ -22,6 +22,15 @@ as $$
         or cv.assigned_to = auth.uid()
         or cv.created_by = auth.uid()
         or public.task_links_college(cv.id)
+        or (
+          cv.import_batch_id is not null
+          and exists (
+            select 1
+            from public.college_visit_import_batches b
+            where b.id = cv.import_batch_id
+              and b.uploaded_by = auth.uid()
+          )
+        )
       )
   );
 $$;
