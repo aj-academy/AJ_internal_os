@@ -141,6 +141,7 @@ export function CollegeVisitSaveLocationDialog({
                 {selectableFolders.map((folder) => (
                   <option key={folder.id} value={folder.id}>
                     {folder.file_name}
+                    {folder.row_count ? ` (${folder.row_count})` : ""}
                   </option>
                 ))}
               </select>

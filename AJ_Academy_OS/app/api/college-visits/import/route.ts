@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  COLLEGE_IMPORT_BATCH_SELECT,
   attachImportBatchUploaderAttribution,
+  listImportBatchesForActor,
   requireCollegeVisitImportActor,
 } from "@/lib/college-visits/importAccess";
 
@@ -14,20 +14,13 @@ export async function GET() {
   if (auth.response || !auth.user) return auth.response!;
 
   const admin = createAdminClient();
-  let query = admin
-    .from("college_visit_import_batches")
-    .select(COLLEGE_IMPORT_BATCH_SELECT)
-    .order("uploaded_at", { ascending: false })
-    .limit(200);
-  if (!auth.isAdmin) query = query.eq("uploaded_by", auth.user.id);
-  const { data, error } = await query;
-
-  if (error) {
-    const missing = error.message.toLowerCase().includes("college_visit_import_batches");
+  const listed = await listImportBatchesForActor(admin, auth.user.id, auth.isAdmin);
+  if (listed.error) {
+    const missing = listed.error.message.toLowerCase().includes("college_visit_import_batches");
     return NextResponse.json(
       {
         batches: [],
-        error: missing ? undefined : error.message,
+        error: missing ? undefined : listed.error.message,
         hint: missing ? "Run AJ_Academy_SB/college_visit_import_batches.sql in Supabase SQL Editor." : undefined,
       },
       { status: missing ? 200 : 400 },
@@ -35,7 +28,7 @@ export async function GET() {
   }
 
   return NextResponse.json(
-    { batches: await attachImportBatchUploaderAttribution(admin, data ?? []) },
+    { batches: await attachImportBatchUploaderAttribution(admin, listed.batches) },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

@@ -44,6 +44,63 @@ export async function requireCollegeVisitImportActor(): Promise<
   };
 }
 
+/** Admin sees every folder. Employees see folders they uploaded, plus older files linked to their colleges when uploaded_by was never stored. Admin-owned folders stay hidden. */
+export async function listImportBatchesForActor(
+  admin: SupabaseClient,
+  userId: string,
+  isAdmin: boolean,
+): Promise<{ batches: CollegeImportBatchRecord[]; error: { message: string } | null }> {
+  if (isAdmin) {
+    const { data, error } = await admin
+      .from("college_visit_import_batches")
+      .select(COLLEGE_IMPORT_BATCH_SELECT)
+      .order("uploaded_at", { ascending: false })
+      .limit(200);
+    return { batches: (data ?? []) as CollegeImportBatchRecord[], error: error ? { message: error.message } : null };
+  }
+
+  const { data: owned, error: ownedError } = await admin
+    .from("college_visit_import_batches")
+    .select(COLLEGE_IMPORT_BATCH_SELECT)
+    .eq("uploaded_by", userId)
+    .order("uploaded_at", { ascending: false })
+    .limit(200);
+  if (ownedError) return { batches: [], error: { message: ownedError.message } };
+
+  const merged = new Map<string, CollegeImportBatchRecord>();
+  for (const row of owned ?? []) merged.set(String(row.id), row as CollegeImportBatchRecord);
+
+  const { data: visitRows } = await admin
+    .from("college_visits")
+    .select("import_batch_id")
+    .or(`assigned_to.eq.${userId},created_by.eq.${userId}`)
+    .not("import_batch_id", "is", null)
+    .limit(4000);
+  const extraIds = [
+    ...new Set(
+      (visitRows ?? [])
+        .map((row) => (row.import_batch_id ? String(row.import_batch_id) : ""))
+        .filter((id) => id && !merged.has(id)),
+    ),
+  ];
+  if (extraIds.length) {
+    const { data: extraBatches } = await admin
+      .from("college_visit_import_batches")
+      .select(COLLEGE_IMPORT_BATCH_SELECT)
+      .in("id", extraIds.slice(0, 200));
+    for (const row of extraBatches ?? []) {
+      const uploadedBy = (row as CollegeImportBatchRecord).uploaded_by;
+      if (uploadedBy && uploadedBy !== userId) continue;
+      merged.set(String(row.id), row as CollegeImportBatchRecord);
+    }
+  }
+
+  const batches = [...merged.values()].sort((a, b) =>
+    String(b.uploaded_at ?? "").localeCompare(String(a.uploaded_at ?? "")),
+  );
+  return { batches, error: null };
+}
+
 export async function ensureEmployeeManualFolder(
   admin: SupabaseClient,
   userId: string,

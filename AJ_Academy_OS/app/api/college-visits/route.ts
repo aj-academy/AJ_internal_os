@@ -234,6 +234,7 @@ export async function GET(request: Request) {
     import_batch_uploaded_at: withFolders[index]?.import_batch_uploaded_at ?? null,
     import_batch_number: withFolders[index]?.import_batch_number ?? null,
     import_batch_status: withFolders[index]?.import_batch_status ?? null,
+    import_batch_uploaded_by: withFolders[index]?.import_batch_uploaded_by ?? null,
   }));
 
   return NextResponse.json(
@@ -301,7 +302,7 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    if (!isAdmin && folder.uploaded_by !== user.id) {
+    if (!isAdmin && folder.uploaded_by && folder.uploaded_by !== user.id) {
       return NextResponse.json(
         { error: "You can only save a college into your own upload folder." },
         { status: 403 },

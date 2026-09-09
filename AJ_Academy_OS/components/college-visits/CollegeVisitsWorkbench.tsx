@@ -1113,6 +1113,13 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     const byId = new Map<string, CollegeImportBatchRow>();
     for (const visit of visits) {
       if (!visit.import_batch_id || known.has(visit.import_batch_id)) continue;
+      if (
+        !isDbAdmin &&
+        visit.import_batch_uploaded_by &&
+        visit.import_batch_uploaded_by !== currentUserId
+      ) {
+        continue;
+      }
       const existing = byId.get(visit.import_batch_id);
       if (existing) {
         existing.row_count += 1;
@@ -1133,6 +1140,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         failed_count: 0,
         status: visit.import_batch_status || "completed",
         uploaded_at: visit.import_batch_uploaded_at || visit.created_at || "",
+        uploaded_by: visit.import_batch_uploaded_by ?? null,
       });
     }
     extras.push(...byId.values());
@@ -1147,7 +1155,20 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         uploaded_by_role: batch.uploaded_by_role || profileRoleMap[batch.uploaded_by] || null,
       };
     });
-  }, [employeeAddedLegacyBatches, importBatches, ownerNameMap, profileRoleMap, syntheticLegacyBatches, visits]);
+  }, [currentUserId, employeeAddedLegacyBatches, importBatches, isDbAdmin, ownerNameMap, profileRoleMap, syntheticLegacyBatches, visits]);
+
+  const savableImportFolders = useMemo(
+    () =>
+      displayImportBatches.filter((folder) => {
+        if (folder.isLegacy || folder.legacyGroupKey) return false;
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(folder.id)) {
+          return false;
+        }
+        if (isDbAdmin) return true;
+        return !folder.uploaded_by || folder.uploaded_by === currentUserId;
+      }),
+    [currentUserId, displayImportBatches, isDbAdmin],
+  );
 
   const visitsForFocusedBatch = useMemo(() => {
     if (!focusedImportBatch) return [];
@@ -1364,7 +1385,9 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const canManageFocusedImportBatch = Boolean(
     focusedImportBatch &&
       !focusedImportBatch.isLegacy &&
-      (isDbAdmin || focusedImportBatch.uploaded_by === currentUserId),
+      (isDbAdmin ||
+        focusedImportBatch.uploaded_by === currentUserId ||
+        !focusedImportBatch.uploaded_by),
   );
   const canBulkUploadHere =
     isAdmin &&
@@ -1756,7 +1779,9 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
           saveLocation?.mode === "existing" ? saveLocation.batchId : null;
         let targetFolderName =
           targetBatchId
-            ? importBatches.find((batch) => batch.id === targetBatchId)?.file_name ?? "selected folder"
+            ? savableImportFolders.find((batch) => batch.id === targetBatchId)?.file_name ??
+              importBatches.find((batch) => batch.id === targetBatchId)?.file_name ??
+              "selected folder"
             : "All Colleges";
         let createFolderName: string | null = null;
         const saveToAllColleges = saveLocation?.mode === "existing" && !saveLocation.batchId;
@@ -3396,7 +3421,7 @@ return (
         <CollegeVisitSaveLocationDialog
           open
           collegeName={form.college_name.trim()}
-          folders={importBatches}
+          folders={savableImportFolders}
           defaultBatchId={
             focusedImportBatch && !focusedImportBatch.isLegacy
               ? focusedImportBatch.id

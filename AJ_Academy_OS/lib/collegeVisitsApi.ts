@@ -119,6 +119,7 @@ export function mapCollegeVisitRow(row: unknown): CollegeVisitRow {
     import_batch_uploaded_at: r.import_batch_uploaded_at ?? null,
     import_batch_number: r.import_batch_number ?? null,
     import_batch_status: r.import_batch_status ?? null,
+    import_batch_uploaded_by: r.import_batch_uploaded_by ?? null,
     created_by: r.created_by ?? null,
     created_by_name: r.created_by_name ?? null,
     created_by_role: r.created_by_role ?? null,

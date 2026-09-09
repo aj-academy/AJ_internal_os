@@ -191,7 +191,7 @@ export async function attachImportBatchNames<
 
   const { data } = await admin
     .from("college_visit_import_batches")
-    .select("id,file_name,uploaded_at,batch_number,status")
+    .select("id,file_name,uploaded_at,batch_number,status,uploaded_by")
     .in("id", batchIds);
   const folders = new Map(
     (data ?? []).map((batch) => [
@@ -201,6 +201,7 @@ export async function attachImportBatchNames<
         uploaded_at: (batch.uploaded_at as string) || "",
         batch_number: (batch.batch_number as string) || "",
         status: (batch.status as string) || "completed",
+        uploaded_by: (batch.uploaded_by as string | null) ?? null,
       },
     ]),
   );
@@ -213,6 +214,7 @@ export async function attachImportBatchNames<
       import_batch_uploaded_at: folder?.uploaded_at ?? null,
       import_batch_number: folder?.batch_number ?? null,
       import_batch_status: folder?.status ?? null,
+      import_batch_uploaded_by: folder?.uploaded_by ?? null,
     };
   });
 }
