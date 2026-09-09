@@ -303,10 +303,17 @@ export async function POST(request: Request) {
       );
     }
     if (!isAdmin && folder.uploaded_by && folder.uploaded_by !== user.id) {
-      return NextResponse.json(
-        { error: "You can only save a college into your own upload folder." },
-        { status: 403 },
-      );
+      const { count } = await admin
+        .from("college_visits")
+        .select("id", { count: "exact", head: true })
+        .eq("import_batch_id", importBatchId)
+        .or(`assigned_to.eq.${user.id},created_by.eq.${user.id}`);
+      if (!count) {
+        return NextResponse.json(
+          { error: "You can only save a college into a folder already on your All Colleges list." },
+          { status: 403 },
+        );
+      }
     }
   }
 

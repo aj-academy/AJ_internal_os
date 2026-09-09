@@ -44,7 +44,7 @@ export async function requireCollegeVisitImportActor(): Promise<
   };
 }
 
-/** Admin sees every folder. Employees see folders they uploaded, plus older files linked to their colleges when uploaded_by was never stored. Admin-owned folders stay hidden. */
+/** Admin sees every folder. Employees see folders they uploaded plus any folder already attached to their colleges. */
 export async function listImportBatchesForActor(
   admin: SupabaseClient,
   userId: string,
@@ -89,8 +89,6 @@ export async function listImportBatchesForActor(
       .select(COLLEGE_IMPORT_BATCH_SELECT)
       .in("id", extraIds.slice(0, 200));
     for (const row of extraBatches ?? []) {
-      const uploadedBy = (row as CollegeImportBatchRecord).uploaded_by;
-      if (uploadedBy && uploadedBy !== userId) continue;
       merged.set(String(row.id), row as CollegeImportBatchRecord);
     }
   }

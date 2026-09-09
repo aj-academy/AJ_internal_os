@@ -4,7 +4,10 @@ import { useMemo, useState } from "react";
 import { FolderPlus, FolderTree, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { CollegeImportBatchRow } from "@/components/college-visits/CollegeVisitImportBatchRowList";
+import {
+  isSavedCollegeFolder,
+  type CollegeImportBatchRow,
+} from "@/components/college-visits/CollegeVisitImportBatchRowList";
 
 export type CollegeVisitSaveLocation =
   | { mode: "existing"; batchId: string | null }
@@ -32,11 +35,11 @@ export function CollegeVisitSaveLocationDialog({
   const selectableFolders = useMemo(
     () =>
       folders
-        .filter((folder) => !folder.isLegacy)
+        .filter(isSavedCollegeFolder)
         .sort((a, b) => a.file_name.localeCompare(b.file_name)),
     [folders],
   );
-  const [mode, setMode] = useState<"existing" | "new">(defaultBatchId ? "existing" : "new");
+  const [mode, setMode] = useState<"existing" | "new">(selectableFolders.length ? "existing" : "new");
   const [batchId, setBatchId] = useState<string>(defaultBatchId || "");
   const [folderName, setFolderName] = useState("");
 
@@ -128,7 +131,11 @@ export function CollegeVisitSaveLocationDialog({
               <FolderTree className="h-5 w-5 text-[#a68b2e]" />
               <span>
                 <span className="block text-sm font-semibold text-[#0f172a]">Save in an existing folder</span>
-                <span className="block text-xs text-[#64748b]">Select a College Visits folder, or All Colleges.</span>
+                <span className="block text-xs text-[#64748b]">
+                  {selectableFolders.length
+                    ? `${selectableFolders.length} folder${selectableFolders.length === 1 ? "" : "s"} from All Colleges.`
+                    : "No uploaded folders yet. You can still save without a folder."}
+                </span>
               </span>
             </span>
             {mode === "existing" ? (

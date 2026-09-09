@@ -31,6 +31,16 @@ export type CollegeImportBatchRow = {
   legacyGroupKey?: string;
 };
 
+const SAVED_FOLDER_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Real uploaded/manual folder that a new college can be saved into. */
+export function isSavedCollegeFolder(
+  folder: Pick<CollegeImportBatchRow, "id" | "isLegacy" | "legacyGroupKey">,
+): boolean {
+  return !folder.isLegacy && !folder.legacyGroupKey && SAVED_FOLDER_ID_RE.test(folder.id);
+}
+
 type CollegeVisitImportBatchRowListProps = {
   batches: CollegeImportBatchRow[];
   loading?: boolean;
