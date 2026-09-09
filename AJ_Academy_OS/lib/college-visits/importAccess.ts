@@ -95,6 +95,70 @@ export async function ensureEmployeeManualFolder(
   return String(folder.id);
 }
 
+export async function createNamedManualFolder(
+  admin: SupabaseClient,
+  userId: string,
+  folderNameRaw: string,
+  isAdmin: boolean,
+): Promise<{ id: string; fileName: string } | { id: null; fileName: null; error: string }> {
+  const folderName = folderNameRaw.trim();
+  if (!folderName) return { id: null, fileName: null, error: "Folder name is required." };
+  if (folderName.length > 120) {
+    return { id: null, fileName: null, error: "Folder name must be 120 characters or fewer." };
+  }
+  if (/[\u0000-\u001f<>:"/\\|?*]/.test(folderName)) {
+    return { id: null, fileName: null, error: "Folder name contains unsupported characters." };
+  }
+
+  const { data: existing, error: existingError } = await admin
+    .from("college_visit_import_batches")
+    .select("id,file_name,uploaded_by")
+    .order("uploaded_at", { ascending: false })
+    .limit(1000);
+  if (existingError) return { id: null, fileName: null, error: existingError.message };
+
+  const nameKey = folderName.toLocaleLowerCase();
+  const duplicatePool = isAdmin
+    ? existing ?? []
+    : (existing ?? []).filter((row) => row.uploaded_by === userId);
+  const duplicate = duplicatePool.find(
+    (row) => String(row.file_name || "").trim().toLocaleLowerCase() === nameKey,
+  );
+  if (duplicate?.id) {
+    return { id: String(duplicate.id), fileName: folderName };
+  }
+
+  const { data: batchNumber, error: numberError } = await admin.rpc(
+    "college_visit_import_next_batch_number",
+  );
+  if (numberError || !batchNumber) {
+    return { id: null, fileName: null, error: numberError?.message || "Could not allocate a folder number." };
+  }
+
+  const { data: folder, error } = await admin
+    .from("college_visit_import_batches")
+    .insert({
+      batch_number: batchNumber,
+      file_name: folderName,
+      row_count: 0,
+      new_count: 0,
+      duplicate_count: 0,
+      invalid_count: 0,
+      created_count: 0,
+      skipped_count: 0,
+      failed_count: 0,
+      status: "completed",
+      uploaded_by: userId,
+      meta: { source: "manual_folder" },
+    })
+    .select("id,file_name")
+    .single();
+  if (error || !folder?.id) {
+    return { id: null, fileName: null, error: error?.message || "Could not create folder." };
+  }
+  return { id: String(folder.id), fileName: folder.file_name || folderName };
+}
+
 export function actorOwnsImportBatch(
   batch: { uploaded_by?: string | null },
   userId: string,

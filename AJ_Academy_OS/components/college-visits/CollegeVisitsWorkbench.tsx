@@ -1758,29 +1758,36 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
           targetBatchId
             ? importBatches.find((batch) => batch.id === targetBatchId)?.file_name ?? "selected folder"
             : "All Colleges";
+        let createFolderName: string | null = null;
+        const saveToAllColleges = saveLocation?.mode === "existing" && !saveLocation.batchId;
 
         if (saveLocation?.mode === "new") {
-          const folderRes = await fetch("/api/college-visits/import", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ folderName: saveLocation.folderName }),
-          });
-          const folderJson = (await folderRes.json()) as {
-            folder?: CollegeImportBatchRow;
-            folderId?: string;
-            error?: string;
-          };
-          // If another admin created the same folder moments earlier, reuse it
-          // instead of making the user close the form and start again.
-          if (folderRes.status === 409 && folderJson.folderId) {
-            targetBatchId = folderJson.folderId;
-            targetFolderName = saveLocation.folderName;
-          } else if (!folderRes.ok || !folderJson.folder) {
-            throw new Error(folderJson.error ?? "Could not create folder.");
+          if (isDbAdmin) {
+            const folderRes = await fetch("/api/college-visits/import", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ folderName: saveLocation.folderName }),
+            });
+            const folderJson = (await folderRes.json()) as {
+              folder?: CollegeImportBatchRow;
+              folderId?: string;
+              error?: string;
+            };
+            // If another admin created the same folder moments earlier, reuse it
+            // instead of making the user close the form and start again.
+            if (folderRes.status === 409 && folderJson.folderId) {
+              targetBatchId = folderJson.folderId;
+              targetFolderName = saveLocation.folderName;
+            } else if (!folderRes.ok || !folderJson.folder) {
+              throw new Error(folderJson.error ?? "Could not create folder.");
+            } else {
+              targetBatchId = folderJson.folder.id;
+              targetFolderName = folderJson.folder.file_name;
+            }
           } else {
-            targetBatchId = folderJson.folder.id;
-            targetFolderName = folderJson.folder.file_name;
+            createFolderName = saveLocation.folderName;
+            targetFolderName = saveLocation.folderName;
           }
         }
 
@@ -1792,12 +1799,14 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
             ...form,
             assigned_to: payload.assigned_to ?? "",
             ...(targetBatchId ? { import_batch_id: targetBatchId } : {}),
+            ...(createFolderName ? { folderName: createFolderName } : {}),
+            ...(saveToAllColleges ? { all_colleges: true } : {}),
           }),
         });
         const json = (await res.json()) as { visit?: { id?: string; import_batch_id?: string | null }; error?: string };
         if (!res.ok) throw new Error(json.error ?? "Create failed.");
         const nid = json.visit?.id;
-        if (!targetBatchId && json.visit?.import_batch_id) {
+        if (!targetBatchId && !createFolderName && json.visit?.import_batch_id) {
           targetFolderName = "your folder";
         }
         if (nid && filesToUpload.length) {
@@ -1837,14 +1846,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       void handleSave();
       return;
     }
-    if (!isDbAdmin) {
-      if (canManageFocusedImportBatch && focusedImportBatch) {
-        void handleSave({ mode: "existing", batchId: focusedImportBatch.id });
-        return;
-      }
-      // Folder is created on the college POST so Save does not depend on a
-      // separate import API that was returning Unauthorized for Employees.
-      void handleSave();
+    if (!isDbAdmin && canManageFocusedImportBatch && focusedImportBatch) {
+      void handleSave({ mode: "existing", batchId: focusedImportBatch.id });
       return;
     }
     setSaveLocationOpen(true);

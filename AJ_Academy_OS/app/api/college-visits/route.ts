@@ -18,7 +18,7 @@ import {
   redactCollegeListFileFieldsForActor,
 } from "@/lib/college-visits/access";
 import { isAdminRole } from "@/lib/college-visits/fileVisibility";
-import { ensureEmployeeManualFolder } from "@/lib/college-visits/importAccess";
+import { ensureEmployeeManualFolder, createNamedManualFolder } from "@/lib/college-visits/importAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -225,12 +225,23 @@ export async function POST(request: Request) {
   const record = body as Record<string, unknown>;
   const isAdmin = isAdminRole(profile?.role);
   const admin = createAdminClient();
+  const requestedFolderName =
+    typeof record.folderName === "string" ? record.folderName.trim() : "";
+  const saveToAllColleges = record.all_colleges === true;
   let importBatchId =
     typeof record.import_batch_id === "string" && record.import_batch_id.trim()
       ? record.import_batch_id.trim()
       : null;
 
-  if (!importBatchId && !isAdmin) {
+  if (!importBatchId && requestedFolderName) {
+    const created = await createNamedManualFolder(admin, user.id, requestedFolderName, isAdmin);
+    if ("error" in created) {
+      return NextResponse.json({ error: created.error || "Could not create folder." }, { status: 400 });
+    }
+    importBatchId = created.id;
+  }
+
+  if (!importBatchId && !isAdmin && !saveToAllColleges) {
     try {
       importBatchId = await ensureEmployeeManualFolder(admin, user.id, profile);
     } catch {

@@ -128,7 +128,7 @@ export function CollegeVisitSaveLocationDialog({
               <FolderTree className="h-5 w-5 text-[#a68b2e]" />
               <span>
                 <span className="block text-sm font-semibold text-[#0f172a]">Save in an existing folder</span>
-                <span className="block text-xs text-[#64748b]">Select any available College Visits folder.</span>
+                <span className="block text-xs text-[#64748b]">Select a College Visits folder, or All Colleges.</span>
               </span>
             </span>
             {mode === "existing" ? (
