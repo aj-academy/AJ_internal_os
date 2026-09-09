@@ -113,7 +113,6 @@ import {
   legacyCollegeVisitGroupKey,
   LEGACY_ALL_COLLEGES_BATCH_KEY,
   employeeAddedLegacyGroupKey,
-  employeeManualFolderName,
   isEmployeeAddedLegacyGroupKey,
   isUnbatchedNonAdminCreatedVisit,
   createdByFromEmployeeAddedLegacyGroupKey,
@@ -1788,15 +1787,19 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         const res = await fetch("/api/college-visits", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             ...form,
             assigned_to: payload.assigned_to ?? "",
             ...(targetBatchId ? { import_batch_id: targetBatchId } : {}),
           }),
         });
-        const json = (await res.json()) as { visit?: { id?: string }; error?: string };
+        const json = (await res.json()) as { visit?: { id?: string; import_batch_id?: string | null }; error?: string };
         if (!res.ok) throw new Error(json.error ?? "Create failed.");
         const nid = json.visit?.id;
+        if (!targetBatchId && json.visit?.import_batch_id) {
+          targetFolderName = "your folder";
+        }
         if (nid && filesToUpload.length) {
           for (const file of filesToUpload) {
             const uploaded = await uploadProposalFile({
@@ -1839,15 +1842,9 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         void handleSave({ mode: "existing", batchId: focusedImportBatch.id });
         return;
       }
-      const ownManual = importBatches.find(
-        (batch) => batch.uploaded_by === currentUserId && batch.meta?.source === "manual_folder",
-      );
-      if (ownManual) {
-        void handleSave({ mode: "existing", batchId: ownManual.id });
-        return;
-      }
-      const folderName = employeeManualFolderName(ownerNameMap[currentUserId] || "My colleges");
-      void handleSave({ mode: "new", folderName });
+      // Folder is created on the college POST so Save does not depend on a
+      // separate import API that was returning Unauthorized for Employees.
+      void handleSave();
       return;
     }
     setSaveLocationOpen(true);

@@ -44,6 +44,57 @@ export async function requireCollegeVisitImportActor(): Promise<
   };
 }
 
+export async function ensureEmployeeManualFolder(
+  admin: SupabaseClient,
+  userId: string,
+  profile: Profile | null,
+): Promise<string | null> {
+  const { data: existing } = await admin
+    .from("college_visit_import_batches")
+    .select("id,meta")
+    .eq("uploaded_by", userId)
+    .order("uploaded_at", { ascending: false })
+    .limit(50);
+  const owned = (existing ?? []).find((row) => {
+    const meta = row.meta as { source?: string } | null;
+    return meta?.source === "manual_folder";
+  });
+  if (owned?.id) return String(owned.id);
+
+  const folderName =
+    (profile?.full_name || profile?.email || "My colleges")
+      .replace(/[\u0000-\u001f<>:"/\\|?*]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 120) || "My colleges";
+
+  const { data: batchNumber, error: numberError } = await admin.rpc(
+    "college_visit_import_next_batch_number",
+  );
+  if (numberError || !batchNumber) return null;
+
+  const { data: folder, error } = await admin
+    .from("college_visit_import_batches")
+    .insert({
+      batch_number: batchNumber,
+      file_name: folderName,
+      row_count: 0,
+      new_count: 0,
+      duplicate_count: 0,
+      invalid_count: 0,
+      created_count: 0,
+      skipped_count: 0,
+      failed_count: 0,
+      status: "completed",
+      uploaded_by: userId,
+      meta: { source: "manual_folder" },
+    })
+    .select("id")
+    .single();
+  if (error || !folder?.id) return null;
+  return String(folder.id);
+}
+
 export function actorOwnsImportBatch(
   batch: { uploaded_by?: string | null },
   userId: string,

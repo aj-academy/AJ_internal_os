@@ -493,7 +493,7 @@ export async function uploadProposalFile(opts: {
   body.set("entityType", opts.entityType);
   body.set("entityId", opts.entityId);
   body.set("file", opts.file);
-  const res = await fetch("/api/proposals/upload", { method: "POST", body });
+  const res = await fetch("/api/proposals/upload", { method: "POST", body, credentials: "include" });
   const json = (await res.json()) as ProposalFileMeta & { error?: string; ok?: boolean };
   if (!res.ok) throw new Error(json.error || "Upload failed.");
   return {

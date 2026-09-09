@@ -643,6 +643,13 @@ export function friendlyCollegeVisitError(raw: unknown) {
     return "Who visited column is missing. Run `college_visits_visited_by_patch.sql` from AJ_Academy_SB in Supabase SQL Editor, then refresh.";
   }
   if (
+    msg === "Unauthorized" ||
+    msg.toLowerCase() === "unauthorized." ||
+    msg.toLowerCase().includes("unauthorized")
+  ) {
+    return "Your login session expired. Sign out, sign in again, then save the college.";
+  }
+  if (
     msg === "Forbidden" ||
     msg.toLowerCase().includes("row-level security") ||
     msg.toLowerCase().includes("permission denied")

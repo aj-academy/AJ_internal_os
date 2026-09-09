@@ -18,6 +18,7 @@ import {
   redactCollegeListFileFieldsForActor,
 } from "@/lib/college-visits/access";
 import { isAdminRole } from "@/lib/college-visits/fileVisibility";
+import { ensureEmployeeManualFolder } from "@/lib/college-visits/importAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -222,14 +223,22 @@ export async function POST(request: Request) {
   }
 
   const record = body as Record<string, unknown>;
-  const importBatchId =
+  const isAdmin = isAdminRole(profile?.role);
+  const admin = createAdminClient();
+  let importBatchId =
     typeof record.import_batch_id === "string" && record.import_batch_id.trim()
       ? record.import_batch_id.trim()
       : null;
 
+  if (!importBatchId && !isAdmin) {
+    try {
+      importBatchId = await ensureEmployeeManualFolder(admin, user.id, profile);
+    } catch {
+      importBatchId = null;
+    }
+  }
+
   if (importBatchId) {
-    const isAdmin = isAdminRole(profile?.role);
-    const admin = createAdminClient();
     const { data: folder, error: folderError } = await admin
       .from("college_visit_import_batches")
       .select("id,uploaded_by")
@@ -249,11 +258,12 @@ export async function POST(request: Request) {
     }
   }
 
-  const supabase = await createClient();
+  // Service role after session check: Employee JWT cannot see import folders
+  // (admin-only RLS), so a user-scoped insert with import_batch_id can fail the FK.
   let insertPayload: Record<string, unknown> = { ...payload, created_by: user.id, assigned_to: user.id };
   if (importBatchId) insertPayload.import_batch_id = importBatchId;
   let select = COLLEGE_VISIT_SELECT;
-  let { data, error } = await supabase.from("college_visits").insert(insertPayload).select(select).single();
+  let { data, error } = await admin.from("college_visits").insert(insertPayload).select(select).single();
 
   while (error) {
     const stripped = stripUnavailableColumns(insertPayload, error.message);
@@ -262,7 +272,7 @@ export async function POST(request: Request) {
     if (!fallbackSelect && !payloadChanged) break;
     insertPayload = stripped;
     if (fallbackSelect) select = fallbackSelect;
-    ({ data, error } = await supabase.from("college_visits").insert(insertPayload).select(select).single());
+    ({ data, error } = await admin.from("college_visits").insert(insertPayload).select(select).single());
   }
 
   if (error || !data) {
@@ -271,9 +281,6 @@ export async function POST(request: Request) {
 
   const created = mapCollegeVisitRow(data);
   if (importBatchId) {
-    // Manual additions share the folder batch, so keep its displayed row and
-    // created counts aligned with the college that was just saved.
-    const admin = createAdminClient();
     const { data: batch } = await admin
       .from("college_visit_import_batches")
       .select("row_count,created_count")
@@ -290,7 +297,7 @@ export async function POST(request: Request) {
         .eq("id", importBatchId);
     }
   }
-  await supabase.from("college_visit_activities").insert({
+  await admin.from("college_visit_activities").insert({
     college_visit_id: created.id,
     activity_type: "College Created",
     notes: `Source: ${payload.source_reference ?? "—"}`,
