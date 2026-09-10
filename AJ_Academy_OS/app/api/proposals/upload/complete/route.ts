@@ -2,15 +2,14 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireStaffApiSession } from "@/lib/security";
-import { assertStaffCanAccessProposalEntity, EntityAccessError } from "@/lib/college-visits/access";
-import { proposalVisibilityForUpload, isAdminRole } from "@/lib/college-visits/fileVisibility";
 import {
-  PROPOSALS_BUCKET,
-  buildProposalObjectPath,
-  guessProposalMime,
-  validateProposalUploadMeta,
-  type ProposalEntityKind,
-} from "@/lib/proposalFiles";
+  assertProposalPathMatchesEntity,
+  assertStaffCanAccessProposalEntity,
+  EntityAccessError,
+} from "@/lib/college-visits/access";
+import { proposalVisibilityForUpload, isAdminRole } from "@/lib/college-visits/fileVisibility";
+import { guessProposalMime, validateProposalUploadMeta, type ProposalEntityKind } from "@/lib/proposalFiles";
+import { finalizeProposalUpload } from "@/lib/proposals/finalizeUpload";
 
 export const runtime = "nodejs";
 
@@ -33,12 +32,13 @@ export async function POST(request: Request) {
   const record = body as Record<string, unknown>;
   const kind = parseKind(record.entityType);
   const entityId = typeof record.entityId === "string" ? record.entityId.trim() : "";
+  const path = typeof record.path === "string" ? record.path.trim() : "";
   const fileName = typeof record.fileName === "string" ? record.fileName.trim() : "";
   const fileType = typeof record.fileType === "string" ? record.fileType : "";
   const fileSize = typeof record.fileSize === "number" ? record.fileSize : Number(record.fileSize);
 
-  if (!kind || !entityId || !fileName) {
-    return NextResponse.json({ error: "entityType, entityId, and fileName are required." }, { status: 400 });
+  if (!kind || !entityId || !path || !fileName) {
+    return NextResponse.json({ error: "entityType, entityId, path, and fileName are required." }, { status: 400 });
   }
 
   const validationError = validateProposalUploadMeta({ name: fileName, size: fileSize, type: fileType });
@@ -57,32 +57,31 @@ export async function POST(request: Request) {
       kind,
       entityId,
     );
+    assertProposalPathMatchesEntity(kind, entityId, path);
   } catch (e) {
     const status = e instanceof EntityAccessError ? e.status : 404;
     return NextResponse.json({ error: e instanceof Error ? e.message : "Not found." }, { status });
   }
 
-  const mime = guessProposalMime(fileName, fileType);
-  const path = buildProposalObjectPath(kind, entityId, fileName);
-  const admin = createAdminClient();
-  const { data: signed, error: signError } = await admin.storage
-    .from(PROPOSALS_BUCKET)
-    .createSignedUploadUrl(path, { upsert: false });
-  if (signError || !signed?.signedUrl || !signed.token) {
+  try {
+    const result = await finalizeProposalUpload({
+      admin: createAdminClient(),
+      userId: user.id,
+      uploaderName: profile?.full_name || profile?.email || null,
+      uploaderRole: profile?.role || null,
+      kind,
+      entityId,
+      path,
+      fileName,
+      mime: guessProposalMime(fileName, fileType),
+      fileSize,
+      visibilityScope: proposalVisibilityForUpload(kind, profile?.role),
+    });
+    return NextResponse.json(result);
+  } catch (e) {
     return NextResponse.json(
-      { error: signError?.message || "Could not start a secure upload. Please try again." },
+      { error: e instanceof Error ? e.message : "Could not finish upload." },
       { status: 400 },
     );
   }
-
-  return NextResponse.json({
-    ok: true,
-    path: signed.path || path,
-    token: signed.token,
-    signedUrl: signed.signedUrl,
-    mime: mime || "application/octet-stream",
-    fileName,
-    fileSize,
-    visibilityScope: proposalVisibilityForUpload(kind, profile?.role),
-  });
 }

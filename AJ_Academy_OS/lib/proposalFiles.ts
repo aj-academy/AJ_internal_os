@@ -57,16 +57,24 @@ export function guessProposalMime(fileName: string, mime?: string | null) {
   return mime?.trim() || "";
 }
 
-export function validateProposalFile(file: File): string | null {
-  if (file.size <= 0) return "Empty file.";
-  if (file.size > PROPOSAL_MAX_BYTES) return "File exceeds 10 MB limit.";
-  const mime = guessProposalMime(file.name, file.type);
-  const lower = file.name.toLowerCase();
+export function validateProposalUploadMeta(input: {
+  name: string;
+  size: number;
+  type?: string | null;
+}): string | null {
+  if (!Number.isFinite(input.size) || input.size <= 0) return "Empty file.";
+  if (input.size > PROPOSAL_MAX_BYTES) return "File exceeds 10 MB limit.";
+  const mime = guessProposalMime(input.name, input.type);
+  const lower = input.name.toLowerCase();
   const extOk = lower.endsWith(".pdf") || lower.endsWith(".doc") || lower.endsWith(".docx");
   if (!extOk && !PROPOSAL_ALLOWED_MIME.has(mime)) {
     return "Only PDF, DOC, or DOCX files are allowed.";
   }
   return null;
+}
+
+export function validateProposalFile(file: File): string | null {
+  return validateProposalUploadMeta({ name: file.name, size: file.size, type: file.type });
 }
 
 export function proposalStorageFolder(kind: ProposalEntityKind, entityId: string) {

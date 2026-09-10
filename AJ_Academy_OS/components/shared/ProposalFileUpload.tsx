@@ -15,6 +15,7 @@ import {
 } from "@/lib/proposalFiles";
 import { armFilePickerBackdropGuard } from "@/lib/useSuppressBackdropClose";
 import { downloadUrlInSameWindow } from "@/lib/browser/sameWindowDownload";
+import { readApiJson } from "@/lib/readApiJson";
 
 type ProposalFileUploadProps = {
   entityType: ProposalEntityKind;
@@ -131,7 +132,7 @@ export function ProposalFileUpload({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entityType, entityId, download }),
       });
-      const json = (await res.json()) as { url?: string; error?: string };
+      const json = await readApiJson<{ url?: string; error?: string }>(res);
       if (!res.ok || !json.url) throw new Error(json.error || "Could not open file.");
       await downloadUrlInSameWindow(json.url, meta.proposal_file_name || "proposal");
     } catch (e) {
@@ -151,7 +152,7 @@ export function ProposalFileUpload({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entityType, entityId }),
       });
-      const json = (await res.json()) as { error?: string };
+      const json = await readApiJson<{ error?: string }>(res);
       if (!res.ok) throw new Error(json.error || "Could not remove file.");
       onMetaChange({
         ...meta,
@@ -179,7 +180,7 @@ export function ProposalFileUpload({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entityType, entityId, filePath: file.file_path, fileId: file.id }),
       });
-      const json = (await res.json()) as { error?: string };
+      const json = await readApiJson<{ error?: string }>(res);
       if (!res.ok) throw new Error(json.error || "Could not remove file.");
       onFilesChange?.(files.filter((f) => f.id !== file.id));
       onSuccess?.("File removed.");
@@ -205,7 +206,7 @@ export function ProposalFileUpload({
           download,
         }),
       });
-      const json = (await res.json()) as { url?: string; error?: string };
+      const json = await readApiJson<{ url?: string; error?: string }>(res);
       if (!res.ok || !json.url) throw new Error(json.error || "Could not open file.");
       await downloadUrlInSameWindow(json.url, file.file_name || "proposal");
     } catch (e) {
@@ -489,16 +490,69 @@ export async function uploadProposalFile(opts: {
 }): Promise<ProposalFileMeta> {
   const err = validateProposalFile(opts.file);
   if (err) throw new Error(err);
-  const body = new FormData();
-  body.set("entityType", opts.entityType);
-  body.set("entityId", opts.entityId);
-  body.set("file", opts.file);
-  const res = await fetch("/api/proposals/upload", { method: "POST", body, credentials: "include" });
-  const json = (await res.json()) as ProposalFileMeta & { error?: string; ok?: boolean };
-  if (!res.ok) throw new Error(json.error || "Upload failed.");
+
+  const initRes = await fetch("/api/proposals/upload", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      entityType: opts.entityType,
+      entityId: opts.entityId,
+      fileName: opts.file.name,
+      fileType: opts.file.type,
+      fileSize: opts.file.size,
+    }),
+  });
+  const init = await readApiJson<{
+    error?: string;
+    signedUrl?: string;
+    token?: string;
+    path?: string;
+    mime?: string;
+  }>(initRes);
+  if (!initRes.ok || !init.signedUrl || !init.path) {
+    throw new Error(init.error || "Could not start proposal upload.");
+  }
+
+  const putOnce = (withAuth: boolean) =>
+    fetch(init.signedUrl!, {
+      method: "PUT",
+      headers: {
+        "Content-Type": init.mime || opts.file.type || "application/octet-stream",
+        "x-upsert": "false",
+        ...(withAuth && init.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      },
+      body: opts.file,
+    });
+
+  let stored = await putOnce(false);
+  if (!stored.ok) stored = await putOnce(true);
+  if (!stored.ok) stored = await putOnce(false);
+  if (!stored.ok) {
+    const detail = await stored.text().catch(() => "");
+    throw new Error(
+      detail.trim().slice(0, 200) || "Could not send the file to storage. Check your connection and try again.",
+    );
+  }
+
+  const doneRes = await fetch("/api/proposals/upload/complete", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      entityType: opts.entityType,
+      entityId: opts.entityId,
+      path: init.path,
+      fileName: opts.file.name,
+      fileType: opts.file.type,
+      fileSize: opts.file.size,
+    }),
+  });
+  const json = await readApiJson<ProposalFileMeta & { error?: string; ok?: boolean }>(doneRes);
+  if (!doneRes.ok) throw new Error(json.error || "Upload failed.");
   return {
     proposal_file_name: json.proposal_file_name ?? opts.file.name,
-    proposal_file_path: json.proposal_file_path ?? null,
+    proposal_file_path: json.proposal_file_path ?? init.path,
     proposal_file_type: json.proposal_file_type ?? null,
     proposal_file_size: json.proposal_file_size ?? opts.file.size,
     proposal_uploaded_at: json.proposal_uploaded_at ?? new Date().toISOString(),

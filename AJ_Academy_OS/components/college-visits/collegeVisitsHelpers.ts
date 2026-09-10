@@ -675,6 +675,14 @@ export function friendlyCollegeVisitError(raw: unknown) {
   ) {
     return "Could not save this college visit. Refresh the folder and try again.";
   }
+  if (
+    msg.toLowerCase().includes("request entity too large") ||
+    msg.toLowerCase().includes("payload too large") ||
+    msg.toLowerCase().includes("unexpected token") ||
+    msg.toLowerCase().includes("is not valid json")
+  ) {
+    return "That upload did not finish. Use a PDF, DOC, or DOCX under 10 MB and try again. If it still fails, wait a few seconds and retry.";
+  }
   return msg;
 }
 

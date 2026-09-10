@@ -135,6 +135,7 @@ import {
 import { parseOutcomeRemarkEntries } from "@/lib/outcomeRemarks";
 import { ProposalFileUpload, uploadProposalFile } from "@/components/shared/ProposalFileUpload";
 import type { ProposalFileMeta, ProposalStoredFile } from "@/lib/proposalFiles";
+import { readApiJson } from "@/lib/readApiJson";
 
 import {
   mergeOutreachFlags,
@@ -2215,7 +2216,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         credentials: "include",
         body,
       });
-      const json = (await res.json()) as {
+      const json = await readApiJson<{
         batch?: CollegeImportBatchRow;
         append?: boolean;
         created?: number;
@@ -2224,7 +2225,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         summary?: { newCount: number; duplicateCount: number; invalidCount: number; parseErrors?: string[] };
         error?: string;
         hint?: string;
-      };
+      }>(res);
       if (!res.ok) {
         setError(friendlyCollegeVisitError(new Error(json.error || "Upload failed.")));
         if (json.hint) setSuccess(json.hint);
