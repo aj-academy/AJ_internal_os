@@ -17,6 +17,7 @@ const DATE_COLUMNS = new Set([
 
 function isMissingProposalColumn(errorMsg: string) {
   const m = errorMsg.toLowerCase();
+  if (m.includes("proposal_files")) return false;
   return (
     m.includes("proposal_") &&
     (m.includes("column") || m.includes("schema cache") || m.includes("does not exist"))

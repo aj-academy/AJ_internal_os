@@ -207,7 +207,11 @@ export function isMissingContactsColumn(msg: string) {
 
 export function isMissingProposalFileColumn(msg: string) {
   const m = msg.toLowerCase();
-  return m.includes("proposal_file_") && (m.includes("column") || m.includes("schema cache") || m.includes("does not exist"));
+  if (m.includes("proposal_files")) return false;
+  return (
+    (m.includes("proposal_file_") || m.includes("proposal_uploaded_at")) &&
+    (m.includes("column") || m.includes("schema cache") || m.includes("does not exist"))
+  );
 }
 
 export function isMissingImportBatchColumn(msg: string) {
@@ -631,10 +635,17 @@ export function isFollowUpDue(row: CollegeVisitRow): boolean {
 
 export function friendlyCollegeVisitError(raw: unknown) {
   const msg = raw instanceof Error ? raw.message : "Unexpected error.";
+  const lower = msg.toLowerCase();
   if (isMissingCollegeVisitsTable(msg)) {
     return "College Visits table is missing. Run `college_visits_schema.sql` from AJ_Academy_SB in Supabase SQL Editor.";
   }
-  if (isMissingProposalFileColumn(msg) || (msg.includes("proposal_") && (msg.includes("column") || msg.includes("schema cache")))) {
+  if (
+    lower.includes("proposal_files") &&
+    (lower.includes("does not exist") || lower.includes("schema cache") || lower.includes("column"))
+  ) {
+    return "Proposal files table is missing. Run `proposals_multi_file_patch.sql` from AJ_Academy_SB in Supabase SQL Editor, then refresh.";
+  }
+  if (isMissingProposalFileColumn(msg)) {
     return "Proposal file columns are missing. Run `proposals_file_upload_patch.sql` from AJ_Academy_SB in Supabase SQL Editor, then refresh.";
   }
   if (isMissingContactsColumn(msg)) {

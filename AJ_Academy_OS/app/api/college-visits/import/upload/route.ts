@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import {
   attachImportBatchUploaderAttribution,
   loadCollegeVisitsForDuplicateMatch,
@@ -44,8 +43,7 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
   const fileHash = hashCollegeImportBuffer(buffer);
   const admin = createAdminClient();
-  const visitClient = auth.isAdmin ? admin : await createClient();
-  const existingVisits = await loadCollegeVisitsForDuplicateMatch(visitClient, auth.isAdmin ? 5000 : 4000);
+  const existingVisits = await loadCollegeVisitsForDuplicateMatch(admin, auth.isAdmin ? 5000 : 4000);
 
   const batchIds = [
     ...new Set(existingVisits.map((v) => v.import_batch_id).filter((id): id is string => Boolean(id))),
@@ -109,6 +107,7 @@ export async function POST(request: Request) {
 
     const pendingRows = analysis.rows.filter((row) => row.status === "pending");
     skipped += analysis.rows.length - pendingRows.length;
+    let lastInsertError: string | null = null;
 
     if (target === "legacy") {
       for (let i = 0; i < pendingRows.length; i += 75) {
@@ -129,6 +128,7 @@ export async function POST(request: Request) {
           };
         });
         const { results, lastError } = await insertCollegeVisitsBulk(admin, inserts);
+        if (lastError) lastInsertError = lastError;
         if (lastError && !results.some(Boolean)) failed += slice.length;
         for (const row of results) {
           if (row?.id) {
@@ -184,6 +184,7 @@ export async function POST(request: Request) {
           };
         });
         const { results, lastError } = await insertCollegeVisitsBulk(admin, inserts);
+        if (lastError) lastInsertError = lastError;
         if (lastError && !results.some(Boolean)) failed += slice.length;
         for (const row of results) {
           if (row?.id) {
@@ -209,6 +210,10 @@ export async function POST(request: Request) {
           failed_count: (targetBatch.failed_count ?? 0) + failed,
         })
         .eq("id", target);
+    }
+
+    if (pendingRows.length && created === 0 && lastInsertError) {
+      return NextResponse.json({ error: lastInsertError }, { status: 400 });
     }
 
     if (activityRows.length) {

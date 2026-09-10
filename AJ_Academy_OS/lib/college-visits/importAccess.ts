@@ -219,7 +219,7 @@ export function actorOwnsImportBatch(
   userId: string,
   isAdmin: boolean,
 ): boolean {
-  return isAdmin || batch.uploaded_by === userId;
+  return isAdmin || !batch.uploaded_by || batch.uploaded_by === userId;
 }
 
 export async function loadImportBatchForActor(
@@ -239,10 +239,17 @@ export async function loadImportBatchForActor(
     .maybeSingle();
   if (error) return { batch: null, error: error.message, status: 400 };
   const batch = (data ?? null) as CollegeImportBatchRecord | null;
-  if (!batch || !actorOwnsImportBatch(batch, userId, isAdmin)) {
-    return { batch: null, error: "Import batch not found.", status: 404 };
+  if (!batch) return { batch: null, error: "Import batch not found.", status: 404 };
+  if (actorOwnsImportBatch(batch, userId, isAdmin)) {
+    return { batch, error: null, status: 200 };
   }
-  return { batch, error: null, status: 200 };
+  const { count } = await admin
+    .from("college_visits")
+    .select("id", { count: "exact", head: true })
+    .eq("import_batch_id", batchId)
+    .or(`assigned_to.eq.${userId},created_by.eq.${userId}`);
+  if ((count ?? 0) > 0) return { batch, error: null, status: 200 };
+  return { batch: null, error: "Import batch not found.", status: 404 };
 }
 
 export async function loadCollegeVisitsForDuplicateMatch(

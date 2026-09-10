@@ -2175,7 +2175,9 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
               !focusedImportBatch.isLegacy &&
               (focusedImportBatch.status === "completed" ||
                 focusedImportBatch.status === "completed_with_errors") &&
-              (isDbAdmin || focusedImportBatch.uploaded_by === currentUserId)
+              (isDbAdmin ||
+                focusedImportBatch.uploaded_by === currentUserId ||
+                !focusedImportBatch.uploaded_by)
             ? focusedImportBatch.id
             : null;
       if (appendToBatchId) body.append("appendToBatchId", appendToBatchId);
@@ -2196,7 +2198,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
         hint?: string;
       };
       if (!res.ok) {
-        setError(json.error || "Upload failed.");
+        setError(friendlyCollegeVisitError(new Error(json.error || "Upload failed.")));
         if (json.hint) setSuccess(json.hint);
         return;
       }
