@@ -140,6 +140,7 @@ import {
   mergeOutreachFlags,
   type CollegeOutreachFlags,
 } from "@/lib/college-visits/outreachActivity";
+import { cityNameFromLocation, locationMatchesCityFilter } from "@/lib/college-visits/cityFromLocation";
 
 /** Employee a college is assigned to via a task, keyed by college id. */
 type CollegeAssignedEmployee = { id: string; name: string | null };
@@ -379,12 +380,12 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const locationOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const visit of visits) {
-      const raw = (visit.location ?? "").trim();
-      if (!raw) continue;
-      const key = raw.toLocaleLowerCase();
-      if (!seen.has(key)) seen.set(key, raw);
+      const city = cityNameFromLocation(visit.location);
+      if (!city) continue;
+      const key = city.toLocaleLowerCase();
+      if (!seen.has(key)) seen.set(key, city);
     }
-    const selected = fltLocation.trim();
+    const selected = cityNameFromLocation(fltLocation);
     if (selected) {
       const key = selected.toLocaleLowerCase();
       if (!seen.has(key)) seen.set(key, selected);
@@ -393,11 +394,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   }, [fltLocation, visits]);
 
   const matchesLocationFilter = useCallback(
-    (row: Pick<CollegeVisitRow, "location">) => {
-      const want = fltLocation.trim().toLocaleLowerCase();
-      if (!want) return true;
-      return (row.location ?? "").trim().toLocaleLowerCase() === want;
-    },
+    (row: Pick<CollegeVisitRow, "location">) => locationMatchesCityFilter(row.location, fltLocation),
     [fltLocation],
   );
 
@@ -2352,8 +2349,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
           <h2 className="text-3xl font-semibold text-[#0f172a]">College Visits</h2>
           <p className="mt-1 text-sm text-[#64748b]">
             {isDbAdmin
-              ? "All colleges in one table. Created By shows who added each college. Location filter lists every location already in these rows."
-              : "Your college visits — add, update, import, and export. Admin still sees every college you save."}
+              ? "All colleges in one table. Created By shows who added each college. Location filter lists city names from these rows, not full addresses."
+              : "Every college is visible here — add, update, import, and export. Location filter lists city names only."}
           </p>
           {cvRefreshing ? (
             <p className="mt-1 text-xs font-medium text-[#64748b]" aria-live="polite">
@@ -3007,25 +3004,21 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
                     value={fltLocation}
                     options={locationOptions.map((location) => ({ value: location, label: location }))}
                     onChange={setFltLocation}
-                    allLabel="All locations"
+                    allLabel="All cities"
                     className={thClass}
                   />
-                  {isDbAdmin ? (
-                    <TableHeaderFilter
-                      label="Created By"
-                      value={fltCreator}
-                      options={[
-                        { value: "role:admin", label: "All Admins" },
-                        { value: "role:employee", label: "All Employees" },
-                        ...creatorOptions.map((option) => ({ value: option.id, label: option.label })),
-                      ]}
-                      onChange={setFltCreator}
-                      allLabel="All creators"
-                      className={`${thClass} min-w-[13rem]`}
-                    />
-                  ) : (
-                    <TableHeaderCell label="Created By" className={`${thClass} min-w-[13rem]`} />
-                  )}
+                  <TableHeaderFilter
+                    label="Created By"
+                    value={fltCreator}
+                    options={[
+                      { value: "role:admin", label: "All Admins" },
+                      { value: "role:employee", label: "All Employees" },
+                      ...creatorOptions.map((option) => ({ value: option.id, label: option.label })),
+                    ]}
+                    onChange={setFltCreator}
+                    allLabel="All creators"
+                    className={`${thClass} min-w-[13rem]`}
+                  />
                   <TableHeaderCell label="Created At" className={`${thClass} min-w-[11rem]`} />
                   <TableHeaderCell label="Call" className={`${thClass} min-w-[5.5rem]`} />
                   <TableHeaderCell label="WhatsApp" className={`${thClass} min-w-[5.5rem]`} />

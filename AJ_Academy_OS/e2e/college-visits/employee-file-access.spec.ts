@@ -17,6 +17,7 @@ test("Employee uses shared College Visits UI", async ({ page }) => {
   await expect(page.getByText("Created By", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: /open →/i })).toHaveCount(0);
   await expect(page.getByLabel("Filter by Location")).toBeVisible();
+  await expect(page.getByLabel("Filter by Created By")).toBeVisible();
 });
 
 test("Employee cannot enumerate or sign files for an inaccessible College Visit", async ({ request }) => {

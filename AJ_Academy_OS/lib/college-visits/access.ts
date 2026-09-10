@@ -86,34 +86,19 @@ export async function employeeUploadedBatchIds(
   return [...new Set((data ?? []).map((row) => String(row.id)).filter(Boolean))];
 }
 
-/** Same visibility as College Visits GET: own/created, folder owner, or task-linked. */
+/** Same visibility as College Visits GET: Admin and Employee can open every college. */
 export async function actorCanAccessCollegeVisit(
   admin: SupabaseClient,
-  userId: string,
-  isAdmin: boolean,
+  _userId: string,
+  _isAdmin: boolean,
   collegeId: string,
 ): Promise<boolean> {
-  if (isAdmin) return true;
   const { data: row } = await admin
     .from("college_visits")
-    .select("id,assigned_to,created_by,import_batch_id")
+    .select("id")
     .eq("id", collegeId)
     .maybeSingle();
-  if (!row?.id) return false;
-  if (row.assigned_to === userId || row.created_by === userId) return true;
-  if (row.import_batch_id) {
-    const { data: batch } = await admin
-      .from("college_visit_import_batches")
-      .select("uploaded_by")
-      .eq("id", row.import_batch_id)
-      .maybeSingle();
-    if (batch?.uploaded_by === userId) return true;
-  }
-  const { data: taskRows } = await admin
-    .from("tasks")
-    .select("college_visit_ids")
-    .or(`assigned_to.eq.${userId},assigned_by.eq.${userId}`);
-  return collectCollegeIdsFromTaskRows(taskRows ?? []).includes(collegeId);
+  return Boolean(row?.id);
 }
 
 export function canActorReadFile(
