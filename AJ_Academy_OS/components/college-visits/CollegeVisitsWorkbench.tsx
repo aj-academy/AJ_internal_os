@@ -1398,7 +1398,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     loadBatchStagingPreview,
   ]);
 
-  const showImportBatchList = !pickForTask && activeTab === "all-colleges";
+  const showImportBatchList = isDbAdmin && !pickForTask && activeTab === "all-colleges";
   const canManageFocusedImportBatch = Boolean(
     focusedImportBatch &&
       !focusedImportBatch.isLegacy &&
@@ -1417,7 +1417,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       ? batchNeedsPreview
         ? stagingVisitsForTable
         : visitsForFocusedBatch
-      : visits;
+      : filteredVisits;
     let list = [...base];
     const q = searchText.trim().toLowerCase();
     if (q) {
@@ -1457,7 +1457,6 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     showImportBatchList,
     stagingRowByVisitId,
     stagingVisitsForTable,
-    visits,
     visitsForFocusedBatch,
   ]);
 
@@ -1888,6 +1887,10 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       void handleSave();
       return;
     }
+    if (!isDbAdmin) {
+      void handleSave({ mode: "existing", batchId: null });
+      return;
+    }
     const addingInsideOpenedFolder = activeTab === "all-colleges" && Boolean(focusedImportBatch);
     if (addingInsideOpenedFolder && focusedImportBatch) {
       void handleSave(
@@ -2296,6 +2299,10 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
       setBatchStagingRows([]);
       setDuplicateResolutions({});
+      if (!isDbAdmin) {
+        setFocusedImportBatch(null);
+        setPage(1);
+      }
       setSuccess(
         failed > 0
           ? `Saved ${created} new, updated ${updated}, skipped ${skipped} duplicate(s), ${failed} failed.${json.error ? ` Last error: ${json.error}` : ""}`
@@ -2312,7 +2319,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const tdClass = TABLE_DATA_TD;
   const dash = (v: unknown) => (v == null || v === "" ? "—" : String(v));
   const stackElevated = Boolean(focusedImportBatch);
-return (
+  return (
     <section className="space-y-5 rounded-[24px] border border-[#e8dcc8] bg-white p-4 sm:p-6 shadow-[0_20px_40px_rgba(30,64,175,0.08)] lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -2320,7 +2327,7 @@ return (
           <p className="mt-1 text-sm text-[#64748b]">
             {isDbAdmin
               ? "Track every employee's college outreach. Filter by Owner to review one person. Employees only see their own rows."
-              : "Same College Visits workspace as Admin — your authorized colleges, follow-ups, pipeline, and proposals."}
+              : "Your college visits — add, update, import, and export. Admin still sees every college you save."}
           </p>
           {cvRefreshing ? (
             <p className="mt-1 text-xs font-medium text-[#64748b]" aria-live="polite">
@@ -2590,9 +2597,7 @@ return (
           {showImportBatchList && !focusedImportBatch ? (
             <div className="space-y-3">
               <p className="text-xs font-medium text-[#64748b]">
-                {isDbAdmin
-                  ? "Each uploaded file appears separately with its upload date. Colleges an employee adds from their dashboard appear as that employee's folder, with their name. Click a row to open the full college table — edit, assign to employees, call, WhatsApp, and email work exactly as before."
-                  : "Each uploaded file appears separately, the same as Admin. Colleges you add are saved in your folder so Admin can see them. Use Import template, Import, and Export here. Admin-only uploads stay hidden."}
+                Each uploaded file appears separately with its upload date. Colleges an employee adds from their dashboard appear as that employee's folder, with their name. Click a row to open the full college table — edit, assign to employees, call, WhatsApp, and email work exactly as before.
               </p>
               {isDbAdmin && batchBulk.selectedCount > 0 ? (
                 <BulkSelectionBar selectedCount={batchBulk.selectedCount} onClear={batchBulk.clearSelection}>
@@ -2610,22 +2615,13 @@ return (
               <CollegeVisitImportBatchRowList
                 batches={paginatedImportBatches}
                 loading={importBatchesLoading || loading}
-                selection={
-                  isDbAdmin
-                    ? {
-                        allSelected: batchBulk.allSelected,
-                        someSelected: batchBulk.someSelected,
-                        isSelected: batchBulk.isSelected,
-                        onToggleAll: batchBulk.toggleAll,
-                        onToggle: batchBulk.toggleOne,
-                      }
-                    : undefined
-                }
-                emptyMessage={
-                  isDbAdmin
-                    ? undefined
-                    : "No college folders yet. Use Import to upload a spreadsheet, or + Add College to create a visit — it will appear as your folder here and on Admin."
-                }
+                selection={{
+                  allSelected: batchBulk.allSelected,
+                  someSelected: batchBulk.someSelected,
+                  isSelected: batchBulk.isSelected,
+                  onToggleAll: batchBulk.toggleAll,
+                  onToggle: batchBulk.toggleOne,
+                }}
                 onOpenBatch={(batch) => {
                   setFocusedImportBatch(batch);
                   setBatchStagingRows([]);
@@ -2666,7 +2662,7 @@ return (
                           setPage(1);
                         }}
                       >
-                        ← Back to uploads
+                        {isDbAdmin ? "← Back to uploads" : "← Back to All Colleges"}
                       </Button>
                       <div className="flex flex-wrap items-center gap-2">
                         {batchAwaitingImport ? (
