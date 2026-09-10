@@ -10,14 +10,14 @@ test("Admin College Visits shows creator attribution", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "College Visits" })).toBeVisible();
 
   await page.getByRole("button", { name: "All Colleges" }).click();
-  await expect(page.getByText(/each uploaded file appears separately/i).first()).toBeVisible();
-
-  const openFolder = page.getByRole("button", { name: /open →/i }).first();
-  if ((await openFolder.count()) > 0) {
-    await openFolder.click();
-    await expect(page.getByText("Created By", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("Created At", { exact: true }).first()).toBeVisible();
-  }
+  await expect(page.getByRole("button", { name: /import template/i }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /^import$/i }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /export/i }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /open →/i })).toHaveCount(0);
+  await expect(page.getByText("Created By", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Created At", { exact: true }).first()).toBeVisible();
+  await expect(page.getByLabel("Filter by Created By")).toBeVisible();
+  await expect(page.getByLabel("Filter by Location")).toBeVisible();
 });
 
 test("Admin receives uploader attribution and all visibility scopes", async ({ request }) => {

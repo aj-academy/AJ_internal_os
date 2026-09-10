@@ -213,6 +213,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const [searchText, setSearchText] = useState("");
   const [fltVisitStatus, setFltVisitStatus] = useState("");
   const [fltPriority, setFltPriority] = useState("");
+  const [fltLocation, setFltLocation] = useState("");
   const [fltOwner, setFltOwner] = useState("");
   const [fltCreator, setFltCreator] = useState("");
   const [fltFinalStatus, setFltFinalStatus] = useState("");
@@ -374,6 +375,31 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       .map(([id, label]) => ({ id, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [creatorLabelFor, visits]);
+
+  const locationOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const visit of visits) {
+      const raw = (visit.location ?? "").trim();
+      if (!raw) continue;
+      const key = raw.toLocaleLowerCase();
+      if (!seen.has(key)) seen.set(key, raw);
+    }
+    const selected = fltLocation.trim();
+    if (selected) {
+      const key = selected.toLocaleLowerCase();
+      if (!seen.has(key)) seen.set(key, selected);
+    }
+    return [...seen.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  }, [fltLocation, visits]);
+
+  const matchesLocationFilter = useCallback(
+    (row: Pick<CollegeVisitRow, "location">) => {
+      const want = fltLocation.trim().toLocaleLowerCase();
+      if (!want) return true;
+      return (row.location ?? "").trim().toLocaleLowerCase() === want;
+    },
+    [fltLocation],
+  );
 
   const loadVisits = useCallback(async () => {
     const res = await fetch("/api/college-visits", { cache: "no-store", credentials: "include" });
@@ -996,6 +1022,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     }
     if (fltVisitStatus) list = list.filter((v) => v.visit_status === fltVisitStatus);
     if (fltPriority) list = list.filter((v) => v.priority === fltPriority);
+    if (fltLocation) list = list.filter((v) => matchesLocationFilter(v));
     if (fltOwner) list = list.filter((v) => (v.assigned_to ?? "") === fltOwner);
     if (fltCreator === "role:admin") {
       list = list.filter((v) => {
@@ -1016,12 +1043,14 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     searchText,
     fltVisitStatus,
     fltPriority,
+    fltLocation,
     fltOwner,
     fltCreator,
     fltFinalStatus,
     fltFollowUpDue,
     creatorLabelFor,
     creatorRoleFor,
+    matchesLocationFilter,
   ]);
 
   /** Overview uses the same search + filters as other subsections. */
@@ -1031,6 +1060,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     searchText.trim() ||
       fltVisitStatus ||
       fltPriority ||
+      fltLocation ||
       fltOwner ||
       fltCreator ||
       fltFinalStatus ||
@@ -1398,7 +1428,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     loadBatchStagingPreview,
   ]);
 
-  const showImportBatchList = isDbAdmin && !pickForTask && activeTab === "all-colleges";
+  const showImportBatchList = false;
   const canManageFocusedImportBatch = Boolean(
     focusedImportBatch &&
       !focusedImportBatch.isLegacy &&
@@ -1429,6 +1459,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     }
     if (fltVisitStatus) list = list.filter((v) => v.visit_status === fltVisitStatus);
     if (fltPriority) list = list.filter((v) => v.priority === fltPriority);
+    if (fltLocation) list = list.filter((v) => matchesLocationFilter(v));
     if (fltOwner) list = list.filter((v) => (v.assigned_to ?? "") === fltOwner);
     if (fltFinalStatus) list = list.filter((v) => v.final_status === fltFinalStatus);
     if (fltFollowUpDue === "yes") list = list.filter((v) => isFollowUpDue(v));
@@ -1448,11 +1479,13 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     filteredVisits,
     fltFinalStatus,
     fltFollowUpDue,
+    fltLocation,
     fltOwner,
     fltPriority,
     fltVisitStatus,
     focusedImportBatch,
     importPreviewFilter,
+    matchesLocationFilter,
     searchText,
     showImportBatchList,
     stagingRowByVisitId,
@@ -1485,6 +1518,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     setSearchText("");
     setFltVisitStatus("");
     setFltPriority("");
+    setFltLocation("");
     setFltOwner("");
     setFltCreator("");
     setFltFinalStatus("");
@@ -1887,20 +1921,14 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       void handleSave();
       return;
     }
-    if (!isDbAdmin) {
-      void handleSave({ mode: "existing", batchId: null });
-      return;
-    }
-    const addingInsideOpenedFolder = activeTab === "all-colleges" && Boolean(focusedImportBatch);
-    if (addingInsideOpenedFolder && focusedImportBatch) {
-      void handleSave(
-        isSavedCollegeFolder(focusedImportBatch)
-          ? { mode: "existing", batchId: focusedImportBatch.id }
-          : { mode: "existing", batchId: null },
-      );
-      return;
-    }
-    setSaveLocationOpen(true);
+    const addingInsideOpenedFolder = focusedImportBatch
+      ? isSavedCollegeFolder(focusedImportBatch)
+      : false;
+    void handleSave(
+      addingInsideOpenedFolder && focusedImportBatch
+        ? { mode: "existing", batchId: focusedImportBatch.id }
+        : { mode: "existing", batchId: null },
+    );
   };
 
   const handleDelete = async (id: string) => {
@@ -2299,10 +2327,8 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
       setBatchStagingRows([]);
       setDuplicateResolutions({});
-      if (!isDbAdmin) {
-        setFocusedImportBatch(null);
-        setPage(1);
-      }
+      setFocusedImportBatch(null);
+      setPage(1);
       setSuccess(
         failed > 0
           ? `Saved ${created} new, updated ${updated}, skipped ${skipped} duplicate(s), ${failed} failed.${json.error ? ` Last error: ${json.error}` : ""}`
@@ -2326,7 +2352,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
           <h2 className="text-3xl font-semibold text-[#0f172a]">College Visits</h2>
           <p className="mt-1 text-sm text-[#64748b]">
             {isDbAdmin
-              ? "Track every employee's college outreach. Filter by Owner to review one person. Employees only see their own rows."
+              ? "All colleges in one table. Created By shows who added each college. Location filter lists every location already in these rows."
               : "Your college visits — add, update, import, and export. Admin still sees every college you save."}
           </p>
           {cvRefreshing ? (
@@ -2481,9 +2507,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
           onClear={clearTableFilters}
           hint={
             activeTab === "all-colleges"
-              ? showImportBatchList
-                ? `${displayImportBatches.length} upload folder(s) — open one to view colleges`
-                : `Showing ${pageRows.length} of ${allCollegesTableVisits.length} college(s) | page ${page}/${totalPages}`
+              ? `Showing ${pageRows.length} of ${allCollegesTableVisits.length} college(s) | page ${page}/${totalPages}`
               : `Showing ${filteredVisits.length} of ${visits.length} college(s)${searchText.trim() ? " (filtered)" : ""} · ${CV_TAB_LABELS[activeTab]}`
           }
         />
@@ -2662,7 +2686,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
                           setPage(1);
                         }}
                       >
-                        {isDbAdmin ? "← Back to uploads" : "← Back to All Colleges"}
+                        ← Back to All Colleges
                       </Button>
                       <div className="flex flex-wrap items-center gap-2">
                         {batchAwaitingImport ? (
@@ -2978,7 +3002,14 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
                     label="College Name"
                     className={`${thClass} sticky-col sticky-col-after-check-2 min-w-[14rem]`}
                   />
-                  <TableHeaderCell label="Location" className={thClass} />
+                  <TableHeaderFilter
+                    label="Location"
+                    value={fltLocation}
+                    options={locationOptions.map((location) => ({ value: location, label: location }))}
+                    onChange={setFltLocation}
+                    allLabel="All locations"
+                    className={thClass}
+                  />
                   {isDbAdmin ? (
                     <TableHeaderFilter
                       label="Created By"
