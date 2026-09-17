@@ -111,6 +111,7 @@ import {
   friendlyCollegeVisitError,
   isFollowUpDue,
   isMissingCollegeVisitsTable,
+  matchesCollegeVisitSearch,
   legacyCollegeVisitGroupKey,
   LEGACY_ALL_COLLEGES_BATCH_KEY,
   employeeAddedLegacyGroupKey,
@@ -1010,13 +1011,9 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
 
   const filteredVisits = useMemo(() => {
     let list = [...visits];
-    const q = searchText.trim().toLowerCase();
+    const q = searchText.trim();
     if (q) {
-      list = list.filter((v) =>
-        `${v.college_name} ${v.location ?? ""} ${v.contact_number ?? ""} ${v.email ?? ""} ${v.connected_person_name ?? ""} ${v.source_reference ?? ""} ${v.visit_status ?? ""} ${v.mou_signed_status ?? ""} ${v.final_status ?? ""} ${v.priority ?? ""} ${v.follow_up_stage ?? ""} ${v.proposal_status ?? ""} ${v.visited_by_name ?? ""} ${creatorLabelFor(v)}`
-          .toLowerCase()
-          .includes(q),
-      );
+      list = list.filter((v) => matchesCollegeVisitSearch(v, q, creatorLabelFor(v)));
     }
     if (fltVisitStatus) list = list.filter((v) => v.visit_status === fltVisitStatus);
     if (fltPriority) list = list.filter((v) => v.priority === fltPriority);
@@ -1441,20 +1438,11 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
   const allCollegesTableVisits = useMemo(() => {
     if (activeTab !== "all-colleges") return filteredVisits;
     if (showImportBatchList && !focusedImportBatch) return [];
-    const base = focusedImportBatch
-      ? batchNeedsPreview
-        ? stagingVisitsForTable
-        : visitsForFocusedBatch
-      : filteredVisits;
+    if (!focusedImportBatch) return filteredVisits;
+    const base = batchNeedsPreview ? stagingVisitsForTable : visitsForFocusedBatch;
     let list = [...base];
-    const q = searchText.trim().toLowerCase();
-    if (q) {
-      list = list.filter((v) =>
-        `${v.college_name} ${v.location ?? ""} ${v.contact_number ?? ""} ${v.email ?? ""} ${v.connected_person_name ?? ""} ${v.source_reference ?? ""} ${v.visit_status ?? ""} ${v.mou_signed_status ?? ""} ${v.final_status ?? ""} ${v.priority ?? ""} ${v.follow_up_stage ?? ""} ${v.proposal_status ?? ""} ${v.visited_by_name ?? ""}`
-          .toLowerCase()
-          .includes(q),
-      );
-    }
+    const q = searchText.trim();
+    if (q) list = list.filter((v) => matchesCollegeVisitSearch(v, q));
     if (fltVisitStatus) list = list.filter((v) => v.visit_status === fltVisitStatus);
     if (fltPriority) list = list.filter((v) => v.priority === fltPriority);
     if (fltLocation) list = list.filter((v) => matchesLocationFilter(v));
@@ -1512,17 +1500,6 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     return processable > 0;
   }, [focusedImportBatch]);
 
-  const clearTableFilters = () => {
-    setSearchText("");
-    setFltVisitStatus("");
-    setFltPriority("");
-    setFltLocation("");
-    setFltOwner("");
-    setFltCreator("");
-    setFltFinalStatus("");
-    setFltFollowUpDue("");
-  };
-
   const {
     paginatedItems: pageRows,
     page,
@@ -1532,6 +1509,29 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
     pageSize,
     setPageSize,
   } = usePagination(activeTab === "all-colleges" ? allCollegesTableVisits : filteredVisits, 25);
+
+  const clearTableFilters = () => {
+    setSearchText("");
+    setFltVisitStatus("");
+    setFltPriority("");
+    setFltLocation("");
+    setFltOwner("");
+    setFltCreator("");
+    setFltFinalStatus("");
+    setFltFollowUpDue("");
+    setPage(1);
+  };
+
+  const handleTableSearchChange = (value: string) => {
+    setSearchText(value);
+    setPage(1);
+    if (
+      value.trim() &&
+      (activeTab === "overview" || activeTab === "timeline" || activeTab === "reports" || activeTab === "settings")
+    ) {
+      setActiveTab("all-colleges");
+    }
+  };
 
   const pageRowIdsKey = useMemo(() => pageRows.map((row) => row.id).join(","), [pageRows]);
   useEffect(() => {
@@ -2499,7 +2499,7 @@ export function CollegeVisitsWorkbench({ role, fullAccess = false }: { role: App
       {activeTab !== "settings" && !focusedImportBatch ? (
         <TableSearchBar
           value={searchText}
-          onChange={setSearchText}
+          onChange={handleTableSearchChange}
           placeholder="Search college, location, contact, email, status…"
           showClear={filtersActive}
           onClear={clearTableFilters}

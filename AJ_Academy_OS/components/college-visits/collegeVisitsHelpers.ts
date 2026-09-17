@@ -633,6 +633,84 @@ export function isFollowUpDue(row: CollegeVisitRow): boolean {
   return row.next_follow_up_date.slice(0, 10) <= todayISO();
 }
 
+/** Lowercase letters/digits only, punctuation becomes spaces so "St Ann" matches "St. Ann's". */
+export function compactCollegeSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export function collegeVisitSearchHaystack(
+  row: Pick<
+    CollegeVisitRow,
+    | "college_name"
+    | "location"
+    | "contact_number"
+    | "email"
+    | "connected_person_name"
+    | "connected_person_role"
+    | "source_reference"
+    | "visit_status"
+    | "mou_signed_status"
+    | "final_status"
+    | "priority"
+    | "follow_up_stage"
+    | "proposal_status"
+    | "visited_by_name"
+    | "visited_by"
+    | "description"
+    | "created_by_name"
+    | "contacts"
+  >,
+  extra = "",
+): string {
+  const contactBits = (row.contacts ?? [])
+    .flatMap((contact) => [contact.name, contact.role, contact.email, ...(contact.phones ?? [])])
+    .filter(Boolean);
+  return compactCollegeSearchText(
+    [
+      row.college_name,
+      row.location,
+      row.contact_number,
+      row.email,
+      row.connected_person_name,
+      row.connected_person_role,
+      row.source_reference,
+      row.visit_status,
+      row.mou_signed_status,
+      row.final_status,
+      row.priority,
+      row.follow_up_stage,
+      row.proposal_status,
+      row.visited_by_name,
+      row.visited_by,
+      row.description,
+      row.created_by_name,
+      extra,
+      ...contactBits,
+    ]
+      .filter((part) => part != null && String(part).trim())
+      .join(" "),
+  );
+}
+
+export function matchesCollegeVisitSearch(
+  row: Parameters<typeof collegeVisitSearchHaystack>[0],
+  query: string,
+  extra = "",
+): boolean {
+  const q = compactCollegeSearchText(query);
+  if (!q) return true;
+  const haystack = collegeVisitSearchHaystack(row, extra);
+  const compactHay = haystack.replace(/\s+/g, "");
+  const compactQ = q.replace(/\s+/g, "");
+  if (compactQ && compactHay.includes(compactQ)) return true;
+  return q.split(/\s+/).every((token) => haystack.includes(token));
+}
+
 export function friendlyCollegeVisitError(raw: unknown) {
   const msg = raw instanceof Error ? raw.message : "Unexpected error.";
   const lower = msg.toLowerCase();

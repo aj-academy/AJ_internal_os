@@ -29,6 +29,9 @@ export function TableSearchBar({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
           className="h-10 border-[#dbe6f3] bg-white pl-9"
         />
       </div>
